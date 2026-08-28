@@ -116,6 +116,9 @@ import organizationAccountingSettingsRouter from "./api/router/organizationaccou
 import syncRouter from "./api/router/sync.js";
 import refReplacementRouter from "./api/router/refreplacement.js";
 import reportsRouter from "./api/router/reports.js";
+import modulesRouter from "./api/router/modules.js";
+import dealsRouter from "./api/router/deals.js";
+import { moduleGuardMiddleware } from "./services/moduleAccess.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
 import subkontoTypesRouter from "./api/router/subkontotypes.js";
@@ -335,7 +338,12 @@ app.use("/api/v1", accessPermissionMiddleware);
 // Сквозной журнал действий (E1.2): пишет create/update/delete с diff. Строго
 // после проверки прав — незаконные запросы до сюда не доходят.
 app.use("/api/v1", auditMiddleware);
+// E11: гард модулей — 403 на создание документа отключённого для организации
+// модуля. Безопасен по умолчанию (не-POST/неизвестный путь/нет org → пропуск).
+app.use("/api/v1", moduleGuardMiddleware);
 
+app.use("/api/v1", modulesRouter);
+app.use("/api/v1", dealsRouter);
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
 app.use("/api/v1/activityhistories", activityHistoriesRouter);

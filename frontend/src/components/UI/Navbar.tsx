@@ -32,7 +32,7 @@ const LanguageSwitcher: FC = () => {
 };
 
 // Переключатель светлой/тёмной темы (E5). Иконка отражает ДЕЙСТВИЕ по клику.
-const ThemeSwitcher: FC = () => {
+export const ThemeSwitcher: FC = () => {
   const [dark, setDark] = useState(() => getEffectiveTheme() === "dark");
   return (
     <button

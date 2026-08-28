@@ -9,6 +9,7 @@ import { getLegalAddress } from "../../services/legalAddress.js";
 import { EsfSoapError } from "../../services/esf/soapClient.js";
 import { buildAwpV1Xml, AWP_SALE_INCLUDE, uploadAwp, queryAwpById, queryAwpUpdates, buildAwpActionXml, changeAwpStatus, AWP_ACTION } from "../../services/awp/index.js";
 import { buildSntV1Xml, SNT_SALE_INCLUDE, validateSntProducts, uploadSnt, querySntById, querySntUpdates, buildSntActionXml, changeSntStatus, SNT_ACTION } from "../../services/snt/index.js";
+import { joinErrorText } from "../../services/esf/parseUploadErrors.js";
 
 const router = express.Router();
 
@@ -169,7 +170,16 @@ router.post("/awp/sales/:uuid/build-xml", async (req, res) => {
 		if (!sale) return res.status(404).json({ success: false, message: "Реализация не найдена" });
 		if (!sale.posted) return res.status(400).json({ success: false, message: "Сначала проведите документ" });
 		await injectAddresses(sale);
-		res.json({ success: true, xml: buildAwpV1Xml(sale, { performedDate: req.body?.performedDate }) });
+		// T7.11: корректировочный ЭАВР ссылается на основной (relatedAwp).
+		let awpRelated = null;
+		if (sale.awpRelatedUuid) {
+			const orig = await prisma.sale.findFirst({
+				where: { uuid: sale.awpRelatedUuid, deletedAt: null, ...tenantFilter(req) },
+				select: { date: true, number: true, awpRegistrationNumber: true },
+			});
+			if (orig) awpRelated = { date: orig.date, number: orig.number, registrationNumber: orig.awpRegistrationNumber };
+		}
+		res.json({ success: true, xml: buildAwpV1Xml(sale, { performedDate: req.body?.performedDate, related: awpRelated }) });
 	} catch (err) { respondErr(res, err); }
 });
 
@@ -184,15 +194,17 @@ router.post("/awp/sales/:uuid/upload", async (req, res) => {
 		if (!sale) return res.status(404).json({ success: false, message: "Реализация не найдена" });
 
 		const r = await uploadAwp({ sessionId, awpBody: signedXml, x509Certificate });
+		// T7.8: построчные ошибки отклонения → поле awpErrorText + ответ (для формы).
+		const errText = joinErrorText(r.errors);
 		const updated = await prisma.sale.update({
 			where: { uuid: sale.uuid },
 			data: {
 				awpStatus: r.status || "CREATED", awpId: r.id || null,
 				awpRegistrationNumber: r.registrationNumber || null,
-				awpSentAt: new Date(), awpXml: signedXml, awpErrorText: null,
+				awpSentAt: new Date(), awpXml: signedXml, awpErrorText: errText,
 			},
 		});
-		res.json({ success: true, awpStatus: updated.awpStatus, awpId: updated.awpId, awpRegistrationNumber: updated.awpRegistrationNumber });
+		res.json({ success: true, awpStatus: updated.awpStatus, awpId: updated.awpId, awpRegistrationNumber: updated.awpRegistrationNumber, errors: r.errors || [] });
 	} catch (err) { respondErr(res, err); }
 });
 
@@ -237,7 +249,17 @@ router.post("/snt/:source/:uuid/build-xml", async (req, res) => {
 			return res.status(400).json({ success: false, message: `Не указан код ТН ВЭД у товаров: ${missing.join(", ")}` });
 		}
 		await injectAddresses(doc);
-		const xml = buildSntV1Xml({ ...doc, items }, { sntType: req.body?.sntType, shippingDate: req.body?.shippingDate });
+		// T7.11: RETURNED_SNT/FIXED_SNT ссылаются на основную СНТ (relatedSnt).
+		const sntType = req.body?.sntType;
+		let sntRelated = null;
+		if (doc.sntRelatedUuid && (sntType === "RETURNED_SNT" || sntType === "FIXED_SNT")) {
+			const orig = await prisma[loaded.model].findFirst({
+				where: { uuid: doc.sntRelatedUuid, deletedAt: null, ...tenantFilter(req) },
+				select: { date: true, number: true, sntRegistrationNumber: true },
+			});
+			if (orig) sntRelated = { date: orig.date, number: orig.number, registrationNumber: orig.sntRegistrationNumber };
+		}
+		const xml = buildSntV1Xml({ ...doc, items }, { sntType, shippingDate: req.body?.shippingDate, related: sntRelated });
 		res.json({ success: true, xml });
 	} catch (err) { respondErr(res, err); }
 });
@@ -253,15 +275,17 @@ router.post("/snt/:source/:uuid/upload", async (req, res) => {
 		if (!loaded) return res.status(404).json({ success: false, message: "Документ-источник не найден" });
 
 		const r = await uploadSnt({ sessionId, sntBody: signedXml, x509Certificate });
+		// T7.8: построчные ошибки отклонения → поле sntErrorText + ответ (для формы).
+		const errText = joinErrorText(r.errors);
 		const updated = await prisma[loaded.model].update({
 			where: { uuid: loaded.doc.uuid },
 			data: {
 				sntStatus: r.status || "CREATED", sntId: r.id || null,
 				sntRegistrationNumber: r.registrationNumber || null,
-				sntSentAt: new Date(), sntXml: signedXml, sntErrorText: null,
+				sntSentAt: new Date(), sntXml: signedXml, sntErrorText: errText,
 			},
 		});
-		res.json({ success: true, sntStatus: updated.sntStatus, sntId: updated.sntId, sntRegistrationNumber: updated.sntRegistrationNumber });
+		res.json({ success: true, sntStatus: updated.sntStatus, sntId: updated.sntId, sntRegistrationNumber: updated.sntRegistrationNumber, errors: r.errors || [] });
 	} catch (err) { respondErr(res, err); }
 });
 

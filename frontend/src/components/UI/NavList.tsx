@@ -7,6 +7,7 @@ import { useAppContext } from "src/app/context";
 import { useChatUnread } from "src/hooks/useChatUnread";
 
 import { getAccessLevel } from 'src/hooks/useAccessPermission';
+import { useDisabledModules } from "src/hooks/useDisabledModules";
 import {
   ContractsList,
   ActivityHistoriesList,
@@ -90,6 +91,10 @@ import {
   InventoryTurnoverReport,
   InventoryBatchesReport,
   ABCReport,
+  XYZReport,
+  ModuleSettings,
+  DealsList,
+  DealsKanban,
   PriceListReport,
   SalesTerminal,
   ChartOfAccountsList,
@@ -165,9 +170,14 @@ export const NavList = ({ label }: TypeNavListProps) => {
   // Непрочитанные сообщения чата — бейдж в пункте меню (E4.1).
   const { total: chatUnread } = useChatUnread();
 
+  // E11: модули, отключённые для организации пользователя, скрываются из меню.
+  // По умолчанию (нет настроек) — набор пуст, всё видно как раньше.
+  const disabledModules = useDisabledModules();
+  const moduleOn = (key: string) => !disabledModules.has(key);
+
   const TradeGroups = () => (
     <>
-      <div className={styles.NavGroup}>
+      {moduleOn("sales") && <div className={styles.NavGroup}>
         <h3>{translate("sales")}</h3>
         <ul className={styles.NavList}>
           {can("Sale") && <NavItem onClick={() => addPane({ component: SalesList, label: translate("saleRealization") })}>{translate("saleRealization")}</NavItem>}
@@ -178,8 +188,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("SalesOrder") && <NavItem onClick={() => addPane({ component: SalesOrdersList, label: translate("docType_sales_order") })}>{translate("docType_sales_order")}</NavItem>}
           {can("Reservation") && <NavItem onClick={() => addPane({ component: ReservationsList, label: translate("docType_reservation") })}>{translate("docType_reservation")}</NavItem>}
         </ul>
-      </div>
-      <div className={styles.NavGroup}>
+      </div>}
+      {moduleOn("purchase") && <div className={styles.NavGroup}>
         <h3>{translate("purchase")}</h3>
         <ul className={styles.NavList}>
           {can("Purchase") && <NavItem onClick={() => addPane({ component: PurchasesList, label: translate("purchaseReceipt") })}>{translate("purchaseReceipt")}</NavItem>}
@@ -189,8 +199,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("PurchaseOrder") && <NavItem onClick={() => addPane({ component: PurchaseOrdersList, label: translate("docType_purchase_order") })}>{translate("docType_purchase_order")}</NavItem>}
           {can("ImportDeclaration") && <NavItem onClick={() => addPane({ component: ImportDeclarationsList })}>{translate("ImportDeclarationsList")}</NavItem>}
         </ul>
-      </div>
-      <div className={styles.NavGroup}>
+      </div>}
+      {moduleOn("warehouse") && <div className={styles.NavGroup}>
         <h3>{translate("warehouse")}</h3>
         <ul className={styles.NavList}>
           {can("InventoryTransfer") && <NavItem onClick={() => addPane({ component: InventoryTransfersList })}>{translate("InventoryTransfersList")}</NavItem>}
@@ -198,8 +208,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("GoodsReceipt") && <NavItem onClick={() => addPane({ component: GoodsReceiptsList })}>{translate("GoodsReceiptsList")}</NavItem>}
           {can("StockCount") && <NavItem onClick={() => addPane({ component: StockCountsList })}>{translate("StockCountsList")}</NavItem>}
         </ul>
-      </div>
-      <div className={styles.NavGroup}>
+      </div>}
+      {moduleOn("cash") && <div className={styles.NavGroup}>
         <h3>{translate("cash")}</h3>
         <ul className={styles.NavList}>
           {can("CashReceiptOrder") && <NavItem onClick={() => addPane({ component: CashReceiptOrdersList })}>{translate("CashReceiptOrdersList")}</NavItem>}
@@ -207,7 +217,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("BankStatement") && <NavItem onClick={() => addPane({ component: BankStatementsList, label: translate("docType_bank_statement") })}>{translate("docType_bank_statement")}</NavItem>}
           {can("FiscalReceipt") && <NavItem onClick={() => addPane({ component: FiscalReceiptsList })}>{translate("FiscalReceiptsList")}</NavItem>}
         </ul>
-      </div>
+      </div>}
       <div className={styles.NavGroup}>
         <h3>{translate("reports")}</h3>
         <ul className={styles.NavList}>
@@ -219,6 +229,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {(can("Purchase") || can("Sale")) && <NavItem onClick={() => addPane({ component: InventoryTurnoverReport, label: translate("inventoryTurnover") })}>{translate("inventoryTurnover")}</NavItem>}
           {(can("Purchase") || can("Sale")) && <NavItem onClick={() => addPane({ component: InventoryBatchesReport, label: translate("inventoryBatches") })}>{translate("inventoryBatches")}</NavItem>}
           {can("Sale") && <NavItem onClick={() => addPane({ component: ABCReport, label: translate("abcAnalysis") })}>{translate("abcAnalysis")}</NavItem>}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: XYZReport, label: translate("xyzAnalysis") })}>{translate("xyzAnalysis")}</NavItem>}
           {(can("CashReceiptOrder") || can("CashExpenseOrder")) && <NavItem onClick={() => addPane({ component: CashReport, label: translate("CashReportList") })}>{translate("CashReportList")}</NavItem>}
         </ul>
       </div>
@@ -245,7 +256,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("Product") && <NavItem onClick={() => addPane({ component: OpeningBalanceForm, label: translate("openingBalanceEntry") })}>{translate("openingBalanceEntry")}</NavItem>}
         </ul>
       </div>
-      <div className={styles.NavGroup}>
+      {moduleOn("govdocs") && <div className={styles.NavGroup}>
         <h3>{translate("govDocsSection")}</h3>
         <ul className={styles.NavList}>
           {can("OutgoingInvoice") && <NavItem onClick={() => addPane({ component: EsfIncomingList, label: translate("esfIncomingSection") })}>{translate("esfIncomingSection")}</NavItem>}
@@ -255,14 +266,14 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("Sale") && <NavItem onClick={() => addPane({ component: SntIncomingList, label: translate("sntIncomingSection") })}>{translate("sntIncomingSection")}</NavItem>}
           <li className={styles.NavHint}>{translate("govDocsHint")}</li>
         </ul>
-      </div>
-      <div className={styles.NavGroup}>
+      </div>}
+      {moduleOn("edo") && <div className={styles.NavGroup}>
         <h3>{translate("edoSection")}</h3>
         <ul className={styles.NavList}>
           {can("EdoDocument") && <NavItem onClick={() => addPane({ component: EdoInboxList, label: translate("edoInbox") })}>{translate("edoInbox")}</NavItem>}
           {can("EdoDocument") && <NavItem onClick={() => addPane({ component: EdoOutboxList, label: translate("edoOutbox") })}>{translate("edoOutbox")}</NavItem>}
         </ul>
-      </div>
+      </div>}
     </>
   );
 
@@ -315,6 +326,13 @@ export const NavList = ({ label }: TypeNavListProps) => {
 
   const CRMGroups = () => (
     <>
+      {can("Deal") && <div className={styles.NavGroup}>
+        <h3>{translate("dealsSection")}</h3>
+        <ul className={styles.NavList}>
+          <NavItem onClick={() => addPane({ component: DealsKanban, label: translate("dealsKanban") })}>{translate("dealsKanban")}</NavItem>
+          <NavItem onClick={() => addPane({ component: DealsList, label: translate("dealsTitle") })}>{translate("dealsTitle")}</NavItem>
+        </ul>
+      </div>}
       <div className={styles.NavGroup}>
         <h3>{translate("directories")}</h3>
         <ul className={styles.NavList}>
@@ -377,6 +395,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <NavItem onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</NavItem>
           <NavItem onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</NavItem>
           {isSuperAdmin && <NavItem onClick={() => addPane({ component: EsfLicensesList, label: translate("EsfLicensesList") })}>{translate("EsfLicensesList")}</NavItem>}
+          {isSuperAdmin && <NavItem onClick={() => addPane({ component: ModuleSettings, label: translate("moduleSettingsTitle") })}>{translate("moduleSettingsTitle")}</NavItem>}
         </ul>
       </div>
     </>
@@ -393,7 +412,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <div className={styles.NavSection}>
           <TradeGroups />
           <AccountingGroups />
-          <HRGroups />
+          {moduleOn("hr") && <HRGroups />}
           <CRMGroups />
           <SettingsGroups />
         </div>
@@ -428,7 +447,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("hr")}</h1>
         <div className={styles.NavSection}>
-          <HRGroups />
+          {moduleOn("hr") && <HRGroups />}
         </div>
       </div>
     );

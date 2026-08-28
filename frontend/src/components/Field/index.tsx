@@ -1,10 +1,7 @@
 import React, { CSSProperties, FC, useId, useRef, type ChangeEvent } from 'react'
-import { getTranslation } from "src/i18"
 
 import styles from "./Field.module.scss"
 import FieldActionButton from "./FieldActionButton"
-import { useCellFieldState } from "src/hooks/useDirtyHighlight"
-import { useFormRequiredScope } from "src/hooks/useFormRequired"
 
 import { useFieldBase, FieldLabelNode, FieldHintNode, FIELD_ACTION_META } from "./fieldBase";
 import type { TypeFieldActions } from "./fieldBase";
@@ -236,112 +233,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
   );
 };
 
-// Компонент FieldDateTime — поле выбора даты/времени (datetime-local)
-interface TypeFieldDateTimeProps {
-  label?: string;
-  name: string;
-  value?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  width?: string;
-  minWidth?: string;
-  maxWidth?: string;
-  disabled?: boolean;
-  required?: boolean;
-  error?: boolean;
-  variant?: FieldVariant;
-  /** Видимая подсказка-help ПОД полем. */
-  hint?: React.ReactNode;
-}
-
-export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
-  label,
-  name,
-  value = '',
-  onChange,
-  width,
-  minWidth,
-  maxWidth,
-  disabled = false,
-  required = false,
-  error = false,
-  variant = 'default',
-}) => {
-  // Гарантируем, что value для input[type=datetime-local] имеет формат YYYY-MM-DDTHH:mm
-  const safeValue = (() => {
-    if (!value) return '';
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T00:00`;
-    return '';
-  })();
-
-  const uid = useId();
-  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
-
-  return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
-      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
-      <div className={styles.FieldInputWrapper}>
-        <input
-          type="datetime-local"
-          id={uid}
-          name={name}
-          value={safeValue}
-          onChange={onChange}
-          className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
-          disabled={disabled}
-        />
-      </div>
-    </div>
-  );
-};
-
-// Компонент FieldDate — поле выбора даты (без времени)
-export const FieldDate: FC<TypeFieldDateTimeProps> = ({
-  label,
-  name,
-  value = '',
-  onChange,
-  width,
-  minWidth,
-  maxWidth,
-  disabled = false,
-  required = false,
-  error = false,
-  variant = 'default',
-  hint,
-}) => {
-  // Гарантируем, что value для input[type=date] имеет формат YYYY-MM-DD
-  const safeValue = (() => {
-    if (!value) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
-    return '';
-  })();
-
-  const uid = useId();
-  const hintId = hint ? `${uid}-hint` : undefined;
-  const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
-
-  return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
-      <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
-      <div className={styles.FieldInputWrapper}>
-        <input
-          type="date"
-          id={uid}
-          name={name}
-          value={safeValue}
-          onChange={onChange}
-          className={`${styles.FieldDate} ${disabled ? styles.FieldDisabled : ''}`}
-          disabled={disabled}
-          aria-describedby={hintId}
-        />
-      </div>
-      <FieldHintNode id={hintId} hint={hint} isTable={isTable} />
-    </div>
-  );
-};
-
+export { FieldDateTime, FieldDate } from "./FieldDate";
 export { FieldFile } from "./FieldFile";
 type TypeFieldSelectProps = {
   label?: string;
@@ -394,85 +286,5 @@ export const Divider = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FieldTextarea — многострочное текстовое поле, стилизованное как Field
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface TypeFieldTextareaProps {
-  label?: string;
-  name: string;
-  value?: string;
-  onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  width?: string;
-  maxWidth?: string;
-  minWidth?: string;
-  minHeight?: string;
-  rows?: number;
-  disabled?: boolean;
-  placeholder?: string;
-  required?: boolean;
-  error?: boolean;
-  /** Видимая подсказка-help ПОД полем. */
-  hint?: React.ReactNode;
-}
-
-export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
-  label,
-  name,
-  value = '',
-  onChange,
-  width,
-  maxWidth,
-  minWidth,
-  minHeight,
-  rows = 4,
-  disabled = false,
-  placeholder,
-  required = false,
-  error = false,
-  hint,
-}) => {
-  const cellState = useCellFieldState();
-  const formRequired = useFormRequiredScope();
-  const isEmpty = value === '' || value === undefined || value === null;
-  const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
-  const effectiveRequired = required || !!cellState.required || formRequired.requiredKeys.has(tail);
-  const effectiveError = error || !!cellState.error;
-
-  const wrapperClass = [
-    styles.FieldTextareaWrapper,
-    !effectiveError && effectiveRequired && isEmpty ? styles.FieldRequired : '',
-    effectiveError ? styles.FieldError : '',
-  ].filter(Boolean).join(' ');
-
-  const uid = useId();
-  const hintId = hint ? `${uid}-hint` : undefined;
-  return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
-      {label && (
-        <label htmlFor={uid} className={styles.FieldLabel}>
-          {typeof label === 'string' ? getTranslation(label) : label}
-          {effectiveRequired && <span style={{ color: 'red', marginLeft: '4px' }}>*</span>}
-        </label>
-      )}
-      <div className={styles.FieldTextareaInputWrapper}>
-        <textarea
-          id={uid}
-          name={name}
-          value={value}
-          onChange={onChange}
-          className={styles.FieldTextarea}
-          disabled={disabled}
-          placeholder={placeholder}
-          rows={rows}
-          style={{ minHeight: minHeight ?? undefined }}
-          aria-describedby={hintId}
-        />
-      </div>
-      <FieldHintNode id={hintId} hint={hint} isTable={false} />
-    </div>
-  );
-};
-
-
-// ═══════════════════════════════════════════════════════════════════════════
+export { FieldTextarea } from "./FieldTextarea";
 export { FieldPeriod } from "./FieldPeriod";

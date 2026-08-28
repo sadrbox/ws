@@ -35,7 +35,7 @@ function open(): void {
   source.onmessage = (e) => {
     let ev: LiveEvent;
     try {
-      ev = JSON.parse(e.data) as LiveEvent;
+      ev = JSON.parse(e.data as string) as LiveEvent;
     } catch {
       return; // некорректный кадр — игнорируем
     }

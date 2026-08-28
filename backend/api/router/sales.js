@@ -178,6 +178,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			basisDocumentType,
 			basisDocumentUuid,
 			basisDocumentLabel,
+			awpRelatedUuid,
+			sntRelatedUuid,
 		} = req.body;
 		const fkError = await checkFkOwnership(req, prisma, [
 			{ model: "warehouse", uuid: warehouseUuid },
@@ -212,6 +214,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				basisDocumentType: basisDocumentType || null,
 				basisDocumentUuid: basisDocumentUuid || null,
 				basisDocumentLabel: basisDocumentLabel || null,
+				awpRelatedUuid: awpRelatedUuid || null,
+				sntRelatedUuid: sntRelatedUuid || null,
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -278,7 +282,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 					? parseFloat(req.body.discountAmount)
 					: null;
 
-		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"]) {
+		for (const f of ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel", "awpRelatedUuid", "sntRelatedUuid"]) {
 			if (req.body[f] !== undefined) data[f] = req.body[f] || null;
 		}
 		if (data.warehouseUuid) {

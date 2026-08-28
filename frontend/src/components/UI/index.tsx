@@ -94,7 +94,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   const isDirty = usePaneIsDirty(p.uniqId);
   const isEditMode = usePaneIsEditMode(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
-  const Component = p.component as FC<any>;
+  const Component = p.component as FC<Partial<TPane>>;
 
   // Ref на корневой DOM-узел Pane — нужен чтобы при открытии нового пейна
   // или переключении на существующий автоматически передать фокус

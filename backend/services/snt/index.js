@@ -3,6 +3,8 @@
 // через NCALayer): sntBody + signature? + x509Certificate (см. SntUploadInfo.xsd).
 import { serviceUrl } from "../esf/config.js";
 import { soapCall, EsfSoapError, extractTag, xmlEscape } from "../esf/soapClient.js";
+import { enrichErrors } from "../esf/errorCatalog.js";
+import { parseUploadErrors } from "../esf/parseUploadErrors.js";
 
 const NS = { prefix: "snt", ns: "v1.snt" };
 const URL = () => serviceUrl("SntWebService");
@@ -38,10 +40,13 @@ export async function uploadSnt({ sessionId, sntBody, signature, x509Certificate
 		(x509Certificate ? `<x509Certificate>${xmlEscape(x509Certificate)}</x509Certificate>` : "") +
 		"</snt:uploadSntRequest>";
 	const xml = await soapCall(URL(), body, { ns: NS });
+	// T7.8: построчные ошибки отклонения (enrichErrors — офиц. текст+категория).
+	const errors = await enrichErrors(parseUploadErrors(xml));
 	return {
 		id: extractTag(xml, "id") || extractTag(xml, "sntId"),
 		registrationNumber: extractTag(xml, "registrationNumber"),
 		status: extractTag(xml, "status") || extractTag(xml, "sntStatus"),
+		errors,
 		raw: xml,
 	};
 }

@@ -1,0 +1,11 @@
+[
+	{ "identifier": "id", "type": "number", "width": "70px", "minWidth": "60px", "alignment": "left", "hint": "Номер", "visible": true, "inlist": true },
+	{ "identifier": "uuid", "type": "string", "width": "300px", "minWidth": "80px", "alignment": "left", "hint": "UUID", "visible": false, "inlist": false },
+	{ "identifier": "title", "type": "string", "width": "260px", "minWidth": "120px", "alignment": "left", "hint": "Сделка", "visible": true, "inlist": true },
+	{ "identifier": "stage", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "left", "hint": "Стадия", "visible": true, "inlist": true },
+	{ "identifier": "counterpartyName", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Контрагент", "visible": true, "inlist": true },
+	{ "identifier": "amount", "type": "number", "width": "130px", "minWidth": "90px", "alignment": "right", "hint": "Сумма", "visible": true, "inlist": true },
+	{ "identifier": "probability", "type": "number", "width": "90px", "minWidth": "70px", "alignment": "right", "hint": "Вероятность, %", "visible": true, "inlist": true },
+	{ "identifier": "expectedCloseDate", "type": "date", "width": "130px", "minWidth": "100px", "alignment": "left", "hint": "Ожид. закрытие", "visible": true, "inlist": true },
+	{ "identifier": "responsibleName", "type": "string", "width": "160px", "minWidth": "100px", "alignment": "left", "hint": "Ответственный", "visible": true, "inlist": true }
+]

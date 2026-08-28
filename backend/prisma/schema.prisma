@@ -61,6 +61,7 @@ model User {
   authoredGoodsReceipts GoodsReceipt[] @relation("GoodsReceiptAuthor")
   authoredStockCounts   StockCount[]   @relation("StockCountAuthor")
   pipeActivities        PipeActivity[] @relation("UserPipeActivities")
+  deals                 Deal[]         @relation("UserDeals")
   chatMessages          ChatMessage[]  @relation("UserChatMessages")
 
   @@index([employeeUuid])
@@ -176,6 +177,7 @@ model Organization {
   purchaseRequisitions PurchaseRequisition[]
   productRegister      ProductRegister[]
   reservationRegister  ReservationRegister[]
+  deals                Deal[]                          @relation("OrgDeals")
   commercialOffers     CommercialOffer[]
   salesOrders          SalesOrder[]
   reservations         Reservation[]
@@ -234,6 +236,7 @@ model Counterparty {
   sales                Sale[]
   saleReturns          SaleReturn[]
   todos                Todo[]
+  deals                Deal[]                @relation("CpDeals")
   commercialOffers     CommercialOffer[]
   salesOrders          SalesOrder[]
   reservations         Reservation[]
@@ -687,12 +690,16 @@ model Sale {
   awpSentAt             DateTime?
   awpErrorText          String?
   awpXml                String?       @db.Text
+  /// Основная Реализация (ЭАВР), к которой относится корректировочный АВР (T7.11).
+  awpRelatedUuid        String?
   sntStatus             String?
   sntId                 String?
   sntRegistrationNumber String?
   sntSentAt             DateTime?
   sntErrorText          String?
   sntXml                String?       @db.Text
+  /// Основной документ-источник СНТ для RETURNED_SNT/FIXED_SNT (T7.11).
+  sntRelatedUuid        String?
   updatedAt             DateTime      @default(now()) @updatedAt
   deletedAt             DateTime?
   saleItems             SaleItem[]
@@ -956,6 +963,8 @@ model InventoryTransfer {
   sntSentAt              DateTime?
   sntErrorText           String?
   sntXml                 String?                 @db.Text
+  /// Основной документ-источник СНТ для RETURNED_SNT/FIXED_SNT (T7.11).
+  sntRelatedUuid         String?
   updatedAt              DateTime                @default(now()) @updatedAt
   deletedAt              DateTime?
   inventoryTransferItems InventoryTransferItem[]
@@ -2155,6 +2164,10 @@ model AccountingEntry {
 
   @@index([organizationUuid])
   @@index([documentType, documentUuid])
+  // E3.3: отчёт «продажи по товару»/ABC/прибыль фильтрует проводки по документу
+  // БЕЗ documentType (documentUuid IN docUuids) — составной [documentType,
+  // documentUuid] тут не работает (нет левого префикса), нужен отдельный индекс.
+  @@index([documentUuid])
   @@index([date])
   @@index([debitAccountCode])
   @@index([creditAccountCode])
@@ -3211,4 +3224,44 @@ model EsfInboundLine {
 
   @@index([inboundUuid])
   @@map("esf_inbound_lines")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deal (E9 CRM) — сделка/возможность в воронке продаж. НЕ учётный документ:
+// движений регистра и проводок не даёт. Стадия (stage) двигает карточку по
+// канбану; status фиксирует исход (open/won/lost). Связь с контрагентом и
+// ответственным (User). Изоляция по организации — как у прочих сущностей.
+// ─────────────────────────────────────────────────────────────────────────────
+model Deal {
+  id                Int       @id @default(autoincrement())
+  uuid              String    @unique @default(uuid())
+  number            String?
+  title             String
+  /// Стадия воронки: new|qualified|proposal|negotiation|won|lost (см. фронт STAGES).
+  stage             String    @default("new")
+  /// Исход: open|won|lost. Ставится автоматически при стадии won/lost.
+  status            String    @default("open")
+  amount            Decimal   @default(0) @db.Decimal(18, 2)
+  currency          String    @default("KZT")
+  /// Вероятность закрытия, % (0..100) — для взвешенной воронки.
+  probability       Int       @default(0)
+  expectedCloseDate DateTime?
+  comment           String?
+  organizationUuid  String?
+  counterpartyUuid  String?
+  responsibleUuid   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+  deletedAt         DateTime?
+
+  organization Organization? @relation("OrgDeals", fields: [organizationUuid], references: [uuid])
+  counterparty Counterparty? @relation("CpDeals", fields: [counterpartyUuid], references: [uuid])
+  responsible  User?         @relation("UserDeals", fields: [responsibleUuid], references: [uuid])
+
+  @@index([organizationUuid])
+  @@index([counterpartyUuid])
+  @@index([responsibleUuid])
+  @@index([stage])
+  @@index([updatedAt])
+  @@map("deals")
 }

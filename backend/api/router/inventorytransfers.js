@@ -161,6 +161,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			organizationUuid,
 			posted,
 			amount,
+			sntRelatedUuid,
 		} = req.body;
 		// Stage D: оба склада принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, fromWarehouseUuid, toWarehouseUuid }, prisma);
@@ -178,6 +179,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				organizationUuid: organizationUuid || null,
 				posted: typeof posted === "boolean" ? posted : false,
 				amount: amount != null ? parseFloat(amount) : null,
+				sntRelatedUuid: sntRelatedUuid || null,
 				authorUuid: req.user.uuid,
 			},
 			include: {
@@ -208,6 +210,7 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			"fromWarehouseUuid",
 			"toWarehouseUuid",
 			"organizationUuid",
+			"sntRelatedUuid",
 		]) {
 			if (req.body[f] !== undefined)
 				data[f] = req.body[f]?.trim?.() ?? req.body[f] ?? null;

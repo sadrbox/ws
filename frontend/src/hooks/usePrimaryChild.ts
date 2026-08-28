@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from "react";
+import { asText } from "src/utils/asText";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "src/services/api/client";
 
@@ -73,7 +74,7 @@ export function usePrimaryChild(params: {
 	}, [endpoint, primary, invalidate]);
 
 	const primaryUuid = primary?.uuid ?? "";
-	const primaryName = primary ? String(primary[displayField] ?? "") : "";
+	const primaryName = primary ? asText(primary[displayField]) : "";
 
 	return {
 		primaryUuid,

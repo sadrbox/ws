@@ -3,6 +3,8 @@
 // через NCALayer): awpBody + signature? + x509Certificate.
 import { serviceUrl } from "../esf/config.js";
 import { soapCall, EsfSoapError, extractTag, xmlEscape } from "../esf/soapClient.js";
+import { enrichErrors } from "../esf/errorCatalog.js";
+import { parseUploadErrors } from "../esf/parseUploadErrors.js";
 
 const NS = { prefix: "awp", ns: "v1.awp" };
 const URL = () => serviceUrl("AwpWebService");
@@ -42,10 +44,13 @@ export async function uploadAwp({ sessionId, awpBody, signature, x509Certificate
 		(x509Certificate ? `<x509Certificate>${xmlEscape(x509Certificate)}</x509Certificate>` : "") +
 		"</awp:uploadAwpRequest>";
 	const xml = await soapCall(URL(), body, { ns: NS });
+	// T7.8: построчные ошибки отклонения (enrichErrors — офиц. текст+категория).
+	const errors = await enrichErrors(parseUploadErrors(xml));
 	return {
 		id: extractTag(xml, "id") || extractTag(xml, "awpId"),
 		registrationNumber: extractTag(xml, "registrationNumber"),
 		status: extractTag(xml, "status") || extractTag(xml, "awpStatus"),
+		errors,
 		raw: xml,
 	};
 }

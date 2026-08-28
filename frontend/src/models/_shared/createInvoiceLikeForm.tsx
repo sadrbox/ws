@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // ─────────────────────────────────────────────────────────────────────────────
 // createInvoiceLikeForm — фабрика для счёт-фактур, счёт на оплату, заявок.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,20 +45,37 @@ import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useEsfInvoice } from "src/hooks/useEsfInvoice";
 import type { NoticeItem } from "src/components/Notice";
 import { useAppContext } from "src/app/context";
-import { type BasisFromTarget, type OrgDependentField, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { type BasisFromTarget, type OrgDependentField, type BasisSource, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
 export type { BasisTypeConfig };
 
+/** Строка результата лукапа (организация/контрагент/договор) — поля, которые
+ *  читают обработчики выбора. Все опциональны: набор зависит от справочника. */
+interface LookupRow {
+  organizationUuid?: string | null;
+  organization?: { name?: string | null } | null;
+  counterpartyUuid?: string | null;
+  counterparty?: { name?: string | null } | null;
+  enterpriseCategory?: string | null;
+}
+
+/** Строка, которую фабрика подготавливает для печати (все поля уже числа/строки).
+ *  buildLayout моделей ре-мапит её в свой конкретный печатный тип. */
+export interface InvoicePrintRow {
+  number: number; name: string; unit: string;
+  quantity: number; price: number; amount: number;
+  amountWithoutVat: number; vatRate: number; vatAmount: number;
+  exciseRate: number; exciseAmount: number;
+  discountPercent: number; discountAmount: number;
+}
+
 export interface PrintConfig {
-  /** items — строки документа, которые мапперы печати кладут в типизированные
-   *  печатные строки (SaleItemPrintRow и др.). Тип `any` здесь СУЩЕСТВЕННЫЙ:
-   *  TDataItem даёт unknown, а печатные типы требуют number/string, и конверсия
-   *  (Number(r.quantity)) изменила бы вывод при пустых значениях — это смена
-   *  поведения, а не типизация. */
-  buildLayout: (fields: TFields, items: any[], cols: Record<string, boolean>) => React.ReactNode;
+  /** items — строки, уже приведённые фабрикой к числам/строкам (InvoicePrintRow).
+   *  buildLayout каждой модели ре-мапит их в свой конкретный печатный тип. */
+  buildLayout: (fields: TFields, items: InvoicePrintRow[], cols: Record<string, boolean>) => React.ReactNode;
   columnDefs: PrintColumnDef[];
   columnsKey: string;
   fileBaseName: (fields: TFields) => string;
@@ -533,7 +549,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
 
     const handleCreateFromBasis = useCallback(async (target: BasisFromTarget) => {
       const withKnown: BasisFromTarget = { ...target, knownExisting: target.existingCheckEndpoint ? (existingDeps[target.existingCheckEndpoint] ?? null) : null };
-      await openDocumentFromBasis(form.fields as any, cfg.formLabel, withKnown, addPane);
+      await openDocumentFromBasis(form.fields as unknown as BasisSource, cfg.formLabel, withKnown, addPane);
     }, [form.fields, addPane, existingDeps]);
     const showHeaderActions = isSavedDoc || hasBasis;
     const headerActionsPortal = usePaneHeaderActions(
@@ -601,7 +617,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     );
 
     const syncContract = useContractSync();
-    const handleContractSelect = useCallback((uuid: string, displayValue: string, item: Record<string, any>) => {
+    const handleContractSelect = useCallback((uuid: string, displayValue: string, item: LookupRow) => {
       const updates: Partial<TFields> = { contractUuid: uuid, contractName: displayValue };
       if (item.organizationUuid) { updates.organizationUuid = item.organizationUuid; updates.organizationName = item.organization?.name ?? ""; }
       if (item.counterpartyUuid) { updates.counterpartyUuid = item.counterpartyUuid; updates.counterpartyName = item.counterparty?.name ?? ""; }
@@ -609,7 +625,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     }, [form.setFields]);
 
     // Выбор контрагента: ЭСФ — грузополучатель = контрагент; категория получателя из карточки.
-    const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string, item?: Record<string, any>) => {
+    const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string, item?: LookupRow) => {
       const updates: Partial<TFields> = { counterpartyUuid: uuid, counterpartyName: displayValue };
       if (cfg.hasEsf) {
         updates.esfConsigneeUuid = uuid; updates.esfConsigneeName = displayValue;
@@ -628,7 +644,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
 
     // Смена организации: зависимые поля (договор, склад если есть) →
     // дефолт пользователя для новой орг, иначе очистка.
-    const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string, item?: Record<string, any>) => {
+    const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string, item?: LookupRow) => {
       const cur = form.store.getSnapshot().fields;
       if (cur.organizationUuid === uuid) return;
       const patch0: Partial<TFields> = { organizationUuid: uuid, organizationName: displayValue };

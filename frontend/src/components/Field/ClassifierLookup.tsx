@@ -1,4 +1,5 @@
 // Поле-автокомплит по классификатору РК/ЕАЭС (страны/ТН ВЭД/КАТО/ГС ВС).
+import { asText } from "src/utils/asText";
 // Хранит КОД (не uuid). Обёртка над LookupField — единый вид/поведение с остальными
 // лукапами (стили FieldWrapper, портал-дропдаун в ячейках, «Быстрый выбор» + «Список»).
 // Отображает «код — наименование» (имя резолвится по коду, если не передано явно).
@@ -42,13 +43,13 @@ export const ClassifierLookup: FC<Props> = ({ type, label, name, value, displayN
 			endpoint="classifiers"
 			displayField="name"
 			extraParams={{ type }}
-			getSuggestionLabel={(i) => `${i.code}${i.name ? ` — ${i.name}` : ""}`}
+			getSuggestionLabel={(i) => `${asText(i.code)}${i.name ? ` — ${asText(i.name)}` : ""}`}
 			visibleActions={["quickselect", "list"]}
 			allowCreate={false}
 			disabled={disabled}
 			width={width}
 			variant={variant ?? "default"}
-			onSelect={(_uuid, _display, item) => onChange(String(item.code ?? ""), String(item.name ?? ""))}
+			onSelect={(_uuid, _display, item) => onChange(asText(item.code), asText(item.name))}
 		/>
 	);
 };

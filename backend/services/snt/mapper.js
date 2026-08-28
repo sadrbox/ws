@@ -102,6 +102,20 @@ export function validateSntProducts(items) {
  * @param {object} [opts] @param {string} [opts.sntType="PRIMARY_SNT"] @param {Date} [opts.shippingDate]
  * @returns {string} XML `<v1:snt xmlns:v1="v1.snt">…`
  */
+// Ссылка на основную СНТ для корректировочных типов (RETURNED_SNT/FIXED_SNT),
+// аналог ЭСФ relatedInvoice (T7.11). Порядок/имя тега — гипотеза до сверки с
+// живым контуром (T7.1); эмитится только когда caller передал opts.related.
+function relatedSntXml(related) {
+	if (!related) return "";
+	return (
+		"<relatedSnt>" +
+		tag("date", sntDate(related.date)) +
+		tag("number", related.number || "") +
+		tag("registrationNumber", related.registrationNumber || "") +
+		"</relatedSnt>"
+	);
+}
+
 export function buildSntV1Xml(doc, opts = {}) {
 	if (!doc) throw new Error("buildSntV1Xml: нет данных документа");
 	const items = doc.items || [];
@@ -113,6 +127,7 @@ export function buildSntV1Xml(doc, opts = {}) {
 		reqTag("number", doc.number || "") +
 		tag("shippingDate", sntDate(opts.shippingDate || doc.date)) +
 		reqTag("sntType", sntType) +
+		relatedSntXml(opts.related) +
 		contractXml(doc.contract) +
 		reqTag("currencyCode", DEFAULT_CURRENCY) +
 		participantXml("customer", doc.counterparty || doc.organization) +

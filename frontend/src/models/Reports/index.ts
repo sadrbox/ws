@@ -7,6 +7,7 @@ export { SettlementsReport } from "./SettlementsReport";
 export { InventoryTurnoverReport } from "./InventoryTurnoverReport";
 export { InventoryBatchesReport } from "./InventoryBatchesReport";
 export { ABCReport } from "./ABCReport";
+export { XYZReport } from "./XYZReport";
 export { ProductRegisterReport } from "./ProductRegisterReport";
 export { PriceListReport } from "./PriceListReport";
 export { AccountingJournal } from "./AccountingJournal";

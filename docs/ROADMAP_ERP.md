@@ -68,12 +68,15 @@ backend-node` — только по команде пользователя.
   (CSV/XLSX) для контрагентов/номенклатуры/остатков.
 
 ### E3 — Производительность (1M товаров / 100 польз.)
-- **T3.1 Виртуализация таблиц**: виртуальный скролл в `Table`/`ModelList` (окно строк) —
-  без смены API компонента; замерить на 100k+ строк.
+- **T3.1 Виртуализация таблиц** — ✅ по факту кода (сверка 2026-08-28): `@tanstack/react-virtual`
+  в `Table` (VirtualPaddingRow/startIndexVirtual в TableBody.tsx). Замер на 100k+ — при желании.
 - **T3.2 Redis-кэш**: подключить Redis для справочников/классификаторов/прав (инвалидация
-  по write); фича-флаг, чтобы работать и без Redis.
-- **T3.3 Индексы БД**: аудит `@@index` по частым where/sort (по slow-query); добавить
-  недостающие миграциями.
+  по write); фича-флаг, чтобы работать и без Redis. ⛔ нужна инфраструктура Redis.
+- **T3.3 Индексы БД** — ⏳ аудит проведён (2026-08-28): схема зрелая (437 @@index, композиты
+  горячих путей на месте — напр. `ProductRegister[productUuid,warehouseUuid,date]`,
+  `AccountingEntry[organizationUuid,date]`). Реальный пробел закрыт: `AccountingEntry[documentUuid]`
+  (миграция `20260828160000_idx_entry_document`) — отчёты «продажи по товару»/ABC/прибыль фильтруют
+  проводки по documentUuid БЕЗ типа, составной [documentType,documentUuid] не применялся.
 - **T3.4 Загрузка больших списков**: пагинации в UI НЕТ намеренно (виртуализация/полная
   загрузка) — оптимизировать через виртуальный скролл (T3.1) + индексы (T3.3) + кэш (T3.2),
   а НЕ вводить постраничную навигацию.
@@ -142,11 +145,17 @@ backend-node` — только по команде пользователя.
   SOAP-фолта) общий. НО обогащение по каталогу кодов (`errorCatalog.enrichErrors`: офиц. текст +
   категория) применяется ТОЛЬКО в ЭСФ `syncInvoice`. Вынести в общий слой и применить в
   `uploadSnt`/`uploadAwp`/`changeStatus`. Плюс регресс-тест инварианта «один sessionId на
-  ЭСФ+СНТ+ЭАВР» (A1 — уже выполняется, зафиксировать тестом).
-- **T7.8 (B3) Построчные ошибки СНТ/ЭАВР** — ❌. `uploadSnt`/`uploadAwp` возвращают только
-  `{id, registrationNumber, status, raw}` — нет разбора declined-набора (в ЭСФ есть
-  `parseSyncResult`→acceptedSet/declinedSet→`enrichErrors`). Добавить парсер + табличную часть
-  «Ошибки» на форме, иначе не видно, какая строка отклонена.
+  ЭСФ+СНТ+ЭАВР» (A1 — уже выполняется, зафиксировать тестом). ⏳ ЧАСТИЧНО (2026-08-28): `enrichErrors`
+  применён в `uploadSnt`/`uploadAwp` (через `parseUploadErrors`, см. T7.8). Остаётся `changeStatus` + регресс-тест sessionId.
+- **T7.8 (B3) Построчные ошибки СНТ/ЭАВР** — ⏳ BACKEND ГОТОВ (2026-08-28). Общий парсер
+  `services/esf/parseUploadErrors.js` (`parseUploadErrors` — все блоки `<error>` c
+  errorCode/text|description|errorText/property + фолбэк на верхнеуровневую ошибку; `joinErrorText`).
+  `uploadSnt`/`uploadAwp` теперь `enrichErrors(parseUploadErrors(xml))` → поле `errors[]` в ответе;
+  роутер `govdocs.js` upload пишет свод в `sntErrorText`/`awpErrorText` и отдаёт `errors[]` форме.
+  Юнит-тест `__tests__/parseUploadErrors.test.js` (7, headless — чистый парсер). Формат ответа СНТ/
+  ЭАВР — гипотеза до живого контура (T7.1); парсер устойчив к вариантам имён. Также частично закрывает
+  T7.7 (enrichErrors теперь и в СНТ/ЭАВР). ОСТАЁТСЯ: табличная часть «Ошибки» на форме (сейчас — свод
+  в *ErrorText + errors[] в ответе upload).
 - **T7.9 (B1) 17 табличных частей СНТ** — ❌. `services/snt/mapper.js` заполняет только базовый
   `productSet` (в комментарии: «наборы алкоголь/нефть/маркировка/транспорт не заполняются»). По
   `Documents\СНТ.xml` расписать под-задачами: этил.спирт, виноматериал, пиво, алкоголь,
@@ -154,10 +163,14 @@ backend-node` — только по команде пользователя.
   погруз/разгруз, таксировка. Сейчас НЕ маппится ни одна спец-категория. Включать инкрементально.
 - **T7.10 (B2) СопоставлениеСНТиФНО (fnoMatching)** — ❌ не найдено. Решить, нужен ли поток
   сверки с таможенной декларацией (документ + `FnoMatchingWebService`, см. T7.2b).
-- **T7.11 (C1) Корректировочные цепочки СНТ/ЭАВР** — ❌. У ЭСФ есть `esfRelatedInvoiceUuid`, у
-  Sale для ЭАВР — только `awpStatus/awpId/...`, поля «связанный АВР» НЕТ (маппер цепочку не
-  строит). Добавить `awpRelatedUuid` (+ в маппер, как в ЭСФ). Аналогично `sntRelatedUuid` для
-  `RETURNED_SNT`/`FIXED_SNT`.
+- **T7.11 (C1) Корректировочные цепочки СНТ/ЭАВР** — ⏳ BACKEND ГОТОВ (2026-08-28). Поля
+  `Sale.awpRelatedUuid`, `Sale.sntRelatedUuid`, `InventoryTransfer.sntRelatedUuid` (миграция
+  `20260828150000_gov_correction_chain`, РУКОПИСНАЯ — только ADD COLUMN). Персист в `sales.js`/
+  `inventorytransfers.js`. Резолв в `govdocs.js` (build-xml ЭАВР + СНТ): связанный документ →
+  `{date,number,registrationNumber}` → `opts.related` → мапперы эмитят `<relatedAwp>`/`<relatedSnt>`
+  (SNT только для RETURNED_SNT/FIXED_SNT), как ЭСФ `relatedInvoice`. ИМЯ/ПОРЯДОК тега — гипотеза
+  до сверки на живом контуре (T7.1). ОСТАЁТСЯ: UI-лукап «связанный документ» на форме Реализации/
+  Перемещения (сейчас поле только через API; ЭСФ-аналог живёт на форме OutgoingInvoice).
 - **T7.13 (H1) Импорт входящего ЭСФ → Поступление с find-or-create** — ⏳ BACKEND ГОТОВ
   (ОС Трек B, 2026-08-15): модели `EsfInbound`/`EsfInboundLine`, роутер `esf-inbounds` (список/
   деталь/ручное создание + `POST /:id/to-purchase`), сервис `services/esf/inboundToPurchase.js`
@@ -187,24 +200,40 @@ backend-node` — только по команде пользователя.
   платёжные ссылки; секреты через AppSetting/ENV, не в коде.
 
 ### E9 — CRM
-- **T9.1 Сделки/воронка**: модель `Deal`(стадии, сумма, ответственный) + канбан-представление;
-  связь с контрагентом/заказами.
+- **T9.1 Сделки/воронка** — ✅ (2026-08-28). Модель `Deal` (stage/status/amount/probability/
+  expectedCloseDate + FK контрагент/организация/ответственный), миграция `20260828140000_crm_deals`
+  (РУКОПИСНАЯ — полный дифф тянул дрейф: DROP INDEX штрихкодов/trigram). Backend `deals.js` (CRUD,
+  flatten имён связей, stage won/lost → status). Front: форма+список (`models/Deals`) + канбан
+  `DealsKanban` (колонки-стадии, перенос через select→PUT). Меню CRM → «Сделки», гейт `can("Deal")`.
 - **T9.2 Взаимодействия**: комментарии/задачи/история по контрагенту (переиспользовать `Todos`/
-  `Contacts`).
+  `Contacts`). Задел: заметки/задачи «из записи» уже есть ([[project_notes_feature]]).
 
-### E10 — Отчёты
-- **T10.1 ABC/XYZ-анализ** номенклатуры; **T10.2 Прибыль** (выручка−себестоимость по ФИФО/сред.);
-  **T10.3 Движение товаров** (приход/расход/остаток за период). Существующий каркас `Reports`.
+### E10 — Отчёты — ✅ в основном готово
+Каркас `Reports` содержит 15 отчётов. По факту кода (сверка 2026-08-28):
+- **T10.1 ABC/XYZ** — ✅ `ABCReport` (вклад в выручку) + `XYZReport` (2026-08-28, совмещённый
+  ABC-XYZ: XYZ по коэффициенту вариации помесячного нетто-спроса, месяцы без продаж=0; матрица 3×3).
+  Backend `reports/sales-by-product` (ABC) + `reports/sales-by-product-xyz` (помесячные количества).
+- **T10.2 Прибыль** — ✅ в `SalesReport`/`sales-by-product` (выручка−себестоимость из проводок 7010,
+  акциз исключён; сходится с ОСВ при ФИФО/средней) + `ManagerReport`.
+- **T10.3 Движение товаров** — ✅ `reports/product-movements` + `InventoryTurnoverReport`/
+  `MaterialStatement` (приход/расход/остаток, себестоимость единым движком `costingReplay`).
 
 ### E11 — Модульность и данные
-- **T11.1 Вкл/выкл модулей** на орг (флаги в `AppSetting`/`OrganizationAccountingSetting`),
-  скрытие в NavList + серверный гард.
+- **T11.1 Вкл/выкл модулей** — ✅ (2026-08-28). Флаги в `AppSetting` (ключ `modules.disabled.<orgUuid>`
+  = JSON-массив, без миграции), 7 модулей: sales/purchase/warehouse/cash/hr/govdocs/edo. Backend
+  `services/moduleAccess.js` (кэш + `moduleGuardMiddleware`: 403 MODULE_DISABLED на POST создания
+  документа отключённого модуля) + роутер `module-settings` GET/PUT (PUT — суперадмин). Front:
+  `config/modules.ts` + `useDisabledModules` (скрытие групп в NavList) + админ-пейн `ModuleSettings`.
+  Гард покрывает create-POST sales/purchase/склад(4)/касса(3)/ЗП(2); govdocs/edo скрыты в UI (их POST —
+  интеграционные действия, не create-коллекции). Читать/править историю отключённого модуля можно.
 - **T11.2 Журнал изменений на всех сущностях** (см. T1.2) как сквозная возможность модуля.
 
 ### E12 — Качество
 - **T12.1 TS strict-аудит**: добить оставшиеся `source-any` помодульно (мерить `tsc` после каждой).
-- **T12.2 Покрытие тестами**: юниты сервисов/мапперов (по образцу `esfInvoiceMapper.test.js`),
-  мультиарендность/права (`test-multitenancy.js`).
+- **T12.2 Покрытие тестами** — ⏳ прирастает. Frontend-тесты 391→**417** (2026-08-28): чистая логика
+  ABC-XYZ вынесена в `models/Reports/_shared/xyz.ts` + тесты (`xyzAnalysis` 20), `asText` (6),
+  контракт стадий CRM (`dealStages` 4). Остаётся: backend-мапперы `esf/snt/awp`, `documentChain`,
+  `recomputeCosting` (backend-тесты бьют по РЕАЛЬНОЙ БД — нужен тест-Postgres, не headless).
 - **T12.3 Рефактор по SOLID/DRY**: вынести повторы (фабрики уже частично); убрать мёртвый код.
 
 ### E13 — Технический долг / качество (по аудиту 2026-08-15)
@@ -221,27 +250,36 @@ Windows-бандл. Статус: ✅ сделано · ⏳ в работе · �
   `lazyView` — при «Failed to fetch dynamically imported module» (перезапуск Vite-dev / устаревший
   чанк после деплоя) повтор import + однократный reload (флаг в sessionStorage). Лечит наблюдаемые
   на aleppo.kz сбои `/src/models/*.tsx`.
-- **Q2 ⏳ Тип-безопасность (каскад any)**: 281 источник → ~1400 eslint-ошибок (`no-unsafe-*`,
-  `no-explicit-any`). Чинить В ИСТОЧНИКАХ помодульно, мерить eslint после каждого (см. [[project_type_safety_6]]).
-  Крупная фазовая. **Трещотка включена** (2026-08-15): `frontend/.eslint-baseline`=1656 +
-  `scripts/eslint-ratchet.mjs` + шаг CI `lint:ratchet` (блокирует РОСТ ошибок; при снижении —
-  опустить baseline). Так долг гасится монотонно вниз, новый код обязан быть чистым.
-- **Q3 ❌ `react-hooks/exhaustive-deps` — 116**: риск устаревших замыканий; каждый разобрать
-  (дописать deps или подавить с обоснованием).
-- **Q5 ❌ `no-base-to-string` — 96**: объекты в `String(...)`/шаблонах → «[object Object]»; защитить
-  построители подписей (`resolveOwnerName`, `paneLink`, `buildPaneLabel`, `renderAuditCell`).
+- **Q2 ✅ Тип-безопасность (каскад any)** (2026-08-28): baseline ESLint 1668→**40**. Ключевое —
+  типизация параметра печати `items: any[]`→`InvoicePrintRow[]` в `createInvoiceLikeForm` (сняла весь
+  каскад unsafe-* по 8 моделям), `LookupRow` вместо `Record<string,any>`, `asText` для base-to-string,
+  синглтоны (`liveEvents`,`UI/index`). Трещотка `frontend/.eslint-baseline`=40 + `scripts/eslint-ratchet.mjs`
+  + шаг CI `lint:ratchet`. Остаток 40 — намеренный: моки в тестах, дженерик-контракты
+  (`useFormStore` колбэки, `FormLookup<F extends Record<string,any>>`, `TComponentNode`), Node-скрипты `require()`.
+- **Q3 ⚠️ `react-hooks/exhaustive-deps` — 105**: безопасное подмножество разобрано. Остаток: ~65 —
+  намеренный ложноположительный паттерн (колбэки зависят от стабильных под-ссылок `form.setFields`/
+  `form.store`, а не от нестабильного объекта `form`; добавить `form` = пересоздавать колбэки каждый
+  рендер без выигрыша); ~40 — требуют пер-хук рантайм-разбора (риск циклов/устаревших замыканий).
+- **Q5 ✅ `no-base-to-string`** (2026-08-28): 96→0. Утилита `asText(v: unknown): string` (примитивы→
+  строка, Date→ISO, null/объект→"") в построителях подписей и лукапах (`ClassifierLookup`, `usePrimaryChild`).
 - **Q6 ✅ Мёртвый код** (2026-08-15): удалён `backend/api/v1_old.js` (0 ссылок). Заодно вычищен
   мёртвый проп `parentLabel` (объявлен в `TradeDocumentItemsTable`, не рендерился) + 8 call-site и
   осиротевший конфиг `parentLabelListKey` (3 конфига + интерфейс фабрики).
-- **Q7 ❌ Строгость неиспользуемого**: убрать 33 `no-unused-vars`, затем вернуть `noUnusedLocals/
-  noUnusedParameters:true` в tsconfig (сейчас отключены).
+- **Q7 ✅ Строгость неиспользуемого** (2026-08-28): 33→0 `no-unused-vars` (в т.ч. `ThemeSwitcher`
+  экспортирован как feature-in-waiting под тёмную тему E5). Возврат `noUnusedLocals/noUnusedParameters:true`
+  в tsconfig — остаётся отдельным шагом.
 - **Q8 ✅ Хардкод конфига** (2026-08-15): `LOCAL_API_URL` в `services/api/client.ts` теперь
   `import.meta.env.VITE_LOCAL_API_URL || <прежний фолбэк>`.
-- **Q9 ❌ Декомпозиция мега-модулей**: `hooks/useFormStore.ts` 2261, `components/UI/index.tsx` 1394,
-  `components/Field/index.tsx` 1148, `components/SubTable/index.tsx` 990 (паттерн [[reference_table_decomposition]]).
+- **Q9 ✅ Декомпозиция мега-модулей** (2026-08-28): мега-хабы разобраны (~14 срезов) —
+  `hooks/useFormStore.ts` 2262→1832 (paneNotifications/paneFormState/formSession/formStore.types),
+  `components/UI/index.tsx` 1463→394 (NavList/Navbar/PanesTabs), `components/Field/index.tsx` 1148→290
+  (fieldBase/FieldNumber/FieldPeriod/FieldFile/FieldDate/FieldTextarea), `LookupField` (lookupHelpers).
+  Внешние импорты через ре-экспорт. Оставшиеся крупные файлы (SubTable 988, Sales 912,
+  createInvoiceLikeForm 907) — цельные единицы одной ответственности, дальше не дробим.
 - **Q10 ❌ ESLint для backend**: сейчас отсутствует; flat-config + скрипт `lint`.
-- **Q11 ❌ Покрытие тестами** (пересекается с T12.2): `esf/snt/awp` мапперы, `documentChain`,
-  `recomputeCosting`, `useFormStore`.
+- **Q11 ⚠️ Покрытие тестами** (пересекается с T12.2): frontend 391→417 (ABC-XYZ/asText/deal-stages,
+  2026-08-28). Остаётся: `esf/snt/awp` мапперы, `documentChain`, `recomputeCosting`, `useFormStore`
+  (backend-тесты требуют тест-Postgres).
 
 ---
 

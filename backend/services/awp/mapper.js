@@ -133,6 +133,20 @@ function worksPerformedXml(sale, items) {
  * @param {object} [opts] @param {Date|string} [opts.performedDate] — дата выполнения работ.
  * @returns {string} XML `<v1:awp xmlns:v1="v1.awp">…`
  */
+// Ссылка на основной ЭАВР для корректировочного акта (T7.11), аналог ЭСФ
+// relatedInvoice. Имя/порядок тега — гипотеза до сверки с живым контуром (T7.1);
+// эмитится только когда caller передал opts.related.
+function relatedAwpXml(related) {
+	if (!related) return "";
+	return (
+		"<relatedAwp>" +
+		tag("date", awpDate(related.date)) +
+		tag("number", related.number || "") +
+		tag("registrationNumber", related.registrationNumber || "") +
+		"</relatedAwp>"
+	);
+}
+
 export function buildAwpV1Xml(sale, opts = {}) {
 	if (!sale) throw new Error("buildAwpV1Xml: нет данных документа");
 	const items = sale.saleItems || [];
@@ -144,6 +158,7 @@ export function buildAwpV1Xml(sale, opts = {}) {
 		reqTag("date", d) +
 		reqTag("number", sale.number || "") +
 		reqTag("performedDate", performed) +
+		relatedAwpXml(opts.related) +
 		contractXml(sale.contract) +
 		recipientXml(sale.counterparty) +
 		senderXml(sale.organization) +

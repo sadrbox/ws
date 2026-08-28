@@ -194,6 +194,115 @@ router.get("/reports/sales-by-product", async (req, res) => {
 	}
 });
 
+// ─── GET /reports/sales-by-product-xyz ───────────────────────────────────────
+// Источник XYZ-анализа: помесячный НЕТТО-спрос (продажи − возвраты) по каждому
+// товару за период. Месяцы без продаж считаются нулём — иначе разовая продажа
+// выглядела бы «стабильной». Возвращает выровненный по общему списку месяцев
+// массив `monthly` + `amountNet` (для ABC), а коэффициент вариации и классы
+// X/Y/Z и A/B/C считает фронт (см. XYZReport.tsx).
+// Params: dateFrom, dateTo, organizationUuid, counterpartyUuid
+function ymKey(d) {
+	const dt = new Date(d);
+	return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function enumerateMonths(fromYm, toYm) {
+	const out = [];
+	let [y, m] = fromYm.split("-").map(Number);
+	const [ty, tm] = toYm.split("-").map(Number);
+	while (y < ty || (y === ty && m <= tm)) {
+		out.push(`${y}-${String(m).padStart(2, "0")}`);
+		m += 1;
+		if (m > 12) { m = 1; y += 1; }
+	}
+	return out;
+}
+router.get("/reports/sales-by-product-xyz", async (req, res) => {
+	try {
+		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
+
+		const saleWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
+		if (counterpartyUuid) saleWhere.counterpartyUuid = counterpartyUuid;
+		const returnWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
+		if (counterpartyUuid) returnWhere.counterpartyUuid = counterpartyUuid;
+
+		const [sales, saleReturns] = await Promise.all([
+			prisma.sale.findMany({ where: saleWhere, select: { uuid: true, date: true, organization: { select: { name: true } } } }),
+			prisma.saleReturn.findMany({ where: returnWhere, select: { uuid: true, date: true } }),
+		]);
+
+		const orgName = organizationUuid ? (sales.find((s) => s.organization)?.organization?.name ?? "") : "";
+		const saleUuids = sales.map((s) => s.uuid);
+		const returnUuids = saleReturns.map((r) => r.uuid);
+		if (saleUuids.length === 0 && returnUuids.length === 0) {
+			return res.json({ success: true, items: [], months: [], orgName });
+		}
+
+		const saleDate = new Map(sales.map((s) => [s.uuid, s.date]));
+		const retDate = new Map(saleReturns.map((r) => [r.uuid, r.date]));
+
+		// Полный список месяцев периода: границы — из фильтра, иначе из фактических дат.
+		const allDates = [...sales.map((s) => s.date), ...saleReturns.map((r) => r.date)];
+		const fromYm = ymKey(dateFrom || allDates.reduce((a, b) => (a < b ? a : b)));
+		const toYm = ymKey(dateTo || allDates.reduce((a, b) => (a > b ? a : b)));
+		const months = enumerateMonths(fromYm, toYm);
+
+		const map = new Map();
+		const ensure = (item) => {
+			const key = item.productUuid ?? "__no_product__";
+			if (!map.has(key)) {
+				map.set(key, {
+					productUuid: item.productUuid,
+					productName: item.product?.name ?? "—",
+					uom: item.unitOfMeasure?.name ?? "",
+					amountNet: 0,
+					byMonth: new Map(),
+				});
+			}
+			return map.get(key);
+		};
+		const addQty = (row, ym, qty) => row.byMonth.set(ym, (row.byMonth.get(ym) ?? 0) + qty);
+
+		if (saleUuids.length > 0) {
+			const items = await prisma.saleItem.findMany({
+				where: { saleUuid: { in: saleUuids }, deletedAt: null },
+				include: { product: { select: { name: true } }, unitOfMeasure: { select: { name: true } } },
+			});
+			for (const it of items) {
+				const row = ensure(it);
+				addQty(row, ymKey(saleDate.get(it.saleUuid)), Number(it.quantity));
+				row.amountNet += Number(it.amount);
+			}
+		}
+		if (returnUuids.length > 0) {
+			const rItems = await prisma.saleReturnItem.findMany({
+				where: { saleReturnUuid: { in: returnUuids }, deletedAt: null },
+				include: { product: { select: { name: true } }, unitOfMeasure: { select: { name: true } } },
+			});
+			for (const it of rItems) {
+				const row = ensure(it);
+				addQty(row, ymKey(retDate.get(it.saleReturnUuid)), -Number(it.quantity));
+				row.amountNet -= Number(it.amount);
+			}
+		}
+
+		const items = Array.from(map.values())
+			.map((r) => ({
+				productUuid: r.productUuid,
+				productName: r.productName,
+				uom: r.uom,
+				amountNet: r2(r.amountNet),
+				// Нетто-спрос по месяцам, выровненный по общему списку (0 в пустых).
+				monthly: months.map((m) => r3(Math.max(0, r.byMonth.get(m) ?? 0))),
+			}))
+			.sort((a, b) => a.productName.localeCompare(b.productName, "ru"));
+
+		return res.json({ success: true, items, months, orgName });
+	} catch (err) {
+		console.error("GET /reports/sales-by-product-xyz error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
 // ─── GET /reports/material-statement ─────────────────────────────────────────
 // Материальная ведомость. Источник — регистр накопления product_register
 // (только проведённые документы). Себестоимость выбытия считается ЕДИНЫМ движком

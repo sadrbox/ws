@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 export default tseslint.config(
 	tseslint.configs.recommendedTypeChecked,
-	{ ignores: ["dist"] },
+	{ ignores: ["dist", "**/dist/**"] },
 	{
 		extends: [js.configs.recommended, ...tseslint.configs.recommended],
 		files: ["**/*.{ts,tsx}"],

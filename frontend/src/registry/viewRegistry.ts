@@ -143,6 +143,11 @@ export const SettlementsReport = lazyView("SettlementsReport", () => import('src
 export const InventoryTurnoverReport = lazyView("InventoryTurnoverReport", () => import('src/models/Reports/InventoryTurnoverReport').then(m => ({ default: m.InventoryTurnoverReport })));
 export const InventoryBatchesReport = lazyView("InventoryBatchesReport", () => import('src/models/Reports/InventoryBatchesReport').then(m => ({ default: m.InventoryBatchesReport })));
 export const ABCReport = lazyView("ABCReport", () => import('src/models/Reports/ABCReport').then(m => ({ default: m.ABCReport })));
+export const XYZReport = lazyView("XYZReport", () => import('src/models/Reports/XYZReport').then(m => ({ default: m.XYZReport })));
+export const ModuleSettings = lazyView("ModuleSettings", () => import('src/models/ModuleSettings').then(m => ({ default: m.ModuleSettings })));
+export const DealsList = lazyView("DealsList", () => import('src/models/Deals').then(m => ({ default: m.DealsList })));
+export const DealsForm = lazyView("DealsForm", () => import('src/models/Deals').then(m => ({ default: m.DealsForm })));
+export const DealsKanban = lazyView("DealsKanban", () => import('src/models/Deals/DealsKanban').then(m => ({ default: m.DealsKanban })));
 export const PriceListReport = lazyView("PriceListReport", () => import('src/models/Reports/PriceListReport').then(m => ({ default: m.PriceListReport })));
 export const SalesTerminal = lazyView("SalesTerminal", () => import('src/models/SalesTerminal').then(m => ({ default: m.SalesTerminal })));
 export const ChartOfAccountsList = lazyView("ChartOfAccountsList", () => import('src/models/ChartOfAccounts').then(m => ({ default: m.ChartOfAccountsList })));
@@ -238,6 +243,11 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	InventoryTurnoverReport: InventoryTurnoverReport,
 	InventoryBatchesReport: InventoryBatchesReport,
 	ABCReport: ABCReport,
+	XYZReport: XYZReport,
+	ModuleSettings: ModuleSettings,
+	DealsList: DealsList,
+	DealsForm: DealsForm,
+	DealsKanban: DealsKanban,
 	PriceListReport: PriceListReport,
 	SalesTerminal: SalesTerminal,
 	ChartOfAccountsList: ChartOfAccountsList,
