@@ -248,6 +248,7 @@
 		will-change: transform;
 		transform: translate3d(0, 0, 0);
 		contain: layout style paint;
+		// background: $fieldBackground;
 		position: relative;
 
 		tr {

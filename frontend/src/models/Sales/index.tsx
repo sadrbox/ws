@@ -43,6 +43,7 @@ import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPrev
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { useGovDocs } from "src/hooks/useGovDocs";
+import { showToast } from "src/components/UIToast";
 import { useAppContext } from "src/app/context";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
@@ -669,10 +670,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const handleGovDoc = useCallback(async (id: string) => {
     const uuid = form.fields.uuid;
     if (!uuid) return;
+    // T7.8: построчные ошибки отклонения СНТ/ЭАВР → тост (иначе не видно, какая строка отклонена).
+    const showErrors = (errs?: { errorCode?: string | null; text?: string | null; property?: string | null }[]) => {
+      if (!errs?.length) return;
+      const msg = errs.map((e) => [e.errorCode, e.text].filter(Boolean).join(": ") + (e.property ? ` (${e.property})` : "")).join("\n");
+      showToast(msg, "error");
+    };
     try {
-      if (id === "awp") { const r = await govDocs.issueAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpId: r.awpId, awpRegistrationNumber: r.awpRegistrationNumber } as unknown as Partial<TFields>); }
+      if (id === "awp") { const r = await govDocs.issueAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpId: r.awpId, awpRegistrationNumber: r.awpRegistrationNumber } as unknown as Partial<TFields>); showErrors(r.errors); }
       else if (id === "awpStatus") { const r = await govDocs.refreshAwp(uuid); form.setFields({ awpStatus: r.awpStatus, awpRegistrationNumber: r.awpRegistrationNumber } as unknown as Partial<TFields>); }
-      else if (id === "snt") { const r = await govDocs.issueSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
+      else if (id === "snt") { const r = await govDocs.issueSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); showErrors(r.errors); }
       else if (id === "sntStatus") { const r = await govDocs.refreshSnt("sales", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
     } catch { /* ошибка показывается через govDocs.error */ }
   }, [form.fields.uuid, form.setFields, govDocs]);

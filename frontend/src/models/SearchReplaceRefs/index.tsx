@@ -35,9 +35,9 @@ type ApiErr = { response?: { data?: { message?: string } }; message?: string };
 
 const StepCard: FC<{ step: number; title: string; active: boolean; children: React.ReactNode }> = ({ step, title, active, children }) => (
   <div style={{
-    border: `1px solid ${active ? "#bcd6ff" : "#e0e0e0"}`,
+    border: `1px solid ${active ? "var(--sv-color2, #bcd6ff)" : "var(--n-88, #e0e0e0)"}`,
     borderRadius: 4,
-    background: active ? "#f5f9ff" : "#fafafa",
+    background: active ? "#f5f9ff" : "var(--n-98c, #fafafa)",
     padding: "10px 14px",
     transition: "border-color 0.15s, background 0.15s",
   }}>
@@ -45,7 +45,7 @@ const StepCard: FC<{ step: number; title: string; active: boolean; children: Rea
       <span style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         width: 20, height: 20, borderRadius: "50%", fontSize: 11, fontWeight: 600,
-        background: active ? "var(--color-link)" : "#c8c8c8", color: "#fff", flexShrink: 0,
+        background: active ? "var(--color-link)" : "#c8c8c8", color: "var(--sv-color60, #fff)", flexShrink: 0,
       }}>{step}</span>
       <span style={{ fontSize: 12, fontWeight: 500, color: active ? "var(--color-link)" : "var(--text-muted)" }}>{title}</span>
     </div>
@@ -84,9 +84,9 @@ const RefsTable: FC<{ refs: RefEntry[] }> = ({ refs }) => {
     <div style={{ border: "1px solid #ddd", borderRadius: 3, overflow: "hidden", marginTop: 6 }}>
       <div style={{
         padding: "5px 10px", fontWeight: 500, fontSize: 11,
-        background: totalCount > 0 ? "#fdf3e1" : "var(--success-bg)",
+        background: totalCount > 0 ? "var(--sv-warningBg, #fdf3e1)" : "var(--success-bg)",
         borderBottom: rows.length > 0 ? "1px solid #e8e8e8" : undefined,
-        color: totalCount > 0 ? "#7a4d12" : "var(--success-fg)",
+        color: totalCount > 0 ? "var(--sv-warningText, #7a4d12)" : "var(--success-fg)",
       }}>
         {totalCount > 0 ? `Найдено ссылок: ${totalCount}` : "Ссылок не найдено — запись не используется"}
       </div>
@@ -126,7 +126,7 @@ const ProtocolBlock: FC<{ summary: ExecuteSummary; entries: ProtocolEntry[] }> =
         <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{fmtDate(summary.executedAt)}</span>
         <strong>{summary.modelLabel}</strong>
         <span style={{ color: "var(--text-muted)" }}>—</span>
-        <span style={{ color: summary.sourceIsDeleted ? "#b02a37" : "var(--text-secondary)", textDecoration: summary.sourceIsDeleted ? "line-through" : undefined }}>«{summary.sourceLabel}»</span>
+        <span style={{ color: summary.sourceIsDeleted ? "var(--sv-attentionBorder, #b02a37)" : "var(--text-secondary)", textDecoration: summary.sourceIsDeleted ? "line-through" : undefined }}>«{summary.sourceLabel}»</span>
         <span>→</span>
         <span style={{ color: "var(--color-link)", fontWeight: 500 }}>«{summary.targetLabel}»</span>
         <span style={{ marginLeft: "auto", color: summary.totalAffected > 0 ? "var(--success-fg)" : "var(--text-muted)", fontWeight: 500 }}>

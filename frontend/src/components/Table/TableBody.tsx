@@ -409,6 +409,18 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     }
   }, [setActiveRow, setActiveCell, row.id, scrollRef]);
 
+  // Клавиатурный переход фокуса (Tab и т.п.): нативный фокус на фокусируемом
+  // элементе внутри ячейки (input/кнопка/ссылка) НЕ вызывает onClick, поэтому
+  // activeRow не двигался и класс .activeRow не переезжал на новую строку.
+  // React onFocus всплывает от потомков (focusin) — ловим его на <tr> и
+  // синхронизируем activeRow/activeCell с тем, куда встал фокус.
+  const handleRowFocus = useCallback((e: React.FocusEvent<HTMLTableRowElement>) => {
+    setActiveRow?.(row.id);
+    const td = (e.target as HTMLElement | null)?.closest?.('td[data-col-id]') as HTMLElement | null;
+    const colId = td?.getAttribute('data-col-id') ?? null;
+    if (colId) setActiveCell?.(colId);
+  }, [setActiveRow, setActiveCell, row.id]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!inlineEditingRef?.current) {
       clickedFocusedInputRef.current = false;
@@ -489,6 +501,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     <Fragment>
       <tr
         onClick={handleRowClick}
+        onFocus={handleRowFocus}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
         className={trClassName}

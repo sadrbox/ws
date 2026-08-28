@@ -1,14 +1,15 @@
 /**
- * Тема оформления (E5). Значение хранится в localStorage и применяется атрибутом
- * data-theme на <html>. При отсутствии выбора действует системная тема
- * (prefers-color-scheme отрабатывает в CSS сам). Ранний скрипт в index.html
- * выставляет data-theme ДО первой отрисовки, чтобы не было вспышки.
+ * Тема оформления (E5). OPT-IN тёмная: по умолчанию СВЕТЛАЯ, системный
+ * prefers-color-scheme:dark НЕ включает тёмную автоматически (мы всегда ставим
+ * явный data-theme=light|dark). Тёмная — только явным выбором пользователя
+ * (хранится в localStorage). Ранний скрипт в index.html выставляет data-theme
+ * ДО первой отрисовки (без вспышки).
  */
 export type Theme = "light" | "dark";
 
 const KEY = "theme";
 
-/** Явно выбранная тема ("light"|"dark") или null, если следуем системной. */
+/** Явно выбранная тема ("light"|"dark") или null, если выбора не было (=светлая). */
 export function getStoredTheme(): Theme | null {
   try {
     const v = localStorage.getItem(KEY);
@@ -18,14 +19,12 @@ export function getStoredTheme(): Theme | null {
   }
 }
 
-/** Тема, действующая СЕЙЧАС (с учётом системной, если явного выбора нет). */
+/** Тема, действующая СЕЙЧАС. По умолчанию светлая (системную dark не авто-включаем). */
 export function getEffectiveTheme(): Theme {
-  const stored = getStoredTheme();
-  if (stored) return stored;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return getStoredTheme() === "dark" ? "dark" : "light";
 }
 
-/** Применить и запомнить тему. null — вернуться к системной. */
+/** Применить и запомнить тему. null — сброс к светлой (значение по умолчанию). */
 export function setTheme(theme: Theme | null): void {
   try {
     if (theme) localStorage.setItem(KEY, theme);
@@ -33,9 +32,9 @@ export function setTheme(theme: Theme | null): void {
   } catch {
     /* ignore */
   }
-  const root = document.documentElement;
-  if (theme) root.setAttribute("data-theme", theme);
-  else root.removeAttribute("data-theme");
+  // Всегда явный атрибут (никогда не убираем) — иначе системный dark «протёк» бы
+  // через @media(prefers-color-scheme:dark):not([data-theme=light]).
+  document.documentElement.setAttribute("data-theme", theme === "dark" ? "dark" : "light");
 }
 
 /** Переключить light↔dark относительно ДЕЙСТВУЮЩЕЙ темы. */

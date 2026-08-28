@@ -132,7 +132,7 @@ const OutgoingInvoicePrint: FC<{ data: OutgoingInvoicePrintData }> = ({ data }) 
         <tbody>
           {data.items.length === 0 && (
             <tr>
-              <td style={{ ...cell, textAlign: "center", color: "#888" }} colSpan={totalCols}>
+              <td style={{ ...cell, textAlign: "center", color: "var(--sv-color5, #888)" }} colSpan={totalCols}>
                 Нет товарных позиций
               </td>
             </tr>
@@ -185,7 +185,7 @@ const OutgoingInvoicePrint: FC<{ data: OutgoingInvoicePrintData }> = ({ data }) 
         <A4Signature role="Руководитель" />
         <A4Signature role="Главный бухгалтер" />
       </div>
-      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "#555" }}>М.П.</div>
+      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "var(--sv-gray600, #555)" }}>М.П.</div>
     </A4Page>
   );
 };

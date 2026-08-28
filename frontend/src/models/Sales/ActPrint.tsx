@@ -181,7 +181,7 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
           {items.length === 0 && (
             <tr>
               <td
-                style={{ ...cellStyle, textAlign: "center", color: "#888" }}
+                style={{ ...cellStyle, textAlign: "center", color: "var(--sv-color5, #888)" }}
                 colSpan={totalCols}
               >
                 Нет позиций услуг/работ
@@ -281,7 +281,7 @@ const ActPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
         <A4Signature role="Заказчик" name={data.receiverName} />
       </div>
 
-      <div style={{ marginTop: "6mm", fontSize: "8pt", color: "#555" }}>М.П.</div>
+      <div style={{ marginTop: "6mm", fontSize: "8pt", color: "var(--sv-gray600, #555)" }}>М.П.</div>
     </A4Page>
   );
 };

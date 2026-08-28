@@ -3,19 +3,18 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- ТЁМНАЯ ТЕМА ВРЕМЕННО ОТКЛЮЧЕНА (WIP, см. E5): в module.scss ещё ~390
-       хардкод-цветов не переключаются → невидимый текст. Форсим светлую тему для
-       ВСЕХ: data-theme="light" перекрывает и @media(prefers-color-scheme:dark)
-       (селектор :root:not([data-theme="light"])), и застрявший выбор в localStorage.
-       Когда тема будет готова — вернуть чтение localStorage (закомментировано ниже)
-       и раскомментировать <ThemeSwitcher/> в навбаре. -->
+  <!-- Тема (E5): OPT-IN тёмная. По умолчанию СВЕТЛАЯ — системный prefers-color-scheme:dark
+       НЕ включает тёмную автоматически (мы всегда ставим явный data-theme), чтобы никого не
+       удивить недовыверенной палитрой. Тёмная включается ТОЛЬКО явным выбором пользователя
+       (ThemeSwitcher → localStorage 'theme'='dark'). Скрипт до отрисовки — без вспышки. -->
   <script>
     (function () {
       try {
+        var t = localStorage.getItem("theme");
+        document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
+      } catch (e) {
         document.documentElement.setAttribute("data-theme", "light");
-        // var t = localStorage.getItem("theme");
-        // if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
-      } catch (e) { }
+      }
     })();
   </script>
   <link rel="icon"
@@ -286,15 +285,15 @@
       --danger-fg: #fecdd3;
       --danger-bg: #3b1113;
       --surface-muted: #1c2431;
-      --sv-color60: #12161d;
-      --sv-color30: #1a212b;
-      --sv-color31: #232b36;
-      --sv-color33: #2a333f;
+      --sv-color60: #22272f;
+      --sv-color30: #2b313a;
+      --sv-color31: #343b44;
+      --sv-color33: #3c4550;
       --sv-color34: #3a4553;
       --sv-color10: #4a5563;
       --sv-color5: #8b93a1;
       --sv-color51: #a3abb8;
-      --sv-color6: #e7ebf1;
+      --sv-color6: #c7cdd6;
       --sv-colorTheme: #7db0ff;
       --sv-color1: #7db0ff;
       --sv-color2: #24405f;
@@ -306,7 +305,7 @@
       --sv-silverDarkest: #8b93a1;
       --sv-colorPrimaryLight: #5b9bff;
       --sv-colorPrimaryDark: #6ea8ff;
-      --sv-color80: #1a212b;
+      --sv-color80: #2b313a;
       --sv-color81: #7e8a99;
       --sv-primary: #5b9bff;
       --sv-primaryBg: #14243a;
@@ -609,15 +608,15 @@
     --warning: #f59e0b; --warning-strong: #fbbf24;
     --danger: #f87171; --danger-fg: #fecdd3; --danger-bg: #3b1113;
     --surface-muted: #1c2431;
-    --sv-color60: #12161d;
-    --sv-color30: #1a212b;
-    --sv-color31: #232b36;
-    --sv-color33: #2a333f;
+    --sv-color60: #22272f;
+    --sv-color30: #2b313a;
+    --sv-color31: #343b44;
+    --sv-color33: #3c4550;
     --sv-color34: #3a4553;
     --sv-color10: #4a5563;
     --sv-color5: #8b93a1;
     --sv-color51: #a3abb8;
-    --sv-color6: #e7ebf1;
+    --sv-color6: #c7cdd6;
     --sv-colorTheme: #7db0ff;
     --sv-color1: #7db0ff;
     --sv-color2: #24405f;
@@ -629,7 +628,7 @@
     --sv-silverDarkest: #8b93a1;
     --sv-colorPrimaryLight: #5b9bff;
     --sv-colorPrimaryDark: #6ea8ff;
-    --sv-color80: #1a212b;
+    --sv-color80: #2b313a;
     --sv-color81: #7e8a99;
     --sv-primary: #5b9bff;
     --sv-primaryBg: #14243a;

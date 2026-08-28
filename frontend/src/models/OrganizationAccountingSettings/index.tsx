@@ -423,7 +423,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   >
                     <path
                       d="M21 12a9 9 0 1 1-3.51-7.14"
-                      stroke="#2E7D32"
+                      stroke="var(--c-green-34, #2E7D32)"
                       strokeWidth="3"
                       strokeLinecap="round"
                       strokeLinejoin="round"

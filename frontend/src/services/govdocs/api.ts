@@ -6,8 +6,11 @@ const cfg = { timeout: 60_000 };
 
 export type SntSource = "sales" | "inventory-transfers";
 
-export interface AwpResult { success: boolean; awpStatus?: string | null; awpId?: string | null; awpRegistrationNumber?: string | null; }
-export interface SntResult { success: boolean; sntStatus?: string | null; sntId?: string | null; sntRegistrationNumber?: string | null; }
+/** Построчная ошибка отклонения СНТ/ЭАВР (T7.8) — из upload-ответа ИС ЭСФ. */
+export interface GovDocError { errorCode?: string | null; text?: string | null; property?: string | null; kind?: string | null; }
+
+export interface AwpResult { success: boolean; awpStatus?: string | null; awpId?: string | null; awpRegistrationNumber?: string | null; errors?: GovDocError[]; }
+export interface SntResult { success: boolean; sntStatus?: string | null; sntId?: string | null; sntRegistrationNumber?: string | null; errors?: GovDocError[]; }
 
 // ── ЭАВР ────────────────────────────────────────────────────────────────────
 export const buildAwpXml = (saleUuid: string, performedDate?: string) =>

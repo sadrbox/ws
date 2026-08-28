@@ -60,7 +60,7 @@ const BankStatementPrint: FC<{ data: BankStatementPrintData }> = ({ data }) => {
         <A4Signature role="Руководитель" />
         <A4Signature role="Гл. бухгалтер" />
       </div>
-      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "#555" }}>М.П.</div>
+      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "var(--sv-gray600, #555)" }}>М.П.</div>
     </A4Page>
   );
 };

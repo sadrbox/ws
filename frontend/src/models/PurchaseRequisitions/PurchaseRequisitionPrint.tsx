@@ -102,7 +102,7 @@ const PurchaseRequisitionPrint: FC<{ data: PurchaseRequisitionPrintData }> = ({ 
         <tbody>
           {data.items.length === 0 && (
             <tr>
-              <td style={{ ...cell, textAlign: "center", color: "#888" }} colSpan={totalCols}>
+              <td style={{ ...cell, textAlign: "center", color: "var(--sv-color5, #888)" }} colSpan={totalCols}>
                 Нет товарных позиций
               </td>
             </tr>
@@ -125,7 +125,7 @@ const PurchaseRequisitionPrint: FC<{ data: PurchaseRequisitionPrintData }> = ({ 
       <div style={{ marginTop: "4mm", display: "flex", flexDirection: "column", gap: "2mm", fontSize: "9pt", alignItems: "flex-end" }}>
         {showVatAmt && (
           <div style={{ display: "flex", justifyContent: "space-between", width: "220px", gap: 8 }}>
-            <span style={{ color: "#555" }}>В том числе НДС:</span>
+            <span style={{ color: "var(--sv-gray600, #555)" }}>В том числе НДС:</span>
             <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{fmt(data.totalVatAmount)}</span>
           </div>
         )}
@@ -139,7 +139,7 @@ const PurchaseRequisitionPrint: FC<{ data: PurchaseRequisitionPrintData }> = ({ 
         <A4Signature role="Руководитель" />
         <A4Signature role="Гл. бухгалтер" />
       </div>
-      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "#555" }}>М.П.</div>
+      <div style={{ marginTop: "4mm", fontSize: "8pt", color: "var(--sv-gray600, #555)" }}>М.П.</div>
     </A4Page>
   );
 };

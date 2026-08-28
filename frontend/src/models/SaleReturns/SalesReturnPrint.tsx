@@ -100,7 +100,7 @@ const SalesReturnPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td style={{ ...cellStyle, textAlign: "center", color: "#888" }} colSpan={totalCols}>
+              <td style={{ ...cellStyle, textAlign: "center", color: "var(--sv-color5, #888)" }} colSpan={totalCols}>
                 Нет товарных позиций
               </td>
             </tr>
@@ -158,7 +158,7 @@ const SalesReturnPrint: FC<{ data: SaleInvoicePrintData }> = ({ data }) => {
         <A4Signature role="Продавец (принял)" />
         <A4Signature role="Покупатель (сдал)" />
       </div>
-      <div style={{ marginTop: "6mm", fontSize: "8pt", color: "#555" }}>М.П.</div>
+      <div style={{ marginTop: "6mm", fontSize: "8pt", color: "var(--sv-gray600, #555)" }}>М.П.</div>
     </A4Page>
   );
 };

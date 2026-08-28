@@ -788,7 +788,7 @@ const LookupField: FC<LookupFieldProps> = ({
                   }}
                   onMouseEnter={() => setActiveIndex(idx)}
                 >
-                  <span className={styles.LookupDropdownPrimary}>{postedIndicator && typeof item.posted === "boolean" && <span aria-hidden title={item.posted ? translate("posted") : translate("draft")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", verticalAlign: "middle", marginRight: 6, background: item.posted ? "#1a7f37" : "#cbd5e1" }} />}{primary}</span>
+                  <span className={styles.LookupDropdownPrimary}>{postedIndicator && typeof item.posted === "boolean" && <span aria-hidden title={item.posted ? translate("posted") : translate("draft")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", verticalAlign: "middle", marginRight: 6, background: item.posted ? "var(--c-green-30, #1a7f37)" : "var(--c-cyan-84a, #cbd5e1)" }} />}{primary}</span>
                   {secondary && <span className={styles.LookupDropdownSecondary}>{secondary}</span>}
                 </div>
               );
@@ -841,7 +841,7 @@ const LookupField: FC<LookupFieldProps> = ({
                 }}
                 onMouseEnter={() => setActiveIndex(idx)}
               >
-                <span className={styles.LookupDropdownPrimary}>{postedIndicator && typeof item.posted === "boolean" && <span aria-hidden title={item.posted ? translate("posted") : translate("draft")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", verticalAlign: "middle", marginRight: 6, background: item.posted ? "#1a7f37" : "#cbd5e1" }} />}{primary}</span>
+                <span className={styles.LookupDropdownPrimary}>{postedIndicator && typeof item.posted === "boolean" && <span aria-hidden title={item.posted ? translate("posted") : translate("draft")} style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", verticalAlign: "middle", marginRight: 6, background: item.posted ? "var(--c-green-30, #1a7f37)" : "var(--c-cyan-84a, #cbd5e1)" }} />}{primary}</span>
                 {secondary && <span className={styles.LookupDropdownSecondary}>{secondary}</span>}
               </div>
             );

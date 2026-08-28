@@ -61,6 +61,10 @@ body {
 	margin: 0;
 	padding: 0;
 	background-color: var(--n-12);
+	// E5: ЯВНЫЙ токен цвета текста. Без него текст брал браузерный дефолт (чёрный) —
+	// в светлой теме случайно ок (чёрный на белом), а в тёмной фон тёмный, а текст
+	// оставался чёрным → НЕВИДИМ. $color6 = #222 (свет) / #e7ebf1 (тёмная).
+	color: var(--sv-color6);
 
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;

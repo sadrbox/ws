@@ -20,6 +20,7 @@ import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { useGovDocs } from "src/hooks/useGovDocs";
+import { showToast } from "src/components/UIToast";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -274,7 +275,14 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
     const uuid = form.fields.uuid;
     if (!uuid) return;
     try {
-      if (id === "snt") { const r = await govDocs.issueSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
+      if (id === "snt") {
+        const r = await govDocs.issueSnt("inventory-transfers", uuid);
+        form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>);
+        // T7.8: построчные ошибки отклонения СНТ → тост.
+        if (r.errors?.length) {
+          showToast(r.errors.map((e) => [e.errorCode, e.text].filter(Boolean).join(": ") + (e.property ? ` (${e.property})` : "")).join("\n"), "error");
+        }
+      }
       else if (id === "sntStatus") { const r = await govDocs.refreshSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
     } catch { /* ошибка через govDocs.error */ }
   }, [form.fields.uuid, form.setFields, govDocs]);

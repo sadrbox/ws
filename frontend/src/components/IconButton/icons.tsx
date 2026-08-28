@@ -161,7 +161,7 @@ export const PostedIcon: FC<SvgProps> = (props) => (
     <circle cx="8" cy="8" r="6" fill="currentColor" stroke="currentColor" />
     <path
       d="M5 8.2l2.2 2.2L11 6.4"
-      stroke="#fff"
+      stroke="var(--sv-color60, #fff)"
       strokeWidth={1.8}
       fill="none"
       strokeLinecap="round"

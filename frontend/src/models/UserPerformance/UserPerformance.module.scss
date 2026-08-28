@@ -85,7 +85,7 @@
 .Chip.on {
   background: var(--color-link);
   border-color: var(--color-link);
-  color: #fff;
+  color: var(--sv-color60, #fff);
   font-weight: 600;
 }
 

@@ -26,7 +26,7 @@ export const A4DocTitle: FC<{ children: ReactNode; subtitle?: ReactNode }> = ({ 
 /** Метка-значение в две строки (для шапки). */
 export const A4Field: FC<{ label: string; children: ReactNode; width?: string }> = ({ label, children, width }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 2, width, minWidth: 0 }}>
-    <span style={{ fontSize: "8pt", color: "#444" }}>{label}</span>
+    <span style={{ fontSize: "8pt", color: "var(--n-27, #444)" }}>{label}</span>
     <div style={{ borderBottom: "1px solid #000", paddingBottom: 2, minHeight: "5mm", fontWeight: 500 }}>{children}</div>
   </div>
 );
@@ -41,6 +41,6 @@ export const A4Signature: FC<{ role: string; name?: string }> = ({ role, name })
   <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: "9pt", minWidth: "55mm" }}>
     <span>{role}</span>
     <span style={{ borderBottom: "1px solid #000", minHeight: "5mm" }}>&nbsp;{name ?? ""}</span>
-    <span style={{ fontSize: "7pt", color: "#666" }}>(подпись, расшифровка)</span>
+    <span style={{ fontSize: "7pt", color: "var(--sv-color51, #666)" }}>(подпись, расшифровка)</span>
   </div>
 );

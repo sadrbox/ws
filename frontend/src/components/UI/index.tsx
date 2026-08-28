@@ -235,13 +235,13 @@ export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
           stroke-linejoin="round"
           stroke-linecap="round">
           <polygon points="4,10 12,10 8,4"
-            fill="#eee" />
+            fill="var(--sv-color30, #eee)" />
 
           <line x1="4"
             y1="10"
             x2="8"
             y2="4"
-            stroke="#aaa"
+            stroke="var(--sv-color10, #aaa)"
             stroke-width="1"
             stroke-linejoin="round"
             stroke-linecap="round" />
@@ -250,7 +250,7 @@ export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
             y1="4"
             x2="12"
             y2="10"
-            stroke="#aaa"
+            stroke="var(--sv-color10, #aaa)"
             stroke-width="1"
             stroke-linejoin="round"
             stroke-linecap="round" />

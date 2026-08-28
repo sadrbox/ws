@@ -497,7 +497,7 @@ const StorageTab: FC<{
                 <input type="checkbox" checked={selected.has(table)} onChange={() => toggle(table)} disabled={downloading} />
               </span>
               <span style={{ flex: 1 }}>{label}</span>
-              <span style={{ width: 70, textAlign: "right", color: count ? "#333" : "var(--text-faint)" }}>{count || "—"}</span>
+              <span style={{ width: 70, textAlign: "right", color: count ? "var(--n-20, #333)" : "var(--text-faint)" }}>{count || "—"}</span>
               <span style={{ width: 40, textAlign: "center" }}>
                 {count > 0 && (
                   <button

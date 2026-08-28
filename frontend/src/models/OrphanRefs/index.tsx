@@ -96,7 +96,7 @@ const OrphanGroupBlock: FC<{
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>→ поле «{group.columnLabel}»</span>
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>→ удалено из «{group.refTableLabel}»</span>
         <span style={{
-          marginLeft: "auto", background: "var(--danger)", color: "#fff",
+          marginLeft: "auto", background: "var(--danger)", color: "var(--sv-color60, #fff)",
           borderRadius: 10, fontSize: 11, fontWeight: 600,
           padding: "1px 7px", whiteSpace: "nowrap",
         }}>
@@ -227,7 +227,7 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
           <div style={{
             display: "flex", alignItems: "center", gap: 12,
             border: "1px solid #e0e0e0", borderRadius: 4,
-            background: "#fafafa", padding: "10px 14px",
+            background: "var(--n-98c, #fafafa)", padding: "10px 14px",
           }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 3 }}>

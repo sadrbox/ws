@@ -19,7 +19,8 @@
 	box-sizing: content-box;
 	padding: 0px 6px;
 	text-overflow: ellipsis;
-	// background: $color60;
+	background: transparent;
+	color: var(--sv-color6);
 
 	option {
 		padding: 0px;
@@ -198,7 +199,7 @@
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			overflow: hidden;
-			background: transparent;
+			// background: red;
 
 			margin: 0px;
 
@@ -222,11 +223,17 @@
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	background-color: $color60;
+	background-color: $fieldBackground;
 	border-radius: $radius2;
 	border: 1px solid $color5;
 	outline: none;
 	// flex: 1 1 100%;
+
+	// В тёмной теме заливка $fieldBackground (светлая) выбивается из палитры —
+	// оставляем прозрачный фон, чтобы поле наследовало тёмный фон родителя.
+	:global(html[data-theme="dark"]) & {
+		background-color: transparent;
+	}
 
 	&:focus-within {
 		border: 1px solid $color3;
@@ -275,7 +282,7 @@
 	box-sizing: content-box;
 	margin-left: 1px;
 	margin-right: 3px;
-	// background-color: $color60;
+	background-color: transparent;
 	// Действия поля видны ВСЕГДА. Раньше они показывались только по :focus-within —
 	// пользователь не знал, что у поля вообще есть кнопки («Открыть», «Список»,
 	// «Очистить»), пока случайно не ставил в него фокус.

@@ -4,7 +4,7 @@ $color31: var(--sv-color31, #dfdfdf);
 $color33: var(--sv-color33, #ddd);
 $color34: var(--sv-color34, #bbb);
 $color10: var(--sv-color10, #aaa);
-$color5: var(--sv-color5, #888); // $color5: #aaaaaa;rgba(51, 51, 51, 0.1);
+$color5: var(--sv-color5, #888); // $color5: var(--sv-color10, #aaaaaa);rgba(51, 51, 51, 0.1);
 $color51: var(--sv-color51, #666);
 $color6: var(--sv-color6, #222);
 $colorTheme: var(--sv-colorTheme, #6aa3ff);
@@ -29,6 +29,7 @@ $color80: var(--sv-color80, #f1f5f9);
 $color81: var(--sv-color81, #9aa7b6);
 
 
+$fieldBackground: var(--sv-fieldBackground, #ffffff);
 
 $heightFieldInput: 26px;
 $fontsize: 13px;
@@ -130,16 +131,16 @@ input[type="checkbox"] {
 .Error {
 	padding: 8px 12px;
 	margin: 0 0 4px;
-	background: #fef2f2;
+	background: var(--n-97a, #fef2f2);
 	border-radius: $radius3;
-	color: #b91c1c;
+	color: var(--c-red-42, #b91c1c);
 	font-size: $fontsize;
 }
 
 .Loading {
 	padding: 8px 12px;
 	margin: 0 0 4px;
-	background: #eff6ff;
+	background: var(--sv-accentBlueSoft, #eff6ff);
 	border-radius: $radius3;
 	color: $color3;
 	font-size: $fontsize;
@@ -235,12 +236,12 @@ a {
 .secondary:hover {}
 
 .danger {
-	background-color: #dc3545 !important;
+	background-color: var(--sv-attention, #dc3545) !important;
 	color: white !important;
 }
 
 .danger:hover {
-	background-color: #b02a37 !important;
+	background-color: var(--sv-attentionBorder, #b02a37) !important;
 }
 
 .outline {

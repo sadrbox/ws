@@ -179,7 +179,7 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                 {form.fields.sourceUuid && (
                   <Group>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 12, color: "#666" }}>{translate("source")}:</span>
+                      <span style={{ fontSize: 12, color: "var(--sv-color51, #666)" }}>{translate("source")}:</span>
                       <ObjectLink
                         objectRef={refFromRestore(
                           { kind: "form", endpoint: form.fields.sourceType, uuid: form.fields.sourceUuid },

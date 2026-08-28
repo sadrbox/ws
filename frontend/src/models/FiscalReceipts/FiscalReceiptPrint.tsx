@@ -35,7 +35,7 @@ const FiscalReceiptPrint: FC<{ data: FiscalReceiptData }> = ({ data }) => {
   const date = data.fiscalDate || data.createdAt || "";
   const isStub = (data.provider ?? "stub") === "stub";
   return (
-    <div style={{ width: "72mm", margin: "0 auto", fontFamily: "'Courier New', monospace", fontSize: "9pt", color: "#000", lineHeight: 1.35 }}>
+    <div style={{ width: "72mm", margin: "0 auto", fontFamily: "'Courier New', monospace", fontSize: "9pt", color: "var(--n-00, #000)", lineHeight: 1.35 }}>
       <div style={{ textAlign: "center", fontWeight: 700 }}>{translate("fiscalReceiptTitle")}</div>
       {isStub && (
         <div style={{ textAlign: "center", border: "1px dashed #b00", color: "#b00", margin: "2mm 0", padding: "1mm", fontSize: "8pt" }}>
