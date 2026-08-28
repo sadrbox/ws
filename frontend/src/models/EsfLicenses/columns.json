@@ -5,5 +5,6 @@
 	{ "identifier": "expiresAt", "type": "date", "width": "120px", "minWidth": "100px", "alignment": "left", "hint": "Действует до", "visible": true, "inlist": true },
 	{ "identifier": "lastRequestAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Заявка на активацию", "visible": true, "inlist": true },
 	{ "identifier": "lastHeartbeatAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Последний heartbeat", "visible": true, "inlist": true },
-	{ "identifier": "requestCount", "type": "number", "width": "80px", "minWidth": "60px", "alignment": "right", "hint": "Заявок", "visible": true, "inlist": true }
+	{ "identifier": "requestCount", "type": "number", "width": "80px", "minWidth": "60px", "alignment": "right", "hint": "Заявок", "visible": true, "inlist": true },
+	{ "identifier": "installsActive", "type": "number", "width": "110px", "minWidth": "80px", "alignment": "right", "hint": "Живых баз 1С под этим БИН", "visible": true, "inlist": true, "sortable": false }
 ]

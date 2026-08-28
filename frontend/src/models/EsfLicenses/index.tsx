@@ -21,6 +21,7 @@ import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDate } from "src/utils/datetime";
 import { getCurrentUser } from "src/services/auth";
 import ModelForm from "src/components/ModelForm";
+import { InstallsPanel, LogPanel } from "./panels";
 import ModelList from "src/components/ModelList";
 import Notice from "src/components/Notice";
 
@@ -34,16 +35,21 @@ interface TFields {
 	note: string;
 	active: boolean;
 	expiresAt: string;
+	/** Лимит установок для этой лицензии; пусто — общий из настроек сервера. */
+	installLimit: string;
 	// Только для чтения (телеметрия 1С).
 	requestCount: number;
+	installsActive: number;
+	installLimitEffective: number;
 	lastRequestAtText: string;
 	lastHeartbeatAtText: string;
 	lastHeartbeatInstallId: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
-	bin: "", note: "", active: false, expiresAt: "",
-	requestCount: 0, lastRequestAtText: "—", lastHeartbeatAtText: "—", lastHeartbeatInstallId: "",
+	bin: "", note: "", active: false, expiresAt: "", installLimit: "",
+	requestCount: 0, installsActive: 0, installLimitEffective: 0,
+	lastRequestAtText: "—", lastHeartbeatAtText: "—", lastHeartbeatInstallId: "",
 };
 
 interface EsfLicenseServerRecord {
@@ -53,6 +59,9 @@ interface EsfLicenseServerRecord {
 	note?: string | null;
 	active?: boolean | null;
 	expiresAt?: string | null;
+	installLimit?: number | null;
+	installsActive?: number | null;
+	installLimitEffective?: number | null;
 	requestCount?: number | null;
 	lastRequestAt?: string | null;
 	lastHeartbeatAt?: string | null;
@@ -73,6 +82,9 @@ const EsfLicensesForm: FC<Partial<TPane>> = (paneProps) => {
 			note: d.note ?? "",
 			active: d.active === true,
 			expiresAt: d.expiresAt ? String(d.expiresAt).slice(0, 10) : "",
+			installLimit: d.installLimit != null ? String(d.installLimit) : "",
+			installsActive: d.installsActive ?? 0,
+			installLimitEffective: d.installLimitEffective ?? 0,
 			requestCount: d.requestCount ?? 0,
 			lastRequestAtText: d.lastRequestAt ? getFormatDate(d.lastRequestAt) : "—",
 			lastHeartbeatAtText: d.lastHeartbeatAt ? getFormatDate(d.lastHeartbeatAt) : "—",
@@ -88,14 +100,19 @@ const EsfLicensesForm: FC<Partial<TPane>> = (paneProps) => {
 				note: fd.note?.trim() || null,
 				active: fd.active === true,
 				expiresAt: fd.expiresAt || null,
+				// Пусто → общий лимит сервера (LICENSE_INSTALL_LIMIT).
+				installLimit: fd.installLimit.trim() ? Number(fd.installLimit) : null,
 			};
 		},
 		buildPaneLabel: (saved: LabelSource & { bin?: string | null }) => makePaneLabel(LIST_NAME, translate("EsfLicensesList"), saved, saved.bin ?? undefined),
 	});
 
 	const notices = useFormNotices(form);
+	// uuid сохранённой записи — ключ вкладок «Установки»/«Журнал» (данные по лицензии).
+	const licenseUuid = form.fields.uuid;
 
-	const tabs = useMemo(() => [
+	const tabs = useMemo(() => {
+		const list = [
 		{
 			id: "tab-details",
 			label: translate("general"),
@@ -124,12 +141,23 @@ const EsfLicensesForm: FC<Partial<TPane>> = (paneProps) => {
 									value={form.fields.expiresAt} onChange={(e) => form.setField("expiresAt", e.target.value)}
 									disabled={form.isLoading} />
 							</Group>
+							<Group>
+								{/* Пусто — действует общий лимит сервера (LICENSE_INSTALL_LIMIT). */}
+								<Field label={translate("esfInstallLimitHint")} name={`${form.formUid}_installLimit`} minWidth="200px"
+									value={form.fields.installLimit} onChange={(e) => form.setField("installLimit", e.target.value.replace(/\D/g, ""))}
+									disabled={form.isLoading} />
+							</Group>
 
 							{form.isEditMode && (
 								<GroupCol>
 									<Group>
 										<Field label={translate("esfRequestCountFull")} name={`${form.formUid}_requestCount`} minWidth="120px"
 											value={String(form.fields.requestCount)} disabled />
+									</Group>
+									<Group>
+										{/* Живые базы 1С / действующий лимит; подробности — на вкладке «Установки». */}
+										<Field label={translate("esfInstallsActive")} name={`${form.formUid}_installsActive`} minWidth="120px"
+											value={`${form.fields.installsActive}${form.fields.installLimitEffective ? ` / ${form.fields.installLimitEffective}` : ""}`} disabled />
 									</Group>
 									<Group>
 										<Field label={translate("esfLastRequest")} name={`${form.formUid}_lastRequestAt`} minWidth="200px"
@@ -155,7 +183,15 @@ const EsfLicensesForm: FC<Partial<TPane>> = (paneProps) => {
 				</div>
 			),
 		},
-	], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, notices]);
+		];
+		// Установки (S-07) и журнал обращений (S-06) существуют только у сохранённой
+		// лицензии — их наполняет 1С, ключ связи здесь uuid записи.
+		if (form.isEditMode && licenseUuid) {
+			list.push({ id: "tab-installs", label: translate("esfTabInstalls"), component: <InstallsPanel licenseUuid={licenseUuid} /> });
+			list.push({ id: "tab-log", label: translate("esfTabLog"), component: <LogPanel licenseUuid={licenseUuid} /> });
+		}
+		return list;
+	}, [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, licenseUuid, notices]);
 
 	return (
 		<FormRequiredScope requiredKeys={["bin"]} active>

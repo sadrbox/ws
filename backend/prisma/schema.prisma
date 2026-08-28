@@ -3004,12 +3004,58 @@ model EsfLicense {
   lastRequestInstallId   String?
   lastHeartbeatAt        DateTime?
   lastHeartbeatInstallId String?
+  // Лимит одновременных установок (баз 1С) для этого БИН; null — общий лимит из
+  // LICENSE_INSTALL_LIMIT. Само превышение отказывает в токене только при
+  // LICENSE_INSTALL_LIMIT_ENFORCE=true (иначе только видно в админке).
+  installLimit           Int?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
+
+  installs               EsfLicenseInstall[]
 
   @@index([active])
   @@index([lastRequestAt])
   @@map("esf_licenses")
+}
+
+// Установка расширения (база 1С) в разрезе БИН. installId — SHA256 строки
+// соединения ИБ, приходит в heartbeat/activation-request; сама строка (и пути к
+// базам) на сервер не передаётся. releasedAt — «отвязана» админом (перенос базы).
+model EsfLicenseInstall {
+  id          Int        @id @default(autoincrement())
+  uuid        String     @unique @default(uuid())
+  bin         String
+  installId   String
+  firstSeenAt DateTime   @default(now())
+  lastSeenAt  DateTime   @default(now())
+  lastIp      String?
+  releasedAt  DateTime?
+  note        String?
+  license     EsfLicense @relation(fields: [bin], references: [bin], onDelete: Cascade)
+
+  @@unique([bin, installId])
+  @@index([bin, lastSeenAt])
+  @@map("esf_license_installs")
+}
+
+// Журнал обращений 1С к лицензионным эндпоинтам: кто, когда, что получил.
+// Не связан с esf_licenses внешним ключом — пишется и для неизвестных БИН.
+model EsfLicenseLog {
+  id        Int      @id @default(autoincrement())
+  uuid      String   @unique @default(uuid())
+  createdAt DateTime @default(now())
+  bin       String?
+  installId String?
+  endpoint  String
+  result    String
+  reason    String?
+  status    Int
+  ip        String?
+
+  @@index([createdAt])
+  @@index([bin, createdAt])
+  @@index([endpoint, createdAt])
+  @@map("esf_license_logs")
 }
 
 // Справочник «Основные средства» (ОС) — карточки для табличной части ОС в Поступлении
