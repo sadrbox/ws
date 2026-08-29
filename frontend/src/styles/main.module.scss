@@ -49,7 +49,8 @@
 }
 
 * {
-	font-family: "PT Sans", sans-serif;
+	font-family: $fontfamily;
+	// font-size: $fontsize;
 	/*  */
 	/* font-family: "Inter", sans-serif; */
 	user-select: none;
@@ -86,7 +87,7 @@ body {
 	min-width: 300px;
 	margin: 0 auto;
 	position: relative;
-	background-color: var(--sv-color60);
+	background-color: var(--sv-color30, #eee);
 }
 
 .NavbarLogo {
@@ -133,7 +134,7 @@ body {
 	flex-wrap: nowrap;
 	flex-shrink: 0;
 	overflow: clip;
-	background: $color30;
+	// background: $color30;
 	// position: relative нужен для абсолютного позиционирования мобильного меню
 	// sticky уже задаёт containing block, но на мобильных нужен явный relative
 
@@ -566,7 +567,7 @@ body {
 	position: relative;
 	z-index: 3;
 	border: 0px solid $color10;
-	background-color: $color30;
+	// background-color: $color30;
 	overflow: hidden;
 	position: relative;
 	height: inherit;
@@ -607,7 +608,7 @@ body {
 	flex-shrink: 0;
 	// margin: 0px -6px 0px -6px;
 	// padding: 0 6px;
-	background: $color30;
+	// background: $color30;
 	user-select: none;
 }
 

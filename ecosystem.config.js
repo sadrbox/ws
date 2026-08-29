@@ -42,6 +42,25 @@ module.exports = {
 			out_file: "./logs/backend-out.log",
 			log_date_format: "YYYY-MM-DD HH:mm:ss",
 		},
+		// 4. BuhProf AI Service (./ai) — диалоговый интерфейс к 1С через bpapi-agent.
+		// TypeScript исполняется Node без сборки (type stripping, Node >= 22.6).
+		// Один инстанс: long-poll агентов и очередь команд рассчитаны на один процесс.
+		// Конфиг — ./ai/.env (секреты там, в git не попадает).
+		{
+			name: "ai-service",
+			cwd: "./ai",
+			script: "node",
+			args: "--experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env src/server.ts",
+			exec_mode: "fork",
+			instances: 1,
+			watch: false,
+			max_memory_restart: "400M",
+			env: { NODE_ENV: "production" },
+			error_file: "./logs/ai-service-err.log",
+			out_file: "./logs/ai-service-out.log",
+			log_date_format: "YYYY-MM-DD HH:mm:ss",
+		},
+
 		// 3. Prisma Studio (новый процесс)
 		{
 			name: "prisma-studio",

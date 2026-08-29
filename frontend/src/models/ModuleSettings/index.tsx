@@ -2,7 +2,11 @@
 // Суперадмин выбирает организацию и галочками включает/выключает модули. Выключенные
 // модули пропадают из меню (NavList) и их документы нельзя создать (серверный гард
 // moduleGuardMiddleware → 403 MODULE_DISABLED). Хранилище — AppSetting, без миграции.
-import { FC, useState } from "react";
+//
+// UX: по умолчанию открывается на АКТИВНОЙ организации пользователя — чтобы правки
+// сразу были видны в его меню. Скрытие в меню завязано на активную орг (OrgSwitcher);
+// для другой орг эффект увидят её пользователи, а не текущий (см. пояснение в форме).
+import { FC, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -11,16 +15,29 @@ import { Group, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
 import { showToast } from "src/components/UIToast";
 import { MODULES } from "src/config/modules";
+import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import styles from "src/styles/main.module.scss";
 
 interface Props { uniqId?: string;[key: string]: unknown }
 
 const ModuleSettings: FC<Props> = () => {
   const qc = useQueryClient();
-  const [orgUuid, setOrgUuid] = useState("");
-  const [orgName, setOrgName] = useState("");
+  const def = useDefaultOrganization();
+  const [orgUuid, setOrgUuid] = useState(def.organizationUuid || "");
+  const [orgName, setOrgName] = useState(def.organizationName || "");
   const [disabled, setDisabled] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+
+  // Подхватить активную орг, когда она подгрузится (первый рендер мог быть без неё).
+  useEffect(() => {
+    if (!orgUuid && def.organizationUuid) {
+      setOrgUuid(def.organizationUuid);
+      setOrgName(def.organizationName || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [def.organizationUuid]);
+
+  const isOwnActiveOrg = orgUuid !== "" && orgUuid === def.organizationUuid;
 
   // Загрузка текущих настроек выбранной организации.
   useQuery({
@@ -47,7 +64,7 @@ const ModuleSettings: FC<Props> = () => {
     try {
       await api.put("module-settings", { organizationUuid: orgUuid, disabled: [...disabled] });
       showToast(translate("saved"), "success");
-      // Обновить меню и хук доступности модулей.
+      // Обновить меню (useDisabledModules) и все связанные запросы.
       await qc.invalidateQueries({ queryKey: ["module-settings"] });
     } catch {
       showToast(translate("serverError"), "error");
@@ -60,6 +77,11 @@ const ModuleSettings: FC<Props> = () => {
     <div className={styles.FormWrapper}>
       <div className={styles.Form}>
         <GroupCol>
+          {/* Что это и зачем */}
+          <div className={styles.NavHint} style={{ maxWidth: 640, lineHeight: 1.5 }}>
+            {translate("moduleSettingsIntro")}
+          </div>
+
           <Group>
             <LookupField
               label={translate("organization")} name="module_org"
@@ -72,13 +94,26 @@ const ModuleSettings: FC<Props> = () => {
 
           {orgUuid && (
             <GroupCol>
-              <div className={styles.NavHint}>{translate("moduleSettingsHint")}</div>
-              {MODULES.map((m) => (
-                <label key={m.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer" }}>
-                  <input type="checkbox" checked={!disabled.has(m.key)} onChange={() => toggle(m.key)} />
-                  <span>{translate(m.labelKey)}</span>
-                </label>
-              ))}
+              {/* Граница действия: своё меню обновится сразу только для активной орг */}
+              <div className={styles.NavHint} style={{ maxWidth: 640, lineHeight: 1.5, opacity: 0.85 }}>
+                {isOwnActiveOrg ? translate("moduleScopeOwn") : translate("moduleScopeOther")}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, margin: "6px 0" }}>
+                {MODULES.map((m) => {
+                  const on = !disabled.has(m.key);
+                  return (
+                    <label key={m.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", cursor: "pointer", borderRadius: 4, background: on ? "transparent" : "var(--sv-attentionBg, #fde2e4)" }}>
+                      <input type="checkbox" checked={on} onChange={() => toggle(m.key)} />
+                      <span style={{ fontWeight: 500, minWidth: 160 }}>{translate(m.labelKey)}</span>
+                      <span style={{ fontSize: "0.85em", opacity: 0.7 }}>
+                        {on ? translate("moduleOn") : translate("moduleOff")}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
               <Group>
                 <Button variant="primary" onClick={handleSave} disabled={saving}>{translate("save")}</Button>
               </Group>

@@ -1,0 +1,31 @@
+{
+  "name": "buhprof-ai-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BuhProf AI Service — диалоговый интерфейс к 1С через bpapi-agent",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/server.ts",
+    "dev": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local src/server.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test tests/",
+    "e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/e2e.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "express": "^4.21.2",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.16.3",
+    "pino": "^9.7.0",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.4",
+    "typescript": "^5.8.0"
+  }
+}
