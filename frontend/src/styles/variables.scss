@@ -224,7 +224,10 @@ a {
 }
 
 .primary {
-	background: linear-gradient(180deg, #ffe240, #caac00) !important;
+	// CTA-градиент через токены: светлая = яркое золото (без изменений),
+	// тёмная = приглушённый янтарь (--btn-gold-* в index.html), чтобы кнопка
+	// не «кричала» на тёмном фоне.
+	background: linear-gradient(180deg, var(--btn-gold-from, #ffe240), var(--btn-gold-to, #caac00)) !important;
 }
 
 .primary:hover {}
