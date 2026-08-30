@@ -16,7 +16,7 @@
  */
 
 import { Prisma } from "@prisma/client";
-import { prisma, pool } from "../prisma/prisma-client.js";
+import { pool } from "../prisma/prisma-client.js";
 import { checkOwnership } from "./auth.js";
 import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError, PeriodLockedError } from "../services/periodLock.js";
 

@@ -326,6 +326,10 @@ export class ChatWorkflow {
 			return { result: { toolCallId: call.id, content: compactImportResult(done.result) } };
 		}
 
+		if (spec.commandType === "POST_BANK_DOCUMENTS") {
+			return { result: { toolCallId: call.id, content: compactPostResult(done.result) } };
+		}
+
 		if (spec.commandType === "PRINT_SALE" && done.result && typeof done.result === "object") {
 			const r = done.result as { fileName?: string; mimeType?: string; content?: string; size?: number; presentation?: string };
 			return {
@@ -550,6 +554,35 @@ function documentsOfImport(result: unknown): { id: string; type: string }[] {
 	return out;
 }
 
+/**
+ * Результат проведения для модели: отказы сгруппированы по причине, чтобы ответ пользователю
+ * объяснял, что делать, а не цитировал 1С. Ведомостные документы (зарплата, ОПВ/СО) без
+ * подобранных документов 1С не проводит — это норма, а не ошибка загрузки.
+ */
+function compactPostResult(result: unknown): unknown {
+	if (!result || typeof result !== "object") return result ?? { ok: true };
+	const r = result as { documents?: Record<string, unknown>[]; posted?: number; failed?: number };
+	const docs = Array.isArray(r.documents) ? r.documents : [];
+	const brief = (d: Record<string, unknown>) => ({ number: d.number, type: d.type, amount: d.amount, counterparty: (d.counterparty as { name?: string })?.name, operation: d.operation });
+	const posted = docs.filter((d) => d.posted === true).map(brief);
+	const already = docs.filter((d) => d.alreadyPosted === true).map(brief);
+	const failed = docs.filter((d) => typeof d.error === "string" && d.error);
+	const needsSheet = failed.filter((d) => /списк\w* на перечисление|ведомост/i.test(String(d.error)));
+	const other = failed.filter((d) => !needsSheet.includes(d));
+	return {
+		posted: posted.length, alreadyPosted: already.length, failed: failed.length,
+		postedDocuments: posted,
+		notPosted: {
+			needsPayrollSheet: {
+				count: needsSheet.length,
+				reason: "вид операции (зарплата, пенсионные/социальные взносы, единый платёж) требует ведомость или документы перечисления из расчёта зарплаты; сумма ПП должна совпасть с суммой ведомости. Бухгалтер делает расчёт за период, подбирает ведомость в документе и проводит",
+				documents: needsSheet.map(brief),
+			},
+			other: other.map((d) => ({ ...brief(d), error: String(d.error).slice(0, 300) })),
+		},
+	};
+}
+
 /** Результат загрузки из 1С в компактном виде для модели: строки без вложенных описаний. */
 function compactImportResult(result: unknown): unknown {
 	if (!result || typeof result !== "object") return result ?? { ok: true };
@@ -559,7 +592,8 @@ function compactImportResult(result: unknown): unknown {
 	return {
 		organization: (r.organization as { name?: string })?.name ?? null,
 		account: (r.account as { iik?: string })?.iik ?? null,
-		created: r.created, existing: r.existing, failed: r.failed, posted: false,
+		created: r.created, existing: r.existing, failed: r.failed,
+		postedAlready: lines.filter((l) => doc(l)?.posted === true).length,
 		createdCounterparties: Array.isArray(r.createdCounterparties) ? (r.createdCounterparties as { id?: string; name?: string; bin?: string }[]).map((c) => ({ id: c.id, name: c.name, bin: c.bin })) : [],
 		warnings: r.warnings ?? [],
 		messages: Array.isArray(r.messages) ? (r.messages as string[]).slice(0, 20) : [],
@@ -568,7 +602,7 @@ function compactImportResult(result: unknown): unknown {
 			counterparty: l.counterpartyName, counterpartyCreated: l.counterpartyCreated || undefined, knp: l.knp || undefined,
 			operation: l.operation, cashFlowItem: l.cashFlowItem || undefined, needsReview: l.needsReview || undefined, hint: l.hint || undefined,
 			postProcessError: l.postProcessError || undefined, accountNote: l.accountNote || undefined,
-			documentId: doc(l)?.id, documentType: doc(l)?.type, documentNumber: doc(l)?.number, error: l.error, remarks: l.remarks,
+			documentId: doc(l)?.id, documentType: doc(l)?.type, documentNumber: doc(l)?.number, documentPosted: doc(l)?.posted === true ? true : undefined, error: l.error, remarks: l.remarks,
 		})),
 	};
 }

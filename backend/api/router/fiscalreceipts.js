@@ -5,7 +5,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
-import { getFiscalProvider, qrToDataUrl, FiscalError, respondFiscalError } from "../../services/fiscal/index.js";
+import { getFiscalProvider, qrToDataUrl, respondFiscalError } from "../../services/fiscal/index.js";
 
 const router = express.Router();
 const ROUTE = "fiscal-receipts";

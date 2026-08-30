@@ -26,7 +26,7 @@ function entryWhere(req, { dateFrom, dateTo, organizationUuid } = {}) {
 }
 
 // Карта код→{name, accountType} для счетов в области видимости.
-async function loadAccountMap(req, organizationUuid) {
+async function loadAccountMap(req, _organizationUuid) {
 	const where = { deletedAt: null };
 	if (!req.user?.isSuperAdmin) {
 		where.OR = [{ organizationUuid: null }, tenantFilter(req)];

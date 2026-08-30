@@ -488,6 +488,8 @@
 	"govSntIssue": "СЖҚ жазу",
 	"govSntResend": "СЖҚ қайта жіберу",
 	"govSntStatus": "СЖҚ мәртебесі",
+	"govAwpRelated": "Негізгі ЭОЖА (түзету үшін)",
+	"govSntRelated": "Негізгі СЖҚ (түзету үшін)",
 	"actions": "Әрекеттер",
 	"govAccept": "Қабылдау",
 	"govDecline": "Қабылдамау",

@@ -189,14 +189,16 @@ backend-node` — только по команде пользователя.
   погруз/разгруз, таксировка. Сейчас НЕ маппится ни одна спец-категория. Включать инкрементально.
 - **T7.10 (B2) СопоставлениеСНТиФНО (fnoMatching)** — ❌ не найдено. Решить, нужен ли поток
   сверки с таможенной декларацией (документ + `FnoMatchingWebService`, см. T7.2b).
-- **T7.11 (C1) Корректировочные цепочки СНТ/ЭАВР** — ⏳ BACKEND ГОТОВ (2026-08-28). Поля
+- **T7.11 (C1) Корректировочные цепочки СНТ/ЭАВР** — ✅ (backend 2026-08-28, UI 2026-08-30). Поля
   `Sale.awpRelatedUuid`, `Sale.sntRelatedUuid`, `InventoryTransfer.sntRelatedUuid` (миграция
   `20260828150000_gov_correction_chain`, РУКОПИСНАЯ — только ADD COLUMN). Персист в `sales.js`/
   `inventorytransfers.js`. Резолв в `govdocs.js` (build-xml ЭАВР + СНТ): связанный документ →
   `{date,number,registrationNumber}` → `opts.related` → мапперы эмитят `<relatedAwp>`/`<relatedSnt>`
   (SNT только для RETURNED_SNT/FIXED_SNT), как ЭСФ `relatedInvoice`. ИМЯ/ПОРЯДОК тега — гипотеза
-  до сверки на живом контуре (T7.1). ОСТАЁТСЯ: UI-лукап «связанный документ» на форме Реализации/
-  Перемещения (сейчас поле только через API; ЭСФ-аналог живёт на форме OutgoingInvoice).
+  до сверки на живом контуре (T7.1). UI (2026-08-30): FormLookup «Основной ЭАВР/СНТ (для корректировки)»
+  на форме Реализации (2 поля, endpoint sales) и Перемещения (1 поле, endpoint inventory-transfers),
+  видны у СОХРАНЁННОГО документа; GET/:id обоих роутеров резолвит `*RelatedName` (№/б/н) для отображения.
+  i18n govAwpRelated/govSntRelated (RU+KK).
 - **T7.13 (H1) Импорт входящего ЭСФ → Поступление с find-or-create** — ⏳ BACKEND ГОТОВ
   (ОС Трек B, 2026-08-15): модели `EsfInbound`/`EsfInboundLine`, роутер `esf-inbounds` (список/
   деталь/ручное создание + `POST /:id/to-purchase`), сервис `services/esf/inboundToPurchase.js`
@@ -306,7 +308,17 @@ Windows-бандл. Статус: ✅ сделано · ⏳ в работе · �
   (fieldBase/FieldNumber/FieldPeriod/FieldFile/FieldDate/FieldTextarea), `LookupField` (lookupHelpers).
   Внешние импорты через ре-экспорт. Оставшиеся крупные файлы (SubTable 988, Sales 912,
   createInvoiceLikeForm 907) — цельные единицы одной ответственности, дальше не дробим.
-- **Q10 ❌ ESLint для backend**: сейчас отсутствует; flat-config + скрипт `lint`.
+- **Q10 ✅ ESLint для backend (2026-08-30)**: flat-config `backend/eslint.config.js` (@eslint/js
+  recommended, Node globals, ESM; `no-empty` allowEmptyCatch, `no-unused-vars` с `^_`), скрипты
+  `lint`/`lint:ratchet` + `scripts/eslint-ratchet.mjs` + `.eslint-baseline` (зеркало фронта).
+  Первый прогон 105 ошибок → **22** после чистки. ⚠ ПОЙМАН РЕАЛЬНЫЙ БАГ: `no-undef idNum` в 11
+  роутерах (contactpersons/accesspermissions/organizations/bankaccounts/activityhistories/
+  counterparties/todos/contracts/warehouses/contacts/users) — недоделанный рефактор оставил
+  `const num = Number(word); if (idNum) …` → поиск по числовому ID был мёртв (always false). Фикс:
+  импорт `idSearchCondition` (int4-overflow-safe) + `const idNum = idSearchCondition(word)`. Также
+  удалены мёртвые импорты (FiscalError, releaseIssuedSerials×3, removeReceiptSerials×2, querySchema×2,
+  success, crypto, prisma). Остаток baseline=22 — пре-существующие dead-локали (dateRange-скаффолдинг
+  в 5 роутерах + seed/dev-скрипты), гасить монотонно.
 - **Q11 ⚠️ Покрытие тестами** (пересекается с T12.2): frontend 391→417; backend +13 HEADLESS
   (parseUploadErrors 7, govMappers 6 — snt/awp мапперы вкл. relatedSnt/relatedAwp), 2026-08-28.
   Остаётся: `esf` маппер, `documentChain`, `recomputeCosting`, `useFormStore` (интеграционные — нужен тест-Postgres).

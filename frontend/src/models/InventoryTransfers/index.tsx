@@ -53,6 +53,8 @@ interface TFields {
   toWarehouseUuid: string; toWarehouseName: string;
   organizationUuid: string; organizationName: string;
   authorUuid: string; authorName: string;
+  // T7.11: связанная (основная) СНТ для корректировочных RETURNED_SNT/FIXED_SNT.
+  sntRelatedUuid: string; sntRelatedName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -63,6 +65,7 @@ const DEFAULT_FIELDS: TFields = {
   toWarehouseUuid: "", toWarehouseName: "",
   organizationUuid: "", organizationName: "",
   authorUuid: "", authorName: "",
+  sntRelatedUuid: "", sntRelatedName: "",
 };
 
 
@@ -83,6 +86,7 @@ interface InventoryTransfersServerRecord {
   toWarehouse?: { name?: string | null } | null;
   toWarehouseUuid?: string | null;
   uuid?: string;
+  sntRelatedUuid?: string | null; sntRelatedName?: string | null;
 }
 
 const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
@@ -148,6 +152,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       organizationName: d.organization?.name ?? "",
       authorUuid: d.authorUuid ?? d.author?.uuid ?? "",
       authorName: d.author?.username ?? d.author?.email ?? "",
+      sntRelatedUuid: d.sntRelatedUuid ?? "",
+      sntRelatedName: d.sntRelatedName ?? "",
     }),
     buildPayload: (fd) => {
       const validation = validateDocumentFields("inventory_transfer", fd as unknown as Record<string, unknown>);
@@ -161,6 +167,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         fromWarehouseUuid: fd.fromWarehouseUuid || null,
         toWarehouseUuid: fd.toWarehouseUuid || null,
         organizationUuid: fd.organizationUuid || null,
+        sntRelatedUuid: fd.sntRelatedUuid || null,
       };
     },
     buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, FORM_LABEL, saved, "date"),
@@ -228,6 +235,16 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
                 <FormLookup form={form} field="toWarehouse" endpoint="warehouses"
                   extraParams={form.fields.organizationUuid ? { organizationUuid: form.fields.organizationUuid } : undefined} />
               </Group>
+              {/* T7.11: связь с основной СНТ для корректировочных RETURNED_SNT/FIXED_SNT. */}
+              {form.isEditMode && form.fields.uuid && (
+                <Group>
+                  <FormLookup form={form} field="sntRelated" endpoint="inventory-transfers"
+                    label={translate("govSntRelated")} displayField="number"
+                    getSuggestionLabel={(item) => (item.number ? `№ ${asText(item.number)}` : translate("docNoNumber"))}
+                    extraParams={form.fields.organizationUuid ? { "filter[organizationUuid][equals]": form.fields.organizationUuid } : undefined}
+                    disabled={form.isLoading} />
+                </Group>
+              )}
             </GroupCol>
             <GroupCol className={styles.FormTotals}>
               <div className={styles.SummaryCard}>

@@ -4,7 +4,6 @@
 //   • канал БЕЗ отметки (ни разу не открывали) непрочитан целиком.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
 import { prisma } from "../prisma/prisma-client.js";
 
 /** Тот же расчёт, что делает GET /chat/unread, — на одной организации. */

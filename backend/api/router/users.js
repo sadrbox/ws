@@ -1,4 +1,5 @@
 import express from "express";
+import { idSearchCondition } from "../../utils/searchId.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import multer from "multer";
 import path from "path";
@@ -97,7 +98,7 @@ router.get("/users", async (req, res) => {
 							employee: { [f]: { contains: word, mode: "insensitive" } },
 						})),
 					];
-					const num = Number(word);
+					const idNum = idSearchCondition(word);
 					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),

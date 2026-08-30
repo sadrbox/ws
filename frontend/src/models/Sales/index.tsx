@@ -79,6 +79,9 @@ interface TFields {
   vatAmount: number; discountAmount: number; amountWithoutVat: number;
   authorUuid: string; authorName: string;
   basisDocumentType: string; basisDocumentUuid: string; basisDocumentLabel: string;
+  // T7.11: связанный (основной) документ для корректировочных СНТ/ЭАВР.
+  awpRelatedUuid: string; awpRelatedName: string;
+  sntRelatedUuid: string; sntRelatedName: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -91,6 +94,7 @@ const DEFAULT_FIELDS: TFields = {
   vatAmount: 0, discountAmount: 0, amountWithoutVat: 0,
   authorUuid: "", authorName: "",
   basisDocumentType: "", basisDocumentUuid: "", basisDocumentLabel: "",
+  awpRelatedUuid: "", awpRelatedName: "", sntRelatedUuid: "", sntRelatedName: "",
 };
 
 /** Строка таблицы saleItems с типизированными бизнес-полями (payload / контроль остатка). */
@@ -150,6 +154,8 @@ interface SaleServerRecord {
   basisDocumentType?: string | null;
   basisDocumentUuid?: string | null;
   basisDocumentLabel?: string | null;
+  awpRelatedUuid?: string | null; awpRelatedName?: string | null;
+  sntRelatedUuid?: string | null; sntRelatedName?: string | null;
 }
 
 /** Серверная позиция документа реализации (ответ GET saleitems, вход печати). */
@@ -299,6 +305,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
       basisDocumentType: d.basisDocumentType ?? "",
       basisDocumentUuid: d.basisDocumentUuid ?? "",
       basisDocumentLabel: d.basisDocumentLabel ?? "",
+      awpRelatedUuid: d.awpRelatedUuid ?? "",
+      awpRelatedName: d.awpRelatedName ?? "",
+      sntRelatedUuid: d.sntRelatedUuid ?? "",
+      sntRelatedName: d.sntRelatedName ?? "",
     }),
     buildPayload: (fd) => {
       const validation = validateDocumentFields("sale", fd as unknown as Record<string, unknown>);
@@ -321,6 +331,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         basisDocumentType: fd.basisDocumentType || null,
         basisDocumentUuid: fd.basisDocumentUuid || null,
         basisDocumentLabel: fd.basisDocumentLabel || null,
+        awpRelatedUuid: fd.awpRelatedUuid || null,
+        sntRelatedUuid: fd.sntRelatedUuid || null,
       };
     },
     buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, FORM_LABEL, saved),
@@ -820,6 +832,32 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                   mismatchDetails={basisMismatch.differences}
                   hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
                 />
+                {/* T7.11: связь с основным документом для корректировочных СНТ/ЭАВР.
+                    Видно у сохранённого документа (гос-док выписывается только с ним). */}
+                {isSavedDoc && (
+                  <>
+                    <FormLookup
+                      form={form}
+                      field="awpRelated"
+                      endpoint="sales"
+                      label={translate("govAwpRelated")}
+                      displayField="number"
+                      getSuggestionLabel={(item) => (item.number ? `№ ${asText(item.number)}` : translate("docNoNumber"))}
+                      extraParams={form.fields.organizationUuid ? { "filter[organizationUuid][equals]": form.fields.organizationUuid } : undefined}
+                      disabled={form.isLoading}
+                    />
+                    <FormLookup
+                      form={form}
+                      field="sntRelated"
+                      endpoint="sales"
+                      label={translate("govSntRelated")}
+                      displayField="number"
+                      getSuggestionLabel={(item) => (item.number ? `№ ${asText(item.number)}` : translate("docNoNumber"))}
+                      extraParams={form.fields.organizationUuid ? { "filter[organizationUuid][equals]": form.fields.organizationUuid } : undefined}
+                      disabled={form.isLoading}
+                    />
+                  </>
+                )}
               </GroupCol>
             </GroupCol>
 

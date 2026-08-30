@@ -1,6 +1,6 @@
 import express from "express";
 import { applyPipeReference } from "../../services/pipeReference.js";
-import { querySchema } from "../../utils/module.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { pruneAuditLog, retentionDays } from "../../services/auditLog.js";
@@ -451,7 +451,7 @@ router.get("/", async (req, res) => {
 					const orConditions = TEXT_FIELDS.map((field) => ({
 						[field]: { contains: word, mode: "insensitive" },
 					}));
-					const num = Number(word);
+					const idNum = idSearchCondition(word);
 					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),

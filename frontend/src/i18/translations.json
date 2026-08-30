@@ -751,6 +751,8 @@
 	"govSntIssue": "Выписать СНТ",
 	"govSntResend": "Переотправить СНТ",
 	"govSntStatus": "Статус СНТ",
+	"govAwpRelated": "Основной ЭАВР (для корректировки)",
+	"govSntRelated": "Основная СНТ (для корректировки)",
 	"actions": "Действия",
 	"govAccept": "Принять",
 	"govDecline": "Отклонить",

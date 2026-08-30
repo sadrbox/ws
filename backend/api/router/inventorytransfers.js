@@ -139,6 +139,11 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// T7.11: подпись связанной (корректировочной) СНТ для формы.
+		if (item.sntRelatedUuid) {
+			const r = await prisma[MODEL].findUnique({ where: { uuid: item.sntRelatedUuid }, select: { number: true } });
+			if (r) item.sntRelatedName = r.number ? `№ ${r.number}` : "б/н";
+		}
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/:id error:`, error);

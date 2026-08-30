@@ -7,7 +7,7 @@ import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js"
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
-import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
+import { assertDocumentSerials, respondSerialError, releaseIssuedSerials } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";

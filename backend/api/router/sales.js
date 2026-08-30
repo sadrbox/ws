@@ -8,7 +8,7 @@ import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgF
 import { syncItemsFromParent } from "./_documentItemsFactory.js";
 import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
-import { assertDocumentSerials, respondSerialError, releaseIssuedSerials, removeReceiptSerials } from "../../services/serialNumbers.js";
+import { assertDocumentSerials, respondSerialError, releaseIssuedSerials } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
@@ -146,6 +146,14 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		});
 		if (!item || !checkOwnership(item, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// T7.11: подпись связанного (корректировочного) документа СНТ/ЭАВР для формы.
+		if (item.awpRelatedUuid || item.sntRelatedUuid) {
+			const uuids = [item.awpRelatedUuid, item.sntRelatedUuid].filter(Boolean);
+			const rel = await prisma[MODEL].findMany({ where: { uuid: { in: uuids } }, select: { uuid: true, number: true } });
+			const labelOf = (u) => { const r = rel.find((x) => x.uuid === u); return r ? (r.number ? `№ ${r.number}` : "б/н") : ""; };
+			if (item.awpRelatedUuid) item.awpRelatedName = labelOf(item.awpRelatedUuid);
+			if (item.sntRelatedUuid) item.sntRelatedName = labelOf(item.sntRelatedUuid);
+		}
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/:id error:`, error);

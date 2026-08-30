@@ -1,6 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter, orgQueryFilter, checkOwnership } from "../../utils/auth.js";
+import { idSearchCondition } from "../../utils/searchId.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 
 const router = express.Router();
@@ -58,7 +59,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					const orConditions = TEXT_FIELDS.map((field) => ({
 						[field]: { contains: word, mode: "insensitive" },
 					}));
-					const num = Number(word);
+					const idNum = idSearchCondition(word);
 					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
