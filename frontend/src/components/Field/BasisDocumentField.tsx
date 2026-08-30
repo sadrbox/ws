@@ -5,6 +5,7 @@ import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { docTypeLabel, docTypeToEndpoint, docTypeUsesPosted } from "src/utils/accountingDocTypes";
 import { api } from "src/services/api/client";
+import { onLiveEvent } from "src/services/liveEvents";
 import styles from "./Field.module.scss";
 
 export interface BasisTypeConfig {
@@ -141,15 +142,25 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   // виде «{Тип}: ID {n} - {дата}» (напр. данные генератора «payment_invoice #165»),
   // подтягиваем документ-основание по uuid и собираем корректную метку.
   const [resolvedLabel, setResolvedLabel] = useState<string | undefined>(undefined);
+  // E4: живое обновление подписи, когда документ-основание получает номер в другой
+  // панели («б/н» → «№…»). Инкремент форсирует перерезолв даже для канонической метки.
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(
+    () => onLiveEvent("docnumber", (ev) => {
+      if ((ev as { uuid?: string }).uuid === basisDocumentUuid) setRefreshTick((t) => t + 1);
+    }),
+    [basisDocumentUuid],
+  );
   useEffect(() => {
     // Каноничны только ФИНАЛЬНЫЕ формы метки — «№…» и «б/н» (docNoNumber). Любую
     // иную (легаси «ID {n}», данные генератора и т.п.) перерезолвим по документу,
-    // чтобы показать № или «б/н» — у документов ID в UI не светим.
+    // чтобы показать № или «б/н» — у документов ID в UI не светим. При live-событии
+    // (refreshTick>0) перерезолвим и каноническую «б/н» — она могла стать «№…».
     const isCanonical = !!basisDocumentLabel &&
       (/:\s*№/.test(basisDocumentLabel) || basisDocumentLabel.includes(translate("docNoNumber")));
     const type = basisDocumentType || "";
     const endpoint = allowedTypes.find((t) => t.type === type)?.endpoint ?? docTypeToEndpoint(type);
-    if (!basisDocumentUuid || !type || !endpoint || isCanonical) {
+    if (!basisDocumentUuid || !type || !endpoint || (isCanonical && refreshTick === 0)) {
       setResolvedLabel(undefined);
       return;
     }
@@ -167,7 +178,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
       }
     })();
     return () => { cancelled = true; };
-  }, [basisDocumentUuid, basisDocumentType, basisDocumentLabel, allowedTypes, nameForType]);
+  }, [basisDocumentUuid, basisDocumentType, basisDocumentLabel, allowedTypes, nameForType, refreshTick]);
 
   const handleSelect = useCallback(
     (_uuid: string, _display: string, item: Record<string, unknown>) => {

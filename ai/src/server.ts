@@ -50,7 +50,7 @@ export function createProvider(cfg: Config, log: Logger): LLMProvider | null {
 
 export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; agents: AgentService; workflow: ChatWorkflow | null } {
 	const { cfg, log, db, erp } = deps;
-	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS);
+	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS, cfg.AGENT_ORG_BINDING);
 	const queue = new CommandQueue(db);
 	const audit = new Audit(db, log);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;

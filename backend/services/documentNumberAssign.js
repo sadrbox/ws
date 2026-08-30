@@ -16,6 +16,7 @@
 import { prisma } from "../prisma/prisma-client.js";
 import { allocateNumber, peekNextNumber, reformatNumber, normalizeDocNumber, docNumberDigitLength } from "./documentNumbering.js";
 import { assertUniqueNumber, DuplicateNumberError } from "../utils/uniqueNumber.js";
+import { publish } from "./chatBus.js";
 
 // Лимит числовой части номера документа (символов без ведущих нулей).
 const MAX_NUMBER_DIGITS = 9;
@@ -71,6 +72,8 @@ export async function ensureDocumentNumber(
 	{ docType, modelName, manual, existingNumber = null, organizationUuid = null, date = null, excludeUuid, uniqueWhere = {} } = {},
 	client = prisma,
 ) {
+	// Был ли номер у документа ДО этой записи (для детекта перехода «б/н → №»).
+	const hadNumber = !!(existingNumber && normalizeDocNumber(existingNumber));
 	const number = await resolveDocumentNumber({ docType, organizationUuid, date, manual, existingNumber }, { preview: false }, client);
 	if (number) {
 		// Лимит числовой части — 9 символов (без ведущих нулей). Переиспользуем
@@ -80,6 +83,14 @@ export async function ensureDocumentNumber(
 			throw new DuplicateNumberError(`Номер документа: числовая часть не должна превышать ${MAX_NUMBER_DIGITS} цифр.`);
 		}
 		await assertUniqueNumber(modelName, { number, date, organizationUuid, excludeUuid, extraWhere: uniqueWhere }, client);
+		// E4 push-point: существующий документ, ранее сохранённый «б/н», получил номер.
+		// Уведомляем панели, где он выбран как «Основание», чтобы подпись «б/н» сменилась
+		// на «№…» без перезагрузки (BasisDocumentField слушает onLiveEvent("docnumber")).
+		// Только для UPDATE (excludeUuid): у нового документа нет ссылающихся панелей.
+		if (excludeUuid && !hadNumber) {
+			try { publish(organizationUuid, { type: "docnumber", modelName, uuid: excludeUuid, number }); }
+			catch { /* realtime-шина опциональна — молча пропускаем */ }
+		}
 	}
 	return number;
 }

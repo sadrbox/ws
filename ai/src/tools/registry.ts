@@ -206,10 +206,11 @@ export const TOOLS: ToolSpec[] = [
 	},
 	{
 		name: "post_bank_documents",
-		description: "Провести платёжные поручения, созданные из выписки. Только по явной просьбе пользователя. id и type — из результата import_bank_statement.",
+		description: "Провести платёжные поручения, созданные из выписки. Только по явной просьбе пользователя. Предпочтительно передавать statementIds (все документы выписки) — это короче и надёжнее; documents (id и type из результата import_bank_statement) — только для выборочного проведения.",
 		inputSchema: {
 			type: "object",
 			properties: {
+				statementIds: { type: "array", items: { type: "string" }, description: "id выписок из сообщений о вложениях — провести все созданные по ним документы" },
 				documents: {
 					type: "array",
 					minItems: 1,
@@ -221,15 +222,18 @@ export const TOOLS: ToolSpec[] = [
 					},
 				},
 			},
-			required: ["documents"],
 			additionalProperties: false,
 		},
 		operation: "CRITICAL",
 		commandType: "POST_BANK_DOCUMENTS",
 		mutating: true,
 		buildPayload: (i, ctx) => {
+			const statementIds = Array.isArray(i.statementIds) ? i.statementIds : [];
 			const docs = Array.isArray(i.documents) ? i.documents : [];
-			if (!docs.length) throw new ToolInputError("documents", "documents: нужен хотя бы один документ");
+			if (statementIds.length) {
+				return { statementIds: statementIds.map((id, n) => known(ctx, `statementIds[${n}]`, id)), ...(docs.length ? { documents: [] } : {}) };
+			}
+			if (!docs.length) throw new ToolInputError("documents", "нужен statementIds или хотя бы один документ в documents");
 			if (docs.length > 200) throw new ToolInputError("documents", "documents: не более 200 за один раз");
 			return {
 				documents: docs.map((d: Record<string, unknown>, n: number) => {

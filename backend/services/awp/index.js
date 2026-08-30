@@ -139,7 +139,9 @@ export async function changeAwpStatus({ sessionId, awpId, actionBody, signature,
 		`<awpActionInfoList>${info}</awpActionInfoList>` +
 		"</awp:changeStatusRequest>";
 	const xml = await soapCall(URL(), body, { ns: NS });
-	return { status: extractTag(xml, "awpStatus") || extractTag(xml, "status"), raw: xml };
+	// T7.7: ошибки действия (CONFIRM/DECLINE) — офиц. текст+категория из каталога.
+	const errors = await enrichErrors(parseUploadErrors(xml));
+	return { status: extractTag(xml, "awpStatus") || extractTag(xml, "status"), errors, raw: xml };
 }
 
 export default { AWP_STATUS, AWP_ACTION, uploadAwp, queryAwpById, queryAwpUpdates, buildAwpActionXml, changeAwpStatus };

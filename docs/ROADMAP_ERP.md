@@ -53,7 +53,11 @@ backend-node` — только по команде пользователя.
   текущего JWT+refresh.
 - **T1.2 Аудит действий**: расширить `ActivityHistory` до сквозного журнала (кто/что/когда/
   diff) на всех документах через общий middleware/сервис; UI-просмотр в `ActivityHistories`.
-- **T1.3 Резервное копирование**: cron-скрипт `pg_dump` + ротация; статус в `SyncDashboard`.
+- **T1.3 Резервное копирование** — ⏳ ГОТОВО ручное (2026-08-30): `services/backup.js` (`runBackup`:
+  pg_dump→gzip в `backups/` + ротация `BACKUP_RETENTION_COUNT`=14; `listBackups`), роутер
+  `/admin/backup`(POST)+`/admin/backups`(GET) суперадмину, секция `BackupSection` в SyncDashboard
+  (кнопка + список). Требует бинарь pg_dump на сервере; `backups/` в .gitignore. ОСТАЁТСЯ:
+  автозапуск по расписанию (в проекте планировщика нет — как и у audit-ретеншена).
 - **T1.4 Ревизия RBAC**: покрыть новые эндпоинты `useUserAccessRight`/серверной проверкой;
   тест-матрица прав.
 
@@ -81,10 +85,18 @@ backend-node` — только по команде пользователя.
   загрузка) — оптимизировать через виртуальный скролл (T3.1) + индексы (T3.3) + кэш (T3.2),
   а НЕ вводить постраничную навигацию.
 
-### E4 — Realtime (WebSocket)
-- **T4.1 WS-сервер** (в существующем сервере): каналы по орг/пользователю; авторизация по JWT.
-- **T4.2 Live-уведомления**: `Notifications` в реальном времени; статусы ЭСФ/СНТ push при
-  смене. Кросс-панельное обновление (напр. поле «Основание» → № при присвоении номера).
+### E4 — Realtime (SSE, не WS)
+- **T4.1 Realtime-сервер** — ✅ по факту кода (сверка 2026-08-30). Не WS, а **SSE**: `GET /chat/stream?token=JWT`
+  (`chatStream.js`, смонтирован ДО authMiddleware — EventSource не шлёт заголовки) + шина
+  `services/chatBus.js` (`publish(orgUuid, {type,...})` / `subscribe(orgs, onEvent)`, каналы по орг,
+  суперадмин — все орг). Фронт `services/liveEvents.ts` (`onLiveEvent(type, handler)`), heartbeat за
+  cloudflared. Масштаб на 1 инстанс (pm2 fork); для многих — Postgres LISTEN/NOTIFY (без Redis).
+- **T4.2 Live-уведомления** — ⏳ ЧАСТИЧНО. Работает: чат (`type:"chat"` → бейдж `useChatUnread`),
+  назначение задачи (`type:"task"` → тост исполнителю, `app/index.tsx`), статусы ЭСФ/СНТ/ЭАВР при
+  смене (`type:"govdoc"` → refetch outbox, `GovDocs/index.tsx`, 2026-08-30) и кросс-панельное
+  «Основание» → № при присвоении номера (`type:"docnumber"` из `ensureDocumentNumber` при переходе
+  «б/н → №» → `BasisDocumentField` перерезолвит подпись, 2026-08-30). ОСТАЁТСЯ: общий
+  Notification-поток (централизованного createNotification нет).
 - **T4.3 Совместное редактирование-lock**: мягкая блокировка документа при открытии другим.
 
 ### E5 — UI/UX (Mobile First, темы)
@@ -156,8 +168,10 @@ backend-node` — только по команде пользователя.
   SOAP-фолта) общий. НО обогащение по каталогу кодов (`errorCatalog.enrichErrors`: офиц. текст +
   категория) применяется ТОЛЬКО в ЭСФ `syncInvoice`. Вынести в общий слой и применить в
   `uploadSnt`/`uploadAwp`/`changeStatus`. Плюс регресс-тест инварианта «один sessionId на
-  ЭСФ+СНТ+ЭАВР» (A1 — уже выполняется, зафиксировать тестом). ⏳ ЧАСТИЧНО (2026-08-28): `enrichErrors`
-  применён в `uploadSnt`/`uploadAwp` (через `parseUploadErrors`, см. T7.8). Остаётся `changeStatus` + регресс-тест sessionId.
+  ЭСФ+СНТ+ЭАВР» (A1 — уже выполняется, зафиксировать тестом). ✅ enrichErrors-часть ЗАКРЫТА (2026-08-30):
+  `enrichErrors(parseUploadErrors(xml))` в `uploadSnt`/`uploadAwp` (T7.8) И в `changeSntStatus`/
+  `changeAwpStatus` — поле `errors[]` в ответе + отдаётся из `govdocs.js` change-status эндпоинтов.
+  Остаётся только регресс-тест инварианта «один sessionId» (A1 — работает, зафиксировать тестом).
 - **T7.8 (B3) Построчные ошибки СНТ/ЭАВР** — ⏳ BACKEND ГОТОВ (2026-08-28). Общий парсер
   `services/esf/parseUploadErrors.js` (`parseUploadErrors` — все блоки `<error>` c
   errorCode/text|description|errorText/property + фолбэк на верхнеуровневую ошибку; `joinErrorText`).
@@ -190,10 +204,13 @@ backend-node` — только по команде пользователя.
   purchaseFixedAssetItems; суммы ОС уже на 2410). ОСТАЛОСЬ: живой pull строк из ИС ЭСФ
   (`queryInvoiceById` даёт только статусы — нужен парсер полного тела + сессия, под T7.1);
   UI-мастер разнесения (пока через API/overrides). Импорт СНТ/ЭАВР — по этому же паттерну.
-- **T7.14 (H2) Общий резолвер справочников** — ⏳ ЧАСТИЧНО (2026-08-15):
-  `resolveCounterpartyByBin`/`resolveOrCreateProduct`/`resolveOrCreateFixedAsset` в
-  `inboundToPurchase.js` + память маппинга `EsfLineMapping`. Осталось: единый резолвер с общим
-  кэшем для всех трёх импортов одной сделки (ЭСФ+СНТ+ЭАВР).
+- **T7.14 (H2) Общий резолвер справочников** — ✅ (2026-08-30): резолверы вынесены в
+  `services/esf/resolver.js` + `createResolverContext(client,{organizationUuid})` — контекст с
+  ОБЩИМ кэшем на сделку (`counterpartyByBin`/`product`/`fixedAsset`, ключ = БИН / ТН ВЭД+имя / имя;
+  адресный маппинг мимо кэша; кэшируется in-flight промис → дедуп при параллели). Один БИН/товар/ОС
+  резолвится раз за сделку — ЭСФ+СНТ+ЭАВР переиспользуют его без дублей. `inboundToPurchase.js`
+  переведён на контекст (чистые функции реэкспортированы для совместимости). Тест `esfResolver.test.js`
+  (6). Память маппинга `EsfLineMapping` — прежняя.
 - **ОС Трек A — классификация номенклатуры** — ✅ (2026-08-15): `Product.assetKind`
   (goods|material|fixed_asset) + селектор в карточке; `EsfLineMapping` (память) +
   `suggestAssetKind` (эвристика по цене) в `services/esf/classification.js`. D1 разрешён: overrides

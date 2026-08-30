@@ -10,6 +10,7 @@ import { EsfSoapError } from "../../services/esf/soapClient.js";
 import { buildAwpV1Xml, AWP_SALE_INCLUDE, uploadAwp, queryAwpById, queryAwpUpdates, buildAwpActionXml, changeAwpStatus, AWP_ACTION } from "../../services/awp/index.js";
 import { buildSntV1Xml, SNT_SALE_INCLUDE, validateSntProducts, uploadSnt, querySntById, querySntUpdates, buildSntActionXml, changeSntStatus, SNT_ACTION } from "../../services/snt/index.js";
 import { joinErrorText } from "../../services/esf/parseUploadErrors.js";
+import { publish } from "../../services/chatBus.js";
 
 const router = express.Router();
 
@@ -130,7 +131,7 @@ router.post("/awp/incoming/change-status", async (req, res) => {
 		if (!sessionId) return res.status(400).json({ success: false, message: "Нет сессии ЭСФ" });
 		if (!signedActionBody) return res.status(400).json({ success: false, message: "Нет подписанного действия" });
 		const r = await changeAwpStatus({ sessionId, awpId, actionBody: signedActionBody, x509Certificate });
-		res.json({ success: true, status: r.status });
+		res.json({ success: true, status: r.status, errors: r.errors || [] });
 	} catch (err) { respondErr(res, err); }
 });
 
@@ -152,7 +153,7 @@ router.post("/snt/incoming/change-status", async (req, res) => {
 		if (!sessionId) return res.status(400).json({ success: false, message: "Нет сессии ЭСФ" });
 		if (!signedActionBody) return res.status(400).json({ success: false, message: "Нет подписанного действия" });
 		const r = await changeSntStatus({ sessionId, sntId, actionBody: signedActionBody, x509Certificate });
-		res.json({ success: true, status: r.status });
+		res.json({ success: true, status: r.status, errors: r.errors || [] });
 	} catch (err) { respondErr(res, err); }
 });
 
@@ -204,6 +205,7 @@ router.post("/awp/sales/:uuid/upload", async (req, res) => {
 				awpSentAt: new Date(), awpXml: signedXml, awpErrorText: errText,
 			},
 		});
+		publish(updated.organizationUuid, { type: "govdoc", kind: "awp", uuid: updated.uuid, status: updated.awpStatus });
 		res.json({ success: true, awpStatus: updated.awpStatus, awpId: updated.awpId, awpRegistrationNumber: updated.awpRegistrationNumber, errors: r.errors || [] });
 	} catch (err) { respondErr(res, err); }
 });
@@ -221,6 +223,7 @@ router.post("/awp/sales/:uuid/status", async (req, res) => {
 			where: { uuid: sale.uuid },
 			data: { awpStatus: r.status || sale.awpStatus, awpRegistrationNumber: r.registrationNumber || sale.awpRegistrationNumber },
 		});
+		publish(updated.organizationUuid, { type: "govdoc", kind: "awp", uuid: updated.uuid, status: updated.awpStatus });
 		res.json({ success: true, awpStatus: updated.awpStatus, awpRegistrationNumber: updated.awpRegistrationNumber });
 	} catch (err) { respondErr(res, err); }
 });
@@ -285,6 +288,7 @@ router.post("/snt/:source/:uuid/upload", async (req, res) => {
 				sntSentAt: new Date(), sntXml: signedXml, sntErrorText: errText,
 			},
 		});
+		publish(updated.organizationUuid, { type: "govdoc", kind: "snt", uuid: updated.uuid, status: updated.sntStatus });
 		res.json({ success: true, sntStatus: updated.sntStatus, sntId: updated.sntId, sntRegistrationNumber: updated.sntRegistrationNumber, errors: r.errors || [] });
 	} catch (err) { respondErr(res, err); }
 });
@@ -304,6 +308,7 @@ router.post("/snt/:source/:uuid/status", async (req, res) => {
 			where: { uuid: doc.uuid },
 			data: { sntStatus: r.status || doc.sntStatus, sntRegistrationNumber: r.registrationNumber || doc.sntRegistrationNumber },
 		});
+		publish(updated.organizationUuid, { type: "govdoc", kind: "snt", uuid: updated.uuid, status: updated.sntStatus });
 		res.json({ success: true, sntStatus: updated.sntStatus, sntRegistrationNumber: updated.sntRegistrationNumber });
 	} catch (err) { respondErr(res, err); }
 });

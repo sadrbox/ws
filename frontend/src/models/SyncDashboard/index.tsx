@@ -22,6 +22,7 @@ import { Button } from "src/components/Button";
 import { Divider } from "src/components/Field";
 import { Group } from "src/components/UI";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
+import BackupSection from "./BackupSection";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import Tabs from "src/components/Tabs";
 import { getFormatDate } from "src/utils/datetime";
@@ -233,6 +234,9 @@ const MainTab: FC<{
         </Group>
       </>
     )}
+
+    {/* Резервное копирование БД (E1.3) — только суперадмин */}
+    <BackupSection />
   </div>
 );
 

@@ -46,9 +46,20 @@ async function main(): Promise<number> {
 		const env = (await r.json()) as Env<Reply>;
 		if (!env.success || !env.data) throw new Error(`HTTP ${r.status}: ${JSON.stringify(env.error)}`);
 		conversationId = env.data.conversationId;
+		let data: Reply = env.data;
+		// Долгие ходы (вложения, много раундов) сервис уводит в фон: дочитываем из состояния диалога.
+		while (data.state === "PROCESSING" || ["UNDERSTANDING", "EXECUTING", "IDLE"].includes(data.state)) {
+			await new Promise((x) => setTimeout(x, 3000));
+			const sr = await fetch(`${BASE}/v1/conversations/${conversationId}?organizationUuid=${ORG}`, { headers: { authorization: `Bearer ${token}` } });
+			const se = (await sr.json()) as Env<{ id: string; state: string; messages: { role: string; text: string }[]; confirmation?: { tool: string; card: string } | null }>;
+			if (!se.success || !se.data) throw new Error("не удалось прочитать диалог");
+			if (["UNDERSTANDING", "EXECUTING", "IDLE"].includes(se.data.state)) continue;
+			const last = [...se.data.messages].reverse().find((m) => m.role === "assistant");
+			data = { conversationId, state: se.data.state, text: last?.text ?? "", confirmation: se.data.confirmation ?? null };
+		}
 		console.log(`>>> ${text || "(вложение)"}${attachments ? ` [${attachments.map((a) => a.fileName).join(", ")}]` : ""}`);
-		console.log(`<<< [${env.data.state}, ${((Date.now() - started) / 1000).toFixed(1)} с]\n${env.data.text}\n`);
-		return env.data;
+		console.log(`<<< [${data.state}, ${((Date.now() - started) / 1000).toFixed(1)} с]\n${data.text}\n`);
+		return data;
 	};
 
 	let rc = 0;

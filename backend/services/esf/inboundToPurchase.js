@@ -13,60 +13,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { ensureDocumentNumber } from "../documentNumberAssign.js";
 import { resolveMapping, rememberMapping, suggestAssetKind } from "./classification.js";
+import {
+	createResolverContext,
+	resolveCounterpartyByBin,
+	resolveOrCreateProduct,
+	resolveOrCreateFixedAsset,
+} from "./resolver.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-/** Контрагент по БИН, иначе создаём минимального (find-or-create). */
-export async function resolveCounterpartyByBin(client, { bin, name, organizationUuid }) {
-	if (bin) {
-		const found = await client.counterparty.findFirst({ where: { bin, deletedAt: null } });
-		if (found) return found;
-	}
-	return client.counterparty.create({
-		data: {
-			bin: bin || null,
-			name: name || bin || "Контрагент (ЭСФ)",
-			legalName: name || null,
-			organizationUuid: organizationUuid || null,
-		},
-	});
-}
-
-/** Номенклатура для строки: маппинг → ТН ВЭД+наименование → создать (find-or-create). */
-export async function resolveOrCreateProduct(client, { line, mapping, organizationUuid }) {
-	if (mapping?.productUuid) {
-		const p = await client.product.findFirst({ where: { uuid: mapping.productUuid, deletedAt: null } });
-		if (p) return p.uuid;
-	}
-	const existing = await client.product.findFirst({
-		where: { deletedAt: null, name: line.name, ...(line.tnvedCode ? { tnvedCode: line.tnvedCode } : {}) },
-	});
-	if (existing) return existing.uuid;
-	const created = await client.product.create({
-		data: {
-			name: line.name || "Номенклатура (ЭСФ)",
-			tnvedCode: line.tnvedCode || null,
-			catalogTruId: line.catalogTruId || null,
-			assetKind: line.assetKind === "material" ? "material" : "goods",
-			organizationUuid: organizationUuid || null,
-		},
-	});
-	return created.uuid;
-}
-
-/** ОС для строки: маппинг → наименование → создать (find-or-create). */
-export async function resolveOrCreateFixedAsset(client, { line, mapping, organizationUuid }) {
-	if (mapping?.fixedAssetUuid) {
-		const fa = await client.fixedAsset.findFirst({ where: { uuid: mapping.fixedAssetUuid, deletedAt: null } });
-		if (fa) return fa.uuid;
-	}
-	const existing = await client.fixedAsset.findFirst({ where: { deletedAt: null, name: line.name } });
-	if (existing) return existing.uuid;
-	const created = await client.fixedAsset.create({
-		data: { name: line.name || "Основное средство (ЭСФ)", organizationUuid: organizationUuid || null },
-	});
-	return created.uuid;
-}
+// Резолверы справочников вынесены в общий модуль (T7.14): единый кэш на сделку для
+// ЭСФ+СНТ+ЭАВР. Реэкспортируем чистые функции для обратной совместимости.
+export { resolveCounterpartyByBin, resolveOrCreateProduct, resolveOrCreateFixedAsset };
 
 /** Итоговый вид строки: overrides мастера → поле строки → память → подсказка. */
 export function decideAssetKind(line, override, mapping) {
@@ -91,7 +49,8 @@ export async function buildPurchaseFromInbound(client, inboundUuid, { authorUuid
 	}
 
 	const org = inbound.organizationUuid;
-	const counterparty = await resolveCounterpartyByBin(client, { bin: inbound.supplierBin, name: inbound.supplierName, organizationUuid: org });
+	const resolver = createResolverContext(client, { organizationUuid: org }); // общий кэш сделки (T7.14)
+	const counterparty = await resolver.counterpartyByBin({ bin: inbound.supplierBin, name: inbound.supplierName });
 	const date = inbound.invoiceDate || new Date();
 	const number = await ensureDocumentNumber({ docType: "purchase", modelName: "purchase", organizationUuid: org, date }, client);
 
@@ -117,7 +76,7 @@ export async function buildPurchaseFromInbound(client, inboundUuid, { authorUuid
 
 		if (assetKind === "fixed_asset") {
 			const fixedAssetUuid = ov.fixedAssetUuid
-				|| await resolveOrCreateFixedAsset(client, { line, mapping: ov.fixedAssetUuid ? null : mapping, organizationUuid: org });
+				|| await resolver.fixedAsset({ line, mapping });
 			faItems.push({
 				purchaseUuid: purchase.uuid, fixedAssetUuid, fixedAssetName: line.name,
 				amount: round2(line.amount), amountWithoutVat: round2(line.amountWithoutVat),
@@ -126,7 +85,7 @@ export async function buildPurchaseFromInbound(client, inboundUuid, { authorUuid
 			await rememberMapping(client, { supplierBin: inbound.supplierBin, tnvedCode: line.tnvedCode, name: line.name, organizationUuid: org, assetKind: "fixed_asset", fixedAssetUuid });
 		} else {
 			const productUuid = ov.productUuid
-				|| await resolveOrCreateProduct(client, { line: { ...line, assetKind }, mapping: ov.productUuid ? null : mapping, organizationUuid: org });
+				|| await resolver.product({ line: { ...line, assetKind }, mapping });
 			productItems.push({
 				purchaseUuid: purchase.uuid, productUuid,
 				quantity: Number(line.quantity), price: Number(line.price),

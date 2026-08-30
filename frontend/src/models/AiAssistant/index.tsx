@@ -169,6 +169,22 @@ export const AiAssistantList: FC = () => {
 		else focusInput();
 	}, [org, loadRecent, openConversation, focusInput]);
 
+	/** Опрос состояния диалога, пока сервер обрабатывает вложения в фоне (до 10 минут). */
+	const waitForReply = useCallback(async (id: string) => {
+		const started = Date.now();
+		while (Date.now() - started < 600_000) {
+			await new Promise((r) => setTimeout(r, 3000));
+			const env = await api<Summary>(`/v1/conversations/${id}${orgQuery}`);
+			if (!env.success || !env.data) break;
+			if (!["UNDERSTANDING", "EXECUTING", "RESOLVING_ENTITIES", "IDLE"].includes(env.data.state)) {
+				await openConversation(id);
+				void loadRecent();
+				return;
+			}
+		}
+		push({ role: "system", text: translate("aiNetworkError") });
+	}, [orgQuery, openConversation, loadRecent, push]);
+
 	const send = useCallback(async (text: string) => {
 		const clean = text.trim();
 		const toSend = files;
@@ -193,6 +209,13 @@ export const AiAssistantList: FC = () => {
 			const d = env.data;
 			setConversationId(d.conversationId);
 			localStorage.setItem(storageKey(org), d.conversationId);
+			if (d.state === "PROCESSING") {
+				// Вложения обрабатываются на сервере в фоне: ждём, пока диалог выйдет из рабочих состояний,
+				// и перечитываем историю целиком (ответ ассистента уже будет в ней).
+				setMessages((prev) => prev.map((m) => (m.id === pendingId ? { ...m, text: d.text } : m)));
+				await waitForReply(d.conversationId);
+				return;
+			}
 			setAwaitingConfirmation(d.state === "WAITING_CONFIRMATION");
 			setMessages((prev) => prev.map((m) => (m.id === pendingId ? { ...m, pending: false, text: d.text, attachments: d.attachments } : m)));
 			if (!conversationId) void loadRecent();
@@ -202,7 +225,7 @@ export const AiAssistantList: FC = () => {
 			setBusy(false);
 			focusInput();
 		}
-	}, [busy, conversationId, org, push, loadRecent, focusInput, files]);
+	}, [busy, conversationId, org, push, loadRecent, focusInput, files, waitForReply]);
 
 	const newDialog = useCallback(() => {
 		localStorage.removeItem(storageKey(org));

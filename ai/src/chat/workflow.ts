@@ -81,6 +81,32 @@ export class ChatWorkflow {
 		this.d = deps;
 	}
 
+	/**
+	 * Готовит диалог к долгому ходу (вложения): создаёт/находит его, переводит в UNDERSTANDING и
+	 * возвращает id — клиент тут же получает ответ и дальше опрашивает состояние, а сам ход идёт
+	 * в handle() фоном. Иначе три PDF по минуте держали бы HTTP-соединение дольше, чем живут
+	 * прокси по дороге.
+	 */
+	async prepare(user: { uuid: string; organizationUuid: string }, conversationId: string | null): Promise<string> {
+		const conv = conversationId ? await this.load(conversationId, user) : await this.create(user);
+		if (!conv) throw new WorkflowError("NOT_FOUND", "Диалог не найден");
+		// Ожидающее подтверждение не трогаем: решение «да/нет» принимается по context.pending,
+		// а клиенту состояние WAITING_CONFIRMATION нужно, чтобы показывать карточку.
+		if (conv.state !== "WAITING_CONFIRMATION") await this.setState(conv.id, "UNDERSTANDING", conv.context);
+		return conv.id;
+	}
+
+	/** Фоновый ход: ошибки не теряются — попадают в состояние диалога и его историю. */
+	async handleInBackground(user: { uuid: string; organizationUuid: string }, conversationId: string, text: string, attachments: Attachment[]): Promise<void> {
+		try {
+			await this.handle(user, conversationId, text, attachments);
+		} catch (e) {
+			this.d.log.error({ err: e, conversationId }, "фоновый ход диалога завершился ошибкой");
+			await this.appendMessage(conversationId, { role: "assistant", text: "Не удалось обработать вложения. Попробуйте ещё раз или отправьте файлы по одному.", toolCalls: [] });
+			await this.d.db.query(`UPDATE conversations SET state = 'FAILED', updated_at = now() WHERE id = $1`, [conversationId]);
+		}
+	}
+
 	/** Главная точка: сообщение пользователя → ответ. */
 	async handle(user: { uuid: string; organizationUuid: string }, conversationId: string | null, text: string, attachments: Attachment[] = []): Promise<ChatReply> {
 		const conv = conversationId ? await this.load(conversationId, user) : await this.create(user);
@@ -94,8 +120,9 @@ export class ChatWorkflow {
 		// сервис соберёт из сохранённой выписки.
 		if (attachments.length) text = await this.attachStatements(conv, user, text, attachments);
 
-		// Ответ на подтверждение — без модели.
-		if (conv.state === "WAITING_CONFIRMATION" && conv.context.pending) {
+		// Ответ на подтверждение — без модели. Признак — ожидающий вызов в контексте, а не
+		// состояние: состояние мог сменить prepare() или фоновый ход.
+		if (conv.context.pending) {
 			if (YES.test(text.trim())) return this.executePending(conv, user);
 			if (NO.test(text.trim())) return this.cancelPending(conv, user);
 			// Не «да» и не «нет» — считаем новым указанием: отменяем ожидание и идём к модели.
@@ -119,7 +146,9 @@ export class ChatWorkflow {
 			const history = await this.history(conv.id);
 			let res;
 			try {
-				res = await this.d.llm.chat({ system: SYSTEM_PROMPT, messages: history, tools: toolDefinitions(), cacheable: true });
+				// 16k: вызов инструмента со списком документов или длинный отчёт по выписке не должны
+				// обрезаться по лимиту — обрезанный JSON инструмента превращается в пустой вызов.
+				res = await this.d.llm.chat({ system: SYSTEM_PROMPT, messages: history, tools: toolDefinitions(), cacheable: true, maxTokens: 16_000 });
 			} catch (e) {
 				const err = e instanceof LLMError ? e : new LLMError("LLM_ERROR", String(e));
 				this.d.log.error({ err, conversationId: conv.id }, "ошибка модели");
@@ -217,8 +246,14 @@ export class ChatWorkflow {
 	private async execute(conv: Conversation, user: { uuid: string; organizationUuid: string }, spec: ToolSpec, payload: Record<string, unknown>, call: ToolCall, requestId: string | null): Promise<{ result: ToolResult; attachment?: { fileName: string; mimeType: string; content: string } }> {
 		const agent = await this.d.agents.pickOnline(user.organizationUuid);
 		if (!agent) {
-			await this.d.audit.write({ event: "chat.agent_unavailable", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid });
-			return { result: { toolCallId: call.id, content: { error: "AGENT_OFFLINE", message: "Агент 1С этой организации сейчас не на связи" }, isError: true } };
+			// «Не настроен» и «не на связи» — разные ситуации с разными действиями пользователя:
+			// в первом случае бесполезно ждать, нужно переключить организацию или завести агента.
+			const configured = (await this.d.agents.listByOrganization(user.organizationUuid)).filter((a) => !a.disabled);
+			await this.d.audit.write({ event: "chat.agent_unavailable", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid, details: { configured: configured.length } });
+			const message = configured.length
+				? "Агент 1С этой организации сейчас не на связи (служба на компьютере с 1С не запущена или нет сети)"
+				: "Для активной организации ERP агент 1С не настроен. Переключите организацию на ту, к которой подключена база 1С, или заведите агента для этой организации";
+			return { result: { toolCallId: call.id, content: { error: configured.length ? "AGENT_OFFLINE" : "AGENT_NOT_CONFIGURED", message }, isError: true } };
 		}
 		if (!agent.onec.reachable) {
 			return { result: { toolCallId: call.id, content: { error: "ONEC_UNAVAILABLE", message: "База 1С недоступна для агента" }, isError: true } };
@@ -235,6 +270,22 @@ export class ChatWorkflow {
 				return { result: { toolCallId: call.id, content: { error: "STATEMENT_NOT_FOUND", message: "Выписка с таким statementId не найдена в этой организации" }, isError: true } };
 			}
 			payload = { statementId, ...statementPayload(stored.statement) };
+		}
+
+		// Проведение по выпискам: список документов — из сохранённого результата загрузки.
+		if (spec.commandType === "POST_BANK_DOCUMENTS" && Array.isArray(payload.statementIds) && payload.statementIds.length) {
+			const documents: { id: string; type: string }[] = [];
+			for (const sid of payload.statementIds as string[]) {
+				const stored = this.d.bank ? await this.d.bank.store.get(sid, user.organizationUuid) : null;
+				if (!stored || !stored.importResult) {
+					return { result: { toolCallId: call.id, content: { error: "STATEMENT_NOT_IMPORTED", message: `Выписка ${sid} ещё не загружена в 1С — проводить нечего` }, isError: true } };
+				}
+				documents.push(...documentsOfImport(stored.importResult));
+			}
+			if (!documents.length) {
+				return { result: { toolCallId: call.id, content: { error: "NO_DOCUMENTS", message: "По этим выпискам в 1С не создано ни одного документа" }, isError: true } };
+			}
+			payload = { documents };
 		}
 
 		const cmd = await this.d.queue.enqueue({
@@ -311,6 +362,10 @@ export class ChatWorkflow {
 				s.reconciled ? null : "⚠ Сверка не сошлась — проверьте суммы после загрузки.",
 			].filter(Boolean).join("\n");
 		}
+		if (spec.name === "post_bank_documents" && Array.isArray(payload.statementIds) && (payload.statementIds as string[]).length) {
+			const names = (payload.statementIds as string[]).map((id) => ctx.statements?.[id]?.fileName ?? id);
+			return `Провести все документы, созданные по выпискам:\n${names.map((n) => `• ${n}`).join("\n")}`;
+		}
 		if (spec.name === "post_bank_documents") {
 			const docs = (payload.documents as { id: string; type: string }[]) ?? [];
 			const list = docs.slice(0, 15).map((d) => `• ${d.type === "incoming" ? "ПП входящее" : "ПП исходящее"} ${nameOf(d.id)}`);
@@ -326,14 +381,12 @@ export class ChatWorkflow {
 		return "Создать документ?";
 	}
 
-	/** Распознаёт PDF-вложения и дописывает к сообщению пользователя сводку каждой выписки. */
+	/** Распознаёт PDF-вложения (параллельно) и дописывает к сообщению пользователя сводку каждой выписки. */
 	private async attachStatements(conv: Conversation, user: { uuid: string; organizationUuid: string }, text: string, attachments: Attachment[]): Promise<string> {
-		const parts: string[] = [text];
-		for (const a of attachments) {
+		const one = async (a: Attachment): Promise<string> => {
 			const isPdf = a.mimeType === "application/pdf" || a.fileName.toLowerCase().endsWith(".pdf");
 			if (!this.d.bank || !isPdf) {
-				parts.push(`[Вложение «${a.fileName}»: ${isPdf ? "обработка PDF в этом сервисе отключена" : "поддерживаются только PDF банковских выписок"}]`);
-				continue;
+				return `[Вложение «${a.fileName}»: ${isPdf ? "обработка PDF в этом сервисе отключена" : "поддерживаются только PDF банковских выписок"}]`;
 			}
 			const started = Date.now();
 			try {
@@ -342,17 +395,22 @@ export class ChatWorkflow {
 				const summary = summarize(r.statement, r.reconciliation);
 				conv.context.seenIds = [...new Set([...conv.context.seenIds, stored.id])];
 				conv.context.statements = { ...(conv.context.statements ?? {}), [stored.id]: { fileName: a.fileName, summary, reconciled: r.reconciliation.ok, lines: r.statement.lines.length, ownerBin: r.statement.owner.bin ?? null } };
-				parts.push(`[Вложение «${a.fileName}» — банковская выписка распознана. statementId=${stored.id}\n${summary}\nПервые операции:\n${previewLines(r.statement)}]`);
 				await this.d.audit.write({ event: "chat.statement_extracted", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid,
 					details: { statementId: stored.id, fileName: a.fileName, lines: r.statement.lines.length, reconciled: r.reconciliation.ok, model: r.model, usage: r.usage, ms: Date.now() - started } });
+				return `[Вложение «${a.fileName}» — банковская выписка распознана. statementId=${stored.id}
+${summary}
+Первые операции:
+${previewLines(r.statement)}]`;
 			} catch (e) {
 				const msg = e instanceof ExtractError ? e.message : e instanceof Error ? e.message : String(e);
 				this.d.log.warn({ err: e, conversationId: conv.id, fileName: a.fileName }, "выписка не распознана");
 				await this.d.audit.write({ event: "chat.statement_failed", conversationId: conv.id, userUuid: user.uuid, details: { fileName: a.fileName, error: msg } });
-				parts.push(`[Вложение «${a.fileName}»: не удалось распознать выписку — ${msg}]`);
+				return `[Вложение «${a.fileName}»: не удалось распознать выписку — ${msg}]`;
 			}
-		}
-		return parts.filter(Boolean).join("\n\n");
+		};
+		// Параллельно: три выписки по минуте каждая — это минута, а не три.
+		const parts = await Promise.all(attachments.map(one));
+		return [text, ...parts].filter(Boolean).join("\n\n");
 	}
 
 	private namesFromHistory(ctx: Context): Map<string, string> {
@@ -407,7 +465,25 @@ export class ChatWorkflow {
 
 	private async history(conversationId: string): Promise<ChatMessage[]> {
 		const r = await this.d.db.query<{ content: ChatMessage }>(`SELECT content FROM messages WHERE conversation_id = $1 ORDER BY id`, [conversationId]);
-		const msgs = r.rows.map((x) => x.content);
+		const raw = r.rows.map((x) => x.content);
+		// Самовосстановление: API модели требует tool_result на каждый tool_use в следующем же
+		// сообщении. Если ход прервался (сбой, перезапуск) и результата нет — подставляем отказ,
+		// иначе диалог навсегда остаётся неотправляемым.
+		const msgs: ChatMessage[] = [];
+		for (let i = 0; i < raw.length; i++) {
+			const m = raw[i];
+			msgs.push(m);
+			if (m.role === "assistant" && m.toolCalls.length) {
+				const next = raw[i + 1];
+				const answered = new Set(next && next.role === "user" && "toolResults" in next ? next.toolResults.map((t) => t.toolCallId) : []);
+				const missing = m.toolCalls.filter((c) => !answered.has(c.id));
+				if (missing.length) {
+					const filler: ChatMessage = { role: "user", toolResults: missing.map((c) => ({ toolCallId: c.id, content: { error: "INTERRUPTED", message: "ход был прерван, результат не получен" }, isError: true })) };
+					if (next && next.role === "user" && "toolResults" in next) next.toolResults.push(...filler.toolResults);
+					else msgs.push(filler);
+				}
+			}
+		}
 		for (const m of msgs) if (m.role === "user" && "toolResults" in m) for (const t of m.toolResults) this.nameCache.set(t.toolCallId, t.content);
 		return msgs;
 	}
@@ -460,6 +536,18 @@ function statementPayload(s: Statement): Record<string, unknown> {
 
 function previewLines(s: Statement): string {
 	return s.lines.slice(0, 5).map((l) => `${l.date} ${l.direction === "in" ? "+" : "−"}${fmt(l.amount)} ${l.counterparty.name}${l.counterparty.bin ? ` (БИН ${l.counterparty.bin})` : ""}${l.knp ? `, КНП ${l.knp}` : ""}`).join("\n") + (s.lines.length > 5 ? `\n… всего ${s.lines.length}` : "");
+}
+
+/** Документы, созданные (или уже существовавшие) по результату загрузки выписки в 1С. */
+function documentsOfImport(result: unknown): { id: string; type: string }[] {
+	if (!result || typeof result !== "object") return [];
+	const lines = Array.isArray((result as { lines?: unknown }).lines) ? ((result as { lines: Record<string, unknown>[] }).lines) : [];
+	const out: { id: string; type: string }[] = [];
+	for (const l of lines) {
+		const d = l.document as { id?: string; type?: string } | null | undefined;
+		if (d?.id && (d.type === "incoming" || d.type === "outgoing")) out.push({ id: d.id, type: d.type });
+	}
+	return out;
 }
 
 /** Результат загрузки из 1С в компактном виде для модели: строки без вложенных описаний. */

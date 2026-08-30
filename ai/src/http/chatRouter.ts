@@ -60,8 +60,27 @@ export function chatRouter(deps: { workflow: ChatWorkflow; log: Logger; maxAttac
 		// Ход может быть долгим: модель + очередь + 1С.
 		req.setTimeout(300_000);
 		try {
-			const reply = await workflow.handle({ uuid: u.uuid, organizationUuid }, p.data.conversationId ?? null, p.data.text, attachments);
-			res.json({ success: true, data: reply });
+			const user = { uuid: u.uuid, organizationUuid };
+			if (attachments.length) {
+				// Вложения распознаются минутами — ответ сразу, результат клиент заберёт из состояния диалога.
+				const id = await workflow.prepare(user, p.data.conversationId ?? null);
+				void workflow.handleInBackground(user, id, p.data.text, attachments);
+				res.json({ success: true, data: { conversationId: id, state: "PROCESSING", text: `Читаю ${attachments.length === 1 ? "выписку" : "выписки"}… Это займёт до пары минут; ответ появится здесь.` } });
+				return;
+			}
+			// Обычный ход тоже может затянуться (несколько раундов модели + 1С); прокси по дороге
+			// держат соединение ~100 с. Не успели за 45 с — отвечаем PROCESSING, ход продолжается
+			// в фоне, клиент дочитает результат из состояния диалога.
+			const id = await workflow.prepare(user, p.data.conversationId ?? null);
+			const work = workflow.handle(user, id, p.data.text, attachments);
+			const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 45_000));
+			const reply = await Promise.race([work, timeout]);
+			if (reply) {
+				res.json({ success: true, data: reply });
+				return;
+			}
+			work.catch((e) => log.error({ err: e, conversationId: id }, "фоновый ход завершился ошибкой"));
+			res.json({ success: true, data: { conversationId: id, state: "PROCESSING", text: "Ещё работаю… ответ появится здесь через несколько секунд." } });
 		} catch (e) {
 			if (e instanceof WorkflowError) {
 				res.status(e.code === "NOT_FOUND" ? 404 : 400).json({ success: false, error: { code: e.code, message: e.message } });

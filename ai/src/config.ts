@@ -25,6 +25,9 @@ const schema = z.object({
 	POLL_MAX_WAIT_SECS: z.coerce.number().int().min(1).max(60).default(30),
 	// Агент считается офлайн, если heartbeat не приходил дольше этого.
 	AGENT_OFFLINE_AFTER_SECS: z.coerce.number().int().min(10).default(90),
+	// Привязка агентов к организациям ERP: strict — команды идут только агенту своей организации;
+	// any — если у организации агента нет, берётся любой онлайн-агент (режим разработки на одном стенде).
+	AGENT_ORG_BINDING: z.enum(["strict", "any"]).default("strict"),
 	// §17: спрашивать подтверждение перед созданием документа (WRITE). CRITICAL — всегда.
 	CONFIRM_WRITE: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
 	// Глубина рассуждений модели: извлечение намерения — не задача на xhigh.

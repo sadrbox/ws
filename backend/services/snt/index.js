@@ -142,7 +142,9 @@ export async function changeSntStatus({ sessionId, sntId, actionBody, signature,
 		`<sntActionInfoList>${info}</sntActionInfoList>` +
 		"</snt:changeStatusRequest>";
 	const xml = await soapCall(URL(), body, { ns: NS });
-	return { status: extractTag(xml, "sntStatus") || extractTag(xml, "status"), raw: xml };
+	// T7.7: ошибки действия (CONFIRM/DECLINE) — офиц. текст+категория из каталога.
+	const errors = await enrichErrors(parseUploadErrors(xml));
+	return { status: extractTag(xml, "sntStatus") || extractTag(xml, "status"), errors, raw: xml };
 }
 
 export default { SNT_TYPE, SNT_ACTION, uploadSnt, querySntById, querySntUpdates, buildSntActionXml, changeSntStatus };

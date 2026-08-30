@@ -46,7 +46,9 @@ export class AgentService {
 	private readonly db: Db;
 	private readonly offlineAfterSecs: number;
 
-	constructor(db: Db, offlineAfterSecs: number) {
+	private readonly orgBinding: "strict" | "any";
+	constructor(db: Db, offlineAfterSecs: number, orgBinding: "strict" | "any" = "strict") {
+		this.orgBinding = orgBinding;
 		this.db = db;
 		this.offlineAfterSecs = offlineAfterSecs;
 	}
@@ -98,8 +100,17 @@ export class AgentService {
 
 	/** Агент организации, которому можно отдать команду: не отключён и недавно был на связи. */
 	async pickOnline(organizationUuid: string): Promise<AgentView | null> {
-		const all = await this.listByOrganization(organizationUuid);
-		return all.find((a) => !a.disabled && a.online) ?? null;
+		const own = (await this.listByOrganization(organizationUuid)).find((a) => !a.disabled && a.online);
+		if (own || this.orgBinding === "strict") return own ?? null;
+		// Режим разработки: один стенд 1С на все организации ERP.
+		return (await this.listAll()).find((a) => !a.disabled && a.online) ?? null;
+	}
+
+	/** Агенты, которые организация видит в интерфейсе: свои, а в режиме any — все, если своих нет. */
+	async visibleTo(organizationUuid: string): Promise<AgentView[]> {
+		const own = await this.listByOrganization(organizationUuid);
+		if (own.length || this.orgBinding === "strict") return own;
+		return this.listAll();
 	}
 
 	async register(id: string, info: { name?: string; version: string; os: string; capabilities: string[] }): Promise<void> {

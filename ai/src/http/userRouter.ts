@@ -31,7 +31,7 @@ export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; w
 			res.status(409).json({ success: false, error: { code: "ORGANIZATION_REQUIRED", message: "У пользователя не выбрана активная организация" } });
 			return;
 		}
-		const items = (await agents.listByOrganization(org)).map((a) => ({
+		const items = (await agents.visibleTo(org)).map((a) => ({
 			id: a.id, name: a.name, status: a.status, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt,
 		}));
 		res.json({ success: true, data: { items } });

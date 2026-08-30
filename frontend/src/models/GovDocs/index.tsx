@@ -1,9 +1,10 @@
 // Государственные документы РК — списки «Исходящие» ЭАВР и СНТ (выписанные из
 // Реализации/Перемещения, со статусом и рег.номером). Единый вид — стандартный
 // <Table/>; клик по строке открывает документ-источник.
-import { FC, useCallback, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asText } from "src/utils/asText";
 import { useQuery } from "@tanstack/react-query";
+import { onLiveEvent } from "src/services/liveEvents";
 import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
 import Table from "src/components/Table";
@@ -47,6 +48,8 @@ export const AwpOutboxList: FC = () => {
 	const { addPane } = useAppContext().windows;
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(AWP_COLUMNS, "AwpOutboxList"));
 	const { data, isLoading, refetch } = useQuery({ queryKey: ["awp", "outbox"], queryFn: async () => (await fetchAwpOutbox()).items });
+	// E4: live-обновление при смене статуса ЭАВР (push из govdocs.js через SSE-шину).
+	useEffect(() => onLiveEvent("govdoc", (ev) => { if ((ev as { kind?: string }).kind === "awp") void refetch(); }), [refetch]);
 	const rows = useMemo(() => (data ?? []).map((r, i) => ({ id: i + 1, ...r })), [data]);
 
 	const open = useCallback((d: Partial<TDataItem>) => { if (d.uuid) void openDocumentByType("sale", String(d.uuid), addPane); }, [addPane]);
@@ -78,6 +81,8 @@ export const SntOutboxList: FC = () => {
 	const { addPane } = useAppContext().windows;
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(SNT_COLUMNS, "SntOutboxList"));
 	const { data, isLoading, refetch } = useQuery({ queryKey: ["snt", "outbox"], queryFn: async () => (await fetchSntOutbox()).items });
+	// E4: live-обновление при смене статуса СНТ.
+	useEffect(() => onLiveEvent("govdoc", (ev) => { if ((ev as { kind?: string }).kind === "snt") void refetch(); }), [refetch]);
 	const rows = useMemo(() => (data ?? []).map((r, i) => ({
 		id: i + 1, ...r,
 		sourceLabel: r.source === "inventory-transfers" ? translate("docType_inventory_transfer") : translate("docType_sale"),

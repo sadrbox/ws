@@ -118,6 +118,8 @@ import refReplacementRouter from "./api/router/refreplacement.js";
 import reportsRouter from "./api/router/reports.js";
 import modulesRouter from "./api/router/modules.js";
 import dealsRouter from "./api/router/deals.js";
+import backupRouter from "./api/router/backup.js";
+import { startBackupScheduler } from "./services/backup.js";
 import { moduleGuardMiddleware } from "./services/moduleAccess.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
@@ -344,6 +346,7 @@ app.use("/api/v1", moduleGuardMiddleware);
 
 app.use("/api/v1", modulesRouter);
 app.use("/api/v1", dealsRouter);
+app.use("/api/v1", backupRouter);
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
 app.use("/api/v1/activityhistories", activityHistoriesRouter);
@@ -499,6 +502,8 @@ const ip = getLocalIP();
 const server = app.listen(port, () => {
 	console.log(`Server is running on http://${ip}:${port}`);
 	console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+	// E1.3: авто-бэкап БД по расписанию (opt-in через BACKUP_INTERVAL_HOURS).
+	startBackupScheduler();
 });
 
 // Graceful shutdown
