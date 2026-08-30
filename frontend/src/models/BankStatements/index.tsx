@@ -32,6 +32,7 @@ import { asText } from "src/utils/asText";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import BankStatementImportButton from "./ImportButton";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
@@ -442,6 +443,7 @@ const BankStatementsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TD
     variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams}
     defaultSort={{ id: "desc" }} enableDateRange
     renderCell={renderPostedCell}
+    extraButtons={ownerUuid ? undefined : <BankStatementImportButton />}
   />
 );
 BankStatementsList.displayName = LIST_NAME;

@@ -29,9 +29,12 @@ function getAiUrl(): string {
 	return isLocal ? LOCAL_AI_URL : REMOTE_AI_URL;
 }
 
-type Attachment = { fileName: string; mimeType: string; content: string };
+/** Файл из хранилища сервиса (печатная форма, отчёт): скачивается по ссылке с JWT. */
+type Attachment = { fileId: string; fileName: string; mimeType: string; size: number; url: string };
+/** Вложение, которое отправляет пользователь (PDF выписки) — base64. */
+type Upload = { fileName: string; mimeType: string; content: string };
 type ChatReply = { conversationId: string; state: string; text: string; confirmation?: { tool: string; card: string } | null; attachments?: Attachment[] };
-type Summary = { id: string; state: string; messages: { role: string; text: string; at: string }[]; confirmation?: { tool: string; card: string } | null };
+type Summary = { id: string; state: string; messages: { role: string; text: string; at: string; attachments?: Attachment[] }[]; confirmation?: { tool: string; card: string } | null };
 type Recent = { id: string; state: string; preview: string; updatedAt: string };
 type Envelope<T> = { success: boolean; data?: T; error?: { code: string; message: string } };
 
@@ -57,15 +60,20 @@ const QUICK_PROMPTS = [
 
 const storageKey = (org: string | null | undefined) => `ai.assistant.conversation.${org ?? "default"}`;
 
-function downloadAttachment(a: Attachment): void {
-	const bytes = Uint8Array.from(atob(a.content), (c) => c.charCodeAt(0));
-	const url = URL.createObjectURL(new Blob([bytes], { type: a.mimeType }));
+async function downloadAttachment(a: Attachment, org: string | null): Promise<void> {
+	const token = getToken();
+	if (!token) return;
+	const r = await fetch(`${getAiUrl()}${a.url}${org ? `?organizationUuid=${encodeURIComponent(org)}` : ""}`, { headers: { authorization: `Bearer ${token}` } });
+	if (!r.ok) return;
+	const url = URL.createObjectURL(await r.blob());
 	const link = document.createElement("a");
 	link.href = url;
 	link.download = a.fileName;
 	link.click();
 	setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} МБ` : n >= 1024 ? `${Math.round(n / 1024)} КБ` : `${n} Б`);
 
 async function api<T>(path: string, init?: RequestInit): Promise<Envelope<T>> {
 	const token = getToken();
@@ -153,7 +161,7 @@ export const AiAssistantList: FC = () => {
 			return false;
 		}
 		nextId.current = 1;
-		setMessages(env.data.messages.map((m) => ({ id: nextId.current++, role: m.role === "user" ? "user" : "assistant", text: m.text })));
+		setMessages(env.data.messages.map((m) => ({ id: nextId.current++, role: m.role === "user" ? "user" : "assistant", text: m.text, attachments: m.attachments })));
 		setConversationId(env.data.id);
 		setAwaitingConfirmation(env.data.state === "WAITING_CONFIRMATION");
 		localStorage.setItem(storageKey(org), env.data.id);
@@ -207,7 +215,7 @@ export const AiAssistantList: FC = () => {
 		const pendingId = push({ role: "assistant", text: toSend.length ? translate("aiReadingPdf") : "…", pending: true });
 		setBusy(true);
 		try {
-			const attachments: Attachment[] = [];
+			const attachments: Upload[] = [];
 			for (const f of toSend) attachments.push({ fileName: f.name, mimeType: f.type || "application/pdf", content: await readAsBase64(f) });
 			const env = await api<ChatReply>(`/v1/chat`, {
 				method: "POST",
@@ -293,8 +301,8 @@ export const AiAssistantList: FC = () => {
 							{m.text.split("\n").map((line, i) => <p key={i}>{line}</p>)}
 							{m.files?.map((name) => <p key={name}>📎 {name}</p>)}
 							{m.attachments?.map((a) => (
-								<button key={a.fileName} type="button" className={styles.File} onClick={() => downloadAttachment(a)}>
-									📄 {a.fileName}
+								<button key={a.fileId} type="button" className={styles.File} onClick={() => void downloadAttachment(a, org)} title={a.mimeType}>
+									📄 {a.fileName} <span className={styles.Status}>{fmtSize(a.size)}</span>
 								</button>
 							))}
 						</div>

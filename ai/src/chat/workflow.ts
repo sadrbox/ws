@@ -27,6 +27,7 @@ import type { Audit } from "../audit/index.ts";
 import { BankExtractor, ExtractError } from "../bank/extract.ts";
 import type { StatementStore } from "../bank/store.ts";
 import { summarize, fmt, type Statement } from "../bank/schema.ts";
+import type { FileStore, FileRef } from "../files/store.ts";
 
 export type Attachment = { fileName: string; mimeType: string; content: Buffer };
 
@@ -51,8 +52,8 @@ export type ChatReply = {
 	text: string;
 	/** Требуется ли подтверждение и что именно подтверждается. */
 	confirmation?: { tool: string; card: string } | null;
-	/** Вложения (PDF печатной формы) — base64 из 1С. */
-	attachments?: { fileName: string; mimeType: string; content: string }[];
+	/** Файлы для пользователя (печатные формы, отчёты) — ссылки на хранилище сервиса. */
+	attachments?: FileRef[];
 	usage?: { inputTokens: number; outputTokens: number; cacheRead?: number };
 };
 
@@ -68,6 +69,8 @@ export type WorkflowDeps = {
 	maxToolRounds: number;
 	/** Распознавание и хранение выписок; null — вложения в чате не поддерживаются. */
 	bank?: { extractor: BankExtractor; store: StatementStore } | null;
+	/** Хранилище файлов диалога (печатные формы, отчёты). */
+	files: FileStore;
 };
 
 // Границу слова  здесь использовать нельзя: в JS она знает только латиницу, и «да» не
@@ -138,8 +141,8 @@ export class ChatWorkflow {
 
 	// ── цикл с моделью ────────────────────────────────────────────────────
 
-	private async runModel(conv: Conversation, user: { uuid: string; organizationUuid: string }): Promise<ChatReply> {
-		const attachments: ChatReply["attachments"] = [];
+	private async runModel(conv: Conversation, user: { uuid: string; organizationUuid: string }, carry: FileRef[] = []): Promise<ChatReply> {
+		const attachments: FileRef[] = [...carry];
 		let usage: ChatReply["usage"];
 
 		for (let round = 0; round < this.d.maxToolRounds; round++) {
@@ -157,7 +160,8 @@ export class ChatWorkflow {
 				return { conversationId: conv.id, state: "FAILED", text: "Не удалось обратиться к модели. Попробуйте повторить через минуту." };
 			}
 			usage = res.usage ? { inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens, cacheRead: res.usage.cacheRead } : undefined;
-			await this.appendMessage(conv.id, { role: "assistant", text: res.text, toolCalls: res.toolCalls, raw: res.raw });
+			// Файлы этого хода закрепляются за итоговым сообщением ассистента — так они видны в истории.
+			await this.appendMessage(conv.id, { role: "assistant", text: res.text, toolCalls: res.toolCalls, raw: res.raw, ...(res.toolCalls.length || !attachments.length ? {} : { files: attachments }) });
 			await this.d.audit.write({ event: "chat.llm_turn", conversationId: conv.id, userUuid: user.uuid,
 				details: { stopReason: res.stopReason, tools: res.toolCalls.map((c) => c.name), usage: res.usage ?? null, model: res.model } });
 
@@ -226,9 +230,7 @@ export class ChatWorkflow {
 		conv.context.pending = null;
 		const out = await this.execute(conv, user, spec, p.payload, { id: p.toolCallId, name: p.tool, input: p.payload }, p.requestId);
 		await this.appendMessage(conv.id, { role: "user", toolResults: [...p.priorResults, out.result] });
-		const reply = await this.runModel(conv, user);
-		if (out.attachment) reply.attachments = [...(reply.attachments ?? []), out.attachment];
-		return reply;
+		return this.runModel(conv, user, out.attachment ? [out.attachment] : []);
 	}
 
 	private async cancelPending(conv: Conversation, user: { uuid: string; organizationUuid: string }): Promise<ChatReply> {
@@ -243,7 +245,7 @@ export class ChatWorkflow {
 
 	// ── исполнение через агента ───────────────────────────────────────────
 
-	private async execute(conv: Conversation, user: { uuid: string; organizationUuid: string }, spec: ToolSpec, payload: Record<string, unknown>, call: ToolCall, requestId: string | null): Promise<{ result: ToolResult; attachment?: { fileName: string; mimeType: string; content: string } }> {
+	private async execute(conv: Conversation, user: { uuid: string; organizationUuid: string }, spec: ToolSpec, payload: Record<string, unknown>, call: ToolCall, requestId: string | null): Promise<{ result: ToolResult; attachment?: FileRef }> {
 		const agent = await this.d.agents.pickOnline(user.organizationUuid);
 		if (!agent) {
 			// «Не настроен» и «не на связи» — разные ситуации с разными действиями пользователя:
@@ -316,7 +318,8 @@ export class ChatWorkflow {
 		const seen = new Set(conv.context.seenIds);
 		collectIds(done.result, seen);
 		conv.context.seenIds = [...seen];
-		conv.context.lastResult = spec.commandType === "PRINT_SALE" ? { form: (done.result as { form?: string })?.form } : done.result;
+		const isFile = spec.commandType === "PRINT_SALE" || spec.commandType === "PRINT_DOCUMENT";
+		conv.context.lastResult = isFile ? { form: (done.result as { form?: string })?.form } : done.result;
 		await this.setState(conv.id, "EXECUTING", conv.context);
 
 		if (statementId && this.d.bank) {
@@ -330,11 +333,19 @@ export class ChatWorkflow {
 			return { result: { toolCallId: call.id, content: compactPostResult(done.result) } };
 		}
 
-		if (spec.commandType === "PRINT_SALE" && done.result && typeof done.result === "object") {
-			const r = done.result as { fileName?: string; mimeType?: string; content?: string; size?: number; presentation?: string };
+		if (isFile && done.result && typeof done.result === "object") {
+			// Файл — в хранилище сервиса; модели только имя и размер, пользователю — ссылка.
+			const r = done.result as { fileName?: string; mimeType?: string; content?: string; size?: number; presentation?: string; format?: string; type?: string; document?: { id?: string } };
+			if (!r.content) return { result: { toolCallId: call.id, content: { error: "EMPTY_FILE", message: "1С вернула пустой файл" }, isError: true } };
+			const ref = await this.d.files.save({
+				conversationId: conv.id, organizationUuid: user.organizationUuid, userUuid: user.uuid,
+				fileName: r.fileName ?? "document.pdf", mimeType: r.mimeType ?? "application/pdf", content: Buffer.from(r.content, "base64"),
+				source: { tool: spec.name, form: r.presentation, format: r.format, documentType: r.type ?? payload.documentType, documentId: r.document?.id ?? payload.documentId },
+			});
+			await this.d.audit.write({ event: "chat.file_created", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid, details: { fileId: ref.fileId, fileName: ref.fileName, size: ref.size } });
 			return {
-				result: { toolCallId: call.id, content: { ok: true, form: r.presentation, fileName: r.fileName, size: r.size, note: "PDF передан пользователю как вложение" } },
-				attachment: r.content ? { fileName: r.fileName ?? "document.pdf", mimeType: r.mimeType ?? "application/pdf", content: r.content } : undefined,
+				result: { toolCallId: call.id, content: { ok: true, form: r.presentation, fileName: ref.fileName, size: ref.size, format: r.format ?? "pdf", note: "файл передан пользователю вложением к ответу" } },
+				attachment: ref,
 			};
 		}
 		return { result: { toolCallId: call.id, content: done.result ?? { ok: true } } };
@@ -498,8 +509,11 @@ ${previewLines(r.statement)}]`;
 		if (!conv) return null;
 		const r = await this.d.db.query<{ role: string; content: ChatMessage; created_at: Date }>(`SELECT role, content, created_at FROM messages WHERE conversation_id = $1 ORDER BY id`, [conversationId]);
 		const messages = r.rows
-			.filter((m) => (m.role === "user" && "text" in m.content) || (m.role === "assistant" && m.content.role === "assistant" && m.content.text))
-			.map((m) => ({ role: m.role, text: "text" in m.content ? m.content.text : "", at: m.created_at.toISOString() }));
+			.filter((m) => (m.role === "user" && "text" in m.content) || (m.role === "assistant" && m.content.role === "assistant" && (m.content.text || m.content.files?.length)))
+			.map((m) => ({
+				role: m.role, text: "text" in m.content ? m.content.text : "", at: m.created_at.toISOString(),
+				...(m.content.role === "assistant" && m.content.files?.length ? { attachments: m.content.files } : {}),
+			}));
 		const pending = conv.state === "WAITING_CONFIRMATION" ? conv.context.pending : null;
 		if (pending) messages.push({ role: "assistant", text: `${pending.card}\n\n${this.question(pending.tool, TOOLS_BY_NAME.get(pending.tool)?.operation ?? "WRITE")}`, at: new Date().toISOString() });
 		return {

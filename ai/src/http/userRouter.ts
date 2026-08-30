@@ -12,10 +12,11 @@ import { requireErpUser } from "../auth/index.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { ChatWorkflow } from "../chat/workflow.ts";
 import type { Logger } from "../logger.ts";
+import type { FileStore } from "../files/store.ts";
 import { chatRouter } from "./chatRouter.ts";
 
-export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger }) {
-	const { erp, cfg, agents, workflow, log } = deps;
+export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore }) {
+	const { erp, cfg, agents, workflow, log, files } = deps;
 	const r = Router();
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
 	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576 }));
@@ -23,6 +24,23 @@ export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; w
 	r.get("/me", (req, res) => {
 		const u = req.erpUser!;
 		res.json({ success: true, data: { uuid: u.uuid, organizationUuid: u.organizationUuid, isOrgAdmin: u.isOrgAdmin, isSuperAdmin: u.isSuperAdmin } });
+	});
+
+	// Файл диалога (печатная форма, отчёт): только своей организации, пока не истёк срок хранения.
+	r.get("/files/:id", async (req, res) => {
+		const u = req.erpUser!;
+		const requested = typeof req.query.organizationUuid === "string" ? req.query.organizationUuid : null;
+		const org = requested && (u.isSuperAdmin || u.allowedOrgUuids.includes(requested)) ? requested : u.organizationUuid;
+		const f = org && /^[0-9a-f-]{36}$/i.test(req.params.id) ? await files.get(req.params.id, org) : null;
+		if (!f) {
+			res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Файл не найден или срок его хранения истёк" } });
+			return;
+		}
+		res.setHeader("Content-Type", f.mimeType);
+		res.setHeader("Content-Length", String(f.size));
+		res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(f.fileName)}`);
+		res.setHeader("Cache-Control", "private, max-age=3600");
+		res.end(f.content);
 	});
 
 	r.get("/agents", async (req, res) => {

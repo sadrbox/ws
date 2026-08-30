@@ -29,7 +29,10 @@ export type ToolResult = {
 export type ChatMessage =
 	| { role: "user"; text: string }
 	| { role: "user"; toolResults: ToolResult[] }
-	| { role: "assistant"; text: string; toolCalls: ToolCall[]; raw?: unknown };
+	| { role: "assistant"; text: string; toolCalls: ToolCall[]; raw?: unknown; files?: FileRefLike[] };
+
+/** Файл, отданный пользователю в этом ходе (печатная форма, отчёт) — хранится в истории. */
+export type FileRefLike = { fileId: string; fileName: string; mimeType: string; size: number; url: string };
 
 export type LLMRequest = {
 	system: string;

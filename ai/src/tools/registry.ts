@@ -51,6 +51,15 @@ function known(ctx: ToolContext, field: string, value: unknown): string {
 	return p.data;
 }
 
+/** Типы документов, которые 1С печатает через универсальный endpoint (белый список расширения). */
+const DOCUMENT_TYPES = ["sale", "incoming", "outgoing", "purchase", "invoice", "taxInvoice", "cashIn", "cashOut"];
+const FORMATS = ["pdf", "xlsx", "docx", "txt", "html"];
+
+function docType(v: unknown): string {
+	if (typeof v !== "string" || !DOCUMENT_TYPES.includes(v)) throw new ToolInputError("documentType", `documentType: один из ${DOCUMENT_TYPES.join(", ")}`);
+	return v;
+}
+
 const searchSchema = {
 	type: "object",
 	properties: {
@@ -243,6 +252,42 @@ export const TOOLS: ToolSpec[] = [
 				}),
 			};
 		},
+	},
+	{
+		name: "list_print_forms",
+		description: "Печатные формы документа 1С — как в кнопке «Печать». documentType: sale (реализация), incoming/outgoing (платёжное поручение входящее/исходящее), purchase (поступление ТиУ), invoice (счёт на оплату), taxInvoice (счёт-фактура), cashIn/cashOut (кассовые ордера). documentId — только из результатов этого диалога (в отчёте о выписке — documentId и documentType строки).",
+		inputSchema: {
+			type: "object",
+			properties: { documentType: { type: "string", enum: DOCUMENT_TYPES }, documentId: { type: "string" } },
+			required: ["documentType", "documentId"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "LIST_PRINT_FORMS",
+		mutating: false,
+		buildPayload: (i, ctx) => ({ documentType: docType(i.documentType), documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "print_document",
+		description: "Сформировать печатную форму документа 1С файлом: format pdf (по умолчанию), xlsx, docx, txt, html. form — идентификатор из list_print_forms; если пользователь не уточнял форму, для платёжного поручения бери «ПлатежноеПоручение», для реализации — как в print_sale. Файл уходит пользователю вложением; в результате — только имя и размер.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				documentType: { type: "string", enum: DOCUMENT_TYPES },
+				documentId: { type: "string" },
+				form: { type: "string", description: "идентификатор печатной формы из list_print_forms" },
+				format: { type: "string", enum: ["pdf", "xlsx", "docx", "txt", "html"] },
+			},
+			required: ["documentType", "documentId", "form"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "PRINT_DOCUMENT",
+		mutating: false,
+		buildPayload: (i, ctx) => ({
+			documentType: docType(i.documentType), documentId: known(ctx, "documentId", i.documentId), form: str(i.form, "form"),
+			format: typeof i.format === "string" && FORMATS.includes(i.format) ? i.format : "pdf",
+		}),
 	},
 	{
 		name: "print_sale",

@@ -225,8 +225,17 @@ backend-node` — только по команде пользователя.
 (ВС, крон — отдельные эпики).
 
 ### E8 — Банки и платежи
-- **T8.1 Импорт банк-выписок**: расширить `BankStatement` (форматы 1C/MT940/CSV банков РК),
-  автосопоставление платежей.
+- **T8.1 Импорт банк-выписок** — ⏳ ГОТОВО (2026-08-30): парсер `services/bank/parseStatement.js`
+  (формат `1CClientBankExchange` — де-факто стандарт РК/РФ, + CSV с шапкой-синонимами; ЧИСТЫЙ,
+  headless-тесты) + сервис `importBankStatements.js` (направление по IBAN счёта организации /
+  owner-счёту файла / явной колонке; контрагент = другая сторона, find-or-create по БИН через общий
+  [[resolver]]; дедуп по {number,date,amount,direction} в рамках орг+счёт; строки создаются
+  НЕпроведёнными). Эндпоинт `POST /bank-statements/import` (текст в body, без multer). UI:
+  `models/BankStatements/ImportButton.tsx` (модалка: организация+счёт+файл) в тулбаре списка —
+  через новый opt-in проп `ModelList.extraButtons` (проброс в `Table.extraButtons`). Тест
+  `__tests__/bankImport.test.js` (11, HEADLESS). i18 bankImport* (RU+KK). Форматы: 1C, CSV и
+  **MT940** (SWIFT, 2026-08-30: теги :25:/:61:/:86:, направление из D/C-признака, контрагент из :86:).
+  ОСТАЁТСЯ (nice-to-have): автопривязка платежа к счёту-фактуре/договору (сейчас только контрагент).
 - **T8.2 Банковские API**: Kaspi/Halyk/Freedom — реестр провайдеров (как fiscal), выписки/
   платёжные ссылки; секреты через AppSetting/ENV, не в коде.
 
@@ -265,7 +274,9 @@ backend-node` — только по команде пользователя.
   ABC-XYZ вынесена в `models/Reports/_shared/xyz.ts` + тесты (`xyzAnalysis` 20, `asText` 6,
   `dealStages` 4). Backend +2 HEADLESS-файла (без БД): `parseUploadErrors.test.js` (7, T7.8),
   `govMappers.test.js` (6 — buildSntV1Xml/buildAwpV1Xml вкл. relatedSnt/relatedAwp T7.11).
-  Остаётся: `documentChain`, `recomputeCosting`, интеграционные (бьют по РЕАЛЬНОЙ БД — нужен тест-Postgres).
+  Прирост 2026-08-30: `esfResolver.test.js` (6, T7.14), `bankImport.test.js` (11, T8.1 — парсер
+  1C/CSV/MT940 + сервис импорта), `listUtils.test.js` (9 — idSearchCondition/buildOrderBy);
+  фронт `datetime.test.ts` (13). Остаётся: `documentChain`, `recomputeCosting`, интеграционные (БД).
 - **T12.3 Рефактор по SOLID/DRY**: вынести повторы (фабрики уже частично); убрать мёртвый код.
 
 ### E13 — Технический долг / качество (по аудиту 2026-08-15)

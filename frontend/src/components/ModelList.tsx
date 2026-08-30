@@ -111,6 +111,8 @@ interface ModelListProps {
    * записи админу при этом можно.
    */
   hideAdd?: boolean;
+  /** Доп. кнопки в тулбаре списка (opt-in), напр. «Импорт выписки» в BankStatements. */
+  extraButtons?: ReactNode;
 }
 
 // ─── Вспомогательный компонент состояния ошибки ───────────────────────────────
@@ -238,6 +240,7 @@ const ModelList: FC<ModelListProps> = ({
   renderPreviewValue,
   hideAddDelete = false,
   hideAdd = false,
+  extraButtons,
 }) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
@@ -411,6 +414,7 @@ const ModelList: FC<ModelListProps> = ({
       })}
       hideAddDelete={hideAddDelete}
       hideAdd={hideAdd}
+      extraButtons={extraButtons}
     />
   );
 

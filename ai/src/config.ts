@@ -41,6 +41,8 @@ const schema = z.object({
 	BANK_EXTRACT_MODEL: z.string().default(""),
 	// Предел размера вложения PDF в чате (МБ). Anthropic принимает до 32 МБ и 100 страниц.
 	CHAT_ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(30).default(20),
+	// Сколько дней хранить файлы, отданные в диалоге (печатные формы, отчёты).
+	FILE_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(7),
 });
 
 export type Config = z.infer<typeof schema>;

@@ -27,6 +27,7 @@ import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
 import { BankExtractor } from "./bank/extract.ts";
 import { StatementStore } from "./bank/store.ts";
+import { FileStore } from "./files/store.ts";
 
 export const VERSION = "0.2.0";
 
@@ -59,10 +60,15 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const bank = deps.bank !== undefined ? deps.bank : cfg.ANTHROPIC_API_KEY
 		? { extractor: new BankExtractor({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL }), store: new StatementStore(db) }
 		: null;
+	const files = new FileStore(db, cfg.FILE_TTL_DAYS);
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,
-			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank })
+			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, files })
 		: null;
+	// Просроченные файлы диалогов — при старте и раз в час.
+	const purge = () => files.purgeExpired().then((n) => { if (n) log.info({ n }, "удалены просроченные файлы диалогов"); }).catch((e) => log.warn({ err: e }, "очистка файлов"));
+	void purge();
+	setInterval(purge, 3_600_000).unref();
 
 	const app = express();
 	app.disable("x-powered-by");
@@ -97,7 +103,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 
 	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, queue, audit }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));
-	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log }));
+	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files }));
 
 	app.use((_req, res) => {
 		res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ресурс не найден" } });
