@@ -64,6 +64,25 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	app.use(helmet());
 	app.use(express.json({ limit: "2mb" }));
 
+	// CORS — только для браузерного API /v1 и только для перечисленных origins. Агенты и
+	// admin-вызовы идут не из браузера, им заголовки CORS ни к чему. Без библиотеки: правил
+	// три строки, а лишняя зависимость — лишняя поверхность.
+	app.use("/v1", (req, res, next) => {
+		const origin = req.headers.origin;
+		if (origin && cfg.ALLOWED_ORIGINS.includes(origin)) {
+			res.setHeader("Access-Control-Allow-Origin", origin);
+			res.setHeader("Vary", "Origin");
+			res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+			res.setHeader("Access-Control-Max-Age", "600");
+		}
+		if (req.method === "OPTIONS") {
+			res.status(204).end();
+			return;
+		}
+		next();
+	});
+
 	app.get("/health", (_req, res) => {
 		res.json({ success: true, data: { service: "buhprof-ai", version: VERSION, status: "ok", chat: !!workflow, timestamp: new Date().toISOString() } });
 	});

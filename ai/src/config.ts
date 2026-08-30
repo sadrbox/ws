@@ -17,6 +17,9 @@ const schema = z.object({
 	LLM_MODEL: z.string().default("claude-opus-5"),
 	AGENT_ADMIN_KEY: z.string().min(16, "AGENT_ADMIN_KEY слишком короткий"),
 	PUBLIC_URL: z.string().url().default("http://localhost:3100"),
+	// Origins браузерных клиентов (ERP-фронт), через запятую. Агентам CORS не нужен.
+	ALLOWED_ORIGINS: z.string().default("https://aleppo.kz,http://192.168.1.112:5173,http://localhost:5173,http://tauri.localhost")
+		.transform((v) => v.split(",").map((x) => x.trim()).filter(Boolean)),
 	LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 	// Сколько секунд держать long-poll агента максимум (сам агент просит wait=N).
 	POLL_MAX_WAIT_SECS: z.coerce.number().int().min(1).max(60).default(30),
@@ -53,6 +56,7 @@ export function describe(cfg: Config): Record<string, unknown> {
 		llm: `${cfg.LLM_PROVIDER}/${cfg.LLM_MODEL} effort=${cfg.LLM_EFFORT} confirmWrite=${cfg.CONFIRM_WRITE}`,
 		anthropicKey: cfg.ANTHROPIC_API_KEY ? "задан" : "ПУСТО",
 		publicUrl: cfg.PUBLIC_URL,
+		allowedOrigins: cfg.ALLOWED_ORIGINS,
 	};
 }
 

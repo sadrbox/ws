@@ -39,16 +39,21 @@ const ModuleSettings: FC<Props> = () => {
 
   const isOwnActiveOrg = orgUuid !== "" && orgUuid === def.organizationUuid;
 
-  // Загрузка текущих настроек выбранной организации.
-  useQuery({
+  // Загрузка текущих настроек выбранной организации. ВАЖНО: НЕ вызывать setState
+  // внутри queryFn — при отдаче из кэша queryFn не запускается, и состояние не
+  // синхронизируется (галочки «забывали» сохранённое). Берём data и синхроним
+  // локальный редактируемый набор через useEffect (срабатывает и на кэш-хит).
+  const { data: serverDisabled } = useQuery<string[]>({
     queryKey: ["module-settings-edit", orgUuid],
     queryFn: async () => {
       const resp = await api.get<{ disabled?: string[] }>("module-settings", { params: { organizationUuid: orgUuid } });
-      setDisabled(new Set(resp?.disabled ?? []));
       return resp?.disabled ?? [];
     },
     enabled: !!orgUuid,
   });
+  useEffect(() => {
+    setDisabled(new Set(serverDisabled ?? []));
+  }, [serverDisabled, orgUuid]);
 
   const toggle = (key: string) => {
     setDisabled((prev) => {
@@ -62,9 +67,13 @@ const ModuleSettings: FC<Props> = () => {
     if (!orgUuid) { showToast(translate("moduleSelectOrgFirst"), "error"); return; }
     setSaving(true);
     try {
-      await api.put("module-settings", { organizationUuid: orgUuid, disabled: [...disabled] });
+      const payload = [...disabled];
+      await api.put("module-settings", { organizationUuid: orgUuid, disabled: payload });
       showToast(translate("saved"), "success");
-      // Обновить меню (useDisabledModules) и все связанные запросы.
+      // Кэш ЭТОГО пейна обновляем сохранённым значением напрямую (иначе при
+      // повторном открытии подтянулось бы старое кэшированное состояние).
+      qc.setQueryData(["module-settings-edit", orgUuid], payload);
+      // Меню (useDisabledModules, ключ ["module-settings", org]) — рефетчим.
       await qc.invalidateQueries({ queryKey: ["module-settings"] });
     } catch {
       showToast(translate("serverError"), "error");

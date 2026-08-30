@@ -24,6 +24,7 @@ import {
   UserPerformanceList,
   TodoStatusesList,
   ChatList,
+  AiAssistantList,
   NotificationsList,
   WarehousesList,
   CashboxesList,
@@ -354,6 +355,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
             {/* Бейдж непрочитанного (E4.1): чужие сообщения позже отметки прочтения. */}
             {chatUnread > 0 && <span className={styles.NavBadge}>{chatUnread > 99 ? "99+" : chatUnread}</span>}
           </NavItem>
+          {/* AI-помощник: команды 1С на естественном языке (сервис ai/, см. models/AiAssistant). */}
+          <NavItem onClick={() => addPane({ component: AiAssistantList, label: translate("AiAssistant") })}>{translate("AiAssistant")}</NavItem>
         </ul>
       </div>
     </>

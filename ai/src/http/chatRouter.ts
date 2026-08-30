@@ -15,6 +15,8 @@ import type { Logger } from "../logger.ts";
 const chatSchema = z.object({
 	conversationId: z.string().uuid().optional().nullable(),
 	text: z.string().trim().min(1).max(4000),
+	/** Организация диалога; по умолчанию — активная у пользователя в ERP. Только из доступных ему. */
+	organizationUuid: z.string().uuid().optional().nullable(),
 });
 
 export function chatRouter(deps: { workflow: ChatWorkflow; log: Logger }) {
@@ -28,14 +30,20 @@ export function chatRouter(deps: { workflow: ChatWorkflow; log: Logger }) {
 			return;
 		}
 		const u = req.erpUser!;
-		if (!u.organizationUuid) {
+		const requested = p.data.organizationUuid ?? null;
+		if (requested && !u.isSuperAdmin && !u.allowedOrgUuids.includes(requested)) {
+			res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Нет доступа к этой организации" } });
+			return;
+		}
+		const organizationUuid = requested ?? u.organizationUuid;
+		if (!organizationUuid) {
 			res.status(409).json({ success: false, error: { code: "ORGANIZATION_REQUIRED", message: "У пользователя не выбрана активная организация" } });
 			return;
 		}
 		// Ход может быть долгим: модель + очередь + 1С.
 		req.setTimeout(300_000);
 		try {
-			const reply = await workflow.handle({ uuid: u.uuid, organizationUuid: u.organizationUuid }, p.data.conversationId ?? null, p.data.text);
+			const reply = await workflow.handle({ uuid: u.uuid, organizationUuid }, p.data.conversationId ?? null, p.data.text);
 			res.json({ success: true, data: reply });
 		} catch (e) {
 			if (e instanceof WorkflowError) {

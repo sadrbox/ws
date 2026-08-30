@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "description": "BuhProf AI Service — диалоговый интерфейс к 1С через bpapi-agent",
-  "engines": { "node": ">=22.6" },
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning src/server.ts",
     "dev": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local src/server.ts",
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test tests/",
     "e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/e2e.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/chat_e2e.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

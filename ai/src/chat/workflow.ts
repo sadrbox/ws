@@ -59,8 +59,10 @@ export type WorkflowDeps = {
 	maxToolRounds: number;
 };
 
-const YES = /^(да|ок|окей|давай|подтверждаю|создавай|создай|верно|yes|ok|\+)\b/i;
-const NO = /^(нет|отмена|отмени|не надо|стоп|no|cancel|-)\b/i;
+// Границу слова  здесь использовать нельзя: в JS она знает только латиницу, и «да» не
+// совпадало бы. Слово должно стоять в начале и заканчиваться концом строки или знаком.
+const YES = /^(?:да|ок|окей|давай|подтверждаю|подтвердить|создавай|создай|верно|согласен|yes|ok|\+)(?=$|[\s.,!)])/i;
+const NO = /^(?:нет|отмена|отмени|отменить|не надо|стоп|no|cancel|-)(?=$|[\s.,!)])/i;
 
 export class ChatWorkflow {
 	private readonly d: WorkflowDeps;
@@ -189,7 +191,8 @@ export class ChatWorkflow {
 		conv.context.pending = null;
 		await this.appendMessage(conv.id, { role: "user", toolResults: [...p.priorResults, { toolCallId: p.toolCallId, content: { cancelled: true, reason: "пользователь отказался" }, isError: true }] });
 		await this.setState(conv.id, "COMPLETED", conv.context);
-		return { conversationId: conv.id, state: "COMPLETED", text: "Отменено. Документ не создан." };
+		const what = p.tool === "create_sale" ? "Документ не создан." : "Операция не выполнена.";
+		return { conversationId: conv.id, state: "COMPLETED", text: `Отменено. ${what}` };
 	}
 
 	// ── исполнение через агента ───────────────────────────────────────────
@@ -219,6 +222,12 @@ export class ChatWorkflow {
 			return { result: { toolCallId: call.id, content: { error: "EXPIRED", message: "Команда не была исполнена агентом вовремя" }, isError: true } };
 		}
 		if (done.state === "failed") {
+			// Кандидаты из CONTRACT_AMBIGUOUS и подобных ответов — тоже реальные объекты 1С:
+			// модель должна иметь право сослаться на них после выбора пользователя.
+			const seenErr = new Set(conv.context.seenIds);
+			collectIds(done.error?.details, seenErr);
+			conv.context.seenIds = [...seenErr];
+			await this.setState(conv.id, "EXECUTING", conv.context);
 			return { result: { toolCallId: call.id, content: { error: done.error?.code ?? "ERROR", message: done.error?.message ?? "", details: done.error?.details ?? null }, isError: true } };
 		}
 
@@ -302,7 +311,8 @@ export class ChatWorkflow {
 
 	private async appendMessage(conversationId: string, m: ChatMessage): Promise<void> {
 		if (m.role === "user" && "toolResults" in m) {
-			for (const r of m.toolResults) if (!r.isError) this.nameCache.set(r.toolCallId, r.content);
+			// И ошибки тоже: кандидаты договоров приходят в details ошибки CONTRACT_AMBIGUOUS.
+			for (const r of m.toolResults) this.nameCache.set(r.toolCallId, r.content);
 		}
 		await this.d.db.query(`INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3::jsonb)`,
 			[conversationId, m.role, JSON.stringify(m)]);
@@ -311,7 +321,7 @@ export class ChatWorkflow {
 	private async history(conversationId: string): Promise<ChatMessage[]> {
 		const r = await this.d.db.query<{ content: ChatMessage }>(`SELECT content FROM messages WHERE conversation_id = $1 ORDER BY id`, [conversationId]);
 		const msgs = r.rows.map((x) => x.content);
-		for (const m of msgs) if (m.role === "user" && "toolResults" in m) for (const t of m.toolResults) if (!t.isError) this.nameCache.set(t.toolCallId, t.content);
+		for (const m of msgs) if (m.role === "user" && "toolResults" in m) for (const t of m.toolResults) this.nameCache.set(t.toolCallId, t.content);
 		return msgs;
 	}
 
