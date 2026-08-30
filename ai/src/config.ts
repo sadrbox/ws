@@ -33,6 +33,11 @@ const schema = z.object({
 	CHAT_COMMAND_TIMEOUT_SECS: z.coerce.number().int().min(5).max(300).default(120),
 	// Предел раундов «модель → инструменты» за один ход пользователя.
 	CHAT_MAX_TOOL_ROUNDS: z.coerce.number().int().min(1).max(20).default(8),
+	// Модель для чтения PDF выписок; по умолчанию — основная. Извлечение таблиц из многостраничных
+	// PDF — задача, где точность важнее цены, поэтому отдельная переменная, а не «что подешевле».
+	BANK_EXTRACT_MODEL: z.string().default(""),
+	// Предел размера вложения PDF в чате (МБ). Anthropic принимает до 32 МБ и 100 страниц.
+	CHAT_ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(30).default(20),
 });
 
 export type Config = z.infer<typeof schema>;
@@ -53,7 +58,7 @@ export function describe(cfg: Config): Record<string, unknown> {
 		env: cfg.NODE_ENV,
 		database: maskUrl(cfg.DATABASE_URL),
 		erpDatabase: maskUrl(cfg.ERP_DATABASE_URL),
-		llm: `${cfg.LLM_PROVIDER}/${cfg.LLM_MODEL} effort=${cfg.LLM_EFFORT} confirmWrite=${cfg.CONFIRM_WRITE}`,
+		llm: `${cfg.LLM_PROVIDER}/${cfg.LLM_MODEL} effort=${cfg.LLM_EFFORT} confirmWrite=${cfg.CONFIRM_WRITE} bankExtract=${cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL}`,
 		anthropicKey: cfg.ANTHROPIC_API_KEY ? "задан" : "ПУСТО",
 		publicUrl: cfg.PUBLIC_URL,
 		allowedOrigins: cfg.ALLOWED_ORIGINS,

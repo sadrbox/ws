@@ -199,6 +199,18 @@ export const ListIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+// Дерево-список «маркеры-лесенка»: точки-маркеры с нарастающим отступом + строки.
+export const TreeIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <circle cx="3" cy="4" r="1.15" fill="currentColor" stroke="none" />
+    <path d="M5.2 4h8.3" />
+    <circle cx="5.6" cy="8" r="1.15" fill="currentColor" stroke="none" />
+    <path d="M7.8 8h5.7" />
+    <circle cx="5.6" cy="12" r="1.15" fill="currentColor" stroke="none" />
+    <path d="M7.8 12h5.7" />
+  </svg>
+);
+
 export const ViewSplitIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
     <rect x="2" y="3" width="5" height="10" rx="1" />
@@ -414,6 +426,7 @@ export const ICONS = {
   minus: MinusIcon,
   quickselect: QuickSelectIcon,
   list: ListIcon,
+  tree: TreeIcon,
   viewSplit: ViewSplitIcon,
   viewSingle: ViewSingleIcon,
   documentChain: DocumentChainIcon,

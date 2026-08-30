@@ -1,4 +1,4 @@
-.Wrapper {
+.Root {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -109,11 +109,6 @@
 	box-sizing: border-box;
 }
 
-.Toolbar {
-	display: flex;
-	gap: 8px;
-	margin-bottom: 6px;
-}
 
 .CreateForm {
 	display: flex;

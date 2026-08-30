@@ -60,7 +60,7 @@ export const AwpOutboxList: FC = () => {
 		componentName: "AwpOutboxList", rows, columns, setColumns, isLoading, onRowClick: open, onReload: () => void refetch(), renderCell,
 	}), [rows, columns, isLoading, open, refetch, renderCell]);
 
-	return <div className={styles.Wrapper}><Table {...tableProps} /></div>;
+	return <div className={styles.Root}><Table {...tableProps} /></div>;
 };
 AwpOutboxList.displayName = "AwpOutboxList";
 
@@ -98,7 +98,7 @@ export const SntOutboxList: FC = () => {
 		componentName: "SntOutboxList", rows, columns, setColumns, isLoading, onRowClick: open, onReload: () => void refetch(), renderCell,
 	}), [rows, columns, isLoading, open, refetch, renderCell]);
 
-	return <div className={styles.Wrapper}><Table {...tableProps} /></div>;
+	return <div className={styles.Root}><Table {...tableProps} /></div>;
 };
 SntOutboxList.displayName = "SntOutboxList";
 
@@ -200,12 +200,12 @@ function useGovIncoming(kind: "awp" | "snt", componentName: string) {
 
 export const AwpIncomingList: FC = () => {
 	const { rows, notice, tableProps, declineModal } = useGovIncoming("awp", "AwpIncomingList");
-	return <div className={styles.Wrapper}><Notice items={notice ? [notice] : []} />{rows === null ? <div className={styles.Empty}>{translate("esfIncomingHint")}</div> : <Table {...tableProps} />}{declineModal}</div>;
+	return <div className={styles.Root}><Notice items={notice ? [notice] : []} />{rows === null ? <div className={styles.Empty}>{translate("esfIncomingHint")}</div> : <Table {...tableProps} />}{declineModal}</div>;
 };
 AwpIncomingList.displayName = "AwpIncomingList";
 
 export const SntIncomingList: FC = () => {
 	const { rows, notice, tableProps, declineModal } = useGovIncoming("snt", "SntIncomingList");
-	return <div className={styles.Wrapper}><Notice items={notice ? [notice] : []} />{rows === null ? <div className={styles.Empty}>{translate("esfIncomingHint")}</div> : <Table {...tableProps} />}{declineModal}</div>;
+	return <div className={styles.Root}><Notice items={notice ? [notice] : []} />{rows === null ? <div className={styles.Empty}>{translate("esfIncomingHint")}</div> : <Table {...tableProps} />}{declineModal}</div>;
 };
 SntIncomingList.displayName = "SntIncomingList";

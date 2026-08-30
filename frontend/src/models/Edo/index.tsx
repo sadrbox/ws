@@ -76,7 +76,7 @@ const EdoList: FC<{ mode: "inbox" | "outbox" }> = ({ mode }) => {
 		extraButtons: mode === "outbox" ? <button className={[styles.Btn, styles.BtnPrimary].join(" ")} onClick={openCreate}>+ {translate("edoNew")}</button> : undefined,
 	}), [rows, columns, isLoading, mode, openDoc, refetch, renderCell, openCreate]);
 
-	return <div className={styles.Wrapper}><Table {...tableProps} /></div>;
+	return <div className={styles.Root}><Table {...tableProps} /></div>;
 };
 
 export const EdoInboxList: FC = () => <EdoList mode="inbox" />;
@@ -117,7 +117,7 @@ export const EdoDocumentCreateForm: FC<Partial<TPane>> = () => {
 	}, [receiverBin, kind, title, number, comment, addPane, queryClient]);
 
 	return (
-		<div className={styles.Wrapper}>
+		<div className={styles.Root}>
 			<Notice items={error ? [{ type: "attention", text: error }] : []} />
 			<div className={styles.CreateForm}>
 				<div className={styles.Field}>
@@ -193,7 +193,7 @@ export const EdoDocumentForm: FC<Partial<TPane>> = (paneProps) => {
 		return out;
 	}, [doc, edo.error]);
 
-	if (!doc) return <div className={styles.Wrapper}><div className={styles.Empty}>…</div></div>;
+	if (!doc) return <div className={styles.Root}><div className={styles.Empty}>…</div></div>;
 
 	const isSender = doc.senderOrgUuid === myOrg;
 	const isReceiver = doc.receiverOrgUuid === myOrg;
@@ -209,7 +209,7 @@ export const EdoDocumentForm: FC<Partial<TPane>> = (paneProps) => {
 	};
 
 	return (
-		<div className={styles.Wrapper}>
+		<div className={styles.Root}>
 			<Notice items={notices} />
 
 			<dl className={styles.DocHeader}>

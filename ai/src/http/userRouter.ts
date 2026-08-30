@@ -18,7 +18,7 @@ export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; w
 	const { erp, cfg, agents, workflow, log } = deps;
 	const r = Router();
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
-	if (workflow) r.use(chatRouter({ workflow, log }));
+	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576 }));
 
 	r.get("/me", (req, res) => {
 		const u = req.erpUser!;

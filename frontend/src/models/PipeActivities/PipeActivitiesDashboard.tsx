@@ -12,6 +12,7 @@ import {
 import { apiClient } from "src/services/api/client";
 import { translate } from "src/i18";
 import styles from "./PipeActivitiesDashboard.module.scss";
+import main from "src/styles/main.module.scss";
 
 interface Cat { key: string | null; count: number }
 interface Stats {
@@ -98,7 +99,7 @@ export const PipeActivitiesDashboard: FC = () => {
 
   return (
     <div className={styles.Wrap}>
-      <div className={styles.Toolbar}>
+      <div className={main.Toolbar}>
         <label className={styles.Field}>{translate("perfPeriod")}:
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </label>

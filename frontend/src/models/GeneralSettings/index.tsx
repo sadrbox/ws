@@ -11,7 +11,7 @@ const GeneralSettings: FC = () => {
   const { settings, update } = useGeneralSettings();
 
   return (
-    <div className={styles.Wrapper}>
+    <div className={styles.Root}>
       <div className={styles.Section}>
         <div className={styles.Row}>
           <label className={styles.Label} htmlFor="utcOffsetSelect">

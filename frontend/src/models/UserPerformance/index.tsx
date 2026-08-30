@@ -29,6 +29,7 @@ import {
 	type KpiTileDef,
 } from "./dashboardBlocks";
 import styles from "./UserPerformance.module.scss";
+import main from "src/styles/main.module.scss";
 
 // ── Типы источников ──────────────────────────────────────────────────────────
 interface ManagerRow {
@@ -163,7 +164,7 @@ export const UserPerformanceList: FC = () => {
 	return (
 		<div className={styles.Wrap}>
 			{/* Панель управления */}
-			<div className={styles.Toolbar}>
+			<div className={main.Toolbar}>
 				<label className={styles.Field}>
 					{translate("perfPeriod")}:
 					<input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />

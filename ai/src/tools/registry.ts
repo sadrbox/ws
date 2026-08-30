@@ -193,6 +193,54 @@ export const TOOLS: ToolSpec[] = [
 		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
 	},
 	{
+		name: "import_bank_statement",
+		description:
+			"Загрузить в 1С распознанную банковскую выписку (statementId из сообщения о вложении PDF): по каждой операции создаётся НЕ проведённое платёжное поручение " +
+			"(входящее/исходящее), контрагенты подбираются по БИН, отсутствующие создаются автоматически. Уже загруженные строки повторно не создаются. " +
+			"Организацию 1С определяет по БИН владельца счёта из выписки.",
+		inputSchema: { type: "object", properties: { statementId: { type: "string", description: "id распознанной выписки из сообщения о вложении" } }, required: ["statementId"], additionalProperties: false },
+		operation: "WRITE",
+		commandType: "IMPORT_BANK_STATEMENT",
+		mutating: true,
+		buildPayload: (i, ctx) => ({ statementId: known(ctx, "statementId", i.statementId) }),
+	},
+	{
+		name: "post_bank_documents",
+		description: "Провести платёжные поручения, созданные из выписки. Только по явной просьбе пользователя. id и type — из результата import_bank_statement.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				documents: {
+					type: "array",
+					minItems: 1,
+					items: {
+						type: "object",
+						properties: { id: { type: "string" }, type: { type: "string", enum: ["incoming", "outgoing"] } },
+						required: ["id", "type"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["documents"],
+			additionalProperties: false,
+		},
+		operation: "CRITICAL",
+		commandType: "POST_BANK_DOCUMENTS",
+		mutating: true,
+		buildPayload: (i, ctx) => {
+			const docs = Array.isArray(i.documents) ? i.documents : [];
+			if (!docs.length) throw new ToolInputError("documents", "documents: нужен хотя бы один документ");
+			if (docs.length > 200) throw new ToolInputError("documents", "documents: не более 200 за один раз");
+			return {
+				documents: docs.map((d: Record<string, unknown>, n: number) => {
+					const type = str(d.type, `documents[${n}].type`);
+					if (type !== "incoming" && type !== "outgoing") throw new ToolInputError(`documents[${n}].type`, "type: incoming или outgoing");
+					return { id: known(ctx, `documents[${n}].id`, d.id), type };
+				}),
+			};
+		},
+	},
+	{
 		name: "print_sale",
 		description: "Сформировать печатную форму документа (PDF). form — из get_print_forms: для товаров обычно РасходнаяНакладная, для услуг — АктОбОказанииУслуг.",
 		inputSchema: {

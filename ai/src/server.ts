@@ -25,10 +25,12 @@ import { userRouter } from "./http/userRouter.ts";
 import { AnthropicProvider } from "./llm/anthropic.ts";
 import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
+import { BankExtractor } from "./bank/extract.ts";
+import { StatementStore } from "./bank/store.ts";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
-export type AppDeps = { cfg: Config; log: Logger; db: Db; erp: Db; llm?: LLMProvider | null };
+export type AppDeps = { cfg: Config; log: Logger; db: Db; erp: Db; llm?: LLMProvider | null; bank?: { extractor: BankExtractor; store: StatementStore } | null };
 
 /** Провайдер LLM по конфигурации. `none` — сервис работает без чата (только агенты/админ). */
 export function createProvider(cfg: Config, log: Logger): LLMProvider | null {
@@ -52,9 +54,14 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const queue = new CommandQueue(db);
 	const audit = new Audit(db, log);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;
+	// Чтение PDF выписок — прямой вызов Anthropic с документом на входе, поэтому не абстрагируется
+	// провайдером LLM: без ключа Anthropic вложения в чате отключены, остальной чат работает.
+	const bank = deps.bank !== undefined ? deps.bank : cfg.ANTHROPIC_API_KEY
+		? { extractor: new BankExtractor({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL }), store: new StatementStore(db) }
+		: null;
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,
-			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS })
+			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank })
 		: null;
 
 	const app = express();
@@ -62,7 +69,8 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// За cloudflared: реальный IP клиента — в X-Forwarded-For.
 	app.set("trust proxy", true);
 	app.use(helmet());
-	app.use(express.json({ limit: "2mb" }));
+	// Вложения чата (PDF выписок, base64) идут в теле JSON: лимит — с запасом над CHAT_ATTACHMENT_MAX_MB × 3 файла.
+	app.use(express.json({ limit: `${cfg.CHAT_ATTACHMENT_MAX_MB * 4 + 2}mb` }));
 
 	// CORS — только для браузерного API /v1 и только для перечисленных origins. Агенты и
 	// admin-вызовы идут не из браузера, им заголовки CORS ни к чему. Без библиотеки: правил

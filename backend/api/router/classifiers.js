@@ -4,7 +4,7 @@ import express from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { listClassifiers, importClassifiers } from "../../services/classifiers/index.js";
+import { listClassifiers, importClassifiers, countsByType } from "../../services/classifiers/index.js";
 import { importClassifierXml } from "../../services/classifiers/importXml.js";
 
 const router = express.Router();
@@ -17,6 +17,17 @@ const importStorage = multer.diskStorage({
 	filename: (_req, file, cb) => cb(null, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname)}`),
 });
 const importUpload = multer({ storage: importStorage, limits: { fileSize: 200 * 1024 * 1024 } });
+
+// GET /classifiers/counts → { counts: { country: N, tnved: N, ... } } (для подписей селекта)
+router.get("/classifiers/counts", async (req, res) => {
+	if (!req.user?.uuid) return res.status(401).json({ success: false, message: "Требуется авторизация" });
+	try {
+		res.json({ success: true, counts: await countsByType() });
+	} catch (err) {
+		console.error("GET /classifiers/counts error:", err);
+		res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
 
 // GET /classifiers?type=country&search=&parentCode= → список значений
 router.get("/classifiers", async (req, res) => {

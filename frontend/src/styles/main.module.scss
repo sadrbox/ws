@@ -654,9 +654,11 @@ body {
 	vertical-align: middle;
 }
 
-.PaneItemBottomToolbar {
+.PaneItemToolbar {
 	display: flex;
 	flex-direction: row;
+	align-items: center;
+	flex-wrap: wrap;
 	gap: 6px;
 	justify-content: flex-start;
 	margin: 0px;
@@ -1280,6 +1282,38 @@ body {
 	max-width: 600px;
 	// flex: 1;
 
+}
+
+// Общий корень-«заполнитель» пейна для НЕ форм/списков/отчётов: колонка на всю
+// высоту, тело скроллится независимо. Используется, когда тулбар вынесен на
+// уровень панели (usePaneToolbar) и компонент отдаёт только тело (референс
+// pane-toolbar: Классификаторы). Единый «shell» вместо разрозненных .Root/.Wrapper.
+.PaneFill {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	height: 100%;
+	overflow: auto;
+}
+
+// Единый тулбар пейна/дашборда — горизонтальный ряд контролов (тип/поиск/кнопки/
+// счётчик). Один общий класс вместо копий .Toolbar по модулям. (Тулбар-«разброс»
+// для кнопок-дропдаунов — отдельный components/Toolbar/Toolbar.module.scss,
+// у него justify-content:space-between, это другой кейс.)
+.Toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+// Стандартный <Toolbar> (components/Toolbar) внутри pane-слота: растянуть на всю
+// ширину, чтобы работал его space-between (команды слева, reload/поиск справа) —
+// как в обычных таблицах. См. Классификаторы (референс pane-toolbar).
+.PaneToolbarFill {
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 // Колонка итогов документа (DocumentTotals / сводка) — по ширине содержимого.

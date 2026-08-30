@@ -23,6 +23,18 @@ export async function listClassifiers({ type, search, parentCode, limit = 100 } 
 	});
 }
 
+/** Количество активных значений по каждому типу классификатора (для подписей селекта). */
+export async function countsByType() {
+	const rows = await prisma.classifier.groupBy({
+		by: ["type"],
+		where: { deletedAt: null, isActive: true },
+		_count: { _all: true },
+	});
+	const out = {};
+	for (const r of rows) out[r.type] = r._count._all;
+	return out;
+}
+
 /**
  * Массовое наполнение классификатора (upsert по [type, code]).
  * @param {string} type
@@ -54,4 +66,4 @@ export function seedCountries() {
 	return importClassifiers("country", COUNTRIES.map(([code, name]) => ({ code, name })));
 }
 
-export default { listClassifiers, importClassifiers, seedCountries };
+export default { listClassifiers, importClassifiers, seedCountries, countsByType };

@@ -601,33 +601,25 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Действия для кнопок
   const fieldActions = useMemo(() => {
-    const acts: { type: LookupActionType; onClick: () => void }[] = [];
+    const acts: { type: LookupActionType; onClick: () => void; disabled?: boolean }[] = [];
     const allowed = visibleActions; // undefined = показывать все
     const show = (t: LookupActionType) => !allowed || allowed.includes(t);
 
-    // Поле заблокировано (проведённый документ, read-only журнал) — менять значение
-    // нельзя, но ПОСМОТРЕТЬ связанный объект можно: это чтение. Остальные действия
-    // (выбор/список/очистка) — мутации, их скрываем.
-    if (disabled) {
-      return show("open") && value && getByEndpoint(endpoint)
-        ? [{ type: "open" as LookupActionType, onClick: handleOpenItemForm }]
-        : [];
-    }
-
-    // В table-варианте кнопка «Очистить» избыточна: ячейка таблицы и так
-    // редактируется поверх существующего значения, отдельная кнопка только
-    // загромождает узкую колонку. Открытие/Быстрый выбор/Список оставляем.
+    // При disabled (проведённый документ / СОХРАНЕНИЕ формы) НЕ убираем кнопки из
+    // DOM — иначе поле «прыгает». Мутации (выбор/список/очистка) делаем НЕДОСТУПНЫМИ
+    // (disabled), а «Открыть» (чтение связанного объекта) оставляем доступным.
+    // В table-варианте кнопка «Очистить» избыточна (ячейка редактируется поверх).
     if (show("quickselect")) {
-      acts.push({ type: "quickselect", onClick: handleQuickSelect });
+      acts.push({ type: "quickselect", onClick: handleQuickSelect, disabled });
     }
     if (show("open") && value && getByEndpoint(endpoint)) {
-      acts.push({ type: "open", onClick: handleOpenItemForm });
+      acts.push({ type: "open", onClick: handleOpenItemForm }); // чтение — доступно всегда
     }
     if (show("list")) {
-      acts.push({ type: "list", onClick: handleOpenModal });
+      acts.push({ type: "list", onClick: handleOpenModal, disabled });
     }
     if (show("clear") && !isTable && (value || inputText)) {
-      acts.push({ type: "clear", onClick: handleClear });
+      acts.push({ type: "clear", onClick: handleClear, disabled });
     }
     return acts;
   }, [disabled, visibleActions, isTable, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
@@ -761,6 +753,7 @@ const LookupField: FC<LookupFieldProps> = ({
                     icon={meta.icon}
                     label={meta.label}
                     onClick={action.onClick}
+                    disabled={action.disabled}
                   />
                 );
               })}

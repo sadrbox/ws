@@ -102,6 +102,10 @@ export interface TableProps {
   hideAdd?: boolean;
   /** Если true — скрыть кнопку «Обновить» в тулбаре (когда перезагрузка с сервера не нужна). */
   hideReload?: boolean;
+  /** Если true — НЕ рендерить панель управления (TableControlPanel) вовсе. Для
+   *  пейнов, где тулбар вынесен на уровень панели (usePaneToolbar). По умолчанию
+   *  false — на все существующие таблицы не влияет (референс pane-toolbar). */
+  hideToolbar?: boolean;
   /** Раскрытые строки (expand) */
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
@@ -277,6 +281,7 @@ const Table: FC<TableProps> = memo((props) => {
     hideAddDelete = false,
     hideAdd = false,
     hideReload = false,
+    hideToolbar = false,
     expandedRowIds,
     renderExpandedRow,
     apiRef,
@@ -772,7 +777,7 @@ const Table: FC<TableProps> = memo((props) => {
       )}
 
       <div className={styles.TableWrapper}>
-        <TableControlPanel
+        {!hideToolbar && <TableControlPanel
           variant={variant}
           componentName={componentName}
           showDateRangeButton={showDateRangeButton}
@@ -794,7 +799,7 @@ const Table: FC<TableProps> = memo((props) => {
           hideAdd={hideAdd}
           hideReload={hideReload}
           canDelete={!!onDelete}
-        />
+        />}
 
         {showDateRangeButton && hasDateRange && (
           <DateRangeBar

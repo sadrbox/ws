@@ -9,6 +9,10 @@ export const fetchClassifiers = (type: string, search = "", parentCode?: string,
 		params: { type, search, limit, ...(parentCode !== undefined ? { parentCode } : {}) },
 	});
 
+/** Количество значений по каждому типу (для подписей селектора). */
+export const fetchClassifierCounts = () =>
+	api.get<{ success: boolean; counts: Record<string, number> }>("/classifiers/counts");
+
 /** Массовый импорт значений классификатора (суперадмин). */
 export const importClassifiers = (type: string, rows: { code: string; name: string; parentCode?: string }[]) =>
 	api.post<{ success: boolean; upserted: number }>("/classifiers/import", { type, rows }, { timeout: 120_000 });

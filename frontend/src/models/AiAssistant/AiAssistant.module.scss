@@ -1,4 +1,7 @@
-// AI-помощник. Цвета — семантические токены, как в Chat.module.scss (тема-независимо).
+// AI-помощник. Приведён к общему дизайн-языку приложения: токены из
+// styles/variables.scss ($color*/$radius*/$fontsize) — тема-независимо и
+// консистентно с формами/списками (компактные радиусы, единые границы/фон/текст).
+@use "src/styles/variables" as *;
 
 .Root {
   display: flex;
@@ -6,6 +9,8 @@
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
+  background: $color60;
+  color: $color6;
 }
 
 .Header {
@@ -13,15 +18,33 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--line, var(--n-91a));
+  padding: 6px 12px;
+  border-bottom: 1px solid $color33;
   flex-shrink: 0;
+}
+
+.HeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.Recent {
+  font: inherit;
+  font-size: $fontsize;
+  max-width: 320px;
+  height: $heightFieldInput;
+  padding: 2px 6px;
+  border: 1px solid $color33;
+  border-radius: $radius3;
+  background: $color60;
+  color: $color6;
 }
 
 .Status {
   margin-left: 10px;
-  font-size: 12px;
-  color: var(--ink-3, var(--n-50));
+  font-size: $fontsize;
+  color: $color5;
 }
 
 .Log {
@@ -35,7 +58,7 @@
 }
 
 .Empty {
-  color: var(--ink-3, var(--n-50));
+  color: $color5;
   max-width: 640px;
   p { margin: 0 0 10px; }
 }
@@ -46,14 +69,14 @@
   gap: 6px;
   button {
     font: inherit;
-    font-size: 13px;
-    padding: 6px 10px;
-    border: 1px solid var(--line, var(--n-80));
-    border-radius: 14px;
-    background: var(--panel, var(--sv-color60));
-    color: var(--ink, var(--c-blue-15));
+    font-size: $fontsize;
+    padding: 4px 10px;
+    border: 1px solid $color33;
+    border-radius: $radius4;
+    background: $color60;
+    color: $color6;
     cursor: pointer;
-    &:hover { border-color: var(--accent, var(--c-blue-50)); }
+    &:hover { border-color: $colorPrimaryDark; color: $colorPrimaryDark; }
   }
 }
 
@@ -67,71 +90,107 @@
 .Bubble {
   max-width: min(720px, 85%);
   padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line, var(--n-91a));
-  background: var(--panel, var(--sv-color60));
-  color: var(--ink, var(--c-blue-15));
+  border-radius: $radius4;
+  border: 1px solid $color33;
+  background: $color60;
+  color: $color6;
   white-space: pre-wrap;
   word-break: break-word;
   p { margin: 0; min-height: 1.2em; }
-  .user & { background: var(--accent-soft, var(--c-blue-90)); }
-  .system & { border-style: dashed; color: var(--ink-3, var(--n-50)); }
+  // Сообщение пользователя — мягкая акцентная подсветка (как «активное» в списках).
+  .user & { background: $accentBlueSoft; border-color: $accentBlueBorder; }
+  .system & { border-style: dashed; color: $color5; }
 }
 
 .File {
   display: inline-block;
   margin-top: 6px;
   font: inherit;
-  font-size: 13px;
-  padding: 4px 8px;
-  border: 1px solid var(--line, var(--n-80));
-  border-radius: 6px;
+  font-size: $fontsize;
+  padding: 3px 8px;
+  border: 1px solid $color33;
+  border-radius: $radius3;
   background: transparent;
-  color: var(--ink, var(--c-blue-15));
+  color: $colorPrimaryDark;
   cursor: pointer;
-  &:hover { border-color: var(--accent, var(--c-blue-50)); }
+  &:hover { border-color: $colorPrimaryDark; text-decoration: underline; }
 }
 
 .Confirm {
   display: flex;
   gap: 8px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--line, var(--n-91a));
+  padding: 8px 12px;
+  border-top: 1px solid $color33;
   flex-shrink: 0;
 }
 
+// Прикреплённые к сообщению файлы (до отправки) — чипы над полем ввода.
+.Attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 12px 0;
+  border-top: 1px solid $color33;
+}
+.Chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: $fontsize;
+  padding: 2px 8px;
+  border: 1px solid $accentBlueBorder;
+  border-radius: $radius4;
+  background: $accentBlueSoft;
+  color: $color6;
+  button {
+    font: inherit;
+    border: none;
+    background: transparent;
+    color: $color5;
+    cursor: pointer;
+    padding: 0 2px;
+    &:hover { color: $colorPrimaryDark; }
+  }
+}
 .Composer {
   display: flex;
   gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--line, var(--n-91a));
+  padding: 8px 12px;
+  border-top: 1px solid $color33;
   flex-shrink: 0;
+  // Когда есть чипы вложений, верхняя граница уже нарисована ими.
+  .Attachments + & { border-top: none; padding-top: 6px; }
   textarea {
     flex: 1 1 auto;
     font: inherit;
-    padding: 8px 10px;
-    border: 1px solid var(--line, var(--n-80));
-    border-radius: 8px;
-    background: var(--panel, var(--sv-color60));
-    color: var(--ink, var(--c-blue-15));
+    font-size: $fontsize;
+    padding: 6px 8px;
+    border: 1px solid $color33;
+    border-radius: $radius3;
+    background: $color60;
+    color: $color6;
     resize: none;
+    &:focus { outline: none; border-color: $colorPrimaryDark; }
   }
 }
 
+// Кнопки в стиле приложения: первичная — синий акцент, вторичная — «призрак».
 .Primary, .Ghost {
   font: inherit;
-  padding: 8px 14px;
-  border-radius: 8px;
+  font-size: $fontsize;
+  padding: 5px 14px;
+  border-radius: $radius3;
   cursor: pointer;
   &:disabled { opacity: 0.5; cursor: default; }
 }
 .Primary {
-  border: 1px solid var(--accent, var(--c-blue-50));
-  background: var(--accent, var(--c-blue-50));
-  color: #fff;
+  border: 1px solid $primaryBorder;
+  background: $primary;
+  color: #fff; // белый на синей кнопке — читаемо в обеих темах (как .danger в variables.scss)
 }
 .Ghost {
-  border: 1px solid var(--line, var(--n-80));
+  border: 1px solid $color33;
   background: transparent;
-  color: var(--ink, var(--c-blue-15));
+  color: $color6;
+  &:hover:not(:disabled) { border-color: $colorPrimaryDark; }
 }

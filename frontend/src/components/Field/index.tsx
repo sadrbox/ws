@@ -136,12 +136,14 @@ export const Field: FC<TypeFieldStringProps> = ({
   // поле не показывает FieldActions при фокусе).
   const defaultActions: TypeFieldActions = actions ?? (clearable ? [{ type: "clear", onClick: handleClear }] : []);
 
-  const visibleActions = disabled
-    ? []
-    : defaultActions.filter(action => {
-      if (action.type === 'clear' && !value) return false;
-      return true;
-    });
+  // При disabled (напр. во время СОХРАНЕНИЯ формы) НЕ убираем действия из DOM —
+  // иначе кнопки исчезают и поле «прыгает». Оставляем их видимыми, но
+  // недоступными (FieldGroup передаёт disabled в FieldActionButton). Пустое поле
+  // по-прежнему без «Очистить» (независимо от disabled).
+  const visibleActions = defaultActions.filter(action => {
+    if (action.type === 'clear' && !value) return false;
+    return true;
+  });
 
   return (
     <FieldGroup
@@ -222,7 +224,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
             {actions.map((action, index) => {
               const meta = FIELD_ACTION_META[action.type];
               return (
-                <FieldActionButton key={index} icon={meta.icon} label={meta.label} onClick={action.onClick} />
+                <FieldActionButton key={index} icon={meta.icon} label={meta.label} onClick={action.onClick} disabled={disabled} />
               );
             })}
           </div>

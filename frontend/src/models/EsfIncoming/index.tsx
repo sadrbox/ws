@@ -77,7 +77,7 @@ export const EsfIncomingList: FC = () => {
 	}), [tableRows, columns, busy, renderCell, load]);
 
 	return (
-		<div className={styles.Wrapper}>
+		<div className={styles.Root}>
 			<Notice items={notice ? [notice] : []} />
 			{rows === null ? <div className={styles.Empty}>{translate("esfIncomingHint")}</div> : <Table {...tableProps} />}
 		</div>

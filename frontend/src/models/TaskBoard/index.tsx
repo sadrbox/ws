@@ -22,6 +22,7 @@ import { useTodoStatuses } from "src/hooks/useTodoStatuses";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./TaskBoard.module.scss";
+import main from "src/styles/main.module.scss";
 
 // Статусы = колонки. Порядок значим (слева направо по жизненному циклу).
 
@@ -183,7 +184,7 @@ export const TaskBoardList: FC = () => {
 
   return (
     <div className={styles.Board}>
-      <div className={styles.Toolbar}>
+      <div className={main.Toolbar}>
         {TABS.map((tab) => (
           <button
             key={tab.key}

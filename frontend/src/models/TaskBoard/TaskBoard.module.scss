@@ -10,13 +10,6 @@
   box-sizing: border-box;
 }
 
-.Toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
 
 .FilterTab {
   border: 1px solid var(--line, var(--n-88));

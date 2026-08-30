@@ -21,6 +21,8 @@ interface Params {
 	/** Подсветка/активация строки по uuid (для «Показать в списке» / «Выбор из списка»). */
 	highlightUuid?: string;
 	highlightToken?: number;
+	/** Не рендерить панель управления Table (тулбар вынесен на уровень пейна). */
+	hideToolbar?: boolean;
 }
 
 /** Собирает объект пропсов для <Table {...props} /> на статичных данных. */
@@ -52,6 +54,7 @@ export function buildStaticTableProps(p: Params) {
 		},
 		hideAddDelete: true,
 		hideReload: !p.onReload,
+		hideToolbar: !!p.hideToolbar,
 		readonly: true,
 		selectable: false, // read-only списки без массового выбора → без колонки-чекбокса
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),

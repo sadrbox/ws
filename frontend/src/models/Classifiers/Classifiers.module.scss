@@ -1,4 +1,4 @@
-.Wrapper {
+.Root {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -8,12 +8,6 @@
 	height: 100%;
 }
 
-.Toolbar {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-	flex-wrap: wrap;
-}
 
 .Select,
 .Search {
@@ -127,12 +121,18 @@
 	min-height: 30px;
 	padding-right: 10px;
 
-	&:hover { background: var(--surface-muted); }
+	&:hover {
+		background: var(--surface-muted);
+	}
 }
 
-.TreeRowClickable { cursor: pointer; }
+.TreeRowClickable {
+	cursor: pointer;
+}
 
-.TreeRowHi { background: color-mix(in srgb, var(--color-link) 16%, transparent); }
+.TreeRowHi {
+	background: color-mix(in srgb, var(--color-link) 16%, transparent);
+}
 
 // Вертикальная направляющая уровня (одна на каждый уровень вложенности).
 .Guide {
@@ -142,7 +142,9 @@
 	border-left: 1px solid var(--line, var(--sv-color33));
 	margin-left: 10px;
 
-	&:first-child { margin-left: 6px; }
+	&:first-child {
+		margin-left: 6px;
+	}
 }
 
 .TreeCaret {
@@ -159,7 +161,9 @@
 	border-radius: 4px;
 	padding: 0;
 
-	&:hover { background: color-mix(in srgb, var(--color-link) 18%, transparent); }
+	&:hover {
+		background: color-mix(in srgb, var(--color-link) 18%, transparent);
+	}
 }
 
 .CaretClosed,
@@ -170,7 +174,10 @@
 	transition: transform 0.12s ease;
 	display: inline-block;
 }
-.CaretOpen { transform: rotate(90deg); }
+
+.CaretOpen {
+	transform: rotate(90deg);
+}
 
 .TreeLeafDot {
 	flex: none;
@@ -200,7 +207,11 @@
 	white-space: nowrap;
 	flex: 1 1 auto;
 }
-.TreeName { color: var(--text-secondary, var(--sv-color51)); }
+
+.TreeName {
+	color: var(--text-secondary, var(--sv-color51));
+}
+
 .TreeNameParent {
 	color: var(--ink, var(--n-20, var(--sv-color6)));
 	font-weight: 600;
@@ -239,6 +250,7 @@
 	color: var(--text-muted, var(--sv-color5));
 	font-size: 13px;
 }
+
 .Spinner {
 	width: 20px;
 	height: 20px;
@@ -247,5 +259,15 @@
 	border-top-color: var(--color-link);
 	animation: cls-spin 0.7s linear infinite;
 }
-@keyframes cls-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .Spinner { animation-duration: 2s; } }
+
+@keyframes cls-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.Spinner {
+		animation-duration: 2s;
+	}
+}

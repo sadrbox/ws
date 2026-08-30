@@ -212,7 +212,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
           <CloseButton onClick={onClose} />
         </div>
       </div>
-      {hasToolbar && <div className={styles.PaneItemBottomToolbar}>
+      {hasToolbar && <div className={styles.PaneItemToolbar}>
         <ToolbarSlot ref={slot} />
       </div>}
       <React.Suspense fallback={<LoadingSpinner />}>
