@@ -136,14 +136,12 @@ export const Field: FC<TypeFieldStringProps> = ({
   // поле не показывает FieldActions при фокусе).
   const defaultActions: TypeFieldActions = actions ?? (clearable ? [{ type: "clear", onClick: handleClear }] : []);
 
-  // При disabled (напр. во время СОХРАНЕНИЯ формы) НЕ убираем действия из DOM —
-  // иначе кнопки исчезают и поле «прыгает». Оставляем их видимыми, но
-  // недоступными (FieldGroup передаёт disabled в FieldActionButton). Пустое поле
-  // по-прежнему без «Очистить» (независимо от disabled).
-  const visibleActions = defaultActions.filter(action => {
-    if (action.type === 'clear' && !value) return false;
-    return true;
-  });
+  // НЕ убираем действия из DOM (иначе поле «прыгает»): при disabled — делаем
+  // недоступными, а «Очистить» при пустом значении — НЕВИДИМОЙ (hidden), но место
+  // сохраняем. Так очистка/заполнение не меняют ширину блока действий.
+  const visibleActions = defaultActions.map(action =>
+    action.type === 'clear' && !value ? { ...action, hidden: true } : action,
+  );
 
   return (
     <FieldGroup
@@ -156,7 +154,9 @@ export const Field: FC<TypeFieldStringProps> = ({
       style={{
         width: width ?? '100%',
         maxWidth: maxWidth ?? 'none',
-        minWidth: minWidth ?? 'none'
+        minWidth: minWidth ?? 'none',
+        // Заданная ширина фиксирует поле: не растягивать/не сжимать в flex-ряду.
+        ...(width ? { flex: '0 0 auto' } : {}),
       }}
       actions={visibleActions.length > 0 ? visibleActions : undefined}
       disabled={disabled}
@@ -223,8 +223,13 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
           <div className={styles.FieldActions}>
             {actions.map((action, index) => {
               const meta = FIELD_ACTION_META[action.type];
+              // hidden-класс на самой кнопке (не span-обёртке): спаны в ячейках таблицы
+              // получают паддинг от Table.module «span,code» — кнопки расползались.
               return (
-                <FieldActionButton key={index} icon={meta.icon} label={meta.label} onClick={action.onClick} disabled={disabled} />
+                <FieldActionButton key={index} icon={meta.icon} label={meta.label} onClick={action.onClick}
+                  disabled={disabled || action.hidden}
+                  className={action.hidden ? styles.FieldActionHidden : undefined}
+                  aria-hidden={action.hidden || undefined} />
               );
             })}
           </div>

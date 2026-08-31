@@ -212,18 +212,17 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   // «Очистить» только при clearable (по умолчанию для FieldNumber — нет).
   const defaultActions: TypeFieldActions = actions ?? (clearable ? [{ type: "clear", onClick: handleClear }] : []);
 
-  const visibleActions = disabled
-    ? []
-    : defaultActions.filter(action => {
-      if (action.type === 'clear' && !value) return false;
-      return true;
-    });
+  // Набор действий постоянен (без «прыжков» ширины): при disabled — недоступны,
+  // «Очистить» при пустом значении — невидима (hidden), но место сохранено.
+  const visibleActions = defaultActions.map(action =>
+    action.type === 'clear' && !value ? { ...action, hidden: true } : action,
+  );
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
 
       <div className={styles.FieldInputWrapper}>
@@ -250,12 +249,17 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
           <div className={styles.FieldActions}>
             {visibleActions.map((action, index) => {
               const meta = FIELD_ACTION_META[action.type];
+              // hidden-класс на самой кнопке (не span-обёртке): спаны в ячейках таблицы
+              // получают паддинг от Table.module «span,code» — кнопки расползались.
               return (
                 <FieldActionButton
                   key={index}
                   icon={meta.icon}
                   label={meta.label}
                   onClick={action.onClick}
+                  disabled={disabled || action.hidden}
+                  className={action.hidden ? styles.FieldActionHidden : undefined}
+                  aria-hidden={action.hidden || undefined}
                 />
               );
             })}

@@ -15,7 +15,7 @@ export const FIELD_ACTION_META: Record<'clear' | 'list' | 'open' | 'assignNumber
   assignNumber: { icon: "recalc", label: "Присвоить номер" },
 };
 export type FieldActionType = 'clear' | 'list' | 'open' | 'assignNumber';
-export interface FieldAction { type: FieldActionType; onClick: () => void; }
+export interface FieldAction { type: FieldActionType; onClick: () => void; /** Скрыть кнопку (display:none): набор в DOM постоянен, места не занимает. Стабильность ширины поля обеспечивает width-семантика (заданная ширина = flex 0 0 auto). */ hidden?: boolean; }
 export type TypeFieldActions = FieldAction[];
 
 // ── Общий hook для всех Field* компонентов ──────────────────────────────────

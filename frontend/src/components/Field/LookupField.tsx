@@ -213,8 +213,10 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Инлайн-стиль только для ЯВНО переданных размеров; дефолты (width:100%) — в CSS
   // (.FieldWrapper / .tableVariant), чтобы в табличных ячейках не было лишних inline-styles.
+  // Заданная ширина ФИКСИРУЕТ поле (flex: 0 0 auto — не растягивать и не сжимать);
+  // без width поле тянется по контейнеру (.FieldWrapper flex: 1 1 auto).
   const wrapperStyle = (width || maxWidth || minWidth)
-    ? { ...(width ? { width } : {}), ...(maxWidth ? { maxWidth } : {}), ...(minWidth ? { minWidth } : {}) }
+    ? { ...(width ? { width, flex: '0 0 auto' } : {}), ...(maxWidth ? { maxWidth } : {}), ...(minWidth ? { minWidth } : {}) }
     : undefined;
 
   // ── Autocomplete state ──────────────────────────────────────────────────
@@ -601,26 +603,34 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Действия для кнопок
   const fieldActions = useMemo(() => {
-    const acts: { type: LookupActionType; onClick: () => void; disabled?: boolean }[] = [];
+    const acts: { type: LookupActionType; onClick: () => void; disabled?: boolean; hidden?: boolean }[] = [];
     const allowed = visibleActions; // undefined = показывать все
     const show = (t: LookupActionType) => !allowed || allowed.includes(t);
+    const hasValue = !!(value || inputText);
 
-    // При disabled (проведённый документ / СОХРАНЕНИЕ формы) НЕ убираем кнопки из
-    // DOM — иначе поле «прыгает». Мутации (выбор/список/очистка) делаем НЕДОСТУПНЫМИ
-    // (disabled), а «Открыть» (чтение связанного объекта) оставляем доступным.
-    // В table-варианте кнопка «Очистить» избыточна (ячейка редактируется поверх).
+    // Ключевой принцип против «прыжков» разметки: НАБОР кнопок в DOM постоянен —
+    // ни disabled (сохранение/проведение), ни очистка значения не убирают кнопки, а
+    // лишь ДЕЛАЮТ их недоступными (disabled) или НЕВИДИМЫМИ (hidden → visibility:hidden,
+    // место сохраняется). Иначе ширина блока действий менялась и поле дёргалось.
+    // «Открыть» и «Очистить» имеют смысл только при значении — при пустом их скрываем,
+    // но место резервируем. В table-варианте «Очистить» не показываем совсем (ячейка
+    // редактируется поверх) — это константа поля, ширину не меняет.
     if (show("quickselect")) {
       acts.push({ type: "quickselect", onClick: handleQuickSelect, disabled });
     }
-    if (show("open") && value && getByEndpoint(endpoint)) {
-      acts.push({ type: "open", onClick: handleOpenItemForm }); // чтение — доступно всегда
+    if (show("open") && getByEndpoint(endpoint)) {
+      acts.push({ type: "open", onClick: handleOpenItemForm, hidden: !value }); // чтение — доступно при значении
     }
     if (show("list")) {
       acts.push({ type: "list", onClick: handleOpenModal, disabled });
     }
-    if (show("clear") && !isTable && (value || inputText)) {
-      acts.push({ type: "clear", onClick: handleClear, disabled });
+    if (show("clear") && !isTable) {
+      acts.push({ type: "clear", onClick: handleClear, disabled, hidden: !hasValue });
     }
+    // Скрытые (display:none, места не занимают) — в хвост: React сохраняет
+    // стабильные позиции видимых кнопок при переключениях. Ширина поля от кнопок
+    // не зависит (базис 0 / фиксированная width — см. Field.module.scss).
+    acts.sort((a, b) => Number(!!a.hidden) - Number(!!b.hidden));
     return acts;
   }, [disabled, visibleActions, isTable, value, inputText, endpoint, handleClear, handleOpenItemForm, handleQuickSelect, handleOpenModal]);
 
@@ -747,13 +757,18 @@ const LookupField: FC<LookupFieldProps> = ({
             <div className={styles.FieldActions}>
               {fieldActions.map((action) => {
                 const meta = FIELD_ACTION_META[action.type];
+                // hidden-класс — ПРЯМО на кнопке, без span-обёртки: спаны в ячейках
+                // таблицы получают padding: 0 6px (Table.module «span,code») и кнопки
+                // расползались. Кнопка (button) под то правило не подпадает.
                 return (
                   <FieldActionButton
                     key={action.type}
                     icon={meta.icon}
                     label={meta.label}
                     onClick={action.onClick}
-                    disabled={action.disabled}
+                    disabled={action.disabled || action.hidden}
+                    className={action.hidden ? styles.FieldActionHidden : undefined}
+                    aria-hidden={action.hidden || undefined}
                   />
                 );
               })}

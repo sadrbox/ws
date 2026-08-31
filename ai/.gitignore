@@ -1,4 +1,5 @@
 node_modules/
-.env
-.env.local
+# Все варианты env-файлов (включая бэкапы .env.bak-*) — в них живые секреты.
+.env*
+!.env.example
 logs/

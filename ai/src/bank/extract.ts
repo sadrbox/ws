@@ -25,7 +25,7 @@ export class ExtractError extends Error {
 	}
 }
 
-const SYSTEM = `Ты извлекаешь данные из банковской выписки (Казахстан) в структуру record_statement. Правила:
+export const SYSTEM = `Ты извлекаешь данные из банковской выписки (Казахстан) в структуру record_statement. Правила:
 - Перенеси ВСЕ операции из документа, по порядку, ничего не пропуская и не объединяя. Итоговые строки («Итого», «Обороты», остатки) в lines не включай — их значения идут в totalIn/totalOut/openingBalance/closingBalance.
 - Направление считай относительно владельца счёта: зачисление на его счёт — in (кредит), списание с его счёта — out (дебет). Комиссии банка — out с контрагентом «банк».
 - counterparty — вторая сторона операции: для in это плательщик, для out — получатель. Если у операции вторая сторона — сам владелец (перевод между своими счетами), укажи его данные.
@@ -33,7 +33,12 @@ const SYSTEM = `Ты извлекаешь данные из банковской
 - Ничего не придумывай: если реквизит не напечатан — оставь поле пустым или null. Не исправляй и не «улучшай» текст назначения платежа.
 - Если в документе несколько счетов или валют, извлеки счёт в тенге (KZT); при нескольких счетах в KZT — первый.`;
 
-export class BankExtractor {
+/** Контракт экстрактора — у Claude и OpenAI реализации разные, workflow видит только его. */
+export interface StatementExtractor {
+	extract(pdf: Buffer, fileName: string): Promise<Extracted>;
+}
+
+export class BankExtractor implements StatementExtractor {
 	private readonly client: Anthropic;
 	private readonly model: string;
 
@@ -88,7 +93,7 @@ export class BankExtractor {
 }
 
 /** Мелкая нормализация ответа модели до валидации: пустые строки → undefined, БИН без пробелов. */
-function normalize(v: unknown): unknown {
+export function normalize(v: unknown): unknown {
 	if (Array.isArray(v)) return v.map(normalize);
 	if (v && typeof v === "object") {
 		const out: Record<string, unknown> = {};

@@ -31,8 +31,10 @@ async function main(): Promise<number> {
 		}
 	}
 	const first429 = statuses.indexOf(429);
-	const ok = first429 === limit && statuses.slice(0, limit).every((s) => s === 400);
-	console.log(`статусы: ${statuses.slice(0, 3).join(",")}… всего ${statuses.length}; первый 429 на запросе ${first429 + 1} (ожидался ${limit + 1})`);
+	// Квота общая на пользователя: если перед проверкой шли другие запросы (chat-e2e), 429 придёт
+	// раньше 31-го. Важно, что он пришёл не позже лимита и до него были только 400.
+	const ok = first429 >= 0 && first429 <= limit && statuses.slice(0, first429).every((s) => s === 400);
+	console.log(`статусы: ${statuses.slice(0, 3).join(",")}… всего ${statuses.length}; первый 429 на запросе ${first429 + 1} (не позже ${limit + 1})`);
 	console.log(ok ? "PASS: лимит ходов чата" : "FAIL: лимит ходов чата");
 	return ok ? 0 : 1;
 }

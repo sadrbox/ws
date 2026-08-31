@@ -31,6 +31,7 @@ Node ≥ 22.6 (TypeScript исполняется без сборки, синта
 | `ERP_DATABASE_URL` | база ERP, только чтение `users`/`access_rights` |
 | `JWT_SECRET` | тот же, что у бэкенда ERP — принимаем его JWT |
 | `ANTHROPIC_API_KEY`, `LLM_MODEL`, `LLM_EFFORT` | Claude (`claude-opus-5`, effort `medium`) |
+| `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI (`LLM_MODEL=gpt-5`, `BANK_EXTRACT_MODEL=gpt-5`); ключ платформы, не подписка ChatGPT; BASE_URL — для OpenAI-совместимых API |
 | `AGENT_ADMIN_KEY` | заголовок `X-Admin-Key` для admin API |
 | `CONFIRM_WRITE` | `true` — карточка подтверждения перед созданием документа (§17) |
 | `ALLOWED_ORIGINS` | origins браузерных клиентов для CORS (`/v1/*`) |

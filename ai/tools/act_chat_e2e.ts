@@ -66,7 +66,7 @@ async function main(): Promise<number> {
 	}
 	check(files.length === 1 && files[0].fileName.toLowerCase().endsWith(".pdf") && files[0].size > 1000, `PDF акта: ${files.map((a) => `${a.fileName} ${a.size} Б`).join("; ") || "нет вложения"}`);
 	for (const a of files) {
-		const r = await fetch(`${BASE}${a.url}`, { headers: H });
+		const r = await fetch(`${BASE}${a.url}?organizationUuid=${ORG}`, { headers: H });
 		const buf = Buffer.from(await r.arrayBuffer());
 		check(r.status === 200 && buf.length === a.size, `скачан ${a.fileName}: ${r.status}, ${buf.length} Б, ${r.headers.get("content-type")}`);
 	}

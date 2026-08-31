@@ -44,7 +44,7 @@ export const FieldDateTime: FC<TypeFieldDateTimeProps> = ({
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
@@ -89,7 +89,7 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), minWidth: minWidth ?? 'none', maxWidth: maxWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input

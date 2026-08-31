@@ -146,8 +146,11 @@
 .FieldWrapper {
 	display: flex;
 	flex-direction: column;
-	flex: 1 1 auto;
-	// gap: 6px;
+	// Базис 0 (не auto!): ширину «резинового» поля диктует КОНТЕЙНЕР, а не контент.
+	// Иначе появление/скрытие кнопок FieldActions меняло контентный базис и поле
+	// «прыгало». Поле с заданной width фиксируется инлайном (flex: 0 0 auto).
+	flex: 1 1 0;
+	min-width: 0;
 	position: relative;
 	// Дефолтная ширина (была inline style={{ width: width ?? "100%" }}). Явная ширина,
 	// если передана пропом, по-прежнему задаётся инлайном и перебивает это правило.
@@ -211,8 +214,26 @@
 			}
 		}
 
-		// FieldActions скрыты по умолчанию и показываются при фокусе —
-		// см. глобальное правило ниже (теперь действует для всех вариантов поля).
+		// ТАБЛИЧНЫЙ вариант: кнопки-действия — только у ячейки под курсором или в
+		// редактировании (фокус). Постоянные кнопки в каждой строке съедали место под
+		// текст и загромождали список. Ширину колонки задаёт таблица, поэтому появление
+		// кнопок разметку не двигает. Hover нужен и для disabled-ячеек (проведённый
+		// документ): инпут не фокусируем, но «Открыть» должен быть достижим.
+		// Селектор через wrapper — сильнее позднего `.FieldDisabled .FieldActions`.
+		.FieldInputWrapper .FieldActions,
+		.FieldSelectWrapper .FieldActions {
+			display: none;
+		}
+
+		.FieldInputWrapper:hover .FieldActions,
+		.FieldSelectWrapper:hover .FieldActions,
+		.FieldInputWrapper:focus-within .FieldActions,
+		.FieldSelectWrapper:focus-within .FieldActions {
+			display: flex;
+		}
+
+		// Размеры/отступы кнопок НЕ переопределяем: единый стиль с формой
+		// (IconButton sm 22px, gap 3px — базовый .FieldActions ниже по файлу).
 	}
 }
 
@@ -283,6 +304,14 @@
 	box-sizing: content-box;
 	margin-left: 1px;
 	margin-right: 3px;
+
+	// Кнопка-заглушка: скрыта полностью, места НЕ занимает (никаких «хвостов» и дыр).
+	// Стабильность ширины поля обеспечена не резервом, а тем, что ширина поля вообще
+	// не зависит от контента: базис 0 у .FieldWrapper (резиновые) либо инлайн
+	// width + flex: 0 0 auto (фиксированные).
+	.FieldActionHidden {
+		display: none;
+	}
 	background-color: transparent;
 	// Действия поля видны ВСЕГДА. Раньше они показывались только по :focus-within —
 	// пользователь не знал, что у поля вообще есть кнопки («Открыть», «Список»,

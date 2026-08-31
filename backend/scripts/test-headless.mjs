@@ -17,7 +17,7 @@ const FILES = [
 	"esfErrorHandling", "esfInboundToPurchase", "esfInvoiceMapper", "esfLicense",
 	"esfResolver", "fiscalProvider", "govMappers", "importLandedCost", "listUtils",
 	"openapi", "orgFieldValidation", "parse1cDate", "parseUploadErrors", "periodLock",
-	"recomputeCosting", "scheduler", "sortOrder", "twoFactor",
+	"recomputeCosting", "scheduler", "sortOrder", "twoFactor", "waWebhook",
 ].map((n) => path.join("__tests__", `${n}.test.js`));
 
 const r = spawnSync("node", ["--test", ...FILES], { cwd: root, stdio: "inherit" });

@@ -55,11 +55,15 @@ async function main(): Promise<number> {
 	let rc = 0;
 	const check = (cond: boolean, what: string) => { console.log(`${cond ? "PASS" : "FAIL"}: ${what}`); if (!cond) rc = 1; };
 
-	const r1 = await say(`Оформи поступление от поставщика «${SUPPLIER}» по организации ТОО «ПРЕКАСТ КЗ» (БИН 221140044855): «${PRODUCT}», 1 шт по 100 тенге, накладная поставщика № 77 от 25.08.2026`);
+	let r1 = await say(`Оформи поступление от поставщика «${SUPPLIER}» по организации ТОО «ПРЕКАСТ КЗ» (БИН 221140044855): «${PRODUCT}», 1 шт по 100 тенге, накладная поставщика № 77 от 25.08.2026`);
+	// По «хранилище» в базе несколько позиций — модель обязана уточнить (правило 2); отвечаем как пользователь.
+	if (r1.state === "WAITING_CLARIFICATION") r1 = await say("1");
 	check(r1.state === "WAITING_CONFIRMATION" && r1.confirmation?.tool === "create_purchase", "запрос поступления — карточка подтверждения create_purchase");
 	if (r1.state !== "WAITING_CONFIRMATION") return finish(rc, db, erp);
 
-	const r2 = await say("да");
+	let r2 = await say("да");
+	// Договор/организация могут быть неоднозначны (CONTRACT_AMBIGUOUS и т.п.) — модель спрашивает, отвечаем «1».
+	for (let i = 0; i < 4 && (r2.state === "WAITING_CLARIFICATION" || r2.state === "WAITING_CONFIRMATION"); i++) r2 = await say(r2.state === "WAITING_CONFIRMATION" ? "да" : "1");
 	check(/поступлени/i.test(r2.text) && /\d/.test(r2.text), "после «да» — документ создан, в ответе номер и сумма");
 	check(r2.state !== "WAITING_CONFIRMATION", "документ не проводится без просьбы");
 

@@ -159,7 +159,7 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
   const hasLabel = !isTable && !!label;
 
   return (
-    <div ref={rootRef} className={wrapperClass} style={{ width: width ?? 'auto', position: 'relative' }}>
+    <div ref={rootRef} className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), position: 'relative' }}>
       <FieldLabelNode id={labelId} label={label} required={effectiveRequired} isTable={isTable} />
 
       {/* Trigger */}

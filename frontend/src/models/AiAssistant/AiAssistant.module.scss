@@ -138,7 +138,10 @@
 }
 
 .Bubble {
-  user-select: text !important;
+  * {
+    user-select: text !important;
+  }
+
   max-width: min(720px, 85%);
   padding: 8px 12px;
   border-radius: $radius4;

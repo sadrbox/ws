@@ -56,7 +56,7 @@ export const FieldTextarea: FC<TypeFieldTextareaProps> = ({
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
+    <div className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       {label && (
         <label htmlFor={uid} className={styles.FieldLabel}>
           {typeof label === 'string' ? getTranslation(label) : label}

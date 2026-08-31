@@ -24,7 +24,7 @@ import { SYSTEM_PROMPT } from "./prompt.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue, CommandRow } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
-import { BankExtractor, ExtractError } from "../bank/extract.ts";
+import { ExtractError, type StatementExtractor } from "../bank/extract.ts";
 import type { StatementStore } from "../bank/store.ts";
 import { summarize, fmt, type Statement } from "../bank/schema.ts";
 import type { FileStore, FileRef } from "../files/store.ts";
@@ -68,7 +68,7 @@ export type WorkflowDeps = {
 	commandTimeoutMs: number;
 	maxToolRounds: number;
 	/** Распознавание и хранение выписок; null — вложения в чате не поддерживаются. */
-	bank?: { extractor: BankExtractor; store: StatementStore } | null;
+	bank?: { extractor: StatementExtractor; store: StatementStore } | null;
 	/** Хранилище файлов диалога (печатные формы, отчёты). */
 	files: FileStore;
 };

@@ -25,7 +25,8 @@ export function noteLlmError(code: string, message: string): void {
 /** Что делать пользователю/администратору — по коду и тексту ошибки провайдера. */
 export function llmHint(code: string, message: string): string {
 	const m = message.toLowerCase();
-	if (m.includes("credit balance") || m.includes("billing")) return "Исчерпан баланс Anthropic API — нужно пополнить счёт (Plans & Billing)";
+	if (m.includes("credit balance")) return "Исчерпан баланс Anthropic API — нужно пополнить счёт (Plans & Billing)";
+	if (code === "LLM_QUOTA" || m.includes("quota") || m.includes("billing") || m.includes("no credits")) return "Исчерпана квота/баланс OpenAI API — пополните счёт (Billing) или проверьте лимиты проекта";
 	if (code === "LLM_AUTH") return "Неверный или отозванный ключ Anthropic API";
 	if (code === "LLM_RATE_LIMIT") return "Превышен лимит запросов к модели — повторите через минуту";
 	if (code === "LLM_UNAVAILABLE") return "Сервис модели недоступен (сеть или сбой провайдера)";

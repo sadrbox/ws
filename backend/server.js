@@ -123,6 +123,7 @@ import { runBackup, listBackups } from "./services/backup.js";
 import { pruneAuditLog, retentionDays } from "./services/auditLog.js";
 import { registerTask, startScheduler } from "./services/scheduler.js";
 import openapiRouter from "./api/router/openapi.js";
+import waWebhookRouter from "./api/router/waWebhook.js";
 import { moduleGuardMiddleware } from "./services/moduleAccess.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
@@ -285,6 +286,10 @@ app.use("/api/v1/auth/login", authLimiter);
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. ПАРСИНГ ТЕЛА ЗАПРОСА
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Вебхук WhatsApp — ДО express.json: подпись X-Hub-Signature-256 считается по
+// СЫРОМУ телу (у роутера свой express.raw). Без auth, префикс /api1 (как esf-license).
+app.use("/api1", waWebhookRouter);
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));

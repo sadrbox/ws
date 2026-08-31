@@ -24,6 +24,9 @@ import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
 import { purgeOldData } from "./retention.ts";
 import { AnthropicProvider } from "./llm/anthropic.ts";
+import { OpenAIProvider } from "./llm/openai.ts";
+import { OpenAIBankExtractor } from "./bank/extract_openai.ts";
+import type { StatementExtractor } from "./bank/extract.ts";
 import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
 import { BankExtractor } from "./bank/extract.ts";
@@ -43,9 +46,36 @@ export function createProvider(cfg: Config, log: Logger): LLMProvider | null {
 		}
 		return new AnthropicProvider({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.LLM_MODEL, effort: cfg.LLM_EFFORT });
 	}
+	if (cfg.LLM_PROVIDER === "openai") {
+		if (!cfg.OPENAI_API_KEY) {
+			log.warn("LLM_PROVIDER=openai, но OPENAI_API_KEY пуст — чат отключён");
+			return null;
+		}
+		return new OpenAIProvider({ apiKey: cfg.OPENAI_API_KEY, model: openaiModel(cfg, cfg.LLM_MODEL, log), baseURL: cfg.OPENAI_BASE_URL || undefined, effort: cfg.LLM_EFFORT });
+	}
 	if (cfg.LLM_PROVIDER === "ollama") {
 		log.warn("OllamaProvider ещё не реализован — чат отключён");
 		return null;
+	}
+	return null;
+}
+
+/** Имя модели для OpenAI: LLM_MODEL по умолчанию — Claude, и с провайдером openai это было бы 404. */
+function openaiModel(cfg: Config, model: string, log: Logger): string {
+	if (/^claude/i.test(model)) {
+		log.warn({ model }, "LLM_PROVIDER=openai, а модель — Claude; используется gpt-5 (задайте LLM_MODEL/BANK_EXTRACT_MODEL)");
+		return "gpt-5";
+	}
+	return model;
+}
+
+/** Экстрактор PDF выписок по провайдеру; null — вложения в чате отключены. */
+function createExtractor(cfg: Config, log: Logger): StatementExtractor | null {
+	if (cfg.LLM_PROVIDER === "openai" && cfg.OPENAI_API_KEY) {
+		return new OpenAIBankExtractor({ apiKey: cfg.OPENAI_API_KEY, model: openaiModel(cfg, cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL, log), baseURL: cfg.OPENAI_BASE_URL || undefined });
+	}
+	if (cfg.ANTHROPIC_API_KEY) {
+		return new BankExtractor({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL });
 	}
 	return null;
 }
@@ -56,11 +86,10 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const queue = new CommandQueue(db);
 	const audit = new Audit(db, log);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;
-	// Чтение PDF выписок — прямой вызов Anthropic с документом на входе, поэтому не абстрагируется
-	// провайдером LLM: без ключа Anthropic вложения в чате отключены, остальной чат работает.
-	const bank = deps.bank !== undefined ? deps.bank : cfg.ANTHROPIC_API_KEY
-		? { extractor: new BankExtractor({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL }), store: new StatementStore(db) }
-		: null;
+	// Чтение PDF выписок — прямой вызов модели с документом на входе (Claude или OpenAI по
+	// провайдеру); без ключа вложения в чате отключены, остальной чат работает.
+	const extractor = deps.bank !== undefined ? null : createExtractor(cfg, log);
+	const bank = deps.bank !== undefined ? deps.bank : extractor ? { extractor, store: new StatementStore(db) } : null;
 	const files = new FileStore(db, cfg.FILE_TTL_DAYS);
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,

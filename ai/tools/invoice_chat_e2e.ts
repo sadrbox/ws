@@ -54,11 +54,15 @@ async function main(): Promise<number> {
 	let rc = 0;
 	const check = (cond: boolean, what: string) => { console.log(`${cond ? "PASS" : "FAIL"}: ${what}`); if (!cond) rc = 1; };
 
-	const r1 = await say(`Выстави счёт на оплату покупателю «${CUSTOMER}»: «${PRODUCT}», 2 шт по 100 тенге, и пришли PDF`);
+	let r1 = await say(`Выстави счёт на оплату покупателю «${CUSTOMER}» от организации ИП Азимов С.М. (БИН 831111302342): «${PRODUCT}», 2 шт по 100 тенге, и пришли PDF`);
+	// По «хранилище» в базе несколько позиций — модель обязана уточнить (правило 2); отвечаем как пользователь.
+	if (r1.state === "WAITING_CLARIFICATION") r1 = await say("1");
 	check(r1.state === "WAITING_CONFIRMATION" && r1.confirmation?.tool === "create_invoice", "запрос счёта — карточка подтверждения create_invoice");
 	if (r1.state !== "WAITING_CONFIRMATION") return finish(rc, db, erp);
 
 	let r2 = await say("да");
+	// Договор/организация могут быть неоднозначны (CONTRACT_AMBIGUOUS и т.п.) — модель спрашивает, отвечаем «1».
+	for (let i = 0; i < 4 && (r2.state === "WAITING_CLARIFICATION" || r2.state === "WAITING_CONFIRMATION"); i++) r2 = await say(r2.state === "WAITING_CONFIRMATION" ? "да" : "1");
 	check(/счёт|счет/i.test(r2.text) && /\d/.test(r2.text), "после «да» — счёт создан, в ответе номер и сумма");
 	let files = r2.attachments ?? [];
 	if (!files.length) {
