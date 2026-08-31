@@ -10,12 +10,12 @@
 	// padding: 6px 6px; /* Увеличен размер кнопки */
 	font-size: 100%;
 	text-align: center;
-	border: 1px solid $color5;
+	border: 1px solid $color34;
 	outline: none;
-	padding: 0px 6px;
+	padding: 0 var(--space-12, 12px);
 
-	border-radius: $radius3;
-	/* Увеличен радиус скругления */
+	border-radius: var(--radius-3, 3px);
+	/* Мягкие углы + просторный паддинг (по шкале 3/6/12) — как в согласованном варианте. */
 	height: $heightFieldInput + 4px;
 	// transition: all 1000ms ease; /* Плавные переходы */
 	// Цвет текста по умолчанию
@@ -23,12 +23,24 @@
 	color: $color6;
 	background: linear-gradient(180deg, var(--sv-color60), var(--sv-color10));
 
+	// Тёмная тема: плоская «приподнятая» navy-поверхность вместо тёмного градиента —
+	// иначе кнопка сливается с фоном и не читается как кнопка. Золотая .primary
+	// перебивает фон своим !important, поэтому её вид сохраняется.
+	:global(html[data-theme="dark"]) & {
+		background: var(--sv-btnFace);
+		border-color: $color34;
+	}
+
 	&:hover {
 		box-shadow: 1px 1px 6px 0px rgba(0, 0, 0, 0.2) !important;
 	}
 
+	:global(html[data-theme="dark"]) &:hover {
+		background: var(--sv-btnFaceHover);
+	}
+
 	&:active {
-		border: 1px solid var(--c-amber-12);
+		border: 1px solid $color3;
 	}
 
 	&:not(:last-child) {}
@@ -51,12 +63,27 @@
 	}
 }
 
+// ── Вариант danger (деструктивные действия: удалить/отключить) ────────────────
+// Фон как у обычной кнопки, но красный текст и рамка — чтобы «Удалить» читалось
+// как опасное. Значения тёмной темы — из выбранного варианта 1 (приглушённый красный).
+.danger {
+	color: var(--sv-attention);
+
+	:global(html[data-theme="dark"]) & {
+		border-color: var(--sv-btnDangerBorder);
+	}
+
+	:global(html[data-theme="dark"]) &:hover {
+		background: var(--sv-btnDangerHover);
+	}
+}
+
 // ── Размеры кнопки (проп size) ───────────────────────────────────────────────
 // md — размер по умолчанию (совпадает с базовым .Button). Меняются высота,
 // внутренние отступы и размер шрифта; min — ширина по содержимому (не тянется).
 .sizeSm {
 	height: $heightFieldInput - 2px;
-	padding: 0 5px;
+	padding: 0 var(--space-6, 6px);
 	font-size: 88%;
 
 	span {
@@ -66,7 +93,7 @@
 
 .sizeMd {
 	height: $heightFieldInput + 4px;
-	padding: 0 6px;
+	padding: 0 var(--space-12, 12px);
 	font-size: 100%;
 }
 

@@ -52,7 +52,7 @@ function known(ctx: ToolContext, field: string, value: unknown): string {
 }
 
 /** Типы документов, которые 1С печатает через универсальный endpoint (белый список расширения). */
-const DOCUMENT_TYPES = ["sale", "incoming", "outgoing", "purchase", "invoice", "taxInvoice", "cashIn", "cashOut"];
+const DOCUMENT_TYPES = ["sale", "incoming", "outgoing", "purchase", "invoice", "taxInvoice", "cashIn", "cashOut", "reconciliationAct"];
 const FORMATS = ["pdf", "xlsx", "docx", "txt", "html"];
 
 function docType(v: unknown): string {
@@ -73,7 +73,7 @@ const searchSchema = {
 export const TOOLS: ToolSpec[] = [
 	{
 		name: "search_counterparties",
-		description: "Найти контрагентов (покупателей) в 1С по части названия или БИН. Возвращает список с id — только эти id можно использовать дальше.",
+		description: "Найти контрагентов (покупателей и поставщиков) в 1С по части названия или БИН. Возвращает список с id — только эти id можно использовать дальше.",
 		inputSchema: searchSchema,
 		operation: "READ",
 		commandType: "SEARCH_COUNTERPARTIES",
@@ -254,6 +254,204 @@ export const TOOLS: ToolSpec[] = [
 		},
 	},
 	{
+		name: "create_invoice",
+		description:
+			"Создать «Счёт на оплату покупателю» в 1С (проведения у счёта нет). customerId — из search_counterparties, productId — из search_products; товары и услуги можно в одном счёте. " +
+			"organizationBin — БИН нашей организации, если их несколько. При CONTRACT_AMBIGUOUS — покажите кандидатов и повторите с contractId. Печать: print_document(documentType=invoice, form=СчетЗаказНаОплату).",
+		inputSchema: {
+			type: "object",
+			properties: {
+				customerId: { type: "string", description: "id покупателя из search_counterparties" },
+				organizationId: { type: "string", description: "id организации из get_organizations" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				contractId: { type: "string", description: "id договора из кандидатов CONTRACT_AMBIGUOUS" },
+				warehouseId: { type: "string", description: "id склада (необязательно)" },
+				priceIncludesVat: { type: "boolean", description: "Цена включает НДС (если пользователь сказал явно)" },
+				date: { type: "string", description: "Дата документа YYYY-MM-DD, если названа" },
+				comment: { type: "string" },
+				items: {
+					type: "array",
+					minItems: 1,
+					items: {
+						type: "object",
+						properties: {
+							productId: { type: "string", description: "id номенклатуры из search_products" },
+							quantity: { type: "number", exclusiveMinimum: 0 },
+							price: { type: "number", minimum: 0, description: "Цена за единицу" },
+						},
+						required: ["productId", "quantity", "price"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["customerId", "items"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_INVOICE",
+		mutating: true,
+		buildPayload: (i, ctx) => {
+			const items = Array.isArray(i.items) ? i.items : [];
+			if (!items.length) throw new ToolInputError("items", "items: нужна хотя бы одна позиция");
+			const bin = typeof i.organizationBin === "string" ? i.organizationBin.trim() : "";
+			if (bin && !/^\d{12}$/.test(bin)) throw new ToolInputError("organizationBin", "organizationBin: 12 цифр");
+			return {
+				customerId: known(ctx, "customerId", i.customerId),
+				...(i.organizationId ? { organizationId: known(ctx, "organizationId", i.organizationId) } : {}),
+				...(bin ? { organizationBin: bin } : {}),
+				...(i.contractId ? { contractId: known(ctx, "contractId", i.contractId) } : {}),
+				...(i.warehouseId ? { warehouseId: known(ctx, "warehouseId", i.warehouseId) } : {}),
+				...(typeof i.priceIncludesVat === "boolean" ? { priceIncludesVat: i.priceIncludesVat } : {}),
+				...(i.date ? { date: str(i.date, "date") } : {}),
+				comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
+				items: items.map((it: Record<string, unknown>, n: number) => ({
+					productId: known(ctx, `items[${n}].productId`, it.productId),
+					quantity: num(it.quantity, NaN, `items[${n}].quantity`),
+					price: num(it.price, NaN, `items[${n}].price`),
+				})),
+			};
+		},
+	},
+	{
+		name: "get_invoice",
+		description: "Прочитать счёт на оплату по id (номер, суммы).",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "READ",
+		commandType: "GET_INVOICE",
+		mutating: false,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "create_purchase",
+		description:
+			"Создать документ «Поступление товаров и услуг» от поставщика в 1С (НЕ проведённый). supplierId — из search_counterparties, productId — из search_products (этого диалога). " +
+			"Для товаров склад обязателен (get_warehouses); для услуг — нет. incomingNumber/incomingDate — номер и дата накладной (счёта-фактуры) поставщика, если пользователь их назвал. " +
+			"organizationBin — БИН нашей организации, если их несколько. Если 1С вернёт CONTRACT_AMBIGUOUS — покажите кандидатов и повторите с contractId. Печать: print_document(documentType=purchase, form=ПриходнаяНакладная).",
+		inputSchema: {
+			type: "object",
+			properties: {
+				supplierId: { type: "string", description: "id поставщика из search_counterparties" },
+				warehouseId: { type: "string", description: "id склада из get_warehouses (обязателен для товаров)" },
+				organizationId: { type: "string", description: "id организации из get_organizations" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				contractId: { type: "string", description: "id договора из кандидатов CONTRACT_AMBIGUOUS" },
+				priceIncludesVat: { type: "boolean", description: "Цена включает НДС (если пользователь сказал явно)" },
+				date: { type: "string", description: "Дата документа YYYY-MM-DD, если названа" },
+				incomingNumber: { type: "string", description: "Номер накладной поставщика" },
+				incomingDate: { type: "string", description: "Дата накладной поставщика YYYY-MM-DD" },
+				comment: { type: "string" },
+				items: {
+					type: "array",
+					minItems: 1,
+					items: {
+						type: "object",
+						properties: {
+							productId: { type: "string", description: "id номенклатуры из search_products" },
+							quantity: { type: "number", exclusiveMinimum: 0 },
+							price: { type: "number", minimum: 0, description: "Цена за единицу" },
+						},
+						required: ["productId", "quantity", "price"],
+						additionalProperties: false,
+					},
+				},
+			},
+			required: ["supplierId", "items"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_PURCHASE",
+		mutating: true,
+		buildPayload: (i, ctx) => {
+			const items = Array.isArray(i.items) ? i.items : [];
+			if (!items.length) throw new ToolInputError("items", "items: нужна хотя бы одна позиция");
+			const date = (v: unknown, f: string) => { const d = str(v, f); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new ToolInputError(f, `${f}: дата YYYY-MM-DD`); return d; };
+			const bin = typeof i.organizationBin === "string" ? i.organizationBin.trim() : "";
+			if (bin && !/^\d{12}$/.test(bin)) throw new ToolInputError("organizationBin", "organizationBin: 12 цифр");
+			return {
+				supplierId: known(ctx, "supplierId", i.supplierId),
+				...(i.warehouseId ? { warehouseId: known(ctx, "warehouseId", i.warehouseId) } : {}),
+				...(i.organizationId ? { organizationId: known(ctx, "organizationId", i.organizationId) } : {}),
+				...(bin ? { organizationBin: bin } : {}),
+				...(i.contractId ? { contractId: known(ctx, "contractId", i.contractId) } : {}),
+				...(typeof i.priceIncludesVat === "boolean" ? { priceIncludesVat: i.priceIncludesVat } : {}),
+				...(i.date ? { date: date(i.date, "date") } : {}),
+				...(typeof i.incomingNumber === "string" && i.incomingNumber ? { incomingNumber: i.incomingNumber } : {}),
+				...(i.incomingDate ? { incomingDate: date(i.incomingDate, "incomingDate") } : {}),
+				comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
+				items: items.map((it: Record<string, unknown>, n: number) => ({
+					productId: known(ctx, `items[${n}].productId`, it.productId),
+					quantity: num(it.quantity, NaN, `items[${n}].quantity`),
+					price: num(it.price, NaN, `items[${n}].price`),
+				})),
+			};
+		},
+	},
+	{
+		name: "get_purchase",
+		description: "Прочитать документ поступления по id (номер, суммы, проведён ли).",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "READ",
+		commandType: "GET_PURCHASE",
+		mutating: false,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "post_purchase",
+		description: "Провести документ поступления. Только по явной просьбе пользователя.",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "CRITICAL",
+		commandType: "POST_PURCHASE",
+		mutating: true,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "unpost_purchase",
+		description: "Отменить проведение документа поступления. Только по явной просьбе пользователя.",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "CRITICAL",
+		commandType: "UNPOST_PURCHASE",
+		mutating: true,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "create_reconciliation_act",
+		description:
+			"Создать в 1С документ «Акт сверки взаиморасчётов» с контрагентом за период, заполненный по данным учёта (обороты и остатки по счетам расчётов; " +
+			"данные контрагента заполняются зеркально). counterpartyId — только из search_counterparties этого диалога. from/to — период YYYY-MM-DD. " +
+			"organizationBin — БИН нашей организации, если их несколько. post — провести (по умолчанию нет). Печать: print_document(documentType=reconciliationAct, form=АктСверки).",
+		inputSchema: {
+			type: "object",
+			properties: {
+				counterpartyId: { type: "string", description: "id контрагента из search_counterparties" },
+				from: { type: "string", description: "YYYY-MM-DD" },
+				to: { type: "string", description: "YYYY-MM-DD" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				contractId: { type: "string", description: "id договора, если пользователь просит акт по одному договору" },
+				post: { type: "boolean", description: "Провести документ (только если пользователь просил)" },
+				comment: { type: "string" },
+			},
+			required: ["counterpartyId", "from", "to"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_RECONCILIATION_ACT",
+		mutating: true,
+		buildPayload: (i, ctx) => {
+			const date = (v: unknown, f: string) => { const d = str(v, f); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new ToolInputError(f, `${f}: дата YYYY-MM-DD`); return d; };
+			const bin = typeof i.organizationBin === "string" ? i.organizationBin.trim() : "";
+			if (bin && !/^\d{12}$/.test(bin)) throw new ToolInputError("organizationBin", "organizationBin: 12 цифр");
+			return {
+				counterpartyId: known(ctx, "counterpartyId", i.counterpartyId),
+				from: date(i.from, "from"),
+				to: date(i.to, "to"),
+				...(bin ? { organizationBin: bin } : {}),
+				...(i.contractId ? { contractId: known(ctx, "contractId", i.contractId) } : {}),
+				...(typeof i.post === "boolean" ? { post: i.post } : {}),
+				comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
+			};
+		},
+	},
+	{
 		name: "reconcile_statement",
 		description:
 			"Сверить распознанную выписку (statementId) с учётом в 1С по счёту 1030: остатки и обороты 1С против остатков выписки, каждая операция выписки — против проводок. " +
@@ -304,18 +502,22 @@ export const TOOLS: ToolSpec[] = [
 	{
 		name: "run_report",
 		description:
-			"Сформировать штатный бухгалтерский отчёт 1С файлом. report: osv (оборотно-сальдовая ведомость по всем счетам), osvAccount (ОСВ по счёту — нужен account), accountCard (карточка счёта — нужен account), accountAnalysis (анализ счёта — нужен account). " +
+			"Сформировать штатный бухгалтерский отчёт 1С файлом. report: osv (оборотно-сальдовая ведомость по всем счетам), osvAccount (ОСВ по счёту — нужен account), accountCard (карточка счёта — нужен account), accountAnalysis (анализ счёта — нужен account), " +
+			"subcontoAnalysis (анализ субконто — нужен subconto, например [\"counterparties\"]; счёт не нужен), subcontoCard (карточка субконто — нужен subconto). " +
+			"counterpartyId (id из search_counterparties) — отбор по контрагенту: только для отчётов по счёту с аналитикой по контрагентам (1210, 3310, 1610, 3510…) и отчётов по субконто counterparties. " +
 			"from/to — период YYYY-MM-DD (если пользователь не назвал, спроси или возьми период выписки/текущий месяц из контекста). account — код счёта плана счетов, например 1030 (банк), 1010 (касса), 1210 (покупатели), 3310 (поставщики). " +
 			"organizationBin — БИН организации, если в базе их несколько (например владелец выписки). format: pdf по умолчанию, xlsx — если просят Excel/таблицу, docx, txt, html. Файл уходит пользователю вложением.",
 		inputSchema: {
 			type: "object",
 			properties: {
-				report: { type: "string", enum: ["osv", "osvAccount", "accountCard", "accountAnalysis"] },
+				report: { type: "string", enum: ["osv", "osvAccount", "accountCard", "accountAnalysis", "subcontoAnalysis", "subcontoCard"] },
 				from: { type: "string", description: "YYYY-MM-DD" },
 				to: { type: "string", description: "YYYY-MM-DD" },
 				account: { type: "string", description: "код счёта, обязателен для osvAccount/accountCard/accountAnalysis" },
 				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
 				bySubaccounts: { type: "boolean" },
+				counterpartyId: { type: "string", description: "id контрагента из search_counterparties — отбор по контрагенту" },
+				subconto: { type: "array", items: { type: "string", enum: ["counterparties", "contracts", "products", "employees", "warehouses", "cashFlowItems", "costItems", "taxes", "fixedAssets"] }, description: "виды субконто для subcontoAnalysis/subcontoCard (1–3, в порядке разрезов)" },
 				format: { type: "string", enum: ["pdf", "xlsx", "docx", "txt", "html"] },
 			},
 			required: ["report", "from", "to"],
@@ -324,17 +526,22 @@ export const TOOLS: ToolSpec[] = [
 		operation: "READ",
 		commandType: "RUN_REPORT",
 		mutating: false,
-		buildPayload: (i) => {
+		buildPayload: (i, ctx) => {
 			const report = str(i.report, "report");
-			if (!["osv", "osvAccount", "accountCard", "accountAnalysis"].includes(report)) throw new ToolInputError("report", "report: osv | osvAccount | accountCard | accountAnalysis");
+			if (!["osv", "osvAccount", "accountCard", "accountAnalysis", "subcontoAnalysis", "subcontoCard"].includes(report)) throw new ToolInputError("report", "report: osv | osvAccount | accountCard | accountAnalysis | subcontoAnalysis | subcontoCard");
+			const subconto = Array.isArray(i.subconto) ? i.subconto.filter((x): x is string => typeof x === "string").slice(0, 3) : [];
+			if ((report === "subcontoAnalysis" || report === "subcontoCard") && !subconto.length && !i.counterpartyId) throw new ToolInputError("subconto", "subconto: для отчёта по субконто нужен хотя бы один вид, например [\"counterparties\"]");
+			if (report === "osv" && i.counterpartyId) throw new ToolInputError("counterpartyId", "counterpartyId: для отбора по контрагенту используйте osvAccount/accountCard/accountAnalysis со счётом расчётов или subcontoAnalysis");
 			const date = (v: unknown, f: string) => { const d = str(v, f); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new ToolInputError(f, `${f}: дата YYYY-MM-DD`); return d; };
 			const account = typeof i.account === "string" && i.account.trim() ? i.account.trim() : "";
-			if (report !== "osv" && !account) throw new ToolInputError("account", "account: для этого отчёта нужен код счёта");
+			if (!["osv", "subcontoAnalysis", "subcontoCard"].includes(report) && !account) throw new ToolInputError("account", "account: для этого отчёта нужен код счёта");
 			const bin = typeof i.organizationBin === "string" && /^\d{12}$/.test(i.organizationBin) ? i.organizationBin : "";
 			return {
 				report, from: date(i.from, "from"), to: date(i.to, "to"),
 				...(account ? { account } : {}), ...(bin ? { organizationBin: bin } : {}),
 				...(typeof i.bySubaccounts === "boolean" ? { bySubaccounts: i.bySubaccounts } : {}),
+				...(i.counterpartyId ? { counterpartyId: known(ctx, "counterpartyId", i.counterpartyId) } : {}),
+				...(subconto.length ? { subconto } : {}),
 				format: typeof i.format === "string" && FORMATS.includes(i.format) ? i.format : "pdf",
 			};
 		},

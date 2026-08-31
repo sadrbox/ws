@@ -1442,6 +1442,12 @@
 	"aiAgentNotConfigured": "Ұйым үшін 1С агенті бапталмаған",
 	"aiOnecUnavailable": "1С базасы қолжетімсіз",
 	"aiAgentUnavailable": "AI қызметі қолжетімсіз",
+	"aiStatusAgent": "1С агенті",
+	"aiStatusOnec": "1С базасы",
+	"aiStatusModel": "AI моделі",
+	"aiModelDown": "AI моделі қолжетімсіз",
+	"aiModelUnknown": "әлі сұраныс болған жоқ",
+	"aiStatusUpdated": "Жаңартылды",
 	"aiNotAuthorized": "Жүйеге кіру қажет",
 	"aiNetworkError": "AI қызметімен байланыс жоқ",
 	"aiRecentDialogs": "Соңғы диалогтар"

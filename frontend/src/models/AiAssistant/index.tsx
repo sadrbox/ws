@@ -37,6 +37,14 @@ type ChatReply = { conversationId: string; state: string; text: string; confirma
 type Summary = { id: string; state: string; messages: { role: string; text: string; at: string; attachments?: Attachment[] }[]; confirmation?: { tool: string; card: string } | null };
 type Recent = { id: string; state: string; preview: string; updatedAt: string };
 type Envelope<T> = { success: boolean; data?: T; error?: { code: string; message: string } };
+type StatusData = {
+	service: { version: string; chat: boolean; model: string };
+	llm: { ok: boolean; lastSuccessAt: string | null; lastError: { code: string; message: string; hint: string; at: string } | null };
+	agent: { configured: boolean; online: boolean; name: string | null; version: string | null; lastSeenAt: string | null };
+	onec: { reachable: boolean; version: string | null };
+	organizationSelected: boolean;
+	at: string;
+};
 
 type Msg = { id: number; role: "user" | "assistant" | "system"; text: string; attachments?: Attachment[]; pending?: boolean; files?: string[] };
 
@@ -99,7 +107,8 @@ export const AiAssistantList: FC = () => {
 	const [busy, setBusy] = useState(false);
 	const [conversationId, setConversationId] = useState<string | null>(null);
 	const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
-	const [agentStatus, setAgentStatus] = useState("");
+	const [status, setStatus] = useState<StatusData | null>(null);
+	const [statusError, setStatusError] = useState("");
 	const [recent, setRecent] = useState<Recent[]>([]);
 	// Файлы, прикреплённые к следующему сообщению (PDF выписок).
 	const [files, setFiles] = useState<File[]>([]);
@@ -169,18 +178,25 @@ export const AiAssistantList: FC = () => {
 		return true;
 	}, [org, orgQuery, focusInput]);
 
-	// При открытии панели: состояние агента, недавние диалоги, восстановление последнего.
+	/** Сводка состояния (сервис, модель, агент, база 1С) — раз в 30 секунд, пока панель открыта. */
+	const refreshStatus = useCallback(async () => {
+		try {
+			const env = await api<StatusData>(`/v1/status`);
+			if (env.success && env.data) { setStatus(env.data); setStatusError(""); }
+			else { setStatus(null); setStatusError(env.error?.message ?? translate("aiAgentUnavailable")); }
+		} catch {
+			setStatus(null);
+			setStatusError(translate("aiAgentUnavailable"));
+		}
+	}, []);
 	useEffect(() => {
-		void api<{ items: { online: boolean; onec: { reachable: boolean; version: string | null } }[] }>(`/v1/agents`)
-			.then((env) => {
-				const a = env.data?.items?.[0];
-				if (!env.success) setAgentStatus(env.error?.message ?? translate("aiAgentUnavailable"));
-				else if (!a) setAgentStatus(translate("aiAgentNotConfigured"));
-				else if (!a.online) setAgentStatus(translate("aiAgentOffline"));
-				else if (!a.onec.reachable) setAgentStatus(translate("aiOnecUnavailable"));
-				else setAgentStatus(`${translate("aiConnected")}${a.onec.version ? ` · 1С API ${a.onec.version}` : ""}`);
-			})
-			.catch(() => setAgentStatus(translate("aiAgentUnavailable")));
+		void refreshStatus();
+		const timer = setInterval(() => { void refreshStatus(); }, 30_000);
+		return () => clearInterval(timer);
+	}, [org, refreshStatus]);
+
+	// При открытии панели: недавние диалоги, восстановление последнего.
+	useEffect(() => {
 		void loadRecent();
 		const saved = localStorage.getItem(storageKey(org));
 		if (saved) void openConversation(saved);
@@ -263,7 +279,26 @@ export const AiAssistantList: FC = () => {
 			<div className={styles.Header}>
 				<div>
 					<strong>{translate("AiAssistant")}</strong>
-					<span className={styles.Status}>{agentStatus}</span>
+					{status ? (
+						<span className={styles.Status} title={`${translate("aiStatusUpdated")} ${fmtTime(status.at)}`}>
+							<span className={`${styles.Dot} ${!status.agent.configured ? styles.DotWarn : status.agent.online ? styles.DotOk : styles.DotBad}`} />
+							<span title={!status.agent.configured ? translate("aiAgentNotConfigured") : status.agent.online ? `${status.agent.name ?? ""} ${status.agent.version ?? ""}`.trim() : `${translate("aiAgentOffline")}${status.agent.lastSeenAt ? ` · ${fmtTime(status.agent.lastSeenAt)}` : ""}`}>
+								{translate("aiStatusAgent")}
+							</span>
+							<span className={`${styles.Dot} ${status.onec.reachable ? styles.DotOk : styles.DotBad}`} />
+							<span title={status.onec.reachable ? `1С API ${status.onec.version ?? ""}` : translate("aiOnecUnavailable")}>{translate("aiStatusOnec")}</span>
+							<span className={`${styles.Dot} ${!status.service.chat ? styles.DotBad : !status.llm.ok ? styles.DotBad : status.llm.lastSuccessAt ? styles.DotOk : styles.DotWarn}`} />
+							<span title={status.llm.lastError ? `${status.llm.lastError.hint} (${fmtTime(status.llm.lastError.at)})` : status.llm.lastSuccessAt ? `${status.service.model} · ${fmtTime(status.llm.lastSuccessAt)}` : `${status.service.model} · ${translate("aiModelUnknown")}`}>{translate("aiStatusModel")}</span>
+						</span>
+					) : (
+						<span className={styles.Status}>{statusError}</span>
+					)}
+					{status && !status.llm.ok && status.llm.lastError && (
+						<div className={styles.Alert}>⚠ {translate("aiModelDown")}: {status.llm.lastError.hint}</div>
+					)}
+					{status && status.agent.configured && !status.agent.online && (
+						<div className={styles.Alert}>⚠ {translate("aiAgentOffline")}</div>
+					)}
 				</div>
 				<div className={styles.HeaderActions}>
 					{recent.length > 0 && (

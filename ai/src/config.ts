@@ -43,6 +43,11 @@ const schema = z.object({
 	CHAT_ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(30).default(20),
 	// Сколько дней хранить файлы, отданные в диалоге (печатные формы, отчёты).
 	FILE_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+	// Сколько дней хранить диалоги (с сообщениями и файлами), выписки и завершённые команды.
+	CONVERSATION_TTL_DAYS: z.coerce.number().int().min(1).max(3650).default(180),
+	// Лимиты на пользователя в минуту: ходы чата и ходы с вложениями (распознавание PDF — дорого). 0 — без лимита.
+	RATE_LIMIT_CHAT_PER_MIN: z.coerce.number().int().min(0).max(1000).default(30),
+	RATE_LIMIT_ATTACHMENTS_PER_MIN: z.coerce.number().int().min(0).max(100).default(6),
 });
 
 export type Config = z.infer<typeof schema>;
@@ -67,6 +72,9 @@ export function describe(cfg: Config): Record<string, unknown> {
 		anthropicKey: cfg.ANTHROPIC_API_KEY ? "задан" : "ПУСТО",
 		publicUrl: cfg.PUBLIC_URL,
 		allowedOrigins: cfg.ALLOWED_ORIGINS,
+		agentOrgBinding: cfg.AGENT_ORG_BINDING,
+		retention: `files ${cfg.FILE_TTL_DAYS}d, conversations ${cfg.CONVERSATION_TTL_DAYS}d`,
+		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min`,
 	};
 }
 

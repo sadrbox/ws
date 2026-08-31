@@ -38,6 +38,13 @@ async function main(): Promise<number> {
 		const started = Date.now();
 		const r = await fetch(`${BASE}/v1/chat`, { method: "POST", headers: { ...H, "content-type": "application/json" }, body: JSON.stringify({ conversationId, text, organizationUuid: ORG, ...(attachments ? { attachments } : {}) }) });
 		const env = (await r.json()) as Env<Reply>;
+		if (r.status === 429) {
+			// Лимит ходов чата (RATE_LIMITED): ждём Retry-After и повторяем — это не ошибка сценария.
+			const wait = Number((env.error as { retryAfterSec?: number } | undefined)?.retryAfterSec ?? 60) + 1;
+			console.log(`лимит запросов, ждём ${wait} с`);
+			await new Promise((x) => setTimeout(x, wait * 1000));
+			return say(text);
+		}
 		if (!env.success || !env.data) throw new Error(`HTTP ${r.status}: ${JSON.stringify(env.error)}`);
 		conversationId = env.data.conversationId;
 		let data: Reply = env.data;

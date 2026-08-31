@@ -47,6 +47,38 @@
   color: $color5;
 }
 
+// Индикаторы панели статуса: агент 1С, база 1С, AI-модель.
+.Dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 4px 0 10px;
+  vertical-align: middle;
+  background: $color33;
+}
+
+.DotOk {
+  background: #3aa655;
+}
+
+.DotBad {
+  background: #d23c3c;
+}
+
+.DotWarn {
+  background: #e9a825;
+}
+
+.Alert {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(233, 168, 37, 0.15);
+  color: #8a5a00;
+  font-size: $fontsize;
+}
+
 .Log {
   flex: 1 1 auto;
   min-height: 0;

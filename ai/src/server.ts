@@ -22,6 +22,7 @@ import { Audit } from "./audit/index.ts";
 import { agentRouter } from "./http/agentRouter.ts";
 import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
+import { purgeOldData } from "./retention.ts";
 import { AnthropicProvider } from "./llm/anthropic.ts";
 import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
@@ -29,7 +30,7 @@ import { BankExtractor } from "./bank/extract.ts";
 import { StatementStore } from "./bank/store.ts";
 import { FileStore } from "./files/store.ts";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 
 export type AppDeps = { cfg: Config; log: Logger; db: Db; erp: Db; llm?: LLMProvider | null; bank?: { extractor: BankExtractor; store: StatementStore } | null };
 
@@ -69,6 +70,12 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const purge = () => files.purgeExpired().then((n) => { if (n) log.info({ n }, "удалены просроченные файлы диалогов"); }).catch((e) => log.warn({ err: e }, "очистка файлов"));
 	void purge();
 	setInterval(purge, 3_600_000).unref();
+	// Старые диалоги, выписки и команды — при старте и раз в сутки.
+	const retention = () => purgeOldData(db, cfg.CONVERSATION_TTL_DAYS)
+		.then((r) => { if (r.conversations || r.statements || r.commands) log.info(r, "удалены данные старше срока хранения"); })
+		.catch((e) => log.warn({ err: e }, "очистка старых данных"));
+	void retention();
+	setInterval(retention, 86_400_000).unref();
 
 	const app = express();
 	app.disable("x-powered-by");
@@ -103,7 +110,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 
 	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, queue, audit }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));
-	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files }));
+	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION }));
 
 	app.use((_req, res) => {
 		res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ресурс не найден" } });

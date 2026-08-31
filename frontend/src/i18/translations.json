@@ -1442,6 +1442,12 @@
 	"aiAgentNotConfigured": "Агент 1С для организации не настроен",
 	"aiOnecUnavailable": "База 1С недоступна",
 	"aiAgentUnavailable": "Сервис AI недоступен",
+	"aiStatusAgent": "Агент 1С",
+	"aiStatusOnec": "База 1С",
+	"aiStatusModel": "AI-модель",
+	"aiModelDown": "AI-модель недоступна",
+	"aiModelUnknown": "обращений ещё не было",
+	"aiStatusUpdated": "Обновлено",
 	"aiNotAuthorized": "Требуется вход в систему",
 	"aiNetworkError": "Нет связи с сервисом AI",
 	"aiRecentDialogs": "Недавние диалоги"

@@ -11,6 +11,7 @@
 //     (thinking-блоки нужно возвращать неизменными на той же модели).
 
 import Anthropic from "@anthropic-ai/sdk";
+import { noteLlmError, noteLlmSuccess } from "./health.ts";
 import type { ChatMessage, LLMProvider, LLMRequest, LLMResponse, ToolCall } from "./provider.ts";
 import { LLMError } from "./provider.ts";
 
@@ -62,8 +63,11 @@ export class AnthropicProvider implements LLMProvider {
 				fallbacks: "default",
 			} as Anthropic.Beta.MessageCreateParamsNonStreaming);
 		} catch (e) {
-			throw mapError(e);
+			const err = mapError(e);
+			noteLlmError(err.code, err.message);
+			throw err;
 		}
+		noteLlmSuccess();
 
 		const text = response.content
 			.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")

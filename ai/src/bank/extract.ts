@@ -9,6 +9,7 @@
 // контрагентов и не создаёт ничего — всё это дальше делает 1С по своим правилам (§9 ТЗ).
 
 import Anthropic from "@anthropic-ai/sdk";
+import { noteLlmError, noteLlmSuccess } from "../llm/health.ts";
 import { createHash } from "node:crypto";
 import { StatementSchema, STATEMENT_JSON_SCHEMA, reconcile, type Statement, type Reconciliation } from "./schema.ts";
 
@@ -66,9 +67,11 @@ export class BankExtractor {
 				}],
 			} as Anthropic.Beta.MessageCreateParamsNonStreaming);
 		} catch (e) {
+			noteLlmError(e instanceof Anthropic.AuthenticationError ? "LLM_AUTH" : "LLM_ERROR", e instanceof Error ? e.message : String(e));
 			if (e instanceof Anthropic.APIError) throw new ExtractError("LLM_ERROR", `Ошибка модели при чтении PDF (${e.status ?? "?"}): ${e.message}`);
 			throw new ExtractError("LLM_ERROR", e instanceof Error ? e.message : String(e));
 		}
+		noteLlmSuccess();
 
 		const call = response.content.find((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use" && b.name === "record_statement");
 		if (!call) throw new ExtractError("NO_STATEMENT", `Модель не распознала выписку в «${fileName}» (stop: ${response.stop_reason})`);

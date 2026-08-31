@@ -146,6 +146,7 @@
 .FieldWrapper {
 	display: flex;
 	flex-direction: column;
+	flex: 1 1 auto;
 	// gap: 6px;
 	position: relative;
 	// Дефолтная ширина (была inline style={{ width: width ?? "100%" }}). Явная ширина,
@@ -225,14 +226,14 @@
 	align-items: center;
 	background-color: $fieldBackground;
 	border-radius: $radius2;
-	border: 1px solid $color5;
+	border: 1px solid $color34;
 	outline: none;
 	// flex: 1 1 100%;
 
 	// В тёмной теме заливка $fieldBackground (светлая) выбивается из палитры —
 	// оставляем прозрачный фон, чтобы поле наследовало тёмный фон родителя.
 	:global(html[data-theme="dark"]) & {
-		background-color: transparent;
+		background-color: #0b1120;
 	}
 
 	&:focus-within {
@@ -318,7 +319,7 @@
 	height: $heightFieldInput + 4px;
 	padding: 0 6px 0 4px;
 	background: $color60;
-	border: 1px solid $color5;
+	border: 1px solid $color34;
 	border-radius: $radius2;
 	overflow: hidden;
 	box-sizing: border-box;
@@ -609,7 +610,7 @@
 
 .FieldPeriodDropdown {
 	background: $color60;
-	border: 1px solid $color5;
+	border: 1px solid $color34;
 	border-radius: $radius2;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 	padding: 6px;

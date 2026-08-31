@@ -870,6 +870,11 @@ body {
 	tr[class*="activeRow"] [class*="TableBodyCell"] {
 		background: $color2;
 	}
+	// Наведение на НЕактивную строку — мягкая подсветка (ориентир курсора). В том же
+	// слое, поэтому активная строка/ячейка (unlayered) перекрывают её.
+	tr:hover:not([class*="activeRow"]) [class*="TableBodyCell"] {
+		background: var(--sv-accentBlueHover);
+	}
 }
 
 

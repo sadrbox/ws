@@ -3,6 +3,7 @@
 //
 //   GET /v1/me            кто я с точки зрения AI Service (uuid, активная организация)
 //   GET /v1/agents        агенты активной организации и их состояние (1С доступна?)
+//   GET /v1/status        сводка для панели: сервис, модель (последняя ошибка), агент и база 1С
 //   POST /v1/chat, GET /v1/conversations/:id — см. chatRouter (если LLM настроена)
 
 import { Router } from "express";
@@ -14,12 +15,13 @@ import type { ChatWorkflow } from "../chat/workflow.ts";
 import type { Logger } from "../logger.ts";
 import type { FileStore } from "../files/store.ts";
 import { chatRouter } from "./chatRouter.ts";
+import { llmHealth } from "../llm/health.ts";
 
-export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore }) {
-	const { erp, cfg, agents, workflow, log, files } = deps;
+export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore; version: string }) {
+	const { erp, cfg, agents, workflow, log, files, version } = deps;
 	const r = Router();
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
-	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576 }));
+	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN }));
 
 	r.get("/me", (req, res) => {
 		const u = req.erpUser!;
@@ -53,6 +55,26 @@ export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; w
 			id: a.id, name: a.name, status: a.status, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt,
 		}));
 		res.json({ success: true, data: { items } });
+	});
+
+	// Панель статуса в чате: одна сводка вместо трёх запросов. Агент и база — по активной
+	// организации; модель — по последнему обращению к провайдеру (см. llm/health.ts).
+	r.get("/status", async (req, res) => {
+		const org = req.erpUser!.organizationUuid;
+		const list = org ? await agents.visibleTo(org) : [];
+		const items = list.map((a) => ({ id: a.id, name: a.name, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt }));
+		const a = items.find((x) => x.online && x.onec.reachable) ?? items.find((x) => x.online) ?? items[0] ?? null;
+		res.json({
+			success: true,
+			data: {
+				service: { version, chat: workflow !== null, model: cfg.LLM_MODEL },
+				llm: llmHealth(),
+				agent: a ? { configured: true, online: a.online, name: a.name, version: a.version, lastSeenAt: a.lastSeenAt } : { configured: false, online: false, name: null, version: null, lastSeenAt: null },
+				onec: { reachable: a?.online === true && a.onec.reachable, version: a?.onec.version ?? null },
+				organizationSelected: Boolean(org),
+				at: new Date().toISOString(),
+			},
+		});
 	});
 
 	return r;

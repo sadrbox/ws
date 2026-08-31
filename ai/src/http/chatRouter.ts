@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { ChatWorkflow } from "../chat/workflow.ts";
 import { WorkflowError } from "../chat/workflow.ts";
 import type { Logger } from "../logger.ts";
+import { rateLimit } from "./rateLimit.ts";
 
 const attachmentSchema = z.object({
 	fileName: z.string().trim().min(1).max(200),
@@ -29,12 +30,20 @@ const chatSchema = z.object({
 	attachments: z.array(attachmentSchema).max(3).optional(),
 }).refine((v) => v.text.length > 0 || (v.attachments?.length ?? 0) > 0, { message: "нужен текст или вложение" });
 
-export function chatRouter(deps: { workflow: ChatWorkflow; log: Logger; maxAttachmentBytes?: number }) {
+export function chatRouter(deps: { workflow: ChatWorkflow; log: Logger; maxAttachmentBytes?: number; chatPerMin?: number; attachmentsPerMin?: number }) {
 	const { workflow, log } = deps;
 	const maxAttachmentBytes = deps.maxAttachmentBytes ?? 20 * 1048576;
 	const r = Router();
 
-	r.post("/chat", async (req, res) => {
+	// Лимиты на пользователя: ходы чата и отдельно ходы с вложениями (каждое — вызов модели с PDF).
+	const chatLimiter = rateLimit({ max: deps.chatPerMin ?? 30, windowMs: 60_000, message: "Слишком много сообщений подряд — подождите минуту" });
+	const attachmentLimiter = rateLimit({
+		max: deps.attachmentsPerMin ?? 6, windowMs: 60_000,
+		applies: (req) => Array.isArray((req.body as { attachments?: unknown[] } | undefined)?.attachments) && ((req.body as { attachments: unknown[] }).attachments.length > 0),
+		message: "Слишком много вложений подряд — подождите минуту",
+	});
+
+	r.post("/chat", chatLimiter, attachmentLimiter, async (req, res) => {
 		const p = chatSchema.safeParse(req.body);
 		if (!p.success) {
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Нужен text (до 4000 символов) или вложение" } });

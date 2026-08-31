@@ -379,6 +379,43 @@ export class ChatWorkflow {
 				"Итоговую сумму и НДС рассчитает 1С.",
 			].filter(Boolean).join("\n");
 		}
+		if (spec.name === "create_invoice") {
+			const items = (payload.items as { productId: string; quantity: number; price: number }[]) ?? [];
+			const lines = items.map((it) => `• ${nameOf(it.productId)} — ${it.quantity} × ${it.price} ₸`);
+			return [
+				"Счёт на оплату покупателю",
+				`Покупатель: ${nameOf(payload.customerId)}`,
+				payload.organizationBin ? `Организация: БИН ${String(payload.organizationBin)}` : null,
+				payload.contractId ? `Договор: ${nameOf(payload.contractId)}` : null,
+				...lines,
+				"Итоговую сумму и НДС рассчитает 1С.",
+			].filter(Boolean).join("\n");
+		}
+		if (spec.name === "create_purchase") {
+			const items = (payload.items as { productId: string; quantity: number; price: number }[]) ?? [];
+			const lines = items.map((it) => `• ${nameOf(it.productId)} — ${it.quantity} × ${it.price} ₸`);
+			return [
+				"Поступление товаров и услуг",
+				`Поставщик: ${nameOf(payload.supplierId)}`,
+				payload.warehouseId ? `Склад: ${nameOf(payload.warehouseId)}` : null,
+				payload.organizationBin ? `Организация: БИН ${String(payload.organizationBin)}` : null,
+				payload.contractId ? `Договор: ${nameOf(payload.contractId)}` : null,
+				payload.incomingNumber ? `Документ поставщика: № ${String(payload.incomingNumber)}${payload.incomingDate ? ` от ${String(payload.incomingDate)}` : ""}` : null,
+				...lines,
+				"Итоговую сумму и НДС рассчитает 1С. Документ будет записан без проведения.",
+			].filter(Boolean).join("\n");
+		}
+		if (spec.name === "create_reconciliation_act") {
+			return [
+				"Акт сверки взаиморасчётов",
+				`Контрагент: ${nameOf(payload.counterpartyId)}`,
+				`Период: ${String(payload.from)} — ${String(payload.to)}`,
+				payload.organizationBin ? `Организация: БИН ${String(payload.organizationBin)}` : null,
+				payload.contractId ? `Договор: ${nameOf(payload.contractId)}` : null,
+				payload.post ? "Документ будет проведён." : "Документ будет записан без проведения.",
+				"Заполняется по данным учёта 1С; данные контрагента — зеркально.",
+			].filter(Boolean).join("\n");
+		}
 		if (spec.name === "import_bank_statement") {
 			const s = ctx.statements?.[String(payload.statementId)];
 			if (!s) return `Загрузка выписки ${String(payload.statementId)}`;
