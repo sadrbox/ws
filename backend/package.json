@@ -3,8 +3,11 @@
 	"scripts": {
 		"dev": "node server.js",
 		"test": "node --test",
+		"test:full": "node --test",
+		"test:headless": "node scripts/test-headless.mjs",
 		"lint": "eslint .",
 		"lint:ratchet": "node scripts/eslint-ratchet.mjs",
+		"verify": "node scripts/eslint-ratchet.mjs && node scripts/test-headless.mjs",
 		"check:drift": "sh scripts/check-schema-drift.sh"
 	},
 	"dependencies": {

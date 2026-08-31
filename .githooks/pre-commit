@@ -1,0 +1,35 @@
+#!/bin/bash
+# Ворота качества ПЕРЕД коммитом (Z1). Гоняет `npm run verify` только для пакетов,
+# в которых есть застейдженные изменения:
+#   frontend → tsc -b + eslint-ратчет + vitest
+#   backend  → eslint-ратчет + headless-тесты (DB-тесты гоняет CI на Postgres)
+#   ai       → tsc --noEmit
+# Красный verify → коммит отменяется. Обойти в исключительном случае: git commit --no-verify.
+#
+# Включается один раз на клон: git config core.hooksPath .githooks
+set -u
+ROOT="$(git rev-parse --show-toplevel)"
+staged="$(git diff --cached --name-only)"
+fail=0
+
+run_verify() {
+	pkg="$1"
+	# Есть ли застейдженные файлы в этом пакете?
+	echo "$staged" | grep -q "^$pkg/" || return 0
+	# Нет зависимостей (свежий клон) — пропускаем, не блокируем.
+	[ -d "$ROOT/$pkg/node_modules" ] || { echo "⏭  $pkg: node_modules нет — пропуск verify"; return 0; }
+	echo "🔎 $pkg: npm run verify…"
+	( cd "$ROOT/$pkg" && npm run --silent verify ) || { echo "❌ $pkg: verify упал"; fail=1; }
+}
+
+run_verify frontend
+run_verify backend
+run_verify ai
+
+if [ "$fail" -ne 0 ]; then
+	echo ""
+	echo "🚫 Коммит отменён: почини verify (или, в крайнем случае, git commit --no-verify)."
+	exit 1
+fi
+echo "✅ verify пройден"
+exit 0

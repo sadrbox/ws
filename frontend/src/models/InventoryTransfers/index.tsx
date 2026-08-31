@@ -30,6 +30,7 @@ import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import Notice from "src/components/Notice";
+import GovDocErrors from "src/components/GovDocErrors";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -255,6 +256,7 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol className={styles.FormNotice}>
               <Notice items={notices} />
+              <GovDocErrors groups={[{ label: translate("govSntIssue"), text: (form.fields as unknown as { sntErrorText?: string | null }).sntErrorText }]} />
             </GroupCol>
           </div>
           <GroupRow>

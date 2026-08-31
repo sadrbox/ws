@@ -15,6 +15,7 @@ interface ImportResult {
   imported?: number;
   skipped?: number;
   unresolved?: number;
+  matched?: number;
   message?: string;
 }
 
@@ -53,6 +54,7 @@ const BankStatementImportButton: FC = () => {
         text, organizationUuid: orgUuid || null, bankAccountUuid: accUuid,
       });
       const summary = `${translate("bankImportDone")}: ${r.imported ?? 0} / ${r.total ?? 0}`
+        + (r.matched ? `, ${translate("bankImportMatched")}: ${r.matched}` : "")
         + (r.skipped ? `, ${translate("bankImportSkipped")}: ${r.skipped}` : "")
         + (r.unresolved ? `, ${translate("bankImportUnresolved")}: ${r.unresolved}` : "");
       showToast(summary, (r.unresolved ?? 0) > 0 ? "warning" : "success");

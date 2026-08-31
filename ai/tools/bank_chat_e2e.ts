@@ -1,5 +1,5 @@
 // Сквозной тест выписки через чат на ЖИВОМ сервисе: PDF → распознавание → подтверждение →
-// загрузка в 1С через рабочего агента → проведение по подтверждению.
+// загрузка в 1С через рабочего агента → проведение по подтверждению → сверка с 1030.
 //
 //   node --experimental-strip-types --env-file=.env --env-file=.env.local tools/bank_chat_e2e.ts <файл.pdf> [--base http://192.168.1.112:3100] [--org uuid]
 //
@@ -80,6 +80,9 @@ async function main(): Promise<number> {
 		const r4 = await say("да");
 		check(/провед/i.test(r4.text), "после «да» — отчёт о проведении");
 	}
+
+	const r5 = await say("Сверь эту выписку с 1С по счёту 1030");
+	check(r5.state !== "WAITING_CONFIRMATION" && /1030|сверк|расхожд|совпада|остат/i.test(r5.text), "сверка — отчёт без подтверждения");
 	return finish(rc, db, erp);
 }
 

@@ -56,20 +56,28 @@ backend-node` — только по команде пользователя.
 - **T1.3 Резервное копирование** — ⏳ ГОТОВО ручное (2026-08-30): `services/backup.js` (`runBackup`:
   pg_dump→gzip в `backups/` + ротация `BACKUP_RETENTION_COUNT`=14; `listBackups`), роутер
   `/admin/backup`(POST)+`/admin/backups`(GET) суперадмину, секция `BackupSection` в SyncDashboard
-  (кнопка + список). Требует бинарь pg_dump на сервере; `backups/` в .gitignore. ОСТАЁТСЯ:
-  автозапуск по расписанию (в проекте планировщика нет — как и у audit-ретеншена).
+  (кнопка + список). Требует бинарь pg_dump на сервере; `backups/` в .gitignore. ✅ АВТОЗАПУСК
+  (2026-08-31): единый планировщик `services/scheduler.js` (`registerTask`/`startScheduler` —
+  дедуп, не-чаще-интервала, ошибки изолированы, `.unref()`; тест `scheduler.test.js` 5); в server.js
+  зарегистрированы задачи `backup` (opt-in `BACKUP_INTERVAL_HOURS`) и `audit-prune` (раз в сутки при
+  `AUDIT_RETENTION_DAYS>0`). Разрозненные `setInterval` убраны. Планировщик закрывает и T7.4/ретенцию.
 - **T1.4 Ревизия RBAC**: покрыть новые эндпоинты `useUserAccessRight`/серверной проверкой;
   тест-матрица прав.
 
 ### E2 — API-платформа (API First)
-- **T2.1 OpenAPI/Swagger**: генерация спецификации из роутеров (маршрут-реестр + JSDoc/
-  схемы), `/api/docs` (swagger-ui). Без смены валидации на Zod — описываем существующие DTO.
+- **T2.1 OpenAPI/Swagger** — ✅ (2026-08-31): `services/openapi.js` (`buildOpenApiSpec` — интроспекция
+  стека Express `app._router.stack`, восстановление метод+полный путь, теги по ресурсу, `:id`→`{id}`),
+  роутер `openapi.js` → `GET /api/v1/openapi.json` + `GET /api/docs` (Swagger UI с cdnjs, свой CSP);
+  смонтирован ДО authMiddleware (публичная дока). Тест `openapi.test.js` (5, headless на mock-app).
+  Схемы тел — задел; ответы generic. Валидацию на Zod НЕ меняли.
 - **T2.2 Webhooks**: модель `Webhook`(orgUuid,event,url,secret,enabled) + доставка (очередь/
   ретраи) на ключевые события (создан/проведён/отправлен ЭСФ); UI управления.
 - **T2.3 Унификация REST**: свести GET-списки к единому контракту (cursor/limit/filter/sort/
   search) — многие уже так; выявить расхождения, привести к фабрике `_documentHeaderFactory`.
-- **T2.4 Импорт/экспорт**: обобщить `ProductImportExport` в переиспользуемый механизм
-  (CSV/XLSX) для контрагентов/номенклатуры/остатков.
+- **T2.4 Импорт/экспорт** — ⏳ ЯДРО ВЫНЕСЕНО (2026-08-31): `frontend/src/utils/sheetIO.ts`
+  (`mapRowsByHeader` — колонки по синонимам; `recordsToAoa`; `readWorkbookAoa`/`downloadAoa` —
+  XLSX-обёртки), `ProductImportExport` переведён на него (доказано переиспользование). Тест
+  `sheetIO.test.ts` (5). ОСТАЁТСЯ: UI импорта/экспорта для контрагентов/остатков на этом ядре.
 
 ### E3 — Производительность (1M товаров / 100 польз.)
 - **T3.1 Виртуализация таблиц** — ✅ по факту кода (сверка 2026-08-28): `@tanstack/react-virtual`
@@ -181,7 +189,10 @@ backend-node` — только по команде пользователя.
   ЭАВР — гипотеза до живого контура (T7.1); парсер устойчив к вариантам имён. Также частично закрывает
   T7.7 (enrichErrors теперь и в СНТ/ЭАВР). UI ГОТОВ (2026-08-28): `errors[]` в `AwpResult`/`SntResult`
   (services/govdocs/api.ts) → тост со списком построчных ошибок после выписки на формах Реализации и
-  Перемещения. ОСТАЁТСЯ (nice-to-have): постоянная табличная часть «Ошибки» на форме.
+  Перемещения. ✅ ПОСТОЯННАЯ панель ошибок (2026-08-31): компонент `components/GovDocErrors`
+  (рендерит свод `sntErrorText`/`awpErrorText`/`esfErrorText`, сохраняемый бэкендом — виден и после
+  переоткрытия, в отличие от тоста), подключён на формах Реализации (ЭАВР+СНТ) и Перемещения (СНТ).
+  i18 `govDocErrorsTitle`. T7.8 полностью ✅.
 - **T7.9 (B1) 17 табличных частей СНТ** — ❌. `services/snt/mapper.js` заполняет только базовый
   `productSet` (в комментарии: «наборы алкоголь/нефть/маркировка/транспорт не заполняются»). По
   `Documents\СНТ.xml` расписать под-задачами: этил.спирт, виноматериал, пиво, алкоголь,
@@ -286,6 +297,11 @@ Windows-бандл. Статус: ✅ сделано · ⏳ в работе · �
 - **Q1 ✅ Ворота CI** (`.github/workflows/ci.yml`, 2026-08-15): frontend `tsc -b`+`vitest` (блок.) +
   `eslint` (non-blocking baseline); backend `prisma migrate deploy`+`seed-accounting`+`node --test`
   на сервисе Postgres. Первый прогон на GitHub проверить (окружение не воспроизводилось локально).
+  УСИЛЕНО (2026-08-31): + backend `lint:ratchet` в CI (линтер появился позже) + новый job `ai`
+  (`tsc --noEmit`). Плюс ЛОКАЛЬНЫЙ pre-commit хук `.githooks/pre-commit` (через `core.hooksPath`):
+  гоняет `npm run verify` только затронутых пакетов (frontend tsc+ратчет+vitest; backend ратчет+
+  headless-тесты `scripts/test-headless.mjs`; ai tsc) — красный отменяет коммит (важно при auto-commit
+  в main). Скрипт `verify` добавлен в 3 пакета; `test:headless`/`test:full` — в backend.
 - **Q4 ✅ `no-floating-promises`** (16 мест, 2026-08-15): `void`/`.catch` в app/index, BasisDocumentField,
   Table (Delete), Contacts (dynamic import), DocumentNumberSettings, OrganizationAccountingSettings,
   Files/FileView*Pane, SyncDashboard, UserDefaults. Убирает тихие необработанные отклонения.
@@ -328,8 +344,10 @@ Windows-бандл. Статус: ✅ сделано · ⏳ в работе · �
   `const num = Number(word); if (idNum) …` → поиск по числовому ID был мёртв (always false). Фикс:
   импорт `idSearchCondition` (int4-overflow-safe) + `const idNum = idSearchCondition(word)`. Также
   удалены мёртвые импорты (FiscalError, releaseIssuedSerials×3, removeReceiptSerials×2, querySchema×2,
-  success, crypto, prisma). Остаток baseline=22 — пре-существующие dead-локали (dateRange-скаффолдинг
-  в 5 роутерах + seed/dev-скрипты), гасить монотонно.
+  success, crypto, prisma). baseline 22→**10** (2026-08-31): убран мёртвый dateRange-скаффолдинг в 5
+  роутерах (bankaccounts/contacts/counterparties/organizations/users) + 2 мёртвых импорта в v1.js;
+  остаток 10 — dead-локали seed/dev-скриптов + заявленные API-параметры. Frontend baseline 40→**26**
+  (типизирован `applyEditMarker.test.ts`, −14 any).
 - **Q11 ⚠️ Покрытие тестами** (пересекается с T12.2): frontend 391→417; backend +13 HEADLESS
   (parseUploadErrors 7, govMappers 6 — snt/awp мапперы вкл. relatedSnt/relatedAwp), 2026-08-28.
   Остаётся: `esf` маппер, `documentChain`, `recomputeCosting`, `useFormStore` (интеграционные — нужен тест-Postgres).

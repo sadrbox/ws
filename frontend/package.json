@@ -8,6 +8,7 @@
 		"build": "tsc -b && vite build",
 		"lint": "eslint .",
 		"lint:ratchet": "node scripts/eslint-ratchet.mjs",
+		"verify": "tsc -b && node scripts/eslint-ratchet.mjs && vitest run",
 		"preview": "vite preview",
 		"test": "vitest",
 		"i18:lint": "node scripts/i18-lint.mjs",

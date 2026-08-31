@@ -13,6 +13,7 @@
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test tests/",
     "e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/e2e.ts",
     "typecheck": "tsc --noEmit",
+    "verify": "tsc --noEmit",
     "chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/chat_e2e.ts"
   },
   "dependencies": {

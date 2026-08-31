@@ -14,7 +14,7 @@ import { useAppContext } from "src/app/context";
 import { showToast } from "src/components/UIToast";
 import type { TPane } from "src/app/types";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import * as XLSX from "xlsx";
+import { readWorkbookAoa, downloadAoa } from "src/utils/sheetIO";
 
 const ENDPOINT = "products";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -219,9 +219,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     if (!file) { showToast("Сначала выберите файл (.xlsx, .xls)", "warning"); return; }
     setIsLoading(true);
     try {
-      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
+      const raw = readWorkbookAoa(await file.arrayBuffer());
       if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
       const header = raw[0].map((h) => asText(h).trim());
       const headerL = header.map((h) => h.toLowerCase());
@@ -353,9 +351,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         return [p.sku ?? "", p.name ?? "", p.brand?.name ?? "", p.unitOfMeasure?.name ?? "", p.isService ? 1 : 0, bcs.join(";"),
         ...typeNames.map((n) => (latest[n] != null ? latest[n] : ""))];
       })];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "products");
-      XLSX.writeFile(wb, `products_export_${today()}.xlsx`);
+      downloadAoa(aoa, { sheetName: "products", fileName: `products_export_${today()}.xlsx` });
       showToast(`Выгружено позиций: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
@@ -375,9 +371,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       } catch { /* ignore */ }
       const header = ["sku", "name", "brand", "unit", "isService", "barcodes", ...typeNames];
       const sample = ["ART-001", "Пример товара", "Бренд", "шт", 0, "4870000000001;4870000000002", ...typeNames.map((_, i) => (i === 0 ? 1000 : ""))];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, sample]), "template");
-      XLSX.writeFile(wb, "products_template.xlsx");
+      downloadAoa([header, sample], { sheetName: "template", fileName: "products_template.xlsx" });
     } catch (err) {
       console.error(err);
       showToast("Не удалось сформировать шаблон", "error");

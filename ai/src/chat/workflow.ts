@@ -120,8 +120,14 @@ export class ChatWorkflow {
 
 		// Вложения распознаются ДО хода модели и попадают в её сообщение сводкой со statementId:
 		// модель видит факты, а не байты PDF, и не может «подправить» строки — payload для 1С
-		// сервис соберёт из сохранённой выписки.
-		if (attachments.length) text = await this.attachStatements(conv, user, text, attachments);
+		// сервис соберёт из сохранённой выписки. Оригиналы файлов сохраняются в chat_files и
+		// их ссылки прокидываются в ответ (carryFiles), чтобы были доступны для скачивания.
+		let carryFiles: FileRef[] = [];
+		if (attachments.length) {
+			const att = await this.attachStatements(conv, user, text, attachments);
+			text = att.text;
+			carryFiles = att.files;
+		}
 
 		// Ответ на подтверждение — без модели. Признак — ожидающий вызов в контексте, а не
 		// состояние: состояние мог сменить prepare() или фоновый ход.
@@ -136,7 +142,7 @@ export class ChatWorkflow {
 
 		await this.appendMessage(conv.id, { role: "user", text });
 		await this.setState(conv.id, "UNDERSTANDING", conv.context);
-		return this.runModel(conv, user);
+		return this.runModel(conv, user, carryFiles);
 	}
 
 	// ── цикл с моделью ────────────────────────────────────────────────────
@@ -264,14 +270,16 @@ export class ChatWorkflow {
 		await this.setState(conv.id, "EXECUTING", conv.context);
 
 		// Выписка: модель передала только statementId, строки для 1С — из хранилища.
+		// Сверка получает ту же выписку целиком (с периодом и остатками), но ничего не пишет.
 		let statementId: string | null = null;
-		if (spec.commandType === "IMPORT_BANK_STATEMENT") {
-			statementId = String(payload.statementId ?? "");
-			const stored = this.d.bank ? await this.d.bank.store.get(statementId, user.organizationUuid) : null;
+		if (spec.commandType === "IMPORT_BANK_STATEMENT" || spec.commandType === "RECONCILE_STATEMENT") {
+			const sid = String(payload.statementId ?? "");
+			const stored = this.d.bank ? await this.d.bank.store.get(sid, user.organizationUuid) : null;
 			if (!stored) {
 				return { result: { toolCallId: call.id, content: { error: "STATEMENT_NOT_FOUND", message: "Выписка с таким statementId не найдена в этой организации" }, isError: true } };
 			}
-			payload = { statementId, ...statementPayload(stored.statement) };
+			payload = { statementId: sid, ...statementPayload(stored.statement) };
+			if (spec.commandType === "IMPORT_BANK_STATEMENT") statementId = sid;
 		}
 
 		// Проведение по выпискам: список документов — из сохранённого результата загрузки.
@@ -318,7 +326,7 @@ export class ChatWorkflow {
 		const seen = new Set(conv.context.seenIds);
 		collectIds(done.result, seen);
 		conv.context.seenIds = [...seen];
-		const isFile = spec.commandType === "PRINT_SALE" || spec.commandType === "PRINT_DOCUMENT";
+		const isFile = spec.commandType === "PRINT_SALE" || spec.commandType === "PRINT_DOCUMENT" || spec.commandType === "RUN_REPORT";
 		conv.context.lastResult = isFile ? { form: (done.result as { form?: string })?.form } : done.result;
 		await this.setState(conv.id, "EXECUTING", conv.context);
 
@@ -333,6 +341,10 @@ export class ChatWorkflow {
 			return { result: { toolCallId: call.id, content: compactPostResult(done.result) } };
 		}
 
+		if (spec.commandType === "RECONCILE_STATEMENT") {
+			return { result: { toolCallId: call.id, content: compactReconcileResult(done.result) } };
+		}
+
 		if (isFile && done.result && typeof done.result === "object") {
 			// Файл — в хранилище сервиса; модели только имя и размер, пользователю — ссылка.
 			const r = done.result as { fileName?: string; mimeType?: string; content?: string; size?: number; presentation?: string; format?: string; type?: string; document?: { id?: string } };
@@ -340,11 +352,11 @@ export class ChatWorkflow {
 			const ref = await this.d.files.save({
 				conversationId: conv.id, organizationUuid: user.organizationUuid, userUuid: user.uuid,
 				fileName: r.fileName ?? "document.pdf", mimeType: r.mimeType ?? "application/pdf", content: Buffer.from(r.content, "base64"),
-				source: { tool: spec.name, form: r.presentation, format: r.format, documentType: r.type ?? payload.documentType, documentId: r.document?.id ?? payload.documentId },
+				source: { tool: spec.name, form: r.presentation, format: r.format, documentType: r.type ?? payload.documentType, documentId: r.document?.id ?? payload.documentId, report: payload.report, from: payload.from, to: payload.to, account: payload.account },
 			});
 			await this.d.audit.write({ event: "chat.file_created", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid, details: { fileId: ref.fileId, fileName: ref.fileName, size: ref.size } });
 			return {
-				result: { toolCallId: call.id, content: { ok: true, form: r.presentation, fileName: ref.fileName, size: ref.size, format: r.format ?? "pdf", note: "файл передан пользователю вложением к ответу" } },
+				result: { toolCallId: call.id, content: { ok: true, form: r.presentation, fileName: ref.fileName, size: ref.size, format: r.format ?? "pdf", rows: (r as { rows?: number }).rows, note: "файл передан пользователю вложением к ответу" } },
 				attachment: ref,
 			};
 		}
@@ -397,35 +409,54 @@ export class ChatWorkflow {
 	}
 
 	/** Распознаёт PDF-вложения (параллельно) и дописывает к сообщению пользователя сводку каждой выписки. */
-	private async attachStatements(conv: Conversation, user: { uuid: string; organizationUuid: string }, text: string, attachments: Attachment[]): Promise<string> {
-		const one = async (a: Attachment): Promise<string> => {
+	private async attachStatements(conv: Conversation, user: { uuid: string; organizationUuid: string }, text: string, attachments: Attachment[]): Promise<{ text: string; files: FileRef[] }> {
+		// Сохранить ОРИГИНАЛ вложения в хранилище диалога (chat_files): доступен при
+		// переоткрытии диалога и скачивается по /v1/files/:id (TTL = FILE_TTL_DAYS).
+		// Сбой хранения не должен ронять распознавание — файл не критичен для ответа.
+		const store = async (a: Attachment, source: Record<string, unknown>): Promise<FileRef | null> => {
+			try {
+				return await this.d.files.save({ conversationId: conv.id, organizationUuid: user.organizationUuid, userUuid: user.uuid,
+					fileName: a.fileName, mimeType: a.mimeType || "application/octet-stream", content: a.content, source: { kind: "attachment", ...source } });
+			} catch (e) {
+				this.d.log.warn({ err: e, conversationId: conv.id, fileName: a.fileName }, "не удалось сохранить вложение диалога");
+				return null;
+			}
+		};
+
+		const one = async (a: Attachment): Promise<{ text: string; file: FileRef | null }> => {
 			const isPdf = a.mimeType === "application/pdf" || a.fileName.toLowerCase().endsWith(".pdf");
 			if (!this.d.bank || !isPdf) {
-				return `[Вложение «${a.fileName}»: ${isPdf ? "обработка PDF в этом сервисе отключена" : "поддерживаются только PDF банковских выписок"}]`;
+				const file = await store(a, {});
+				return { text: `[Вложение «${a.fileName}» сохранено${file ? "" : ""}: ${isPdf ? "обработка PDF в этом сервисе отключена" : "поддерживаются только PDF банковских выписок"}]`, file };
 			}
 			const started = Date.now();
 			try {
 				const r = await this.d.bank.extractor.extract(a.content, a.fileName);
 				const stored = await this.d.bank.store.save({ conversationId: conv.id, organizationUuid: user.organizationUuid, userUuid: user.uuid, fileName: a.fileName, sha256: r.sha256, statement: r.statement, reconciliation: r.reconciliation });
+				// Оригинал PDF связываем с распознанной выпиской (source.statementId).
+				const file = await store(a, { statementId: stored.id, sha256: r.sha256 });
 				const summary = summarize(r.statement, r.reconciliation);
 				conv.context.seenIds = [...new Set([...conv.context.seenIds, stored.id])];
 				conv.context.statements = { ...(conv.context.statements ?? {}), [stored.id]: { fileName: a.fileName, summary, reconciled: r.reconciliation.ok, lines: r.statement.lines.length, ownerBin: r.statement.owner.bin ?? null } };
 				await this.d.audit.write({ event: "chat.statement_extracted", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid,
-					details: { statementId: stored.id, fileName: a.fileName, lines: r.statement.lines.length, reconciled: r.reconciliation.ok, model: r.model, usage: r.usage, ms: Date.now() - started } });
-				return `[Вложение «${a.fileName}» — банковская выписка распознана. statementId=${stored.id}
+					details: { statementId: stored.id, fileName: a.fileName, fileId: file?.fileId ?? null, lines: r.statement.lines.length, reconciled: r.reconciliation.ok, model: r.model, usage: r.usage, ms: Date.now() - started } });
+				return { text: `[Вложение «${a.fileName}» — банковская выписка распознана. statementId=${stored.id}
 ${summary}
 Первые операции:
-${previewLines(r.statement)}]`;
+${previewLines(r.statement)}]`, file };
 			} catch (e) {
 				const msg = e instanceof ExtractError ? e.message : e instanceof Error ? e.message : String(e);
 				this.d.log.warn({ err: e, conversationId: conv.id, fileName: a.fileName }, "выписка не распознана");
-				await this.d.audit.write({ event: "chat.statement_failed", conversationId: conv.id, userUuid: user.uuid, details: { fileName: a.fileName, error: msg } });
-				return `[Вложение «${a.fileName}»: не удалось распознать выписку — ${msg}]`;
+				// Даже при неудаче распознавания оригинал сохраняем — пользователь его прикрепил.
+				const file = await store(a, { extractError: msg });
+				await this.d.audit.write({ event: "chat.statement_failed", conversationId: conv.id, userUuid: user.uuid, details: { fileName: a.fileName, fileId: file?.fileId ?? null, error: msg } });
+				return { text: `[Вложение «${a.fileName}» сохранено, но не удалось распознать выписку — ${msg}]`, file };
 			}
 		};
 		// Параллельно: три выписки по минуте каждая — это минута, а не три.
 		const parts = await Promise.all(attachments.map(one));
-		return [text, ...parts].filter(Boolean).join("\n\n");
+		const files = parts.map((p) => p.file).filter((f): f is FileRef => f !== null);
+		return { text: [text, ...parts.map((p) => p.text)].filter(Boolean).join("\n\n"), files };
 	}
 
 	private namesFromHistory(ctx: Context): Map<string, string> {
@@ -545,6 +576,10 @@ function statementPayload(s: Statement): Record<string, unknown> {
 		...(s.owner.bin ? { organizationBin: s.owner.bin } : {}),
 		account: { iik: s.account.iik, bik: s.account.bik ?? "", bankName: s.account.bankName ?? s.bank },
 		period: s.period,
+		openingBalance: s.openingBalance ?? null,
+		closingBalance: s.closingBalance ?? null,
+		totalIn: s.totalIn ?? null,
+		totalOut: s.totalOut ?? null,
 		lines: s.lines.map((l) => ({
 			number: l.number ?? "", date: l.date, direction: l.direction, amount: l.amount, knp: l.knp ?? "", purpose: l.purpose ?? "",
 			counterparty: { name: l.counterparty.name, bin: l.counterparty.bin ?? "", iik: l.counterparty.iik ?? "", bik: l.counterparty.bik ?? "", bankName: l.counterparty.bankName ?? "" },
@@ -618,6 +653,32 @@ function compactImportResult(result: unknown): unknown {
 			postProcessError: l.postProcessError || undefined, accountNote: l.accountNote || undefined,
 			documentId: doc(l)?.id, documentType: doc(l)?.type, documentNumber: doc(l)?.number, documentPosted: doc(l)?.posted === true ? true : undefined, error: l.error, remarks: l.remarks,
 		})),
+	};
+}
+
+/**
+ * Результат сверки для модели: остатки и итоги целиком, а по строкам — только расхождения.
+ * Совпавшие строки модели не нужны (их и так большинство), достаточно числа.
+ */
+function compactReconcileResult(result: unknown): unknown {
+	if (!result || typeof result !== "object") return result ?? { ok: true };
+	const r = result as Record<string, unknown>;
+	const lines = Array.isArray(r.lines) ? (r.lines as Record<string, unknown>[]) : [];
+	const extra = Array.isArray(r.onlyIn1C) ? (r.onlyIn1C as Record<string, unknown>[]) : [];
+	const doc = (l: Record<string, unknown>) => (l.document && typeof l.document === "object" ? (l.document as { presentation?: string; posted?: boolean }) : null);
+	return {
+		organization: (r.organization as { name?: string })?.name ?? null,
+		account: (r.account as { iik?: string })?.iik ?? null,
+		ledgerAccount: r.ledgerAccount,
+		period: r.period,
+		balances: r.balances,
+		summary: r.summary,
+		discrepancies: lines.filter((l) => l.status !== "matched").slice(0, 100).map((l) => ({
+			date: l.date, direction: l.direction, amount: l.amount, counterparty: l.counterpartyName, bin: l.counterpartyBin || undefined,
+			status: l.status, note: l.note || undefined, document: doc(l)?.presentation,
+		})),
+		notes: lines.filter((l) => l.status === "matched" && l.note).slice(0, 30).map((l) => ({ date: l.date, amount: l.amount, counterparty: l.counterpartyName, note: l.note })),
+		onlyIn1C: extra.slice(0, 100).map((x) => ({ date: x.date, direction: x.direction, amount: x.amount, counterparty: x.counterparty, corrAccount: x.corrAccount, posted: x.posted, document: doc(x)?.presentation })),
 	};
 }
 

@@ -119,7 +119,10 @@ import reportsRouter from "./api/router/reports.js";
 import modulesRouter from "./api/router/modules.js";
 import dealsRouter from "./api/router/deals.js";
 import backupRouter from "./api/router/backup.js";
-import { startBackupScheduler } from "./services/backup.js";
+import { runBackup, listBackups } from "./services/backup.js";
+import { pruneAuditLog, retentionDays } from "./services/auditLog.js";
+import { registerTask, startScheduler } from "./services/scheduler.js";
+import openapiRouter from "./api/router/openapi.js";
 import { moduleGuardMiddleware } from "./services/moduleAccess.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
@@ -330,6 +333,10 @@ app.use("/api/v1", chatStreamRouter);
 // Отдельный префикс /api1 не попадает под authMiddleware (тот на /api/v1).
 app.use("/api1/esf-license", esfLicensePublicRouter);
 
+// Документация API (T2.1): /api/docs (Swagger UI) + /api/v1/openapi.json.
+// ДО authMiddleware — публичная дока (перечень маршрутов, без данных).
+app.use(openapiRouter);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 6. ЗАЩИЩЁННЫЕ МАРШРУТЫ (требуют JWT)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -502,8 +509,29 @@ const ip = getLocalIP();
 const server = app.listen(port, () => {
 	console.log(`Server is running on http://${ip}:${port}`);
 	console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-	// E1.3: авто-бэкап БД по расписанию (opt-in через BACKUP_INTERVAL_HOURS).
-	startBackupScheduler();
+	// Z5: единый планировщик фоновых задач вместо разрозненных setInterval.
+	// Авто-бэкап БД (opt-in через BACKUP_INTERVAL_HOURS>0): пропускаем, если свежая копия
+	// уже есть (напр. после ручного бэкапа).
+	const backupHours = Number(process.env.BACKUP_INTERVAL_HOURS) || 0;
+	registerTask({
+		name: "backup", intervalMs: backupHours * 3_600_000,
+		run: async () => {
+			const last = listBackups()[0];
+			if (last && Date.now() - new Date(last.createdAt).getTime() < backupHours * 3_600_000) return;
+			const info = await runBackup();
+			return `авто-копия создана: ${info.file} (${info.size} байт)`;
+		},
+	});
+	// Чистка журнала аудита раз в сутки (ретенция AUDIT_RETENTION_DAYS, деф. 365; <=0 — выкл).
+	// Раньше чистка была лишь оппортунистической (из-под записи в журнал) — теперь по расписанию.
+	registerTask({
+		name: "audit-prune", intervalMs: retentionDays() > 0 ? 24 * 3_600_000 : 0,
+		run: async () => {
+			const r = await pruneAuditLog();
+			return r.deleted ? `удалено записей журнала: ${r.deleted}` : undefined;
+		},
+	});
+	startScheduler();
 });
 
 // Graceful shutdown

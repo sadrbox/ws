@@ -85,30 +85,7 @@ export function listBackups() {
 		.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/**
- * Автозапуск по расписанию (opt-in через env BACKUP_INTERVAL_HOURS>0). Планировщика
- * в проекте нет — используем таймер процесса (1 инстанс pm2 fork). По умолчанию
- * ВЫКЛЮЧЕНО (0), чтобы не занимать диск без ведома администратора.
- */
-export function startBackupScheduler() {
-	const hours = Number(process.env.BACKUP_INTERVAL_HOURS) || 0;
-	if (hours <= 0) return; // выключено
-	const intervalMs = hours * 3_600_000;
-	const tick = async () => {
-		try {
-			// Пропускаем, если свежая копия уже есть (напр. после ручного бэкапа).
-			const last = listBackups()[0];
-			if (last && Date.now() - new Date(last.createdAt).getTime() < intervalMs) return;
-			const info = await runBackup();
-			console.log(`[backup] авто-копия создана: ${info.file} (${info.size} байт)`);
-		} catch (e) {
-			console.error("[backup] авто-копия не удалась:", e?.message || e);
-		}
-	};
-	// Проверяем не реже раза в час; первый прогон — через минуту после старта.
-	setInterval(tick, Math.min(intervalMs, 3_600_000)).unref?.();
-	setTimeout(tick, 60_000).unref?.();
-	console.log(`[backup] авто-копирование включено: каждые ${hours} ч`);
-}
+// Авто-запуск бэкапа по расписанию (opt-in через BACKUP_INTERVAL_HOURS>0) вынесен
+// в единый планировщик services/scheduler.js (Z5) — регистрируется в server.js.
 
-export default { runBackup, listBackups, startBackupScheduler };
+export default { runBackup, listBackups };

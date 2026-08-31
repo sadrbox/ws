@@ -240,15 +240,6 @@ router.get("/counterparties", async (req, res) => {
 		}
 
 		// ── Фильтр по дате ────────────────────────────────────────────────────
-		const dateRange =
-			filter.dateRange && typeof filter.dateRange === "object"
-				? filter.dateRange
-				: {};
-		const startDate =
-			typeof dateRange.startDate === "string" ? dateRange.startDate : null;
-		const endDate =
-			typeof dateRange.endDate === "string" ? dateRange.endDate : null;
-
 		const dateRangeFilter = {};
 
 		// ── Произвольные фильтры ──────────────────────────────────────────────

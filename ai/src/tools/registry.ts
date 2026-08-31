@@ -254,6 +254,18 @@ export const TOOLS: ToolSpec[] = [
 		},
 	},
 	{
+		name: "reconcile_statement",
+		description:
+			"Сверить распознанную выписку (statementId) с учётом в 1С по счёту 1030: остатки и обороты 1С против остатков выписки, каждая операция выписки — против проводок. " +
+			"Ничего не меняет. По строкам статус: matched (проводка есть), unposted (документ есть, но не проведён), missing (в 1С нет); onlyIn1C — проводки и документы 1С без операции в выписке. " +
+			"Вызывай, когда просят сверить выписку/банк с 1С, проверить остаток по 1030, найти расхождения.",
+		inputSchema: { type: "object", properties: { statementId: { type: "string", description: "id распознанной выписки из сообщения о вложении" } }, required: ["statementId"], additionalProperties: false },
+		operation: "READ",
+		commandType: "RECONCILE_STATEMENT",
+		mutating: false,
+		buildPayload: (i, ctx) => ({ statementId: known(ctx, "statementId", i.statementId) }),
+	},
+	{
 		name: "list_print_forms",
 		description: "Печатные формы документа 1С — как в кнопке «Печать». documentType: sale (реализация), incoming/outgoing (платёжное поручение входящее/исходящее), purchase (поступление ТиУ), invoice (счёт на оплату), taxInvoice (счёт-фактура), cashIn/cashOut (кассовые ордера). documentId — только из результатов этого диалога (в отчёте о выписке — documentId и documentType строки).",
 		inputSchema: {
@@ -288,6 +300,44 @@ export const TOOLS: ToolSpec[] = [
 			documentType: docType(i.documentType), documentId: known(ctx, "documentId", i.documentId), form: str(i.form, "form"),
 			format: typeof i.format === "string" && FORMATS.includes(i.format) ? i.format : "pdf",
 		}),
+	},
+	{
+		name: "run_report",
+		description:
+			"Сформировать штатный бухгалтерский отчёт 1С файлом. report: osv (оборотно-сальдовая ведомость по всем счетам), osvAccount (ОСВ по счёту — нужен account), accountCard (карточка счёта — нужен account), accountAnalysis (анализ счёта — нужен account). " +
+			"from/to — период YYYY-MM-DD (если пользователь не назвал, спроси или возьми период выписки/текущий месяц из контекста). account — код счёта плана счетов, например 1030 (банк), 1010 (касса), 1210 (покупатели), 3310 (поставщики). " +
+			"organizationBin — БИН организации, если в базе их несколько (например владелец выписки). format: pdf по умолчанию, xlsx — если просят Excel/таблицу, docx, txt, html. Файл уходит пользователю вложением.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				report: { type: "string", enum: ["osv", "osvAccount", "accountCard", "accountAnalysis"] },
+				from: { type: "string", description: "YYYY-MM-DD" },
+				to: { type: "string", description: "YYYY-MM-DD" },
+				account: { type: "string", description: "код счёта, обязателен для osvAccount/accountCard/accountAnalysis" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				bySubaccounts: { type: "boolean" },
+				format: { type: "string", enum: ["pdf", "xlsx", "docx", "txt", "html"] },
+			},
+			required: ["report", "from", "to"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "RUN_REPORT",
+		mutating: false,
+		buildPayload: (i) => {
+			const report = str(i.report, "report");
+			if (!["osv", "osvAccount", "accountCard", "accountAnalysis"].includes(report)) throw new ToolInputError("report", "report: osv | osvAccount | accountCard | accountAnalysis");
+			const date = (v: unknown, f: string) => { const d = str(v, f); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new ToolInputError(f, `${f}: дата YYYY-MM-DD`); return d; };
+			const account = typeof i.account === "string" && i.account.trim() ? i.account.trim() : "";
+			if (report !== "osv" && !account) throw new ToolInputError("account", "account: для этого отчёта нужен код счёта");
+			const bin = typeof i.organizationBin === "string" && /^\d{12}$/.test(i.organizationBin) ? i.organizationBin : "";
+			return {
+				report, from: date(i.from, "from"), to: date(i.to, "to"),
+				...(account ? { account } : {}), ...(bin ? { organizationBin: bin } : {}),
+				...(typeof i.bySubaccounts === "boolean" ? { bySubaccounts: i.bySubaccounts } : {}),
+				format: typeof i.format === "string" && FORMATS.includes(i.format) ? i.format : "pdf",
+			};
+		},
 	},
 	{
 		name: "print_sale",

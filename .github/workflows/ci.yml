@@ -66,9 +66,27 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - name: ESLint ratchet (без роста ошибок vs .eslint-baseline)
+        run: npm run lint:ratchet
       - name: Prisma migrate + generate
         run: npx prisma migrate deploy && npx prisma generate
       - name: Seed (план счетов/субконто — нужен тестам проводок)
         run: node prisma/seed-accounting.js
       - name: Tests (node --test)
         run: npm test
+
+  ai:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ai/package-lock.json
+      - run: npm ci
+      - name: TypeScript (tsc --noEmit)
+        run: npm run typecheck

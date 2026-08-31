@@ -1,0 +1,35 @@
+.Root {
+  border: 1px solid var(--sv-danger, #d64545);
+  border-radius: 6px;
+  background: var(--sv-danger-bg, #fdf2f2);
+  padding: 8px 12px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--sv-color6, #333);
+}
+
+.Head {
+  font-weight: 600;
+  color: var(--sv-danger, #d64545);
+  margin-bottom: 4px;
+}
+
+.Group + .Group {
+  margin-top: 6px;
+}
+
+.Label {
+  font-weight: 600;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.List {
+  margin: 2px 0 0;
+  padding-left: 18px;
+
+  li {
+    margin: 1px 0;
+    white-space: pre-wrap;
+  }
+}

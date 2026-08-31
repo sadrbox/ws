@@ -60,13 +60,17 @@
 .Empty {
   color: $color5;
   max-width: 640px;
-  p { margin: 0 0 10px; }
+
+  p {
+    margin: 0 0 10px;
+  }
 }
 
 .Quick {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+
   button {
     font: inherit;
     font-size: $fontsize;
@@ -76,18 +80,33 @@
     background: $color60;
     color: $color6;
     cursor: pointer;
-    &:hover { border-color: $colorPrimaryDark; color: $colorPrimaryDark; }
+
+    &:hover {
+      border-color: $colorPrimaryDark;
+      color: $colorPrimaryDark;
+    }
   }
 }
 
 .Msg {
   display: flex;
-  &.user { justify-content: flex-end; }
-  &.assistant, &.system { justify-content: flex-start; }
-  &.pending .Bubble { opacity: 0.6; }
+
+  &.user {
+    justify-content: flex-end;
+  }
+
+  &.assistant,
+  &.system {
+    justify-content: flex-start;
+  }
+
+  &.pending .Bubble {
+    opacity: 0.6;
+  }
 }
 
 .Bubble {
+  user-select: text !important;
   max-width: min(720px, 85%);
   padding: 8px 12px;
   border-radius: $radius4;
@@ -96,10 +115,22 @@
   color: $color6;
   white-space: pre-wrap;
   word-break: break-word;
-  p { margin: 0; min-height: 1.2em; }
+
+  p {
+    margin: 0;
+    min-height: 1.2em;
+  }
+
   // Сообщение пользователя — мягкая акцентная подсветка (как «активное» в списках).
-  .user & { background: $accentBlueSoft; border-color: $accentBlueBorder; }
-  .system & { border-style: dashed; color: $color5; }
+  .user & {
+    background: $accentBlueSoft;
+    border-color: $accentBlueBorder;
+  }
+
+  .system & {
+    border-style: dashed;
+    color: $color5;
+  }
 }
 
 .File {
@@ -113,7 +144,11 @@
   background: transparent;
   color: $colorPrimaryDark;
   cursor: pointer;
-  &:hover { border-color: $colorPrimaryDark; text-decoration: underline; }
+
+  &:hover {
+    border-color: $colorPrimaryDark;
+    text-decoration: underline;
+  }
 }
 
 .Confirm {
@@ -132,6 +167,7 @@
   padding: 6px 12px 0;
   border-top: 1px solid $color33;
 }
+
 .Chip {
   display: inline-flex;
   align-items: center;
@@ -142,6 +178,7 @@
   border-radius: $radius4;
   background: $accentBlueSoft;
   color: $color6;
+
   button {
     font: inherit;
     border: none;
@@ -149,17 +186,26 @@
     color: $color5;
     cursor: pointer;
     padding: 0 2px;
-    &:hover { color: $colorPrimaryDark; }
+
+    &:hover {
+      color: $colorPrimaryDark;
+    }
   }
 }
+
 .Composer {
   display: flex;
   gap: 8px;
   padding: 8px 12px;
   border-top: 1px solid $color33;
   flex-shrink: 0;
+
   // Когда есть чипы вложений, верхняя граница уже нарисована ими.
-  .Attachments + & { border-top: none; padding-top: 6px; }
+  .Attachments+& {
+    border-top: none;
+    padding-top: 6px;
+  }
+
   textarea {
     flex: 1 1 auto;
     font: inherit;
@@ -170,27 +216,41 @@
     background: $color60;
     color: $color6;
     resize: none;
-    &:focus { outline: none; border-color: $colorPrimaryDark; }
+
+    &:focus {
+      outline: none;
+      border-color: $colorPrimaryDark;
+    }
   }
 }
 
 // Кнопки в стиле приложения: первичная — синий акцент, вторичная — «призрак».
-.Primary, .Ghost {
+.Primary,
+.Ghost {
   font: inherit;
   font-size: $fontsize;
   padding: 5px 14px;
   border-radius: $radius3;
   cursor: pointer;
-  &:disabled { opacity: 0.5; cursor: default; }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }
+
 .Primary {
   border: 1px solid $primaryBorder;
   background: $primary;
   color: #fff; // белый на синей кнопке — читаемо в обеих темах (как .danger в variables.scss)
 }
+
 .Ghost {
   border: 1px solid $color33;
   background: transparent;
   color: $color6;
-  &:hover:not(:disabled) { border-color: $colorPrimaryDark; }
+
+  &:hover:not(:disabled) {
+    border-color: $colorPrimaryDark;
+  }
 }

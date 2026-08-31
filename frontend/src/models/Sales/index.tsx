@@ -12,6 +12,7 @@ import { Field, FieldDateTime } from "src/components/Field";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
 import Notice from "src/components/Notice";
+import GovDocErrors from "src/components/GovDocErrors";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import { useContractCounterpartyMismatch } from "src/hooks/useContractCounterpartyMismatch";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
@@ -678,7 +679,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     : undefined;
   // ── Гос-документы РК: ЭАВР (акт работ/услуг) и СНТ (накладная) ──
   const govDocs = useGovDocs();
-  const govFields = form.fields as unknown as { awpStatus?: string | null; awpId?: string | null; sntStatus?: string | null; sntId?: string | null };
+  const govFields = form.fields as unknown as { awpStatus?: string | null; awpId?: string | null; sntStatus?: string | null; sntId?: string | null; awpErrorText?: string | null; sntErrorText?: string | null };
   const handleGovDoc = useCallback(async (id: string) => {
     const uuid = form.fields.uuid;
     if (!uuid) return;
@@ -873,6 +874,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol className={styles.FormNotice}>
               <Notice items={notices} />
+              <GovDocErrors groups={[
+                { label: translate("govAwpIssue"), text: govFields.awpErrorText },
+                { label: translate("govSntIssue"), text: govFields.sntErrorText },
+              ]} />
             </GroupCol>
           </div>
           <GroupRow>

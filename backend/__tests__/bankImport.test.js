@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse1C, parseCsv, parseMT940, parseBankStatement, normalizeAccount } from "../services/bank/parseStatement.js";
-import { importBankStatements } from "../services/bank/importBankStatements.js";
+import { importBankStatements, matchDocuments } from "../services/bank/importBankStatements.js";
 
 const ORG_IBAN = "KZ1234567890";
 
@@ -137,6 +137,9 @@ function makeClient({ existingDup = false } = {}) {
 			findFirst: async ({ where }) => (where.bin === "222222222222" ? { uuid: "cp-existing" } : null),
 			create: async ({ data }) => ({ uuid: `cp-${++n}`, ...data }),
 		},
+		// Z10-автопривязка: по умолчанию совпадений нет.
+		contract: { findFirst: async () => null },
+		paymentInvoice: { findMany: async () => [] },
 	};
 }
 
@@ -178,6 +181,47 @@ test("import: движение без совпадения счёта → unreso
 	});
 	assert.equal(r.imported, 0);
 	assert.equal(r.unresolved, 2);
+});
+
+// ── Z10: автопривязка (договор + счёт по сумме) ────────────────────────────────
+test("matchDocuments: договор контрагента + счёт по точной сумме (однозначно)", async () => {
+	const client = {
+		contract: { findFirst: async ({ where }) => (where.counterpartyUuid === "cp1" ? { uuid: "ctr1" } : null) },
+		paymentInvoice: { findMany: async ({ where }) => (where.amount === 15000.5 ? [{ uuid: "pi1", number: "77" }] : []) },
+	};
+	const m = await matchDocuments(client, { counterpartyUuid: "cp1", organizationUuid: "org1", amount: 15000.5 });
+	assert.equal(m.contractUuid, "ctr1");
+	assert.deepEqual(m.basis, { basisDocumentType: "payment_invoice", basisDocumentUuid: "pi1", basisDocumentLabel: "№ 77" });
+});
+
+test("matchDocuments: несколько счётов с той же суммой → не привязываем (неоднозначно)", async () => {
+	const client = {
+		contract: { findFirst: async () => null },
+		paymentInvoice: { findMany: async () => [{ uuid: "a" }, { uuid: "b" }] },
+	};
+	const m = await matchDocuments(client, { counterpartyUuid: "cp1", amount: 100 });
+	assert.equal(m.basis, null);
+	assert.equal(m.contractUuid, null);
+});
+
+test("import: автопривязка проставляет contractUuid и основание, считает matched", async () => {
+	const client = makeClient();
+	client.contract.findFirst = async () => ({ uuid: "ctr1" });
+	client.paymentInvoice.findMany = async () => [{ uuid: "pi1", number: "77" }];
+	const r = await importBankStatements(client, { text: SAMPLE_1C, organizationUuid: "org1", bankAccountUuid: "acc1", authorUuid: "u1" });
+	assert.equal(r.imported, 2);
+	assert.equal(r.matched, 2);
+	assert.equal(client.created[0].contractUuid, "ctr1");
+	assert.equal(client.created[0].basisDocumentType, "payment_invoice");
+	assert.equal(client.created[0].basisDocumentUuid, "pi1");
+});
+
+test("import: match=false отключает автопривязку", async () => {
+	const client = makeClient();
+	client.contract.findFirst = async () => ({ uuid: "ctr1" });
+	const r = await importBankStatements(client, { text: SAMPLE_1C, organizationUuid: "org1", bankAccountUuid: "acc1", authorUuid: "u1", match: false });
+	assert.equal(r.matched, 0);
+	assert.equal(client.created[0].contractUuid ?? null, null);
 });
 
 test("import: authorUuid и bankAccountUuid обязательны", async () => {
