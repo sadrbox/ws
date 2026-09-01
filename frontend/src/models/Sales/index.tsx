@@ -348,6 +348,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         rows = await fetchDocumentItems("saleitems", "saleUuid", fd.uuid);
       }
       const shortages = await checkStockAvailability({
+        organizationUuid: fd.organizationUuid ?? null,
+        date: fd.date ?? null,
         documentType: "sale",
         documentUuid: fd.uuid || undefined,
         warehouseUuid: fd.warehouseUuid || null,

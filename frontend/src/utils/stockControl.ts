@@ -31,6 +31,10 @@ export interface CheckStockPayload {
 	warehouseUuid?: string | null;
 	/** Склад-источник расхода (inventory_transfer). */
 	fromWarehouseUuid?: string | null;
+	/** Организация документа — от неё зависит настройка «Контроль остатков ТМЗ». */
+	organizationUuid?: string | null;
+	/** Дата документа (настройки историчны). */
+	date?: string | null;
 	items: Array<{ productUuid?: string | null; quantity?: number | string | null }>;
 }
 

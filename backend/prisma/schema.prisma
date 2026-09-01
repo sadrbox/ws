@@ -1706,6 +1706,10 @@ model OrganizationAccountingSetting {
   /// Ставка акциза по умолчанию, % (используется как значение по умолчанию
   /// для новых строк документов продажи при useExcise=true).
   exciseRate           Decimal       @default(0) @db.Decimal(8, 4)
+  /// Контроль остатков ТМЗ: при true документ НЕ проводится, если списание
+  /// уводит остаток в минус (продажа/списание/перемещение/возврат поставщику).
+  /// По умолчанию включён — поведение до появления настройки.
+  stockControl         Boolean       @default(true)
   updatedAt            DateTime      @default(now()) @updatedAt
   deletedAt            DateTime?
   organization         Organization? @relation("OrgAccountingSettings", fields: [organizationUuid], references: [uuid])
@@ -3264,4 +3268,90 @@ model Deal {
   @@index([stage])
   @@index([updatedAt])
   @@map("deals")
+}
+
+// ─── E14 «Коммуникации»: WhatsApp (ТЗ docs/TZ_WHATSAPP_COMMUNICATIONS.md §6) ───
+
+enum WaDirection {
+  in
+  out
+}
+
+enum WaMsgStatus {
+  received
+  queued
+  sent
+  delivered
+  read
+  failed
+}
+
+/// Подключённый WhatsApp-номер организации (Cloud API).
+model WaChannel {
+  id                Int       @id @default(autoincrement())
+  uuid              String    @unique @default(uuid())
+  organizationUuid  String
+  name              String
+  phone             String
+  provider          String    @default("cloud")
+  /// phone_number_id из Cloud API — по нему вебхук находит канал.
+  providerAccountId String?
+  /// Токен доступа Graph API; в ответах API НЕ отдаётся.
+  accessToken       String?
+  isActive          Boolean   @default(true)
+  updatedAt         DateTime  @default(now()) @updatedAt
+  deletedAt         DateTime?
+
+  @@index([organizationUuid])
+  @@index([providerAccountId])
+  @@map("wa_channels")
+}
+
+/// Диалог канала с одним внешним номером. Один номер = один диалог на канал —
+/// история коммуникации сохраняется по построению.
+model WaConversation {
+  id                Int       @id @default(autoincrement())
+  uuid              String    @unique @default(uuid())
+  channelUuid       String
+  organizationUuid  String
+  /// Внешний номер в E.164 без «+» (нормализованный).
+  phone             String
+  displayName       String?
+  contactPersonUuid String?
+  counterpartyUuid  String?
+  lastMessageAt     DateTime?
+  /// Последнее ВХОДЯЩЕЕ — для окна 24ч исходящих.
+  lastIncomingAt    DateTime?
+  unreadCount       Int       @default(0)
+  updatedAt         DateTime  @default(now()) @updatedAt
+  deletedAt         DateTime?
+
+  @@unique([channelUuid, phone])
+  @@index([organizationUuid, lastMessageAt])
+  @@index([contactPersonUuid])
+  @@index([counterpartyUuid])
+  @@map("wa_conversations")
+}
+
+/// Сообщение диалога. Вложение — AttachedFile(ownerType:"WaMessage").
+model WaMessage {
+  id                Int         @id @default(autoincrement())
+  uuid              String      @unique @default(uuid())
+  conversationUuid  String
+  organizationUuid  String
+  direction         WaDirection
+  body              String?
+  mediaFileUuid     String?
+  mediaType         String?
+  /// Автор-пользователь ERP (для исходящих).
+  authorUuid        String?
+  /// wamid провайдера — идемпотентность вебхука.
+  providerMessageId String?     @unique
+  status            WaMsgStatus @default(received)
+  errorText         String?
+  createdAt         DateTime    @default(now())
+  deletedAt         DateTime?
+
+  @@index([conversationUuid, createdAt])
+  @@map("wa_messages")
 }

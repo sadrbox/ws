@@ -12,6 +12,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { computeShortages } from "../../services/productRegister.js";
+import { resolveStockControl } from "../../services/accountingPosting.js";
 
 const router = express.Router();
 const MODEL = "productRegister";
@@ -131,6 +132,8 @@ router.post(`/${ROUTE}/check-availability`, async (req, res) => {
 			documentUuid,
 			warehouseUuid,
 			fromWarehouseUuid,
+			organizationUuid,
+			date,
 			items,
 		} = req.body ?? {};
 		if (!documentType || !Array.isArray(items)) {
@@ -138,6 +141,12 @@ router.post(`/${ROUTE}/check-availability`, async (req, res) => {
 				success: false,
 				message: "Требуются documentType и items[]",
 			});
+		}
+		// Предпроверка формы обязана совпадать с бэкенд-гардом: если контроль
+		// остатков у организации выключен, предупреждать не о чем.
+		const orgUuid = organizationUuid || req.user?.organizationUuid || null;
+		if (!(await resolveStockControl(orgUuid, date ?? null))) {
+			return res.status(200).json({ success: true, shortages: [] });
 		}
 		const shortages = await computeShortages({
 			documentType,

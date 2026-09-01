@@ -198,6 +198,29 @@ export async function resolveCostingMethod(orgUuid, date = null, client = prisma
 }
 
 /**
+ * Включён ли КОНТРОЛЬ ОСТАТКОВ ТМЗ у организации на дату документа.
+ * true → расход, уводящий остаток в минус, блокирует проведение (409 с перечнем
+ * нехваток). false → «минусовой» остаток разрешён (расход проводится всегда).
+ *
+ * Дефолт true — поведение до появления настройки (контроль работал всегда),
+ * поэтому включение настройки ничего не ломает у существующих организаций.
+ * Ошибка чтения настроек тоже даёт true: безопаснее не пропустить минус.
+ *
+ * @param {string|null} orgUuid
+ * @param {Date|string|null} [date] — дата документа; null → текущая настройка.
+ */
+export async function resolveStockControl(orgUuid, date = null, client = prisma) {
+	if (!orgUuid) return true;
+	try {
+		const s = await getSettingsAt(orgUuid, date, client);
+		// Настройки нет → контроль включён (безопасный дефолт).
+		return s?.stockControl !== false;
+	} catch {
+		return true;
+	}
+}
+
+/**
  * Себестоимость единицы товара по методу организации (AVERAGE|FIFO) — для оценки
  * ПРИХОДА по себестоимости (например возврат от покупателя на склад), а не по цене
  * документа. consume=false: партии не списываются (оценка текущего остатка).

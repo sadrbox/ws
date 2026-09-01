@@ -124,6 +124,7 @@ import { pruneAuditLog, retentionDays } from "./services/auditLog.js";
 import { registerTask, startScheduler } from "./services/scheduler.js";
 import openapiRouter from "./api/router/openapi.js";
 import waWebhookRouter from "./api/router/waWebhook.js";
+import waRouter from "./api/router/wa.js";
 import { moduleGuardMiddleware } from "./services/moduleAccess.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
@@ -358,6 +359,7 @@ app.use("/api/v1", moduleGuardMiddleware);
 
 app.use("/api/v1", modulesRouter);
 app.use("/api/v1", dealsRouter);
+app.use("/api/v1", waRouter);
 app.use("/api/v1", backupRouter);
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);

@@ -285,6 +285,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     // непроведённый черновик, а сразу показываем, каких товаров не хватает.
     if (!isReturn) {
       const shortages = await checkStockAvailability({
+        organizationUuid: orgUuid || null,
         documentType: "sale",
         warehouseUuid: warehouseUuid || null,
         items: rows.map((r) => ({ productUuid: String(r.productUuid), quantity: Number(r.quantity) || 0 })),

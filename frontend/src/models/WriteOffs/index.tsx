@@ -184,6 +184,8 @@ const WriteOffsForm: FC<Partial<TPane>> = (paneProps) => {
         rows = await fetchDocumentItems("writeoffitems", "writeOffUuid", fd.uuid);
       }
       const shortages = await checkStockAvailability({
+        organizationUuid: fd.organizationUuid ?? null,
+        date: fd.date ?? null,
         documentType: "write_off",
         documentUuid: fd.uuid || undefined,
         warehouseUuid: fd.warehouseUuid || null,

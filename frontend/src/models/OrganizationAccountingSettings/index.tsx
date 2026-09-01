@@ -41,6 +41,7 @@ interface TFields {
   vatCalculationMethod: "INCLUDED" | "ADDED";
   /** Включить колонки скидок в SaleItemsTable. */
   useDiscount: boolean;
+  stockControl: boolean;
   /** Включить колонки акциза в SaleItemsTable (НК РК ст. 463). */
   useExcise: boolean;
   /** Ставка акциза по умолчанию, % (ввод в форме как строка). */
@@ -59,6 +60,7 @@ const DEFAULT_FIELDS: TFields = {
   vatRate: "12",
   vatCalculationMethod: "INCLUDED",
   useDiscount: false,
+  stockControl: true,
   useExcise: false,
   exciseRate: "0",
   costingMethod: "AVERAGE",
@@ -85,6 +87,7 @@ interface OrganizationAccountingSettingsServerRecord {
   organizationUuid?: string | null;
   startDate?: string | null;
   useDiscount?: boolean | null;
+  stockControl?: boolean | null;
   useExcise?: boolean | null;
   useVat?: boolean | null;
   uuid?: string;
@@ -124,6 +127,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
           ? "ADDED"
           : "INCLUDED",
       useDiscount: Boolean(d.useDiscount),
+      stockControl: d.stockControl !== false,
       useExcise: Boolean(d.useExcise),
       exciseRate:
         d.exciseRate != null && d.exciseRate !== ""
@@ -155,6 +159,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
         vatRate: fd.useVat ? vatRateNum : 0,
         vatCalculationMethod: fd.vatCalculationMethod ?? "INCLUDED",
         useDiscount: Boolean(fd.useDiscount),
+        stockControl: Boolean(fd.stockControl),
         useExcise: Boolean(fd.useExcise),
         exciseRate: fd.useExcise ? exciseRateNum : 0,
         costingMethod: fd.costingMethod === "FIFO" ? "FIFO" : "AVERAGE",
@@ -221,6 +226,12 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
     const items: NoticeItem[] = [];
 
     // Что именно изменил пользователь и чем это грозит.
+    // ВАЖНО: разделяем два РАЗНЫХ по смыслу класса параметров.
+    //   • Расчётные (НДС/скидка/акциз/себестоимость) — влияют на СУММЫ документов,
+    //     поэтому для них важна «Дата начала»: в прошлом → пересчёт проведённых.
+    //   • Правила проведения (контроль остатков) — на суммы НЕ влияют вообще,
+    //     это проверка в момент проведения. Говорить про «пересчёт сумм» для них
+    //     неверно, поэтому у них своя подсказка.
     const touched: string[] = [];
     if (changed("useVat")) touched.push(translate(form.fields.useVat ? "accChangeVatOn" : "accChangeVatOff"));
     if (changed("vatRate")) touched.push(translate("accChangeVatRate"));
@@ -242,6 +253,17 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
       items.push({ type: "warning", text: translate("accImpactPast") });
     }
 
+    // Контроль остатков — отдельно: суммы не трогает, действует на будущие
+    // попытки провести расход. Выключение — это ослабление контроля, поэтому
+    // предупреждение, а не «успех».
+    if (changed("stockControl")) {
+      items.push(
+        form.fields.stockControl
+          ? { type: "success", text: `${translate("accChangeStockControlOn")}. ${translate("accImpactStockOn")}` }
+          : { type: "warning", text: `${translate("accChangeStockControlOff")}. ${translate("accImpactStockOff")}` },
+      );
+    }
+
     // Заблокированные параметры: объясняем ПОЧЕМУ, а не просто гасим контрол.
     if (lockVat || lockDiscount || lockExcise) {
       items.push({ type: "warning", text: translate("accSettingsLockedNote") });
@@ -256,6 +278,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   }, [
     form.fields.useVat, form.fields.vatRate, form.fields.vatCalculationMethod,
     form.fields.useDiscount, form.fields.useExcise, form.fields.costingMethod,
+    form.fields.stockControl,
     form.fields.startDate, startsInPast, lockVat, lockDiscount, lockExcise,
   ]);
 
@@ -457,7 +480,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     disabled={form.isLoading || !canWrite || lockDiscount}
                     title={
                       lockDiscount
-                        ? "Нельзя изменить флаг скидок: есть проведённые документы со Сумма скидкими"
+                        ? "Нельзя изменить флаг скидок: есть проведённые документы со скидками"
                         : undefined
                     }
                   />
@@ -466,6 +489,26 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 <span className={styles.SettingHint}>
                   При включении в строках документов продажи отображаются колонки
                   «Процент скидки» и «Сумма скидки».
+                </span>
+              </GroupRow>
+
+              <GroupRow className={styles.SectionGap}>
+                <label
+                  className={[styles.SettingChip, form.fields.stockControl && styles.SettingChipActive, !canWrite && styles.SettingChipReadonly].filter(Boolean).join(" ")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.fields.stockControl)}
+                    onChange={(e) => form.setField("stockControl", e.target.checked)}
+                    disabled={form.isLoading || !canWrite}
+                  />
+                  <span className={styles.SettingLabelStrong}>{translate("stockControl")}</span>
+                </label>
+                <span className={styles.SettingHint}>
+                  Запрещает расход в минус: продажа, списание, перемещение и возврат
+                  поставщику НЕ проводятся, если списание превышает остаток на складе —
+                  пользователь получает перечень нехваток. Выключение разрешает
+                  «минусовой» остаток.
                 </span>
               </GroupRow>
 

@@ -181,6 +181,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         rows = await fetchDocumentItems("inventorytransferitems", "inventoryTransferUuid", fd.uuid);
       }
       const shortages = await checkStockAvailability({
+        organizationUuid: fd.organizationUuid ?? null,
+        date: fd.date ?? null,
         documentType: "inventory_transfer",
         documentUuid: fd.uuid || undefined,
         fromWarehouseUuid: fd.fromWarehouseUuid || null,

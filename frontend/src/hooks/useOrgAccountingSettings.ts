@@ -27,6 +27,10 @@ export interface OrgAccountingSettingItem {
 	useExcise: boolean;
 	/** Ставка акциза по умолчанию, % (используется при добавлении новых строк). */
 	exciseRate: number | string | null;
+	/** Контроль остатков ТМЗ: запрет расхода в минус (блокирует проведение).
+	 *  Опционально: записи, созданные до появления настройки, поля не содержат
+	 *  (читатель трактует отсутствие как включённый контроль). */
+	stockControl?: boolean;
 	updatedAt: string;
 	deletedAt: string | null;
 	organization?: {
@@ -119,6 +123,8 @@ export function useOrgAccountingSettings(
 			vatRate,
 			useDiscount: Boolean(item?.useDiscount),
 			useExcise: Boolean(item?.useExcise),
+			/** Контроль остатков ТМЗ. Дефолт true — как до появления настройки. */
+			stockControl: item?.stockControl !== false,
 			/** Дефолтная Ставка акциза, % (число). 0 при отключённом useExcise. */
 			exciseRate: item?.useExcise ? Number(item?.exciseRate ?? 0) || 0 : 0,
 			isLoading: query.isLoading,

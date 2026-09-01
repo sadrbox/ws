@@ -41,7 +41,10 @@
 	font-family: inherit;
 	font-size: 11px;
 	color: $warnSoftText;
-	background: rgba(#fff, 0.6);
+	// Полупрозрачная ПАНЕЛЬ, а не жёсткий белый: на тёмной теме белая подложка
+	// светлела под темозависимым $warnSoftText и текст переставал читаться.
+	// Совпадает по смыслу с :hover ниже (там уже сплошной --sv-color60).
+	background: color-mix(in srgb, var(--sv-color60) 60%, transparent);
 	border: 1px solid $warnSoftBorder;
 	border-radius: 4px;
 	cursor: pointer;

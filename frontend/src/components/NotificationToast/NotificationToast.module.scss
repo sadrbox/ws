@@ -28,7 +28,9 @@
 	top: -2px;
 	right: -2px;
 	background: var(--c-red-57);
-	color: var(--sv-color60);
+	// Фиксированный белый: --sv-color60 в тёмной теме = тёмная панель, и цифра
+	// на красном кружке становилась почти нечитаемой.
+	color: #ffffff;
 	font-size: 10px;
 	font-weight: 700;
 	min-width: 16px;
@@ -49,7 +51,10 @@
 	z-index: 9999;
 	border-radius: $radius4;
 	border: 1px solid $color34;
-	background: rgba(#fff, 0.92);
+	// Фон из токена панели (следует теме). Раньше был жёсткий rgba(#fff,.92), а
+	// текст — темозависимый $color6: в тёмной теме получался светлый текст на
+	// белом фоне, панель не читалась.
+	background: $color60;
 	backdrop-filter: blur(12px);
 	box-shadow: 0 8px 32px rgba(#000, 0.18);
 	display: flex;

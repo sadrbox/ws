@@ -75,6 +75,7 @@ export const TodosList = lazyView("TodosList", () => import('src/models/Todos').
 export const TaskBoardList = lazyView("TaskBoardList", () => import('src/models/TaskBoard').then(m => ({ default: m.TaskBoardList })));
 export const UserPerformanceList = lazyView("UserPerformanceList", () => import('src/models/UserPerformance').then(m => ({ default: m.UserPerformanceList })));
 export const ChatList = lazyView("ChatList", () => import('src/models/Chat').then(m => ({ default: m.ChatList })));
+export const CommunicationsPanel = lazyView("CommunicationsPanel", () => import('src/models/Communications').then(m => ({ default: m.CommunicationsPanel })));
 export const AiAssistantList = lazyView("AiAssistantList", () => import('src/models/AiAssistant').then(m => ({ default: m.AiAssistantList })));
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
@@ -176,6 +177,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	TaskBoardList: TaskBoardList,
 	UserPerformanceList: UserPerformanceList,
 	ChatList: ChatList,
+	CommunicationsPanel: CommunicationsPanel,
 	AiAssistantList: AiAssistantList,
 	NotificationsList: NotificationsList,
 	WarehousesList: WarehousesList,

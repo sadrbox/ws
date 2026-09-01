@@ -364,6 +364,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             rows = await fetchDocumentItems(cfg.itemsEndpoint, cfg.itemsParentField, fd.uuid);
           }
           const shortages = await checkStockAvailability({
+            organizationUuid: fd.organizationUuid ?? null,
+            date: fd.date ?? null,
             documentType: cfg.stockCheckDocType as ExpenseDocumentType,
             documentUuid: fd.uuid || undefined,
             warehouseUuid: fd.warehouseUuid || null,

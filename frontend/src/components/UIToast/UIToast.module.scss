@@ -7,9 +7,13 @@
 // стек снизу со scale для нижних тостов.
 // ──────────────────────────────────────────────────────────────────────────
 
+// ВАЖНО: тост НАМЕРЕННО тёмный в ОБЕИХ темах (стиль Sonner), поэтому его цвета
+// НЕ берутся из нейтральной шкалы --n-*: она инвертируется между темами, и в
+// тёмной теме текст становился почти чёрным на тёмном фоне (тост не читался).
+// Здесь фиксированные значения «светлое на тёмном» + отдельная правка фона ниже.
 $toastBg: rgba(28, 32, 40, 0.92);
 $toastBorder: rgba(255, 255, 255, 0.08);
-$toastText: var(--n-96a);
+$toastText: #eef0f3;
 $toastTitle: rgba(255, 255, 255, 0.55);
 $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 0.35);
 
@@ -46,6 +50,15 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 	background: $toastBg;
 	border: 1px solid $toastBorder;
 	box-shadow: $toastShadow;
+
+	// В тёмной теме фон приложения сам тёмный (#1f232a) — тост почти сливался
+	// с экраном. Поднимаем его поверхность и усиливаем рамку, чтобы читался
+	// как всплывающий элемент над интерфейсом.
+	:global(html[data-theme="dark"]) & {
+		background: rgba(48, 54, 64, 0.96);
+		border-color: rgba(255, 255, 255, 0.14);
+	}
+
 	backdrop-filter: blur(12px) saturate(140%);
 	-webkit-backdrop-filter: blur(12px) saturate(140%);
 	pointer-events: all;
@@ -207,7 +220,9 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 
 	&:hover {
 		background: rgba(255, 255, 255, 0.1);
-		color: var(--sv-color60);
+		// Фиксированный светлый: --sv-color60 в тёмной теме = тёмная панель,
+		// поэтому «×» при наведении становился невидимым.
+		color: #ffffff;
 	}
 
 	&:focus-visible {

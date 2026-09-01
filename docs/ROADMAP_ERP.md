@@ -365,10 +365,20 @@ Counterparty→ручная привязка) → диалог `WaConversation` 
   /api1). Env: `WA_VERIFY_TOKEN` (задан), `WA_APP_SECRET` (⚠ пуст — заполнить из Meta до прода).
   Публичный URL: `https://api.aleppo.kz/api1/wa/webhook` (⚠ хост `api.` — aleppo.kz ведёт на
   фронт/Vite, первая проверка Meta падала именно из-за этого). Тест `waWebhook.test.js` (5).
-- **W1 (P0-2) Данные** — ❌: миграция `WaChannel`/`WaConversation`/`WaMessage` (РУКОПИСНАЯ),
-  резолвинг номера (E.164, 8→7), сохранение входящих, идемпотентность по wamid, SSE `type:"wa"`.
-- **W2 (P1) Панель** — ❌: пейн «Коммуникации» (список диалогов + окно чата, внутренний чат
-  вкладкой, unread-бейджи), отправка текста.
+- **W1 (P0-2) Данные** — ✅ (2026-09-01): миграция `20260901090000_wa_communications`
+  (schema↔schema diff со старой схемой из git — только CREATE, дрейфа нет): enum
+  `WaDirection`/`WaMsgStatus` + `WaChannel`/`WaConversation`(@@unique channelUuid+phone)/`WaMessage`
+  (@unique providerMessageId — идемпотентность). Резолвинг: `services/wa/phone.js`
+  (normalizePhone: 8XXX→7XXX, 10 цифр→+7) + `services/wa/resolveContact.js` (whatsapp→telephone,
+  владелец ContactPerson→лицо+его контрагент / Counterparty→контрагент; сравнение в памяти —
+  в БД телефоны хранятся «как введены»). Тест `waResolve.test.js` (7, headless).
+- **W2 (P1) Панель** — ✅ (2026-09-01): роутер `api/router/wa.js` (список диалогов с подписями
+  лица/контрагента без N+1, сообщения, отправка, read, link + авто-создание Contact(whatsapp),
+  contact-summary, simulate-incoming для суперадмина), пейн `models/Communications`
+  (вкладки «Внутренний чат» (существующий ChatList) / WhatsApp, список диалогов с unread-бейджами,
+  окно чата с пузырями и статусами, правая панель-сводка), пункт NavList + viewRegistry
+  (восстановление после F5), i18 RU+KK. **Отправка наружу НЕ подключена** (провайдер не настроен):
+  исходящие сохраняются со статусом `queued` — уйдут при подключении (W4).
 - **W3 (P2) Файлы+сводка** — ❌: вложения in/out, панель-сводка контактного лица, привязка
   незнакомых номеров, окно 24ч + шаблоны.
 - **W4 (P3) Зрелость** — ❌: статусы доставки, исходящий диалог, ретраи (services/scheduler),

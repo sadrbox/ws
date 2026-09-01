@@ -19,6 +19,7 @@ const INCLUDE = { organization: true };
  *   - vatRate:               Ставка НДС, % (справочник VatRate удалён);
  *   - vatCalculationMethod:  "INCLUDED" (в сумме) | "ADDED" (сверху);
  *   - useDiscount:           включает колонки скидок в SaleItemsTable;
+ *   - stockControl:          контроль остатков ТМЗ (запрет расхода в минус);
  *   - startDate:             дата начала действия настроек (историчность).
  *   - При обновлении старая запись soft-deleted, создаётся новая.
  */
@@ -212,6 +213,7 @@ router.get(`/${ROUTE}/active`, async (req, res) => {
 				return prisma[MODEL].findFirst({
 					where: {
 						organizationUuid: uuid,
+						deletedAt: null,
 						startDate: { lte: historicalDate },
 					},
 					orderBy: { id: "desc" },
@@ -226,7 +228,20 @@ router.get(`/${ROUTE}/active`, async (req, res) => {
 		}
 
 		let item = null;
-		if (orgUuid) item = await findFor(orgUuid);
+		if (orgUuid) {
+			item = await findFor(orgUuid);
+			// Дата документа раньше первой версии настроек организации: берём её
+			// САМУЮ РАННЮЮ версию, а не глобальные/пустые. Иначе у старых документов
+			// молча отключался НДС и появлялись/пропадали колонки по чужим настройкам.
+			if (!item) {
+				item = await prisma[MODEL].findFirst({
+					where: { organizationUuid: orgUuid, deletedAt: null },
+					orderBy: { startDate: "asc" },
+					include: INCLUDE,
+				});
+			}
+		}
+		// Организация без настроек вообще → общесистемные (organizationUuid = null).
 		if (!item) item = await findFor(null);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -350,6 +365,13 @@ async function buildBodyData(body, existing = null) {
 				: "AVERAGE";
 	}
 
+	// stockControl — контроль остатков ТМЗ: при true расход, уводящий остаток
+	// в минус, блокирует проведение документа (409 с перечнем нехваток).
+	// Дефолт true (поведение до появления настройки).
+	const stockControl = Object.prototype.hasOwnProperty.call(body, "stockControl")
+		? Boolean(body.stockControl)
+		: existing?.stockControl !== false;
+
 	// startDate
 	let startDate;
 	if (Object.prototype.hasOwnProperty.call(body, "startDate")) {
@@ -371,6 +393,7 @@ async function buildBodyData(body, existing = null) {
 			useExcise,
 			exciseRate,
 			costingMethod,
+			stockControl,
 			startDate,
 		},
 	};

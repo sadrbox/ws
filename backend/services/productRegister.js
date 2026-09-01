@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { reservedQuantity } from "./reservationRegister.js";
-import { createCostingContext } from "./accountingPosting.js";
+import { createCostingContext, resolveStockControl } from "./accountingPosting.js";
 import { allocateImportLandedCost } from "./importLandedCost.js";
 import { getClosedBoundary } from "./periodLock.js";
 
@@ -519,6 +519,8 @@ export async function assertStockAvailable(
 		where: { uuid: documentUuid },
 	});
 	if (!doc || doc.posted !== true || doc.deletedAt) return; // контроль только при проведении
+	// Настройка организации «Контроль остатков ТМЗ» выключена → минус разрешён.
+	if (!(await resolveStockControl(doc.organizationUuid, doc.date, client))) return;
 
 	const items = await client[cfg.itemModel].findMany({
 		where: { [cfg.parentField]: documentUuid },
@@ -547,6 +549,21 @@ export async function assertStockForPosting(
 	const cfg = DOC_CONFIG[documentType];
 	if (!cfg || !documentUuid) return;
 	if (!cfg.movements.some((m) => m.type === "out")) return; // приходный — пропуск
+
+	// Настройка организации «Контроль остатков ТМЗ»: выключена → расход в минус
+	// разрешён, проведение не блокируем. Организация/дата — из прогнозируемого
+	// документа (payload PUT), при отсутствии — из сохранённой записи.
+	let orgUuid = prospectiveDoc?.organizationUuid ?? null;
+	let docDate = prospectiveDoc?.date ?? null;
+	if (!orgUuid) {
+		const saved = await client[cfg.parentModel].findUnique({
+			where: { uuid: documentUuid },
+			select: { organizationUuid: true, date: true },
+		});
+		orgUuid = saved?.organizationUuid ?? null;
+		docDate = docDate ?? saved?.date ?? null;
+	}
+	if (!(await resolveStockControl(orgUuid, docDate, client))) return;
 
 	const allItems = await client[cfg.itemModel].findMany({
 		where: { [cfg.parentField]: documentUuid },

@@ -226,12 +226,19 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     // И хотя бы один товар в строках ведётся с таким учётом (row.product.track*).
     const anySerialTracked = liveRows.some((r) => (r.product as { trackSerialNumbers?: boolean } | undefined)?.trackSerialNumbers === true);
     const anyBatchTracked = liveRows.some((r) => (r.product as { trackBatches?: boolean } | undefined)?.trackBatches === true);
+    // Скидка/акциз: колонка нужна, если ВКЛЮЧЕНА настройка организации ИЛИ в
+    // документе уже есть значения. Второе обязательно: настройки историчны, и у
+    // старого документа (или после отключения флага) в строках могут лежать
+    // реальные суммы — спрятать колонку значило бы спрятать данные.
+    const num = (v: unknown) => Number(v ?? 0) || 0;
+    const anyDiscount = liveRows.some((r) => num(r.discountPercent) > 0 || num(r.discountAmount) > 0);
+    const anyExcise = liveRows.some((r) => num(r.exciseRate) > 0 || num(r.exciseAmount) > 0);
     let base = (columnsJson as unknown as TColumn[]).filter((c) => {
       const id = c.identifier;
       if (!hasPricing && PRICING_COLUMN_IDS.has(id)) return false;
       if (!isVatEnabled && VAT_COLUMN_IDS.has(id)) return false;
-      if (!useDiscount && DISCOUNT_COLUMN_IDS.has(id)) return false;
-      if (!useExcise && EXCISE_COLUMN_IDS.has(id)) return false;
+      if (!useDiscount && !anyDiscount && DISCOUNT_COLUMN_IDS.has(id)) return false;
+      if (!useExcise && !anyExcise && EXCISE_COLUMN_IDS.has(id)) return false;
       if (!isVatEnabled && AMOUNT_WITHOUT_VAT_IDS.has(id)) return false;
       if (!showEsfColumns && ESF_COLUMN_IDS.has(id)) return false;
       if (!showStockCountColumns && STOCKCOUNT_COLUMN_IDS.has(id)) return false;
