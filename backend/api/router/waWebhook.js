@@ -10,6 +10,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { checkVerifyRequest, checkSignature, extractEvents } from "../../services/wa/webhookVerify.js";
+import { prisma } from "../../prisma/prisma-client.js";
+import { saveIncoming } from "../../services/wa/conversations.js";
 
 const router = express.Router();
 
@@ -36,21 +38,54 @@ router.post("/wa/webhook", express.raw({ type: "application/json", limit: "2mb" 
 		let body;
 		try { body = JSON.parse(raw.toString("utf8")); } catch { body = null; }
 		const events = extractEvents(body);
-		for (const ev of events) {
-			// Лог без контента: только идентификаторы и типы.
-			if (ev.messages.length) {
-				console.log(`[wa] входящих: ${ev.messages.length} (канал ${ev.phoneNumberId}) ids=${ev.messages.map((m) => m.id).join(",")}`);
-			}
-			if (ev.statuses.length) {
-				console.log(`[wa] статусов: ${ev.statuses.length} (${ev.statuses.map((s) => `${s.id}:${s.status}`).join(",")})`);
-			}
-			// TODO(P0-2): find-or-create WaConversation + резолвинг контакта +
-			// downloadMedia + WaMessage + publish(type:"wa") — после миграции моделей.
-		}
+		// Обработка асинхронная: Мете отвечаем 200 сразу (иначе ретраи и отключение
+		// вебхука), ошибки разбора/записи остаются в логе.
+		void ingest(events).catch((e) => console.error("[wa] ошибка приёма:", e?.message || e));
+		return res.sendStatus(200);
 	} catch (e) {
 		console.error("[wa] ошибка обработки вебхука:", e?.message || e);
+		return res.sendStatus(200);
 	}
-	return res.sendStatus(200);
 });
+
+/** Сохранить входящие сообщения и статусы. Канал ищем по phone_number_id. */
+async function ingest(events) {
+	for (const ev of events) {
+		const channel = ev.phoneNumberId
+			? await prisma.waChannel.findFirst({
+				where: { providerAccountId: ev.phoneNumberId, isActive: true, deletedAt: null },
+			})
+			: null;
+		if (!channel) {
+			// Канал не заведён в справочнике — сообщение принять некуда.
+			console.warn(`[wa] неизвестный канал phone_number_id=${ev.phoneNumberId}`);
+			continue;
+		}
+		for (const m of ev.messages) {
+			// Лог без контента: переписка — персональные данные.
+			const r = await saveIncoming(prisma, {
+				channel,
+				phone: m.from,
+				body: m.text?.body ?? m.caption ?? null,
+				providerMessageId: m.id,
+				mediaType: m.type && m.type !== "text" ? m.type : null,
+				at: m.timestamp ? new Date(Number(m.timestamp) * 1000) : null,
+			});
+			console.log(`[wa] входящее ${m.id} → диалог ${r.conversation?.uuid}${r.duplicate ? " (дубль, пропущено)" : ""}`);
+		}
+		for (const st of ev.statuses) {
+			// Статус доставки исходящего: обновляем по wamid, если сообщение наше.
+			await prisma.waMessage.updateMany({
+				where: { providerMessageId: st.id },
+				data: { status: normalizeStatus(st.status) },
+			});
+		}
+	}
+}
+
+/** Статус Cloud API → enum WaMsgStatus (неизвестное не трогаем). */
+function normalizeStatus(s) {
+	return ["sent", "delivered", "read", "failed"].includes(s) ? s : "sent";
+}
 
 export default router;

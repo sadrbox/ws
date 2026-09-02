@@ -157,6 +157,10 @@
 	// width: 100%;
 	// height: $heightFieldInput;
 
+	label {
+		color: #aaaaaa;
+	}
+
 	// ── Table variant: no label, no border, stretch to fill td ──
 	&.tableVariant {
 		width: 100%;
@@ -247,7 +251,7 @@
 	align-items: center;
 	background-color: $fieldBackground;
 	border-radius: $radius2;
-	border: 1px solid $color34;
+	border: 1px solid $fieldBorder;
 	outline: none;
 	// flex: 1 1 100%;
 
@@ -314,6 +318,7 @@
 	.FieldActionHidden {
 		display: none;
 	}
+
 	background-color: transparent;
 	// Действия поля видны ВСЕГДА. Раньше они показывались только по :focus-within —
 	// пользователь не знал, что у поля вообще есть кнопки («Открыть», «Список»,
@@ -350,7 +355,7 @@
 	height: $heightFieldInput + 4px;
 	padding: 0 6px 0 4px;
 	background: $color60;
-	border: 1px solid $color34;
+	border: 1px solid $fieldBorder;
 	border-radius: $radius2;
 	overflow: hidden;
 	box-sizing: border-box;

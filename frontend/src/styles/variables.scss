@@ -1,6 +1,9 @@
 $color60: var(--sv-color60, #ffffff);
 $color30: var(--sv-color30, #eee);
 $color31: var(--sv-color31, #dfdfdf);
+// Граница поля ввода — ОТДЕЛЬНО от $color6 (цвет текста): их правки не должны
+// пересекаться, иначе настройка рамки гасит текст по всему приложению.
+$fieldBorder: var(--sv-fieldBorder, #bbb);
 $color33: var(--sv-color33, #ddd);
 $color34: var(--sv-color34, #bbb);
 $color10: var(--sv-color10, #aaa);

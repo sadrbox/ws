@@ -242,8 +242,12 @@ export const TableBody = memo(() => {
         </tr>
       )}
 
-      {visibleRows.map((row) => {
+      {visibleRows.map((row, i) => {
         const isActive = activeRow === row.id;
+        // Индекс в ПОЛНОМ списке, а не в отрисованном окне: при виртуализации
+        // :nth-child считал бы по DOM, и полосы «перекрашивались» бы при
+        // прокрутке. startIndexVirtual — начало окна в загруженном массиве.
+        const rowIndex = startIndexVirtual + i;
         const isSelected = isAllSelectedMode ? !excludedRows.has(row.id) : selectedRows.has(row.id);
         return (
           <TableBodyRow
@@ -252,6 +256,7 @@ export const TableBody = memo(() => {
             columns={visibleColumns}
             isActive={isActive}
             isSelected={isSelected}
+            rowIndex={rowIndex}
             // Активную ячейку передаём ТОЛЬКО активной строке — тогда переезд
             // активной ячейки внутри другой строки не трогает остальные.
             activeCellId={isActive ? activeCell : null}
@@ -290,6 +295,8 @@ interface TableBodyRowProps {
   isActive: boolean;
   /** Выбрана ли строка (чекбокс). */
   isSelected: boolean;
+  /** Индекс строки в ПОЛНОМ списке — для чередования фона (.odd/.even). */
+  rowIndex: number;
   /** Активная ячейка — только если активна ЭТА строка, иначе null. */
   activeCellId: string | null;
   /** Режим «выбрать все» — нужен в обработчике чекбокса. Меняется редко. */
@@ -297,7 +304,7 @@ interface TableBodyRowProps {
 }
 
 
-const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, activeCellId, isAllSelectedMode }) => {
+const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isAllSelectedMode }) => {
   const {
     variant, selectable,
     onSelectItem,
@@ -493,6 +500,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   };
 
   const trClassName = [
+    // Чередование фона (зебра). Классы, а не :nth-child — см. комментарий у
+    // rowIndex: при виртуализации DOM-позиция не равна номеру строки.
+    rowIndex % 2 === 0 ? styles.even : styles.odd,
     isActive && styles.activeRow,
     isLoading && styles.RowLoading,
   ].filter(Boolean).join(' ');

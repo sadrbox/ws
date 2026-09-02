@@ -65,19 +65,29 @@
        приложения снятый чекбокс получался белым квадратом на графите.
        Тема здесь opt-in (всегда явный data-theme), поэтому схему задаём явно. */
     color-scheme: light;
-    --color-link: #1c5fcb;      /* интерактивный акцент (= $colorPrimaryDark) */
-    --text-secondary: #555555;  /* приглушённый основной текст */
-    --text-muted: #999999;      /* подписи, плейсхолдеры */
-    --text-faint: #bbbbbb;      /* самый тихий текст, «—» */
-    --success: #1a7f37;         /* успех, положительная дельта */
-    --success-fg: #145523;      /* текст на светло-зелёном фоне */
+    --color-link: #1c5fcb;
+    /* интерактивный акцент (= $colorPrimaryDark) */
+    --text-secondary: #555555;
+    /* приглушённый основной текст */
+    --text-muted: #999999;
+    /* подписи, плейсхолдеры */
+    --text-faint: #bbbbbb;
+    /* самый тихий текст, «—» */
+    --success: #1a7f37;
+    /* успех, положительная дельта */
+    --success-fg: #145523;
+    /* текст на светло-зелёном фоне */
     --success-bg: #e6f4ea;
-    --warning: #b35900;         /* внимание (акциз/незаполнено) */
+    --warning: #b35900;
+    /* внимание (акциз/незаполнено) */
     --warning-strong: #e65100;
-    --danger: #d32f2f;          /* ошибка/удаление */
-    --danger-fg: #6b1119;       /* текст на светло-красном фоне */
+    --danger: #d32f2f;
+    /* ошибка/удаление */
+    --danger-fg: #6b1119;
+    /* текст на светло-красном фоне */
     --danger-bg: #fde2e4;
-    --surface-muted: #f5f5f5;   /* нейтральная подложка блока */
+    --surface-muted: #f5f5f5;
+    /* нейтральная подложка блока */
     /* Шкала отступов и скруглений (дизайн-система). Отступы/gap — ТОЛЬКО 3/6/12px,
        радиусы — ТОЛЬКО 3/6px. Новые компоненты используют эти токены, а не «магические»
        значения; существующие приводятся к шкале поэтапно. */
@@ -97,6 +107,9 @@
     --sv-color5: #888;
     --sv-color51: #666;
     --sv-color6: #222;
+    /* Граница поля ввода. ОТДЕЛЬНЫЙ токен: раньше здесь стоял $color6 —
+       тот же токен, что цвет ТЕКСТА (66 мест), и его правка гасила текст. */
+    --sv-fieldBorder: #bbb;
     --sv-colorTheme: #6aa3ff;
     --sv-color1: #6aa3ff;
     --sv-color2: #bcd6ff;
@@ -149,7 +162,8 @@
     --sv-successSoftBg: #f0fdf4;
     --sv-successSoftBorder: #bbf7d0;
     --sv-warnAccent: #d97706;
-    --btn-gold-from: #ffe240; /* CTA-градиент (светлая) */
+    --btn-gold-from: #ffe240;
+    /* CTA-градиент (светлая) */
     --btn-gold-to: #caac00;
     /* Нейтральная шкала (E5): светлое значение = исходный цвет из стилей,
        поэтому светлая тема не изменилась; тёмное — зеркальная светлота. */
@@ -285,6 +299,7 @@
     --sv-warnSoftBorder: #fde68a;
     --sv-warnSoftText: #92400e;
   }
+
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
@@ -310,6 +325,7 @@
       --sv-color5: #828b98;
       --sv-color51: #aeb6c0;
       --sv-color6: #c9cfd8;
+      --sv-fieldBorder: #000;
       --sv-colorTheme: #7aa7dd;
       --sv-color1: #7aa7dd;
       --sv-color2: #262f3b;
@@ -362,12 +378,14 @@
       --sv-successSoftBg: #17281d;
       --sv-successSoftBorder: #2e7d52;
       --sv-warnAccent: #d9a53f;
-      --btn-gold-from: #c8952b; /* CTA-градиент (тёмная — приглушённый янтарь) */
+      --btn-gold-from: #c8952b;
+      /* CTA-градиент (тёмная — приглушённый янтарь) */
       --btn-gold-to: #a87b12;
-      --sv-btnFace: #292e36;
-      --sv-btnFaceHover: #333942;
-      --sv-btnDangerBorder: #5a3a42;
-      --sv-btnDangerHover: #33252a;
+      --sv-btnFace: #c9cfd8;
+      --sv-btnFaceHover: #dfe4ea;
+      --sv-btnDangerBorder: #b3737d;
+      --sv-btnDangerText: #9b2230;
+      --sv-btnDangerHover: #f0d7da;
       --sv-warnSoftBg: #2a2413;
       --sv-warnSoftBorder: #6b5a1f;
       --n-00: #ffffff;
@@ -498,8 +516,10 @@
       --sv-warnSoftText: #f0c088;
     }
   }
+
   :root[data-theme="dark"] {
     color-scheme: dark;
+    --sv-fieldBorder: #000;
     --c-amber-12: #fff6c2;
     --c-amber-50: #ffde5c;
     --c-amber-86: #473900;
@@ -626,10 +646,17 @@
     --n-98e: #0a0000;
     --n-98f: #00030a;
     --color-link: #7aa7dd;
-    --text-secondary: #aeb6c0; --text-muted: #828b98; --text-faint: #5f6773;
-    --success: #5fae76; --success-fg: #a8d5b5; --success-bg: #17281d;
-    --warning: #d9a53f; --warning-strong: #d9a53f;
-    --danger: #dd7581; --danger-fg: #efc0c6; --danger-bg: #2b191e;
+    --text-secondary: #aeb6c0;
+    --text-muted: #828b98;
+    --text-faint: #5f6773;
+    --success: #5fae76;
+    --success-fg: #a8d5b5;
+    --success-bg: #17281d;
+    --warning: #d9a53f;
+    --warning-strong: #d9a53f;
+    --danger: #dd7581;
+    --danger-fg: #efc0c6;
+    --danger-bg: #2b191e;
     --surface-muted: #242830;
     --sv-color60: #1c2027;
     --sv-color30: #1f232a;
@@ -692,12 +719,14 @@
     --sv-successSoftBg: #17281d;
     --sv-successSoftBorder: #2e7d52;
     --sv-warnAccent: #d9a53f;
-    --btn-gold-from: #c8952b; /* CTA-градиент (тёмная) */
+    --btn-gold-from: #c8952b;
+    /* CTA-градиент (тёмная) */
     --btn-gold-to: #a87b12;
-      --sv-btnFace: #292e36;
-      --sv-btnFaceHover: #333942;
-      --sv-btnDangerBorder: #5a3a42;
-      --sv-btnDangerHover: #33252a;
+    --sv-btnFace: #c9cfd8;
+    --sv-btnFaceHover: #dfe4ea;
+    --sv-btnDangerBorder: #b3737d;
+    --sv-btnDangerText: #9b2230;
+    --sv-btnDangerHover: #f0d7da;
     --sv-warnSoftBg: #2a2413;
     --sv-warnSoftBorder: #6b5a1f;
     --sv-warnSoftText: #f0c088;

@@ -1,58 +1,56 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// API панели «Коммуникации» (E14/W1-W2, ТЗ §7). Под authMiddleware/tenantFilter.
-//
-// Отправка наружу (provider.sendText) пока НЕ подключена — WhatsApp API не
-// настроен. Исходящее сообщение сохраняется со статусом `queued`: переписка
-// ведётся и хранится, а при подключении провайдера очередь начнёт уходить в сеть
-// (см. W4). Это позволяет пользоваться панелью уже сейчас.
+// API панели «Коммуникации» (этап W2). Под authMiddleware + tenantFilter:
+// диалоги принадлежат организации канала, пользователь видит только свои.
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
-import { publish } from "../../services/chatBus.js";
-import { normalizePhone } from "../../services/wa/phone.js";
-import { resolveContactByPhone } from "../../services/wa/resolveContact.js";
+import { normalizePhone } from "../../services/wa/resolveContact.js";
+import { queueOutgoing, markRead, isWindowOpen, saveIncoming } from "../../services/wa/conversations.js";
 
 const router = express.Router();
 
-// Орг-изоляция: tenantFilter сам отдаёт готовый WHERE-фрагмент
-// ({} суперадмину, {organizationUuid} или {organizationUuid:{in:[…]}}).
-const orgWhere = (req) => tenantFilter(req);
-
-/** Активная организация пользователя (для создания записей). */
-function activeOrg(req) {
-	return req.user?.organizationUuid || req.user?.allowedOrgUuids?.[0] || null;
+/** Организации, доступные пользователю (для изоляции выборок). */
+function orgWhere(req) {
+	const f = tenantFilter(req);
+	return f?.organizationUuid ? { organizationUuid: f.organizationUuid } : {};
 }
 
-// ── Список диалогов ──────────────────────────────────────────────────────────
+// ── Диалоги ──────────────────────────────────────────────────────────────────
 router.get("/wa/conversations", async (req, res) => {
 	try {
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const items = await prisma.waConversation.findMany({
-			where: {
-				deletedAt: null,
-				...orgWhere(req),
-				...(search
-					? { OR: [{ phone: { contains: normalizePhone(search) || search } }, { displayName: { contains: search, mode: "insensitive" } }] }
-					: {}),
-			},
+		const rows = await prisma.waConversation.findMany({
+			where: { deletedAt: null, ...orgWhere(req) },
 			orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
 			take: 200,
 		});
-		// Подписи: контактное лицо и контрагент — одним проходом, без N+1.
-		const personUuids = [...new Set(items.map((i) => i.contactPersonUuid).filter(Boolean))];
-		const cpUuids = [...new Set(items.map((i) => i.counterpartyUuid).filter(Boolean))];
-		const [persons, counterparties] = await Promise.all([
+		// Подписи собеседников: контактное лицо / контрагент — одним запросом каждый.
+		const personUuids = [...new Set(rows.map((r) => r.contactPersonUuid).filter(Boolean))];
+		const cpUuids = [...new Set(rows.map((r) => r.counterpartyUuid).filter(Boolean))];
+		const [persons, cps] = await Promise.all([
 			personUuids.length ? prisma.contactPerson.findMany({ where: { uuid: { in: personUuids } }, select: { uuid: true, fullName: true, firstName: true, lastName: true } }) : [],
 			cpUuids.length ? prisma.counterparty.findMany({ where: { uuid: { in: cpUuids } }, select: { uuid: true, name: true } }) : [],
 		]);
-		const pName = (p) => p.fullName || [p.lastName, p.firstName].filter(Boolean).join(" ") || null;
-		const pm = new Map(persons.map((p) => [p.uuid, pName(p)]));
-		const cm = new Map(counterparties.map((c) => [c.uuid, c.name]));
-		return res.json({
-			success: true,
-			items: items.map((i) => ({ ...i, contactPersonName: pm.get(i.contactPersonUuid) ?? null, counterpartyName: cm.get(i.counterpartyUuid) ?? null })),
-		});
+		const pMap = new Map(persons.map((p) => [p.uuid, p.fullName || [p.lastName, p.firstName].filter(Boolean).join(" ")]));
+		const cMap = new Map(cps.map((c) => [c.uuid, c.name]));
+
+		let items = rows.map((r) => ({
+			...r,
+			contactPersonName: r.contactPersonUuid ? pMap.get(r.contactPersonUuid) ?? null : null,
+			counterpartyName: r.counterpartyUuid ? cMap.get(r.counterpartyUuid) ?? null : null,
+			windowOpen: isWindowOpen(r),
+		}));
+		if (search) {
+			const q = search.toLowerCase();
+			const qPhone = normalizePhone(search);
+			items = items.filter((i) =>
+				i.phone.includes(qPhone) ||
+				(i.displayName ?? "").toLowerCase().includes(q) ||
+				(i.contactPersonName ?? "").toLowerCase().includes(q) ||
+				(i.counterpartyName ?? "").toLowerCase().includes(q));
+		}
+		return res.json({ success: true, items });
 	} catch (e) {
 		console.error("GET /wa/conversations error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -62,169 +60,176 @@ router.get("/wa/conversations", async (req, res) => {
 // ── Сообщения диалога ────────────────────────────────────────────────────────
 router.get("/wa/conversations/:uuid/messages", async (req, res) => {
 	try {
-		const conv = await prisma.waConversation.findFirst({ where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) } });
+		const conv = await prisma.waConversation.findFirst({
+			where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) },
+		});
 		if (!conv) return res.status(404).json({ success: false, message: "Диалог не найден" });
 		const items = await prisma.waMessage.findMany({
 			where: { conversationUuid: conv.uuid, deletedAt: null },
 			orderBy: { createdAt: "asc" },
 			take: 500,
 		});
-		return res.json({ success: true, items });
+		return res.json({ success: true, items, windowOpen: isWindowOpen(conv) });
 	} catch (e) {
-		console.error("GET /wa/messages error:", e);
+		console.error("GET /wa/conversations/:uuid/messages error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── Отправить сообщение (пока в очередь: провайдер не подключён) ─────────────
+// ── Отправка (провайдер подключается на W4: пока ставим в очередь) ───────────
 router.post("/wa/conversations/:uuid/messages", async (req, res) => {
 	try {
 		if (!req.user?.uuid) return res.status(401).json({ success: false, message: "Требуется авторизация" });
 		const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
 		if (!body) return res.status(400).json({ success: false, message: "Пустое сообщение" });
-		const conv = await prisma.waConversation.findFirst({ where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) } });
-		if (!conv) return res.status(404).json({ success: false, message: "Диалог не найден" });
-
-		const msg = await prisma.waMessage.create({
-			data: {
-				conversationUuid: conv.uuid,
-				organizationUuid: conv.organizationUuid,
-				direction: "out",
-				body,
-				authorUuid: req.user.uuid,
-				status: "queued", // отправка наружу — после подключения провайдера (W4)
-			},
+		const conv = await prisma.waConversation.findFirst({
+			where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) },
 		});
-		await prisma.waConversation.update({ where: { uuid: conv.uuid }, data: { lastMessageAt: msg.createdAt } });
-		publish(conv.organizationUuid, { type: "wa", kind: "message", conversationUuid: conv.uuid });
-		return res.json({ success: true, item: msg });
+		if (!conv) return res.status(404).json({ success: false, message: "Диалог не найден" });
+		// Окно 24ч: вне его Cloud API принимает только утверждённые шаблоны.
+		if (!isWindowOpen(conv)) {
+			return res.status(409).json({
+				success: false, code: "WINDOW_CLOSED",
+				message: "Прошло больше 24 часов с последнего входящего — свободный текст недоступен, нужен утверждённый шаблон.",
+			});
+		}
+		const message = await queueOutgoing(prisma, { conversation: conv, body, authorUuid: req.user.uuid });
+		return res.json({ success: true, item: message });
 	} catch (e) {
-		console.error("POST /wa/messages error:", e);
+		console.error("POST /wa/conversations/:uuid/messages error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── Отметить прочитанным ─────────────────────────────────────────────────────
+// ── Прочитано ────────────────────────────────────────────────────────────────
 router.post("/wa/conversations/:uuid/read", async (req, res) => {
 	try {
-		const conv = await prisma.waConversation.findFirst({ where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) } });
+		const conv = await prisma.waConversation.findFirst({
+			where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) },
+		});
 		if (!conv) return res.status(404).json({ success: false, message: "Диалог не найден" });
-		await prisma.waConversation.update({ where: { uuid: conv.uuid }, data: { unreadCount: 0 } });
-		return res.json({ success: true });
+		const updated = await markRead(prisma, conv.uuid);
+		return res.json({ success: true, item: updated });
 	} catch (e) {
-		console.error("POST /wa/read error:", e);
+		console.error("POST /wa/conversations/:uuid/read error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── Привязать контактное лицо вручную (незнакомый номер) ─────────────────────
+// ── Ручная привязка контактного лица (для «неизвестных» номеров) ─────────────
 router.post("/wa/conversations/:uuid/link", async (req, res) => {
 	try {
-		const { contactPersonUuid = null, counterpartyUuid = null } = req.body || {};
-		const conv = await prisma.waConversation.findFirst({ where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) } });
+		const { contactPersonUuid = null, counterpartyUuid = null } = req.body ?? {};
+		const conv = await prisma.waConversation.findFirst({
+			where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) },
+		});
 		if (!conv) return res.status(404).json({ success: false, message: "Диалог не найден" });
 
-		// Контрагент выводим из лица, если явно не передан.
+		let displayName = conv.displayName;
 		let cpUuid = counterpartyUuid;
-		if (contactPersonUuid && !cpUuid) {
-			const person = await prisma.contactPerson.findFirst({ where: { uuid: contactPersonUuid, deletedAt: null }, select: { ownerType: true, ownerUuid: true } });
-			if (person?.ownerType === "Counterparty") cpUuid = person.ownerUuid;
-		}
-		const updated = await prisma.waConversation.update({
-			where: { uuid: conv.uuid },
-			data: { contactPersonUuid, counterpartyUuid: cpUuid },
-		});
-
-		// Запоминаем номер за владельцем — следующий резолвинг будет автоматическим (ТЗ §5.5).
-		const ownerUuid = contactPersonUuid || cpUuid;
-		const ownerType = contactPersonUuid ? "ContactPerson" : cpUuid ? "Counterparty" : null;
-		if (ownerType) {
-			const exists = await prisma.contact.findFirst({
-				where: { deletedAt: null, contactType: "whatsapp", ownerType, ownerUuid, value: { contains: conv.phone.slice(-7) } },
-				select: { id: true },
+		if (contactPersonUuid) {
+			const p = await prisma.contactPerson.findFirst({ where: { uuid: contactPersonUuid, deletedAt: null } });
+			if (!p) return res.status(400).json({ success: false, message: "Контактное лицо не найдено" });
+			displayName = p.fullName || [p.lastName, p.firstName].filter(Boolean).join(" ") || displayName;
+			// Контрагент — владелец лица, если явно не передан.
+			if (!cpUuid && p.ownerType === "Counterparty") cpUuid = p.ownerUuid;
+			// Запоминаем номер в контактах лица — следующий резолвинг будет автоматическим.
+			const already = await prisma.contact.findFirst({
+				where: { deletedAt: null, contactType: "whatsapp", ownerType: "ContactPerson", ownerUuid: p.uuid },
 			});
-			if (!exists) {
+			if (!already) {
 				await prisma.contact.create({
-					data: { value: `+${conv.phone}`, contactType: "whatsapp", ownerType, ownerUuid, organizationUuid: conv.organizationUuid },
+					data: {
+						value: `+${conv.phone}`, contactType: "whatsapp",
+						ownerType: "ContactPerson", ownerUuid: p.uuid,
+						organizationUuid: conv.organizationUuid,
+					},
 				});
 			}
 		}
+		const updated = await prisma.waConversation.update({
+			where: { id: conv.id },
+			data: { contactPersonUuid: contactPersonUuid || null, counterpartyUuid: cpUuid || null, displayName },
+		});
 		return res.json({ success: true, item: updated });
 	} catch (e) {
-		console.error("POST /wa/link error:", e);
+		console.error("POST /wa/conversations/:uuid/link error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── Сводка по собеседнику (правая панель, ТЗ §8.3) ───────────────────────────
+// ── Сводка по собеседнику (правая панель) ───────────────────────────────────
 router.get("/wa/contact-summary/:uuid", async (req, res) => {
 	try {
-		const conv = await prisma.waConversation.findFirst({ where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) } });
-		if (!conv) return res.status(404).json({ success: false, message: "Диалог не найден" });
+		const conversation = await prisma.waConversation.findFirst({
+			where: { uuid: req.params.uuid, deletedAt: null, ...orgWhere(req) },
+		});
+		if (!conversation) return res.status(404).json({ success: false, message: "Диалог не найден" });
 
-		const person = conv.contactPersonUuid
-			? await prisma.contactPerson.findFirst({ where: { uuid: conv.contactPersonUuid, deletedAt: null } })
+		const contactPerson = conversation.contactPersonUuid
+			? await prisma.contactPerson.findFirst({
+				where: { uuid: conversation.contactPersonUuid, deletedAt: null },
+				select: { uuid: true, fullName: true, firstName: true, lastName: true, comment: true },
+			})
 			: null;
-		const counterparty = conv.counterpartyUuid
-			? await prisma.counterparty.findFirst({ where: { uuid: conv.counterpartyUuid, deletedAt: null }, select: { uuid: true, name: true, bin: true } })
+		const counterparty = conversation.counterpartyUuid
+			? await prisma.counterparty.findFirst({
+				where: { uuid: conversation.counterpartyUuid, deletedAt: null },
+				select: { uuid: true, name: true, bin: true },
+			})
 			: null;
-		// Контакты владельца (телефоны/почта) — для карточки.
-		const contacts = person || counterparty
+
+		// Все контакты собеседника: лица (если известно) либо контрагента.
+		const ownerUuid = contactPerson?.uuid ?? counterparty?.uuid ?? null;
+		const ownerType = contactPerson ? "ContactPerson" : counterparty ? "Counterparty" : null;
+		const contacts = ownerUuid
 			? await prisma.contact.findMany({
-				where: {
-					deletedAt: null,
-					ownerType: person ? "ContactPerson" : "Counterparty",
-					ownerUuid: person ? person.uuid : counterparty.uuid,
-				},
+				where: { deletedAt: null, ownerType, ownerUuid },
 				select: { value: true, contactType: true, isPrimary: true },
+				orderBy: [{ isPrimary: "desc" }, { id: "asc" }],
 			})
 			: [];
-		// Последние документы контрагента.
+
+		// Последние документы контрагента — контекст переписки.
 		const sales = counterparty
 			? await prisma.sale.findMany({
-				where: { deletedAt: null, counterpartyUuid: counterparty.uuid },
-				orderBy: { date: "desc" }, take: 5,
+				where: { counterpartyUuid: counterparty.uuid, deletedAt: null },
 				select: { uuid: true, number: true, date: true, amount: true, posted: true },
+				orderBy: { date: "desc" },
+				take: 5,
 			})
 			: [];
-		return res.json({ success: true, conversation: conv, contactPerson: person, counterparty, contacts, sales });
+
+		return res.json({ success: true, conversation, contactPerson, counterparty, contacts, sales });
 	} catch (e) {
-		console.error("GET /wa/contact-summary error:", e);
+		console.error("GET /wa/contact-summary/:uuid error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
 });
 
-// ── Тестовый диалог: имитация входящего (пока провайдер не подключён) ────────
-// Позволяет проверить панель/резолвинг без Meta. Доступно суперадмину.
+// ── Имитация входящего (пока провайдер не подключён) ────────────────────────
+// Позволяет проверить весь путь: резолвинг номера → диалог → SSE → панель,
+// не дожидаясь боевого номера WhatsApp. Только суперадмин.
 router.post("/wa/simulate-incoming", async (req, res) => {
 	try {
 		if (!req.user?.isSuperAdmin) return res.status(403).json({ success: false, message: "Только суперадмин" });
-		const phone = normalizePhone(req.body?.phone);
-		const text = typeof req.body?.body === "string" ? req.body.body : "";
-		const organizationUuid = req.body?.organizationUuid || activeOrg(req);
-		if (!phone || !organizationUuid) return res.status(400).json({ success: false, message: "Нужны phone и organizationUuid" });
+		const phone = String(req.body?.phone ?? "").trim();
+		const body = String(req.body?.body ?? "").trim();
+		if (!phone || !body) return res.status(400).json({ success: false, message: "Нужны phone и body" });
 
-		let channel = await prisma.waChannel.findFirst({ where: { organizationUuid, deletedAt: null } });
+		// Канал: активный канал организации пользователя (или первый активный).
+		const f = tenantFilter(req);
+		const channel = await prisma.waChannel.findFirst({
+			where: { isActive: true, deletedAt: null, ...(f?.organizationUuid ? { organizationUuid: f.organizationUuid } : {}) },
+		});
 		if (!channel) {
-			channel = await prisma.waChannel.create({ data: { organizationUuid, name: "Тестовый канал", phone: "0", provider: "mock" } });
+			return res.status(400).json({ success: false, message: "Нет активного WhatsApp-канала: заведите его в справочнике каналов" });
 		}
-		let conv = await prisma.waConversation.findFirst({ where: { channelUuid: channel.uuid, phone } });
-		if (!conv) {
-			const resolved = await resolveContactByPhone(prisma, { phone, organizationUuid });
-			conv = await prisma.waConversation.create({
-				data: { channelUuid: channel.uuid, organizationUuid, phone, contactPersonUuid: resolved.contactPersonUuid, counterpartyUuid: resolved.counterpartyUuid },
-			});
-		}
-		const now = new Date();
-		const msg = await prisma.waMessage.create({
-			data: { conversationUuid: conv.uuid, organizationUuid, direction: "in", body: text, status: "received" },
+		const r = await saveIncoming(prisma, {
+			channel, phone, body,
+			providerMessageId: `sim.${Date.now()}`,
 		});
-		await prisma.waConversation.update({
-			where: { uuid: conv.uuid },
-			data: { lastMessageAt: now, lastIncomingAt: now, unreadCount: { increment: 1 } },
-		});
-		publish(organizationUuid, { type: "wa", kind: "message", conversationUuid: conv.uuid });
-		return res.json({ success: true, conversationUuid: conv.uuid, item: msg });
+		return res.json({ success: true, conversationUuid: r.conversation.uuid });
 	} catch (e) {
 		console.error("POST /wa/simulate-incoming error:", e);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });

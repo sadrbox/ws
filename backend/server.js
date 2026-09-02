@@ -357,9 +357,9 @@ app.use("/api/v1", auditMiddleware);
 // модуля. Безопасен по умолчанию (не-POST/неизвестный путь/нет org → пропуск).
 app.use("/api/v1", moduleGuardMiddleware);
 
+app.use("/api/v1", waRouter);
 app.use("/api/v1", modulesRouter);
 app.use("/api/v1", dealsRouter);
-app.use("/api/v1", waRouter);
 app.use("/api/v1", backupRouter);
 app.use("/api/v1", apiv1);
 app.use("/api/v1", counterpartiesRouter);
