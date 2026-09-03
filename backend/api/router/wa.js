@@ -5,7 +5,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
-import { normalizePhone } from "../../services/wa/resolveContact.js";
+import { normalizePhone } from "../../services/wa/phone.js";
 import { queueOutgoing, markRead, isWindowOpen, saveIncoming } from "../../services/wa/conversations.js";
 
 const router = express.Router();
