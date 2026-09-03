@@ -17,6 +17,8 @@ import { createLogger, type Logger } from "./logger.ts";
 import { createPools, type Db } from "./db/pool.ts";
 import { migrate } from "./db/migrate.ts";
 import { AgentService } from "./agents/service.ts";
+import { BaseService } from "./bases/service.ts";
+import { onecRouter } from "./http/onecRouter.ts";
 import { CommandQueue } from "./commands/queue.ts";
 import { Audit } from "./audit/index.ts";
 import { agentRouter } from "./http/agentRouter.ts";
@@ -83,6 +85,7 @@ function createExtractor(cfg: Config, log: Logger): StatementExtractor | null {
 export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; agents: AgentService; workflow: ChatWorkflow | null } {
 	const { cfg, log, db, erp } = deps;
 	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS, cfg.AGENT_ORG_BINDING);
+	const baseRegistry = new BaseService(db);
 	const queue = new CommandQueue(db);
 	const audit = new Audit(db, log);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;
@@ -137,7 +140,9 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		res.json({ success: true, data: { service: "buhprof-ai", version: VERSION, status: "ok", chat: !!workflow, timestamp: new Date().toISOString() } });
 	});
 
-	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, queue, audit }));
+	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
+	app.use("/v1/onec", onecRouter({ erp, cfg, log, agents, bases: baseRegistry, queue, audit }));
+	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));
 	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION }));
 

@@ -12,7 +12,8 @@ import type { TTableVariant } from "src/components/Table";
 import { Field, FieldNumber, FieldDateTime, FieldSelect } from "src/components/Field";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useAssignNumber } from "src/hooks/useAssignNumber";
-import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
+import { useRefillAction } from "src/hooks/useRefillAction";
+import ConfirmModal from "src/components/ConfirmModal";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { refillFromBasisSource, type BasisSource } from "src/utils/createFromBasis";
 import { cashOperationTypes, defaultCashOperationType, findCashOperationType, type CashDirection } from "src/models/_shared/cashOperationTypes";
@@ -300,6 +301,10 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       }
     }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, refillHeaderFromBasis]);
 
+    // Кассовый ордер строк не имеет — перезаполняется шапка; подтверждение всё
+    // равно нужно: кнопка стоит рядом с «Очистить» в ряду действий поля.
+    const refill = useRefillAction({ run: handleRefillFromBasis });
+
     // Смена типа операции: если текущее основание не входит в допустимые — очистить.
     const handleOperationTypeChange = useCallback((value: string) => {
       const op = findCashOperationType(value);
@@ -443,6 +448,8 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
                     onClear={handleBasisClear}
                     mismatch={basisMismatch.mismatch}
                     mismatchDetails={basisMismatch.differences}
+                    onRefill={hasBasis ? refill.onRefill : undefined}
+                    refilling={isRefilling}
                   />
                 </GroupCol>
               )}
@@ -509,15 +516,6 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
           {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <><NotesButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <CreateTaskButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /></>} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
-          {hasBasis && (
-            <RefillFromBasisButton
-              mismatch={basisMismatch.mismatch}
-              mismatchDetails={basisMismatch.differences}
-              disabled={form.isLoading || isRefilling}
-              loading={isRefilling}
-              onClick={() => void handleRefillFromBasis()}
-            />
-          )}
           {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
         </>
       ),
@@ -535,6 +533,7 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
             marksEndpoint={cfg.endpoint} marksUuid={form.fields.uuid} marksOrganizationUuid={form.fields.organizationUuid}
           />
           {headerActionsPortal}
+          <ConfirmModal {...refill.confirmState} />
         </FormDirtyScope>
       </FormRequiredScope>
     );

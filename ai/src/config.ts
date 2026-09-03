@@ -28,6 +28,11 @@ const schema = z.object({
 	POLL_MAX_WAIT_SECS: z.coerce.number().int().min(1).max(60).default(30),
 	// Агент считается офлайн, если heartbeat не приходил дольше этого.
 	AGENT_OFFLINE_AFTER_SECS: z.coerce.number().int().min(10).default(90),
+	// Как часто агент присылает ПОЛНЫЙ срез по базам (E15/A2). Между полными срезами — только
+	// изменения: сто баз каждые 30 секунд — это лишний трафик и лишние обращения к кластеру.
+	// Решение принимает сервер и сообщает его в ответе на heartbeat, поэтому интервал меняется
+	// без переустановки службы на сервере 1С.
+	AGENT_BASES_FULL_EVERY_SECS: z.coerce.number().int().min(30).max(3600).default(300),
 	// Привязка агентов к организациям ERP: strict — команды идут только агенту своей организации;
 	// any — если у организации агента нет, берётся любой онлайн-агент (режим разработки на одном стенде).
 	AGENT_ORG_BINDING: z.enum(["strict", "any"]).default("strict"),
@@ -51,6 +56,10 @@ const schema = z.object({
 	// Лимиты на пользователя в минуту: ходы чата и ходы с вложениями (распознавание PDF — дорого). 0 — без лимита.
 	RATE_LIMIT_CHAT_PER_MIN: z.coerce.number().int().min(0).max(1000).default(30),
 	RATE_LIMIT_ATTACHMENTS_PER_MIN: z.coerce.number().int().min(0).max(100).default(6),
+	// Предел обращений к КЛАСТЕРУ 1С в минуту — на организацию, а не на пользователя (E15/A6):
+	// у сотни баз один кластер, и три администратора с открытой панелью сеансов дают тройную
+	// нагрузку на rac. Локальное чтение реестра баз сюда не входит — оно не трогает кластер.
+	RATE_LIMIT_ONEC_CLUSTER_PER_MIN: z.coerce.number().int().min(0).max(600).default(60),
 });
 
 export type Config = z.infer<typeof schema>;
@@ -79,7 +88,7 @@ export function describe(cfg: Config): Record<string, unknown> {
 		allowedOrigins: cfg.ALLOWED_ORIGINS,
 		agentOrgBinding: cfg.AGENT_ORG_BINDING,
 		retention: `files ${cfg.FILE_TTL_DAYS}d, conversations ${cfg.CONVERSATION_TTL_DAYS}d`,
-		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min`,
+		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на организацию`,
 	};
 }
 

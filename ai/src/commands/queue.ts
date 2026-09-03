@@ -19,6 +19,8 @@ export type CommandState = "queued" | "dispatched" | "done" | "failed" | "expire
 export type EnqueueInput = {
 	agentId: string;
 	organizationUuid: string;
+	/** Имя базы в кластере; null — агент протокола v1, у которого база одна (DEFAULT_BASE_KEY). */
+	baseKey?: string | null;
 	type: string;
 	payload: Record<string, unknown>;
 	requestId?: string | null;
@@ -31,6 +33,7 @@ export type CommandRow = {
 	id: string;
 	agent_id: string;
 	organization_uuid: string;
+	base_key: string | null;
 	request_id: string | null;
 	type: string;
 	payload: Record<string, unknown>;
@@ -48,7 +51,7 @@ export type CommandRow = {
 };
 
 /** Команда в формате протокола агента. */
-export type WireCommand = { id: string; requestId?: string; type: string; payload: Record<string, unknown> };
+export type WireCommand = { id: string; requestId?: string; baseKey?: string; type: string; payload: Record<string, unknown> };
 
 export type WireResult = {
 	commandId: string;
@@ -84,13 +87,31 @@ export class CommandQueue {
 	async enqueue(input: EnqueueInput): Promise<CommandRow> {
 		const id = "cmd_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
 		const ttl = Math.max(30, input.ttlSeconds ?? 3600);
+		const baseKey = input.baseKey ?? null;
+		// ON CONFLICT — по частичному уникальному индексу (agent_id, base_key, request_id) среди
+		// НЕЗАВЕРШЁННЫХ команд: повторная постановка той же команды (двойное нажатие, ретрай HTTP)
+		// возвращает уже стоящую в очереди, а не создаёт вторую. Идемпотентность самой операции
+		// в 1С обеспечивает requestId — здесь мы защищаем только очередь.
 		const r = await this.db.query<CommandRow>(
-			`INSERT INTO commands (id, agent_id, organization_uuid, request_id, type, payload, user_uuid, conversation_id, expires_at)
-			 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, now() + ($9 || ' seconds')::interval)
+			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval)
+			 ON CONFLICT (agent_id, COALESCE(base_key, ''), request_id)
+			     WHERE request_id IS NOT NULL AND state IN ('queued', 'dispatched') DO NOTHING
 			 RETURNING *`,
-			[id, input.agentId, input.organizationUuid, input.requestId ?? null, input.type,
+			[id, input.agentId, input.organizationUuid, baseKey, input.requestId ?? null, input.type,
 				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(ttl)],
 		);
+		if (!r.rows[0]) {
+			const existing = await this.db.query<CommandRow>(
+				`SELECT * FROM commands
+				  WHERE agent_id = $1 AND COALESCE(base_key, '') = COALESCE($2, '') AND request_id = $3
+				    AND state IN ('queued', 'dispatched')
+				  ORDER BY created_at LIMIT 1`,
+				[input.agentId, baseKey, input.requestId ?? null],
+			);
+			if (existing.rows[0]) return existing.rows[0];
+			throw new Error("команда не поставлена в очередь");
+		}
 		this.bell.emit(input.agentId);
 		return r.rows[0];
 	}
@@ -127,6 +148,7 @@ export class CommandQueue {
 		return r.rows.map((c) => ({
 			id: c.id,
 			...(c.request_id ? { requestId: c.request_id } : {}),
+			...(c.base_key ? { baseKey: c.base_key } : {}),
 			type: c.type,
 			payload: c.payload ?? {},
 		}));
@@ -193,6 +215,7 @@ export class CommandQueue {
 		return {
 			id: c.id,
 			agentId: c.agent_id,
+			baseKey: c.base_key,
 			type: c.type,
 			requestId: c.request_id,
 			state: c.state,

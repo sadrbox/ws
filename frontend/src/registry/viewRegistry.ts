@@ -77,6 +77,7 @@ export const UserPerformanceList = lazyView("UserPerformanceList", () => import(
 export const ChatList = lazyView("ChatList", () => import('src/models/Chat').then(m => ({ default: m.ChatList })));
 export const CommunicationsPanel = lazyView("CommunicationsPanel", () => import('src/models/Communications').then(m => ({ default: m.CommunicationsPanel })));
 export const AiAssistantList = lazyView("AiAssistantList", () => import('src/models/AiAssistant').then(m => ({ default: m.AiAssistantList })));
+export const OneCAdminList = lazyView("OneCAdminList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAdminList })));
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
 export const CashboxesList = lazyView("CashboxesList", () => import('src/models/Cashboxes').then(m => ({ default: m.CashboxesList })));
@@ -179,6 +180,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	ChatList: ChatList,
 	CommunicationsPanel: CommunicationsPanel,
 	AiAssistantList: AiAssistantList,
+	OneCAdminList: OneCAdminList,
 	NotificationsList: NotificationsList,
 	WarehousesList: WarehousesList,
 	CashboxesList: CashboxesList,

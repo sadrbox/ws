@@ -26,6 +26,7 @@ import {
   ChatList,
   CommunicationsPanel,
   AiAssistantList,
+  OneCAdminList,
   NotificationsList,
   WarehousesList,
   CashboxesList,
@@ -361,6 +362,11 @@ export const NavList = ({ label }: TypeNavListProps) => {
           </NavItem>
           {/* AI-помощник: команды 1С на естественном языке (сервис ai/, см. models/AiAssistant). */}
           <NavItem onClick={() => addPane({ component: AiAssistantList, label: translate("AiAssistant") })}>{translate("AiAssistant")}</NavItem>
+          {/* Администрирование 1С: базы и сеансы кластера (E15). Право OneCAdmin; у сервиса
+              своя проверка — суперадмин или администратор организации. */}
+          {(isSuperAdmin || can("OneCAdmin")) && (
+            <NavItem onClick={() => addPane({ component: OneCAdminList, label: translate("OneCAdmin") })}>{translate("OneCAdmin")}</NavItem>
+          )}
         </ul>
       </div>
     </>

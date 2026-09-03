@@ -16,6 +16,19 @@ import { requireAgent } from "../auth/index.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
+import { type BaseService, type BaseState, needsFullBases } from "../bases/service.ts";
+
+// Состояние одной базы в register/heartbeat (E15/A2). Незаполненное поле значит «не знаю»:
+// список баз и версию платформы даёт админ-агент, версию расширения — бизнес-агент, и
+// затирать чужие данные своими пропусками нельзя.
+const baseStateSchema = z.object({
+	key: z.string().min(1).max(200),
+	name: z.string().max(200).optional(),
+	status: z.string().max(20).optional(),
+	onecVersion: z.string().max(50).nullable().optional(),
+	extVersion: z.string().max(50).nullable().optional(),
+	sessionsCount: z.number().int().min(0).max(100000).optional(),
+});
 
 const registerSchema = z.object({
 	agentId: z.string().uuid(),
@@ -23,6 +36,14 @@ const registerSchema = z.object({
 	version: z.string().max(50),
 	os: z.string().max(50).optional().default(""),
 	capabilities: z.array(z.string().max(50)).max(100).optional().default([]),
+	// v2: роль службы (business | admin), сервер 1С и список его баз.
+	role: z.enum(["business", "admin"]).optional(),
+	server: z.object({
+		name: z.string().max(200).optional().default(""),
+		rasHost: z.string().max(200).nullable().optional(),
+		rasPort: z.number().int().min(1).max(65535).nullable().optional(),
+	}).optional(),
+	bases: z.array(baseStateSchema).max(500).optional(),
 });
 
 const heartbeatSchema = z.object({
@@ -32,6 +53,9 @@ const heartbeatSchema = z.object({
 	onec: z.object({ reachable: z.boolean(), version: z.string().nullable().optional() }).optional(),
 	commandsDone: z.number().int().optional(),
 	commandsFailed: z.number().int().optional(),
+	// v2: состояния баз. basesComplete=true — это полный срез, иначе только изменившиеся.
+	bases: z.array(baseStateSchema).max(500).optional(),
+	basesComplete: z.boolean().optional(),
 });
 
 const resultSchema = z.object({
@@ -45,8 +69,8 @@ const resultSchema = z.object({
 	onecHttpStatus: z.number().int().optional(),
 });
 
-export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: AgentService; queue: CommandQueue; audit: Audit }) {
-	const { db, cfg, log, agents, queue, audit } = deps;
+export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: AgentService; bases: BaseService; queue: CommandQueue; audit: Audit }) {
+	const { db, cfg, log, agents, bases, queue, audit } = deps;
 	const r = Router();
 	r.use(requireAgent(db));
 
@@ -60,13 +84,27 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Некорректная регистрация" } });
 			return;
 		}
+		// Сервер заводится по имени, которое прислал агент: со ста базами никто не будет
+		// вносить серверы руками, а любой ручной список разойдётся с кластером за неделю.
+		const role = p.data.role ?? "business";
+		const server = await bases.ensureServer(req.agent!.organizationUuid, p.data.server?.name ?? "",
+			{ host: p.data.server?.rasHost ?? null, port: p.data.server?.rasPort ?? null });
 		await agents.register(req.agent!.agentId, {
 			name: p.data.agentName, version: p.data.version, os: p.data.os, capabilities: p.data.capabilities,
+			role, serverId: server.id,
 		});
-		log.info({ agentId: req.agent!.agentId, version: p.data.version }, "агент зарегистрирован");
+		if (p.data.bases?.length) {
+			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
+			await agents.markBasesSynced(req.agent!.agentId);
+		}
+		log.info({ agentId: req.agent!.agentId, version: p.data.version, role, bases: p.data.bases?.length ?? 0 }, "агент зарегистрирован");
 		await audit.write({ event: "agent.register", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
-			details: { version: p.data.version, os: p.data.os, capabilities: p.data.capabilities.length } });
-		res.json({ success: true, data: { ok: true, pollMaxWaitSecs: cfg.POLL_MAX_WAIT_SECS } });
+			details: { version: p.data.version, os: p.data.os, role, capabilities: p.data.capabilities.length, bases: p.data.bases?.length ?? 0 } });
+		res.json({ success: true, data: {
+			ok: true,
+			pollMaxWaitSecs: cfg.POLL_MAX_WAIT_SECS,
+			basesFullEverySecs: cfg.AGENT_BASES_FULL_EVERY_SECS,
+		} });
 	});
 
 	r.post("/heartbeat", async (req, res) => {
@@ -81,7 +119,23 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			onecReachable: p.data.onec?.reachable ?? false,
 			onecVersion: p.data.onec?.version ?? null,
 		});
-		res.json({ success: true, data: { ok: true } });
+
+		const me = await agents.get(req.agent!.agentId);
+		if (p.data.bases?.length && me?.serverId) {
+			await bases.sync(me.serverId, p.data.bases as BaseState[],
+				{ complete: p.data.basesComplete === true, authoritative: me.role === "admin" });
+			if (p.data.basesComplete) await agents.markBasesSynced(req.agent!.agentId);
+		}
+		// Сервер сам решает, когда ему нужен полный срез: агенту остаётся только слушаться.
+		// Так интервал меняется в конфигурации сервиса, а не переустановкой службы на сервере 1С,
+		// и после перезапуска сервиса полный список запрашивается сразу.
+		const wantFullBases = !!me?.serverId
+			&& needsFullBases(p.data.basesComplete ? new Date() : me.basesSyncedAt, cfg.AGENT_BASES_FULL_EVERY_SECS);
+		res.json({ success: true, data: {
+			ok: true,
+			wantFullBases,
+			basesFullEverySecs: cfg.AGENT_BASES_FULL_EVERY_SECS,
+		} });
 	});
 
 	r.get("/commands", async (req, res) => {

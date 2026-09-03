@@ -17,9 +17,10 @@ import Notice from "src/components/Notice";
 import { useDocumentNotices } from "src/hooks/useDocumentNotices";
 import { useContractCounterpartyMismatch } from "src/hooks/useContractCounterpartyMismatch";
 import BasisDocumentField from "src/components/Field/BasisDocumentField";
+import { useRefillAction } from "src/hooks/useRefillAction";
+import ConfirmModal from "src/components/ConfirmModal";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
-import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -275,6 +276,10 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     }
   }, [form]);
 
+  // Выписка — header-документ без позиций; перезаполняется шапка. Подтверждение
+  // нужно и здесь: кнопка стоит в ряду действий поля, рядом с «Очистить».
+  const refill = useRefillAction({ run: handleRefillFromBasis });
+
   const assignNumber = useAssignNumber();
 
   const tabs = useMemo(() => [
@@ -349,6 +354,8 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
                 mismatch={basisMismatch.mismatch}
                 mismatchDetails={basisMismatch.differences}
                 hint={getDocumentFillHint(DOC_TYPE, form.fields as unknown as Record<string, unknown>)}
+                onRefill={hasBasis ? refill.onRefill : undefined}
+                refilling={isRefilling}
               />
             </GroupCol>
           </GroupCol>
@@ -401,19 +408,11 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     form.paneId,
     (
       <>
-        {/* Единый порядок шапки: Проведён → Цепочка → Проводки → Перезаполнить → Печать. */}
+        {/* Единый порядок шапки: Проведён → Цепочка → Проводки → Печать.
+            «Перезаполнить по основанию» живёт в ряду действий поля «Основание». */}
         <HeaderTogglePosted name={`${form.formUid}_posted`} value={form.fields.posted === true} onChange={(v) => form.setField("posted", v)} disabled={form.isLoading || !canWrite} />
         {isSavedDoc && <DocumentChainButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType={DOC_TYPE} documentUuid={form.fields.uuid} />}
-        {hasBasis && (
-          <RefillFromBasisButton
-            mismatch={basisMismatch.mismatch}
-            mismatchDetails={basisMismatch.differences}
-            disabled={form.isLoading || isRefilling}
-            loading={isRefilling}
-            onClick={() => void handleRefillFromBasis()}
-          />
-        )}
         {isSavedDoc && <PrintDropdownButton options={[{ id: "print", label: "Печать" }]} onSelect={handlePrint} title="Печать" />}
       </>
     ),
@@ -429,6 +428,7 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         readonly={!canWrite}
       />
       {headerActionsPortal}
+      <ConfirmModal {...refill.confirmState} />
     </>
   );
 };

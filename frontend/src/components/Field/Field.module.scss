@@ -319,6 +319,28 @@
 		display: none;
 	}
 
+	// Действие «требует внимания» (напр. документ разошёлся с основанием):
+	// оранжевая иконка + точка-маркер в углу. Точка — ::after на самой кнопке,
+	// без span-обёртки: спаны в ячейках таблицы получают padding из Table.module
+	// («span, code»), из-за чего кнопки расползались.
+	.FieldActionWarn {
+		position: relative;
+		color: $warnAccent;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: -1px;
+			right: -1px;
+			width: 6px;
+			height: 6px;
+			border-radius: 50%;
+			background: $warnAccent;
+			border: 1.5px solid var(--sv-color60);
+			pointer-events: none;
+		}
+	}
+
 	background-color: transparent;
 	// Действия поля видны ВСЕГДА. Раньше они показывались только по :focus-within —
 	// пользователь не знал, что у поля вообще есть кнопки («Открыть», «Список»,
@@ -475,6 +497,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 .LookupDropdown {
+	// Обязательно: глобального ресета box-sizing в проекте нет, а табличный вариант
+	// задаёт ширину инлайном по ширине ячейки — без border-box padding и рамка
+	// добавлялись бы сверху и список вылезал за колонку.
+	box-sizing: border-box;
 	position: absolute;
 	top: calc(100% + 3px);
 	left: 0;

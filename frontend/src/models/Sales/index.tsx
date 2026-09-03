@@ -51,9 +51,10 @@ import { api } from "src/services/api/client";
 import { openDocumentFromBasis, mapCommonTradeFields, mapPaymentFromBasis, fetchDocumentItems, resolveOrgChangeFields, type BasisSource } from "src/utils/createFromBasis";
 import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
+import { useRefillAction } from "src/hooks/useRefillAction";
+import ConfirmModal from "src/components/ConfirmModal";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { OutgoingInvoicesForm } from "src/models/OutgoingInvoices";
 import { SaleReturnsForm } from "src/models/SaleReturns";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
@@ -398,6 +399,10 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
   });
 
+  // Кнопка «Перезаполнить» переехала в ряд действий поля «Основание» — рядом с
+  // «Очистить», поэтому спрашиваем подтверждение перед перезаписью.
+  const refill = useRefillAction({ run: handleRefillFromBasis, getRowCount: () => allItemsRef.current.length });
+
   // ── Историчные настройки учёта организации ─────────────────────────────
   // Передаём дату документа в хук — так колонки/блоки НДС/скидок отображаются
   // согласно настройкам, действовавшим на дату документа (для нового и
@@ -737,15 +742,6 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         {isSavedDoc && <DocumentChainButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <DocumentEntriesButton documentType="sale" documentUuid={form.fields.uuid} />}
         {isSavedDoc && <><NotesButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} /> <CreateTaskButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} /></>} {isSavedDoc && <DeleteDocumentButton endpoint={MODEL_ENDPOINT} uuid={form.fields.uuid} paneId={form.paneId} />}
-        {hasBasis && (
-          <RefillFromBasisButton
-            mismatch={basisMismatch.mismatch}
-            mismatchDetails={basisMismatch.differences}
-            disabled={form.isLoading || isRefilling}
-            loading={isRefilling}
-            onClick={() => void handleRefillFromBasis()}
-          />
-        )}
         {isSavedDoc && (
           <PrintDropdownButton
             disabled={printDisabled}
@@ -834,6 +830,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
                   mismatch={basisMismatch.mismatch}
                   mismatchDetails={basisMismatch.differences}
                   hint={getDocumentFillHint("sale", form.fields as unknown as Record<string, unknown>)}
+                  onRefill={hasBasis ? refill.onRefill : undefined}
+                  refilling={isRefilling}
                 />
                 {/* T7.11: связь с основным документом для корректировочных СНТ/ЭАВР.
                     Видно у сохранённого документа (гос-док выписывается только с ним). */}
@@ -926,6 +924,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
           readonly={!canWrite} />
         {headerActionsPortal}
+        <ConfirmModal {...refill.confirmState} />
       </FormDirtyScope>
     </FormRequiredScope>
   );

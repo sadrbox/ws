@@ -1,0 +1,109 @@
+// Панель администрирования 1С (E15/A5). Отступы/радиусы — по шкале 3/6/12 и 3/6,
+// как в остальных панелях проекта.
+.Root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.Tabs {
+	display: flex;
+	gap: 3px;
+	padding: 6px;
+	border-bottom: 1px solid $color34;
+}
+
+.Tab,
+.TabActive {
+	font-family: inherit;
+	font-size: $fontsize;
+	padding: 6px 12px;
+	border-radius: var(--radius-6, 6px);
+	border: 1px solid transparent;
+	background: transparent;
+	color: $color6;
+	cursor: pointer;
+}
+
+.TabActive {
+	background: $color60;
+	border-color: $color34;
+	font-weight: 600;
+}
+
+.Notice {
+	margin: 6px;
+}
+
+.TableWrap {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.Filter {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px;
+	flex-wrap: wrap;
+}
+
+.FilterLabel {
+	color: $color6;
+	font-size: $fontsize;
+}
+
+.Select {
+	font-family: inherit;
+	font-size: $fontsize;
+	padding: 3px 6px;
+	border: 1px solid $color34;
+	border-radius: var(--radius-3, 3px);
+	background: $color60;
+	color: $color6;
+	min-width: 180px;
+}
+
+.Action {
+	font-family: inherit;
+	font-size: $fontsize;
+	padding: 3px 12px;
+	border: 1px solid $color34;
+	border-radius: var(--radius-3, 3px);
+	background: $color60;
+	color: $color6;
+	cursor: pointer;
+
+	&:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+}
+
+.Hint {
+	padding: 6px;
+	color: $color6;
+	font-size: $fontsize;
+	opacity: 0.75;
+}
+
+.ConfirmText {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px;
+	font-size: $fontsize;
+	color: $color6;
+}
+
+.ConfirmDetails {
+	opacity: 0.8;
+}
+
+// Предупреждение о необратимости — единственный акцентный элемент окна.
+.ConfirmWarning {
+	color: var(--c-red-42, #b91c1c);
+}

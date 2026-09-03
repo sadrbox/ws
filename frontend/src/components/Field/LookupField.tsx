@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./Field.module.scss";
 import { fetchList } from "src/services/offlineDataService";
@@ -38,6 +38,27 @@ const FIELD_ACTION_META: Record<LookupActionType, { icon: IconName; label: strin
   list: { icon: "list", label: "Выбрать из списка" },
   open: { icon: "open", label: "Открыть" },
 };
+
+/**
+ * Дополнительное действие поля, задаваемое СНАРУЖИ (в отличие от встроенных
+ * clear/open/quickselect/list, которые поле собирает само).
+ *
+ * Нужно, чтобы доменные действия не протекали в универсальный LookupField:
+ * напр. «Перезаполнить по основанию» знает про документы-основания, а поле —
+ * не должно. Владелец действия (BasisDocumentField) описывает его целиком.
+ */
+export interface LookupExtraAction {
+  /** Стабильный ключ для React. */
+  id: string;
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** display:none — место в ряду не занимает (как у встроенных действий). */
+  hidden?: boolean;
+  loading?: boolean;
+  tone?: "warn";
+}
 
 /** Элемент справочника из произвольного эндпоинта: известные поля через
  *  индекс-сигнатуру как unknown (компилятор заставляет сузить перед использованием). */
@@ -107,6 +128,8 @@ export interface LookupFieldProps {
   /** Какие кнопки показывать. По умолчанию — все доступные.
    *  Пример: ["quickselect"] — только кнопка быстрого выбора. */
   visibleActions?: LookupActionType[];
+  /** Доп. действия справа от встроенных (см. LookupExtraAction). */
+  extraActions?: LookupExtraAction[];
   /**
    * Вызывается когда пользователь нажимает Enter в поле без активного пункта дропдауна
    * (сигнал для перехода на следующее поле в строке).
@@ -174,6 +197,7 @@ const LookupField: FC<LookupFieldProps> = ({
   placeholder,
   listComponent,
   variant = 'default',
+  extraActions,
   secondaryFields,
   extraParams,
   createDefaults,
@@ -238,9 +262,19 @@ const LookupField: FC<LookupFieldProps> = ({
   const debouncedText = useDebounceValue(inputText, 300);
 
   // ── Portal dropdown position (for table variant) ──────────────────────
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  // Список рендерится порталом в body с position:fixed, поэтому координаты
+  // считаем сами. Три вещи, без которых он «съезжает» с ячейки:
+  //   • у .LookupDropdown нет box-sizing:border-box (глобального ресета в проекте
+  //     нет), поэтому ширину задаём с учётом padding+border — иначе список шире
+  //     ячейки на 8px и правым краем вылезает из колонки;
+  //   • у крайних правых/нижних колонок список уезжал за окно — прижимаем к краю
+  //     и раскрываем вверх, если снизу не помещается;
+  //   • измеряем в useLayoutEffect, до отрисовки, иначе первый кадр — со старыми
+  //     координатами.
+  type DropdownPos = { left: number; width: number; maxHeight: number; top?: number; bottom?: number };
+  const [dropdownPos, setDropdownPos] = useState<DropdownPos | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isTable || !isDropdownOpen || !wrapperRef.current) {
       setDropdownPos(null);
       return;
@@ -248,7 +282,24 @@ const LookupField: FC<LookupFieldProps> = ({
     const el = wrapperRef.current;
     const updatePos = () => {
       const rect = el.getBoundingClientRect();
-      setDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
+      const GAP = 3;      // тот же зазор, что у нетабличного варианта (top: calc(100% + 3px))
+      const EDGE = 6;     // отступ от края окна
+      const MIN_W = 240;  // в узкой колонке список по ширине ячейки нечитаем
+      const MAX_H = 280;  // как max-height в .LookupDropdown
+
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      const width = Math.min(Math.max(rect.width, MIN_W), vw - EDGE * 2);
+      const left = Math.max(EDGE, Math.min(rect.left, vw - width - EDGE));
+
+      const below = vh - rect.bottom - GAP - EDGE;
+      const above = rect.top - GAP - EDGE;
+      // Вверх раскрываем, только если снизу тесно И сверху заметно просторнее.
+      const openUp = below < Math.min(MAX_H, 140) && above > below;
+
+      setDropdownPos(openUp
+        ? { left, width, maxHeight: Math.min(MAX_H, above), bottom: vh - rect.top + GAP }
+        : { left, width, maxHeight: Math.min(MAX_H, below), top: rect.bottom + GAP });
     };
     updatePos();
     // Обновляем при скролле / ресайзе окна и при изменении ширины самого поля
@@ -753,7 +804,7 @@ const LookupField: FC<LookupFieldProps> = ({
             }}
           />
 
-          {fieldActions.length > 0 && (
+          {(fieldActions.length > 0 || (extraActions?.length ?? 0) > 0) && (
             <div className={styles.FieldActions}>
               {fieldActions.map((action) => {
                 const meta = FIELD_ACTION_META[action.type];
@@ -772,6 +823,21 @@ const LookupField: FC<LookupFieldProps> = ({
                   />
                 );
               })}
+              {/* Внешние действия — всегда в хвосте ряда: позиции встроенных кнопок
+                  не должны зависеть от того, передал ли владелец доп. действия. */}
+              {extraActions?.map((action) => (
+                <FieldActionButton
+                  key={action.id}
+                  icon={action.icon}
+                  label={action.label}
+                  onClick={action.onClick}
+                  disabled={action.disabled || action.hidden}
+                  loading={action.loading}
+                  tone={action.tone}
+                  className={action.hidden ? styles.FieldActionHidden : undefined}
+                  aria-hidden={action.hidden || undefined}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -826,9 +892,13 @@ const LookupField: FC<LookupFieldProps> = ({
           ref={dropdownRef}
           style={{
             position: "fixed",
-            top: dropdownPos.top,
             left: dropdownPos.left,
+            // right в .LookupDropdown = 0 (для нетабличного варианта); при заданной
+            // ширине он игнорируется, но гасим явно, чтобы не зависеть от порядка правил.
+            right: "auto",
             width: dropdownPos.width,
+            maxHeight: dropdownPos.maxHeight,
+            ...(dropdownPos.top !== undefined ? { top: dropdownPos.top } : { bottom: dropdownPos.bottom }),
             zIndex: 9999,
           }}
         >

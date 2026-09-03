@@ -47,10 +47,11 @@ import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
-import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useAppContext } from "src/app/context";
 import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, fetchDocumentItems, type BasisFromTarget , type BasisSource } from "src/utils/createFromBasis";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
+import { useRefillAction } from "src/hooks/useRefillAction";
+import ConfirmModal from "src/components/ConfirmModal";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 import { useUserDefaults, type UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
@@ -418,6 +419,10 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
       bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
     });
 
+    // Перезаполнение перетирает строки и шапку, а кнопка теперь стоит вплотную
+    // к «Очистить» в ряду действий поля — поэтому через подтверждение.
+    const refill = useRefillAction({ run: handleRefillFromBasis, getRowCount: () => allItemsRef.current.length });
+
     const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
       form.fields.organizationUuid || null,
       form.fields.date || null,
@@ -604,6 +609,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
                     mismatch={basisMismatch.mismatch}
                     mismatchDetails={basisMismatch.differences}
                     hint={getDocumentFillHint(cfg.docType, form.fields as unknown as Record<string, unknown>)}
+                    onRefill={hasBasis ? refill.onRefill : undefined}
+                    refilling={isRefilling}
                   />
                 </GroupCol>
               </GroupCol>
@@ -662,7 +669,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           />
         ),
       }] : []),
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, handleFaAllItems, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, handleFaAllItems, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis, refill.onRefill, isRefilling]);
 
     const runCreateTarget = useCallback(async (t: TradeCreateTarget) => {
       const srcLabel = cfg.basisSourceLabelKey ? translate(cfg.basisSourceLabelKey) : cfg.formLabel;
@@ -733,15 +740,6 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <DocumentEntriesButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
           {isSavedDoc && <><NotesButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <CreateTaskButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /></>} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
-          {hasBasis && (
-            <RefillFromBasisButton
-              mismatch={basisMismatch.mismatch}
-              mismatchDetails={basisMismatch.differences}
-              disabled={form.isLoading || isRefilling}
-              loading={isRefilling}
-              onClick={() => void handleRefillFromBasis()}
-            />
-          )}
           {isSavedDoc && cfg.print && (
             <PrintDropdownButton
               disabled={printDisabled}
@@ -764,6 +762,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
             readonly={!canWrite}
             marksEndpoint={cfg.endpoint} marksUuid={form.fields.uuid} marksOrganizationUuid={form.fields.organizationUuid} />
+          <ConfirmModal {...refill.confirmState} />
         </FormDirtyScope>
       </FormRequiredScope>
     );

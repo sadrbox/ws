@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { asText } from "src/utils/asText";
-import LookupField from "./LookupField";
+import LookupField, { type LookupExtraAction } from "./LookupField";
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { docTypeLabel, docTypeToEndpoint, docTypeUsesPosted } from "src/utils/accountingDocTypes";
@@ -24,6 +24,16 @@ export interface BasisDocumentFieldProps {
   basisDocumentLabel?: string;
   onSelect: (type: string, uuid: string, label: string) => void;
   onClear: () => void;
+  /**
+   * Действие «Перезаполнить по основанию» — кнопкой ВНУТРИ поля (раньше жило в
+   * тулбаре пейна, рядом с «Удалить»/«Печать», хотя относится ровно к этому полю).
+   * Показывается, только когда основание выбрано. Перезаполнение перетирает
+   * введённые данные, поэтому владелец обязан спросить подтверждение —
+   * см. useRefillAction.
+   */
+  onRefill?: () => void;
+  /** Перезаполнение выполняется — спиннер вместо иконки. */
+  refilling?: boolean;
   disabled?: boolean;
   formUid: string;
   /**
@@ -86,6 +96,10 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
   counterpartyName,
   warehouseUuid,
   warehouseName,
+  mismatch,
+  mismatchDetails,
+  onRefill,
+  refilling,
 }) => {
   const [selectedType, setSelectedType] = useState<string>(
     basisDocumentType || allowedTypes[0]?.type || "",
@@ -235,7 +249,27 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
     { key: "date", label: translate("date") },
   ];
   // Расхождение с основанием (mismatch/mismatchDetails) выводится на уровне формы
-  // в компоненте <Notice /> и индикатором на кнопке «Перезаполнить по основанию».
+  // в компоненте <Notice /> и индикатором на кнопке «Перезаполнить по основанию»
+  // — она же живёт в ряду действий этого поля (см. refillActions ниже).
+
+  // Действие «Перезаполнить по основанию» в ряду кнопок поля. Подсказка при
+  // расхождении перечисляет конкретные различия — по кнопке сразу видно, ЧТО
+  // разошлось, и это видно у самого поля-источника, а не в шапке пейна.
+  const refillActions = useMemo<LookupExtraAction[] | undefined>(() => {
+    if (!onRefill) return undefined;
+    const base = "Перезаполнить по основанию";
+    return [{
+      id: "refill",
+      icon: "syncFromBasis",
+      label: mismatch
+        ? `${translate("basisMismatch")}:\n• ${(mismatchDetails ?? []).join("\n• ")}\n\n${base}`
+        : base,
+      onClick: onRefill,
+      disabled: disabled || refilling,
+      loading: refilling,
+      tone: mismatch ? "warn" : undefined,
+    }];
+  }, [onRefill, mismatch, mismatchDetails, refilling, disabled]);
 
   // Когда значение уже выбрано — отдаём управление LookupField (он сам рисует FieldWrapper + label).
   // Тип документа берём из basisDocumentType (надёжно даже вне allowedTypes).
@@ -258,6 +292,7 @@ const BasisDocumentField: FC<BasisDocumentFieldProps> = ({
           onSelect={handleSelect}
           onClear={onClear}
           disabled={disabled || !activeType}
+          extraActions={refillActions}
           variant="default"
           searchTransform={extractBasisSearch}
           extraParams={extraParams}

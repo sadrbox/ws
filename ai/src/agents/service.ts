@@ -7,10 +7,24 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 import { newToken, sha256 } from "../auth/index.ts";
+import { DEFAULT_BASE_KEY } from "../bases/service.ts";
+
+/**
+ * Роль агента (E15 §3.1). Это НЕ уровень доступа внутри одной службы, а две разные службы на
+ * сервере 1С под разными учётками ОС:
+ *   business — документы и справочники внутри баз через расширение bpapi;
+ *   admin    — кластер через rac и пользователи ИБ через COM.
+ * Разделение нужно ради радиуса поражения: компрометация бизнес-пути не даёт прав
+ * администратора кластера. Две роли в одном процессе дали бы разделение только на бумаге.
+ */
+export type AgentRole = "business" | "admin";
 
 export type AgentRow = {
 	id: string;
 	organization_uuid: string;
+	server_id: string | null;
+	role: AgentRole;
+	bases_synced_at: Date | null;
 	name: string;
 	version: string | null;
 	os: string | null;
@@ -27,6 +41,9 @@ export type AgentRow = {
 export type AgentView = {
 	id: string;
 	organizationUuid: string;
+	serverId: string | null;
+	role: AgentRole;
+	basesSyncedAt: Date | null;
 	name: string;
 	version: string | null;
 	os: string | null;
@@ -39,8 +56,8 @@ export type AgentView = {
 	disabled: boolean;
 };
 
-const COLS = `id, organization_uuid, name, version, os, capabilities, status, onec_reachable, onec_version,
-	last_seen_at, registered_at, disabled_at, created_at`;
+const COLS = `id, organization_uuid, server_id, role, bases_synced_at, name, version, os, capabilities,
+	status, onec_reachable, onec_version, last_seen_at, registered_at, disabled_at, created_at`;
 
 export class AgentService {
 	private readonly db: Db;
@@ -100,10 +117,42 @@ export class AgentService {
 
 	/** Агент организации, которому можно отдать команду: не отключён и недавно был на связи. */
 	async pickOnline(organizationUuid: string): Promise<AgentView | null> {
-		const own = (await this.listByOrganization(organizationUuid)).find((a) => !a.disabled && a.online);
-		if (own || this.orgBinding === "strict") return own ?? null;
-		// Режим разработки: один стенд 1С на все организации ERP.
-		return (await this.listAll()).find((a) => !a.disabled && a.online) ?? null;
+		return this.pickAgentFor(organizationUuid, null, "business");
+	}
+
+	/**
+	 * Исполнитель команды: база даёт сервер, сервер плюс роль дают агента (E15/A1).
+	 *
+	 * Раньше выбор был «любой онлайн-агент этой организации» — при одной базе на организацию
+	 * это работало. Со ста базами на одном сервере так нельзя: команда ушла бы в чужую базу,
+	 * а админ-команда — бизнес-агенту, у которого нет ни rac, ни прав администратора кластера.
+	 *
+	 * Если подходящего агента нет, команда НЕ ставится вообще. Отдать её «хоть кому-то» —
+	 * значит выполнить операцию не там, где просили; лучше честная ошибка «нет агента».
+	 *
+	 * baseKey = null или 'default' — обращение без указания базы: агент протокола v1, у которого
+	 * база одна. Тогда сервер не проверяется, и выбор сводится к прежнему поведению.
+	 */
+	async pickAgentFor(organizationUuid: string, baseKey: string | null, role: AgentRole = "business"): Promise<AgentView | null> {
+		const candidates = (await this.listByOrganization(organizationUuid))
+			.filter((a) => !a.disabled && a.online && a.role === role);
+
+		const key = baseKey && baseKey !== DEFAULT_BASE_KEY ? baseKey : null;
+		if (!key) {
+			if (candidates.length) return candidates[0];
+			if (this.orgBinding === "strict") return null;
+			// Режим разработки: один стенд 1С на все организации ERP.
+			return (await this.listAll()).find((a) => !a.disabled && a.online && a.role === role) ?? null;
+		}
+
+		const server = await this.db.query<{ server_id: string }>(
+			`SELECT b.server_id FROM bases b JOIN servers s ON s.id = b.server_id
+			  WHERE s.organization_uuid = $1 AND b.key = $2 AND b.disabled_at IS NULL`,
+			[organizationUuid, key],
+		);
+		const serverId = server.rows[0]?.server_id ?? null;
+		if (!serverId) return null;
+		return candidates.find((a) => a.serverId === serverId) ?? null;
 	}
 
 	/** Агенты, которые организация видит в интерфейсе: свои, а в режиме any — все, если своих нет. */
@@ -113,15 +162,22 @@ export class AgentService {
 		return this.listAll();
 	}
 
-	async register(id: string, info: { name?: string; version: string; os: string; capabilities: string[] }): Promise<void> {
+	async register(id: string, info: { name?: string; version: string; os: string; capabilities: string[]; role?: AgentRole; serverId?: string | null }): Promise<void> {
 		await this.db.query(
 			`UPDATE agents
 			    SET version = $2, os = $3, capabilities = $4::jsonb, status = 'ONLINE',
 			        registered_at = now(), last_seen_at = now(),
+			        role = COALESCE($6, role), server_id = COALESCE($7, server_id),
 			        name = CASE WHEN $5 <> '' AND name = '' THEN $5 ELSE name END
 			  WHERE id = $1`,
-			[id, info.version, info.os, JSON.stringify(info.capabilities), info.name ?? ""],
+			[id, info.version, info.os, JSON.stringify(info.capabilities), info.name ?? "",
+				info.role ?? null, info.serverId ?? null],
 		);
+	}
+
+	/** Отметка «полный срез по базам получен» — от неё считается троттлинг (см. needsFullBases). */
+	async markBasesSynced(id: string): Promise<void> {
+		await this.db.query(`UPDATE agents SET bases_synced_at = now() WHERE id = $1`, [id]);
 	}
 
 	async heartbeat(id: string, hb: { status: string; version?: string; onecReachable: boolean; onecVersion: string | null }): Promise<void> {
@@ -140,6 +196,9 @@ export class AgentService {
 		return {
 			id: r.id,
 			organizationUuid: r.organization_uuid,
+			serverId: r.server_id,
+			role: r.role === "admin" ? "admin" : "business",
+			basesSyncedAt: r.bases_synced_at,
 			name: r.name,
 			version: r.version,
 			os: r.os,

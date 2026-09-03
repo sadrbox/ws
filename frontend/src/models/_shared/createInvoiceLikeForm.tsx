@@ -41,13 +41,14 @@ import PrintDocumentPane, { type PrintColumnDef } from "src/components/PrintPrev
 import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
-import RefillFromBasisButton from "src/models/_shared/RefillFromBasisButton";
 import { useEsfInvoice } from "src/hooks/useEsfInvoice";
 import type { NoticeItem } from "src/components/Notice";
 import { useAppContext } from "src/app/context";
 import { type BasisFromTarget, type OrgDependentField, type BasisSource, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
+import { useRefillAction } from "src/hooks/useRefillAction";
+import ConfirmModal from "src/components/ConfirmModal";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
 
 export type { BasisTypeConfig };
@@ -495,6 +496,10 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       }
     }, [form, currentUser?.uuid]);
 
+    // Кнопка «Перезаполнить» стоит в ряду действий поля «Основание», вплотную к
+    // «Очистить», а перезаполнение перетирает строки — спрашиваем подтверждение.
+    const refill = useRefillAction({ run: handleRefillFromBasis, getRowCount: () => allItemsRef.current.length });
+
     const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
       form.fields.organizationUuid || null,
       form.fields.date || null,
@@ -579,15 +584,6 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           {showHeaderActions && (<>
             {isSavedDoc && <DocumentChainButton documentType={cfg.docType} documentUuid={form.fields.uuid} />}
             {isSavedDoc && <><NotesButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <CreateTaskButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /> <ShowInJournalButton endpoint={cfg.endpoint} uuid={form.fields.uuid} /></>} {isSavedDoc && <DeleteDocumentButton endpoint={cfg.endpoint} uuid={form.fields.uuid} paneId={form.paneId} />}
-            {hasBasis && (
-              <RefillFromBasisButton
-                mismatch={basisMismatch.mismatch}
-                mismatchDetails={basisMismatch.differences}
-                disabled={form.isLoading || isRefilling}
-                loading={isRefilling}
-                onClick={() => void handleRefillFromBasis()}
-              />
-            )}
             {isSavedDoc && cfg.printConfig && (
               <PrintDropdownButton
                 disabled={printDisabled}
@@ -783,6 +779,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
                       mismatch={basisMismatch.mismatch}
                       mismatchDetails={basisMismatch.differences}
                       hint={getDocumentFillHint(cfg.docType, form.fields as unknown as Record<string, unknown>)}
+                      onRefill={hasBasis ? refill.onRefill : undefined}
+                      refilling={isRefilling}
                     />
                   </GroupCol>
                 )}
@@ -898,6 +896,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             isLoading={form.isLoading} isInitialLoading={form.isInitialLoading}
             readonly={effectiveReadonly}
             marksEndpoint={cfg.endpoint} marksUuid={form.fields.uuid} marksOrganizationUuid={form.fields.organizationUuid} />
+          <ConfirmModal {...refill.confirmState} />
         </FormDirtyScope>
       </FormRequiredScope>
     );

@@ -11,6 +11,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import IconButton from "src/components/IconButton/IconButton";
 import type { IconName } from "src/components/IconButton/icons";
+import styles from "./Field.module.scss";
 
 export interface FieldActionButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,16 +19,23 @@ export interface FieldActionButtonProps
   icon: IconName;
   /** Подпись (title + aria-label). */
   label: string;
+  /** Спиннер вместо иконки на время длительной операции. */
+  loading?: boolean;
+  /** Смысловая окраска. warn — действие требует внимания (оранжевая иконка
+   *  + точка-маркер): напр. документ разошёлся с основанием. */
+  tone?: "warn";
 }
 
 const FieldActionButton = forwardRef<HTMLButtonElement, FieldActionButtonProps>(
-  ({ icon, label, tabIndex = -1, onMouseDown, onClick, ...rest }, ref) => (
+  ({ icon, label, loading, tone, className, tabIndex = -1, onMouseDown, onClick, ...rest }, ref) => (
     <IconButton
       ref={ref}
       size="sm"
       icon={icon}
       title={label}
       aria-label={label}
+      loading={loading}
+      className={[tone === "warn" ? styles.FieldActionWarn : null, className].filter(Boolean).join(" ") || undefined}
       tabIndex={tabIndex}
       // Предотвращаем перенос фокуса на кнопку при клике мышью — фокус остаётся
       // на input поля. Иначе после клика по «Быстрый выбор» (или другой field-
