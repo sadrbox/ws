@@ -34,6 +34,8 @@ export type AdminCommandSpec = {
 };
 
 const baseKey = z.string().min(1).max(200);
+// Имя пользователя ИБ и имя расширения — то, чем 1С их адресует.
+const ibName = z.string().min(1).max(200);
 
 export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 	{
@@ -83,6 +85,79 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		// Сеанс адресуется своим идентификатором кластера; baseKey нужен только для маршрутизации
 		// к нужному серверу и для записи в аудит.
 		schema: z.object({ sessionId: z.string().min(1).max(64), baseKey: baseKey.optional() }).strict(),
+	},
+	// ── Внутрибазовые операции (A3-P1). Идут НЕ через rac: агенту нужно войти в базу
+	// (COM-соединение или расширение), поэтому отдельная способность ib.admin и
+	// служебный администратор ИБ в каждой базе. Роль та же — admin.
+	{
+		type: "IB_LIST_USERS",
+		title: "Пользователи базы",
+		operation: "READ",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey }).strict(),
+	},
+	{
+		type: "IB_CREATE_USER",
+		title: "Создать пользователя базы",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({
+			baseKey,
+			name: ibName,
+			fullName: z.string().max(200).optional(),
+			// Пароль не логируется и не возвращается; пустой — вход без пароля (как в 1С).
+			password: z.string().max(200).optional(),
+			roles: z.array(z.string().max(200)).max(100).optional(),
+			// Аутентификация ОС и признак «показывать в списке выбора».
+			osUser: z.string().max(200).optional(),
+			showInList: z.boolean().optional(),
+		}).strict(),
+	},
+	{
+		type: "IB_DELETE_USER",
+		title: "Удалить пользователя базы",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey, name: ibName }).strict(),
+	},
+	{
+		type: "IB_LIST_EXTENSIONS",
+		title: "Расширения базы",
+		operation: "READ",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey }).strict(),
+	},
+	{
+		type: "IB_INSTALL_EXTENSION",
+		title: "Установить расширение",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		// Файл .cfe передаётся телом команды: агент не ходит за ним в сеть.
+		schema: z.object({
+			baseKey,
+			name: ibName,
+			contentBase64: z.string().min(1),
+			safeMode: z.boolean().optional(),
+		}).strict(),
+	},
+	{
+		type: "IB_DELETE_EXTENSION",
+		title: "Удалить расширение",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey, name: ibName }).strict(),
 	},
 	{
 		type: "CLUSTER_SET_SESSIONS_LOCK",

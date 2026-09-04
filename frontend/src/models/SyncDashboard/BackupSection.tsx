@@ -43,7 +43,7 @@ const BackupSection: FC = () => {
   return (
     <>
       <Divider />
-      <Group align="col" label={translate("backupTitle")} className={mainStyles.Form}>
+      <Group className={mainStyles.Form}>
         <div style={{ color: "var(--sv-color5, #888)", fontSize: 12, marginBottom: 8, maxWidth: 520, lineHeight: 1.5 }}>
           {translate("backupHint")}
         </div>

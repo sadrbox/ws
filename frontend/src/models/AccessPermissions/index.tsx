@@ -79,6 +79,10 @@ export const MODEL_NAME_OPTIONS = [
     { value: "ActivityHistory", i18: "ActivityHistoriesList" },
     { value: "EmployeeHistory", i18: "EmployeeHistoriesList" },
     { value: "AccessPermission", i18: "AccessPermissionsList" },
+    // Не Prisma-модель, а именованное право на раздел: панель «Администрирование 1С»
+    // (E15/A5) проверяет его в NavList через can("OneCAdmin"). Без строки здесь право
+    // невозможно выдать в интерфейсе, и раздел видел бы только суперадмин.
+    { value: "OneCAdmin", i18: "OneCAdmin" },
   ].map(({ value, i18 }) => ({ value, label: translate(i18) || value })),
 ];
 

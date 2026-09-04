@@ -15,15 +15,29 @@ interface Tab {
 interface TypeTabs {
   tabs: Tab[];
   defaultActiveTab?: string;
+  /**
+   * Управляемый режим: активная вкладка задаётся снаружи. Нужен, когда переключить
+   * вкладку должен не только клик по ней (напр. в «Администрировании 1С» клик по базе
+   * открывает её сеансы). Без пропа компонент остаётся неуправляемым, как прежде.
+   */
+  activeTab?: string;
+  onTabChange?: (tabId: string) => void;
 }
 
 const Tabs: React.FC<TypeTabs> = ({
   tabs,
   defaultActiveTab,
+  activeTab: controlledTab,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<string>(
+  const [uncontrolledTab, setUncontrolledTab] = useState<string>(
     defaultActiveTab || tabs[0]?.id || ''
   );
+  const activeTab = controlledTab ?? uncontrolledTab;
+  const setActiveTab = useCallback((id: string) => {
+    if (controlledTab === undefined) setUncontrolledTab(id);
+    onTabChange?.(id);
+  }, [controlledTab, onTabChange]);
   // Рефы на панели вкладок — нужны чтобы после переключения сфокусировать
   // скролл-контейнер таблицы внутри активной вкладки (для клавиатурной
   // навигации SubTable: Up/Down/Left/Right/Insert/Delete/Home/End/PgUp/PgDn).

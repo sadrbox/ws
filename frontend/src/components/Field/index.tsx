@@ -36,6 +36,9 @@ interface TypeFieldStringProps {
    *  false — без явных `actions`/`clearable` поле не показывает FieldActions при фокусе. */
   clearable?: boolean;
   variant?: FieldVariant;
+  /** Тип ввода. password — для секретов (пароль пользователя ИБ и т.п.): без него
+   *  единственной альтернативой был бы собственный <input> в обход общего поля. */
+  type?: "text" | "password";
   autoFocus?: boolean;
   /** Максимальная длина ввода (символов). Напр. 9 для номера документа. */
   maxLength?: number;
@@ -110,6 +113,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   title,
   required = false,
   error = false,
+  type = "text",
   actions,
   clearable = false,
   variant = 'default',
@@ -165,6 +169,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       required={required}
       error={error}
       variant={variant}
+      type={type}
       autoFocus={autoFocus}
       maxLength={maxLength}
       isDirty={isDirty}
@@ -174,7 +179,7 @@ export const Field: FC<TypeFieldStringProps> = ({
 };
 
 // Компонент FieldGroup
-export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength?: number }> = ({
+export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength?: number; type?: "text" | "password" }> = ({
   name,
   label,
   value = '',
@@ -193,6 +198,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
   maxLength,
   isDirty,
   hint,
+  type = "text",
 }) => {
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
@@ -204,7 +210,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
       <div className={styles.FieldInputWrapper}>
         <input
           ref={inputRef}
-          type="text"
+          type={type}
           id={uid}
           name={name}
           value={value}

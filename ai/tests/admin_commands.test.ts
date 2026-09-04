@@ -19,7 +19,12 @@ test("список закрыт: чужой тип команды не нахо�
 
 test("опасные операции помечены CRITICAL — они идут через подтверждение", () => {
 	const critical = ADMIN_COMMANDS.filter((c) => c.operation === "CRITICAL").map((c) => c.type);
-	assert.deepEqual(critical.sort(), ["CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_TERMINATE_SESSION"]);
+	assert.deepEqual(critical.sort(), [
+		"CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_TERMINATE_SESSION",
+		// Внутрибазовые изменения так же необратимы: удалённого пользователя ИБ или
+		// снесённое расширение не вернуть, а установка меняет конфигурацию базы.
+		"IB_CREATE_USER", "IB_DELETE_EXTENSION", "IB_DELETE_USER", "IB_INSTALL_EXTENSION",
+	]);
 	// Всё остальное — только чтение: список баз или сеансов ничего не меняет.
 	assert.ok(ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL").every((c) => c.operation === "READ"));
 });
@@ -55,4 +60,37 @@ test("сеансы без базы — это весь кластер, и это
 	const r = buildAdminPayload(sessions, {});
 	assert.equal(r.ok, true);
 	assert.equal(r.ok && r.baseKey, null);
+});
+
+test("внутрибазовые команды требуют ib.admin — cluster.admin их не получает", () => {
+	const create = findAdminCommand("IB_CREATE_USER")!;
+	assert.equal(create.capability, "ib.admin");
+	// Агент только с cluster.admin умеет кластер, но не вход в базы.
+	assert.equal(agentCanRun(adminAgent, create), false);
+	assert.equal(agentCanRun({ ...adminAgent, capabilities: ["cluster.admin", "ib.admin"] }, create), true);
+});
+
+test("IB_CREATE_USER: база и имя обязательны, лишние поля отвергаются", () => {
+	const spec = findAdminCommand("IB_CREATE_USER")!;
+	assert.equal(buildAdminPayload(spec, { name: "ivanov" }).ok, false, "без baseKey");
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh" }).ok, false, "без имени");
+	// Схема strict: случайное поле — это опечатка вызывающего, а не «просто игнор».
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh", name: "ivanov", role: "admin" }).ok, false);
+
+	const ok = buildAdminPayload(spec, { baseKey: "buh", name: "ivanov", fullName: "Иванов И.", password: "s3cret" });
+	assert.equal(ok.ok, true);
+	assert.equal(ok.ok && ok.baseKey, "buh", "ключ базы достаётся для маршрутизации");
+});
+
+test("IB_INSTALL_EXTENSION: без содержимого файла команда не собирается", () => {
+	const spec = findAdminCommand("IB_INSTALL_EXTENSION")!;
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh", name: "bpapi" }).ok, false);
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh", name: "bpapi", contentBase64: "AAEC" }).ok, true);
+});
+
+test("списки содержимого базы — чтение: подтверждения не требуют", () => {
+	for (const t of ["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]) {
+		assert.equal(findAdminCommand(t)!.operation, "READ", t);
+		assert.equal(findAdminCommand(t)!.requiresBase, true, t);
+	}
 });

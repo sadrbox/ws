@@ -161,7 +161,7 @@ const MainTab: FC<{
     )}
 
     {/* Режим работы */}
-    <Group align="col" label={translate("syncMode")} className={mainStyles.Form}>
+    <Group className={mainStyles.Form}>
       <div className={styles.SyncModeRow}>
         <button
           type="button"
@@ -191,7 +191,7 @@ const MainTab: FC<{
     <Divider />
 
     {/* Метрики */}
-    <Group align="row" gap="12px" className={mainStyles.Form}>
+    <Group className={mainStyles.Form}>
       <div className={styles.SyncMetricGrid}>
         <MetricCell value={isOnline ? "🟢" : "🔴"} label={isOnline ? "Подключён" : "Нет связи"} />
         <MetricCell value={String(pendingCount)} label={translate("pendingSync")} />
@@ -203,7 +203,7 @@ const MainTab: FC<{
     <Divider />
 
     {/* Действия */}
-    <Group align="row" gap="8px" className={mainStyles.Form}>
+    <Group className={mainStyles.Form}>
       {isSyncing ? (
         <Button onClick={abortSync}><span>⏹ Остановить</span></Button>
       ) : (
@@ -218,7 +218,7 @@ const MainTab: FC<{
     {syncState.lastResult && (
       <>
         <Divider />
-        <Group align="col" label={translate("syncResult")} className={mainStyles.Form}>
+        <Group className={mainStyles.Form}>
           <div className={styles.SyncResultGrid}>
             <span>Статус</span><span>{syncState.lastResult.success ? "✅ Успешно" : "❌ С ошибками"}</span>
             <span>Загружено</span><span>{syncState.lastResult.pulled} записей</span>
@@ -275,7 +275,7 @@ const QueueTab: FC<{
         {isOnline ? " Нажмите «Отправить все»." : " Будут отправлены при появлении связи."}
       </div>
 
-      <Group align="row" gap="8px" className={mainStyles.Form}>
+      <Group className={mainStyles.Form}>
         <Button variant="primary" onClick={syncNow} disabled={isSyncing || !isOnline}>
           <span>{isSyncing ? "⏳ Отправка…" : `🔄 Отправить все (${pendingCount})`}</span>
         </Button>
@@ -445,7 +445,7 @@ const StorageTab: FC<{
   return (
     <div className={mainStyles.FormBodyParts}>
       {/* Обзор */}
-      <Group align="row" gap="12px" className={mainStyles.Form}>
+      <Group className={mainStyles.Form}>
         <div className={styles.SyncMetricGrid}>
           <MetricCell value={dbSize != null ? formatBytes(dbSize) : "—"} label={translate("dbSize")} />
           <MetricCell value={String(offlineStats?.totalRecords ?? 0)} label={translate("records")} />
@@ -457,7 +457,7 @@ const StorageTab: FC<{
       <Divider />
 
       {/* Действия */}
-      <Group align="row" gap="8px" className={mainStyles.Form}>
+      <Group className={mainStyles.Form}>
         <Button onClick={refreshStats}><span>🔄 Обновить</span></Button>
         <Button variant="primary" onClick={handleDlAll} disabled={downloading || !isOnline}>
           <span>{downloading ? "⏳ …" : "📥 Загрузить всё для офлайна"}</span>
@@ -477,7 +477,7 @@ const StorageTab: FC<{
       <Divider />
 
       {/* Выборочная загрузка */}
-      <Group align="col" label={translate("offlineSetup")} className={mainStyles.Form}>
+      <Group className={mainStyles.Form}>
         <div className={styles.SyncInfoBox} style={{ marginBottom: 8 }}>
           Выберите справочники, которые нужны офлайн, и нажмите «Загрузить».
         </div>

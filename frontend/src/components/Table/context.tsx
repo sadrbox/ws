@@ -75,6 +75,13 @@ export interface TableContextProps {
   disableAdd?: boolean;
   /** Если false — скрыть кнопку «Удалить» и чекбоксы выбора строк */
   canDelete?: boolean;
+  /**
+   * Разрешено ли отмечать строки. Раньше отметки были ТОЛЬКО ради удаления и гасились
+   * вместе с ним (`canDelete`), поэтому в списке без удаления чекбоксы были навсегда
+   * заблокированы — а групповым операциям (установить расширение в отмеченные базы)
+   * выделение нужно само по себе.
+   */
+  canSelect?: boolean;
 
   // ── Refs для inline-editing (не триггерят ререндер contextValue) ───────
   renderCellRef?: RefObject<((row: TDataItem, col: TColumn) => ReactNode | undefined) | undefined>;

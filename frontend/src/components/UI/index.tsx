@@ -23,26 +23,42 @@ import UIToast from 'src/components/UIToast';
 import { PanesTabs } from "./PanesTabs";
 
 
+/**
+ * Блочная разметка формы. Назначение компонентов — группировать ЭЛЕМЕНТЫ ФОРМЫ,
+ * а не быть универсальным флексом: поля обязаны лежать в Group/GroupRow/GroupCol,
+ * иначе расстояния между ними расходятся от формы к форме.
+ *
+ * СЕМАНТИКА ОТСТУПА. Горизонтальный и вертикальный шаг НЕ равны:
+ *   • GroupRow (и Group) — 6px: поля стоят в один ряд, на общей базовой линии,
+ *     и читаются как одна полоса;
+ *   • GroupCol — 12px: по вертикали шаг конкурирует с внутренним ритмом самого
+ *     поля. Подпись отбита от своего инпута на 3px (.FieldLabel margin-bottom),
+ *     и при шаге строк 6px отношение всего 2:1 — подпись начинает «липнуть» к
+ *     полю СВЕРХУ, а не к своему. 12px дают 4:1, и группировка читается однозначно.
+ *
+ * Шаг переопределяется пропом gap (только значения шкалы 3/6/12) — для случаев,
+ * когда расстояния в форме намеренно асимметричны.
+ */
+type GroupGap = 3 | 6 | 12;
+
 type TypeGroupProps = {
-  align?: 'row' | 'col';
-  type?: 'easy' | 'medium' | 'hard';
-  label?: string;
-  gap?: string;
+  /** Шаг между дочерними элементами. По умолчанию 6 для ряда и 12 для колонки. */
+  gap?: GroupGap;
   /** Доп. CSS-класс (для семантических утилит вместо inline-стилей). */
   className?: string;
   style?: CSSProperties;
 } & PropsWithChildren;
 
-export const Group: FC<TypeGroupProps> = ({ style, className, children }) =>
-  <div style={style} className={[styles.Group, styles.gap6, className].filter(Boolean).join(" ")}>{children}</div>;
+const GAP_CLASS: Record<GroupGap, string> = { 3: styles.gap3, 6: styles.gap6, 12: styles.gap12 };
 
-export const GroupRow: FC<TypeGroupProps> = ({ style, className, children }) =>
-  <div style={style} className={[styles.GroupRow, styles.gap6, className].filter(Boolean).join(" ")}>{children}</div>;
+export const Group: FC<TypeGroupProps> = ({ style, className, gap = 6, children }) =>
+  <div style={style} className={[styles.Group, GAP_CLASS[gap], className].filter(Boolean).join(" ")}>{children}</div>;
 
-export const GroupCol: FC<TypeGroupProps> = ({ style, className, children }) =>
-  <div style={style} className={[styles.GroupCol, styles.gap6, className].filter(Boolean).join(" ")}>{children}</div>;
+export const GroupRow: FC<TypeGroupProps> = ({ style, className, gap = 6, children }) =>
+  <div style={style} className={[styles.GroupRow, GAP_CLASS[gap], className].filter(Boolean).join(" ")}>{children}</div>;
 
-
+export const GroupCol: FC<TypeGroupProps> = ({ style, className, gap = 12, children }) =>
+  <div style={style} className={[styles.GroupCol, GAP_CLASS[gap], className].filter(Boolean).join(" ")}>{children}</div>;
 
 
 export const HorizontalLine = () => {

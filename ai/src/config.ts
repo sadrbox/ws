@@ -42,6 +42,19 @@ const schema = z.object({
 	LLM_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
 	// Сколько ждать результат команды из 1С внутри одного хода диалога.
 	CHAT_COMMAND_TIMEOUT_SECS: z.coerce.number().int().min(5).max(300).default(120),
+	/**
+	 * Сколько ждать результат админ-команды в HTTP-запросе панели.
+	 *
+	 * ДОЛЖЕН БЫТЬ ЗАМЕТНО МЕНЬШЕ ЛИМИТА ПРОКСИ (у Cloudflare это 100 с). Иначе запрос
+	 * переживает прокси, тот обрывает его СВОИМ ответом — без заголовков CORS, — и браузер
+	 * показывает «Access-Control-Allow-Origin missing» вместо внятной ошибки. Измерено:
+	 * вход в базу занимает у агента от 20 с до 15 минут, так что ждать «сколько получится»
+	 * нельзя в принципе.
+	 *
+	 * Команда при этом остаётся в очереди и доводится до конца, а результат оседает в кэше —
+	 * повторное открытие покажет данные.
+	 */
+	ONEC_COMMAND_TIMEOUT_SECS: z.coerce.number().int().min(5).max(90).default(45),
 	// Предел раундов «модель → инструменты» за один ход пользователя.
 	CHAT_MAX_TOOL_ROUNDS: z.coerce.number().int().min(1).max(20).default(8),
 	// Модель для чтения PDF выписок; по умолчанию — основная. Извлечение таблиц из многостраничных
@@ -56,7 +69,9 @@ const schema = z.object({
 	// Лимиты на пользователя в минуту: ходы чата и ходы с вложениями (распознавание PDF — дорого). 0 — без лимита.
 	RATE_LIMIT_CHAT_PER_MIN: z.coerce.number().int().min(0).max(1000).default(30),
 	RATE_LIMIT_ATTACHMENTS_PER_MIN: z.coerce.number().int().min(0).max(100).default(6),
-	// Предел обращений к КЛАСТЕРУ 1С в минуту — на организацию, а не на пользователя (E15/A6):
+	// Предел обращений к КЛАСТЕРУ 1С в минуту — на сам кластер (E15/A6): он один на
+	// установку, администрирование от организации не зависит, и ключ-по-организации
+	// означал бы N-кратный опрос одного и того же rac.
 	// у сотни баз один кластер, и три администратора с открытой панелью сеансов дают тройную
 	// нагрузку на rac. Локальное чтение реестра баз сюда не входит — оно не трогает кластер.
 	RATE_LIMIT_ONEC_CLUSTER_PER_MIN: z.coerce.number().int().min(0).max(600).default(60),
@@ -88,7 +103,7 @@ export function describe(cfg: Config): Record<string, unknown> {
 		allowedOrigins: cfg.ALLOWED_ORIGINS,
 		agentOrgBinding: cfg.AGENT_ORG_BINDING,
 		retention: `files ${cfg.FILE_TTL_DAYS}d, conversations ${cfg.CONVERSATION_TTL_DAYS}d`,
-		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на организацию`,
+		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на кластер`,
 	};
 }
 

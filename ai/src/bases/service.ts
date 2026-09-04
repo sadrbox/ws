@@ -25,6 +25,8 @@ export type BaseState = {
 };
 
 export type BaseRow = {
+	extensions_count: number | null;
+	extensions_seen_at: Date | null;
 	id: string;
 	server_id: string;
 	key: string;
@@ -47,6 +49,9 @@ export type BaseView = {
 	status: string;
 	onecVersion: string | null;
 	extVersion: string | null;
+	/** Сколько расширений видели в базе; null — базу ещё ни разу не проверяли. */
+	extensionsCount: number | null;
+	extensionsSeenAt: string | null;
 	sessionsCount: number | null;
 	lastSeenAt: string | null;
 	disabled: boolean;
@@ -62,7 +67,17 @@ export type ServerRow = {
 };
 
 const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b.ext_version,
-	b.sessions_count, b.last_seen_at, b.disabled_at, b.created_at`;
+	b.sessions_count, b.last_seen_at, b.disabled_at, b.created_at,
+	-- Расширения базы, как их последний раз читали (IB_LIST_EXTENSIONS). Именно счётчик,
+	-- а не флаг: колонка «Расширение» показывала «не установлено» всем базам подряд, хотя
+	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ — ext_version заполняет только heartbeat
+	-- бизнес-агента, и то лишь про своё расширение bpapi.
+	x.n AS extensions_count, x.seen AS extensions_seen_at`;
+
+/** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
+const EXT_JOIN = `LEFT JOIN LATERAL (
+	SELECT count(*)::int AS n, max(seen_at) AS seen FROM base_extensions e WHERE e.base_id = b.id
+) x ON true`;
 
 export class BaseService {
 	private readonly db: Db;
@@ -103,18 +118,28 @@ export class BaseService {
 		for (const s of states) {
 			const key = s.key.trim();
 			if (!key) continue;
+			// Имя с «?» — след транскодирования через CP1251 на стороне агента: русские
+			// буквы выживают, казахские (ә ғ қ ң ө ұ ү һ і) превращаются в «?» безвозвратно.
+			// Таким именем НЕ затираем уже сохранённое целое: иначе старый агент, запущенный
+			// после исправленного, снова испортит реестр. Битое имя принимается только
+			// когда своего ещё нет.
+			const mangled = !!s.name && s.name.includes("?");
 			await this.db.query(
 				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version, sessions_count, last_seen_at)
 				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, 'UNKNOWN'), $6, $7, $8, now())
 				 ON CONFLICT (server_id, key) DO UPDATE
-				    SET name           = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE bases.name END,
+				    SET name           = CASE
+				                           WHEN EXCLUDED.name = '' THEN bases.name
+				                           WHEN $9::boolean AND bases.name <> '' AND position('?' in bases.name) = 0 THEN bases.name
+				                           ELSE EXCLUDED.name
+				                         END,
 				        status         = COALESCE($5, bases.status),
 				        onec_version   = COALESCE(EXCLUDED.onec_version, bases.onec_version),
 				        ext_version    = COALESCE(EXCLUDED.ext_version, bases.ext_version),
 				        sessions_count = COALESCE(EXCLUDED.sessions_count, bases.sessions_count),
 				        last_seen_at   = now()`,
 				[randomUUID(), serverId, key, s.name ?? null, s.status ?? null,
-					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null],
+					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled],
 			);
 		}
 
@@ -132,7 +157,7 @@ export class BaseService {
 	async listByOrganization(organizationUuid: string): Promise<BaseView[]> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
 			`SELECT ${BASE_COLS}, s.name AS server_name
-			   FROM bases b JOIN servers s ON s.id = b.server_id
+			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE s.organization_uuid = $1
 			  ORDER BY s.name, b.key`,
 			[organizationUuid],
@@ -140,21 +165,48 @@ export class BaseService {
 		return r.rows.map((row) => this.view(row));
 	}
 
+	/** Все базы всех серверов — реестр администрирования 1С (вне организаций ERP). */
+	async listAll(): Promise<BaseView[]> {
+		const r = await this.db.query<BaseRow & { server_name: string }>(
+			`SELECT ${BASE_COLS}, s.name AS server_name
+			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
+			  ORDER BY s.name, b.key`,
+		);
+		return r.rows.map((row) => this.view(row));
+	}
+
 	async listByServer(serverId: string): Promise<BaseView[]> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
 			`SELECT ${BASE_COLS}, s.name AS server_name
-			   FROM bases b JOIN servers s ON s.id = b.server_id
+			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE b.server_id = $1 ORDER BY b.key`,
 			[serverId],
 		);
 		return r.rows.map((row) => this.view(row));
 	}
 
+	/**
+	 * База по ключу без привязки к организации — администрирование 1С идёт вне
+	 * организаций ERP (см. onecRouter). Имя базы уникально в пределах сервера, поэтому
+	 * при совпадении ключей на разных серверах вернётся первая; для адресных операций
+	 * этого достаточно — исполнитель всё равно выбирается по серверу базы.
+	 */
+	async findByKeyGlobal(key: string): Promise<BaseView | null> {
+		const r = await this.db.query<BaseRow & { server_name: string }>(
+			`SELECT ${BASE_COLS}, s.name AS server_name
+			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
+			  WHERE b.key = $1 AND b.disabled_at IS NULL
+			  ORDER BY s.name LIMIT 1`,
+			[key],
+		);
+		return r.rows[0] ? this.view(r.rows[0]) : null;
+	}
+
 	/** База организации по ключу — точка входа маршрутизации «база → сервер → агент». */
 	async findByKey(organizationUuid: string, key: string): Promise<BaseView | null> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
 			`SELECT ${BASE_COLS}, s.name AS server_name
-			   FROM bases b JOIN servers s ON s.id = b.server_id
+			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE s.organization_uuid = $1 AND b.key = $2`,
 			[organizationUuid, key],
 		);
@@ -179,6 +231,8 @@ export class BaseService {
 			status: r.disabled_at ? "DISABLED" : r.status,
 			onecVersion: r.onec_version,
 			extVersion: r.ext_version,
+			extensionsCount: r.extensions_count,
+			extensionsSeenAt: r.extensions_seen_at?.toISOString() ?? null,
 			sessionsCount: r.sessions_count,
 			lastSeenAt: r.last_seen_at?.toISOString() ?? null,
 			disabled: !!r.disabled_at,

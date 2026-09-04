@@ -17,7 +17,7 @@ export const TableHeader = memo(() => {
     columns, rows, componentName,
     sorting: { sort, onSortChange },
     states: { setSelectedRows, setIsAllSelectedMode, setExcludedRows },
-    isLoading, canDelete,
+    isLoading, canSelect,
   } = useTableContext();
   // Значения выделения — из волатильного контекста (чекбокс «выбрать все»).
   const { selectedRows, isAllSelectedMode, excludedRows } = useTableVolatile();
@@ -146,7 +146,7 @@ export const TableHeader = memo(() => {
                 type="checkbox"
                 checked={isAllSelected}
                 onChange={toggleAll}
-                disabled={isLoading || rows.length === 0 || !canDelete}
+                disabled={isLoading || rows.length === 0 || !canSelect}
               />
             </div>
           </th>

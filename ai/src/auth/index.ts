@@ -19,6 +19,12 @@ export type ErpUser = {
 	organizationUuid: string | null;
 	allowedOrgUuids: string[];
 	isOrgAdmin: boolean;
+	/**
+	 * Право «Администрирование 1С» (AccessPermission.modelName = 'OneCAdmin') хотя бы в
+	 * одной организации. Сервер 1С один на всю установку и организации ERP не принадлежит,
+	 * поэтому доступ к нему даёт именно право, а не совпадение активной организации.
+	 */
+	canOnecAdmin: boolean;
 };
 
 export type AgentIdentity = { agentId: string; organizationUuid: string };
@@ -148,6 +154,15 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 		[uuid],
 	);
 	const allowed = rights.rows.map((r) => r.organization_uuid);
+
+	// Право на администрирование 1С — в любой из организаций пользователя: активная
+	// организация к серверу 1С отношения не имеет.
+	const onec = await erp.query<{ n: string }>(
+		`SELECT count(*)::text AS n FROM access_permissions
+		  WHERE "userUuid" = $1 AND "modelName" = 'OneCAdmin'
+		    AND "accessLevel" IN ('full', 'readonly') AND "deletedAt" IS NULL`,
+		[uuid],
+	);
 	let active = row.organization_uuid;
 	if (active && !row.is_super_admin && !allowed.includes(active)) active = null;
 	const activeRole = rights.rows.find((r) => r.organization_uuid === active)?.role;
@@ -158,5 +173,6 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 		organizationUuid: active,
 		allowedOrgUuids: allowed,
 		isOrgAdmin: activeRole === "admin",
+		canOnecAdmin: row.is_super_admin || Number(onec.rows[0]?.n ?? 0) > 0,
 	};
 }

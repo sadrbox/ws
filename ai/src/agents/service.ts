@@ -155,6 +155,32 @@ export class AgentService {
 		return candidates.find((a) => a.serverId === serverId) ?? null;
 	}
 
+	/**
+	 * Исполнитель АДМИНИСТРАТИВНОЙ команды — без привязки к организации ERP.
+	 *
+	 * Сервер 1С один на всю установку: у бухгалтерской компании это её сервер со всеми
+	 * клиентскими базами, и активная организация пользователя к нему отношения не имеет.
+	 * Привязка агента к организации осмысленна для БИЗНЕС-команд (документы конкретной
+	 * организации), но для кластера она означала бы «администрирование работает, только
+	 * если угадал организацию» — чего не бывает.
+	 *
+	 * Ограничение доступа даёт право OneCAdmin (проверяется в onecRouter), а не org.
+	 */
+	async pickAdminAgent(baseKey: string | null): Promise<AgentView | null> {
+		const candidates = (await this.listAll()).filter((a) => !a.disabled && a.online && a.role === "admin");
+		const key = baseKey && baseKey !== DEFAULT_BASE_KEY ? baseKey : null;
+		if (!key) return candidates[0] ?? null;
+
+		// Имя базы уникально в пределах сервера, но не глобально: берём тот сервер,
+		// у которого есть агент на связи.
+		const rows = await this.db.query<{ server_id: string }>(
+			`SELECT b.server_id FROM bases b WHERE b.key = $1 AND b.disabled_at IS NULL`,
+			[key],
+		);
+		const ids = new Set(rows.rows.map((r) => r.server_id));
+		return candidates.find((a) => a.serverId && ids.has(a.serverId)) ?? null;
+	}
+
 	/** Агенты, которые организация видит в интерфейсе: свои, а в режиме any — все, если своих нет. */
 	async visibleTo(organizationUuid: string): Promise<AgentView[]> {
 		const own = await this.listByOrganization(organizationUuid);

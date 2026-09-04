@@ -16,6 +16,7 @@ import { requireAgent } from "../auth/index.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
+import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { type BaseService, type BaseState, needsFullBases } from "../bases/service.ts";
 
 // Состояние одной базы в register/heartbeat (E15/A2). Незаполненное поле значит «не знаю»:
@@ -69,8 +70,8 @@ const resultSchema = z.object({
 	onecHttpStatus: z.number().int().optional(),
 });
 
-export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: AgentService; bases: BaseService; queue: CommandQueue; audit: Audit }) {
-	const { db, cfg, log, agents, bases, queue, audit } = deps;
+export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: AgentService; bases: BaseService; queue: CommandQueue; audit: Audit; registry: OnecRegistry }) {
+	const { db, cfg, log, agents, bases, queue, audit, registry } = deps;
 	const r = Router();
 	r.use(requireAgent(db));
 
@@ -168,6 +169,18 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			log.warn({ agentId: req.agent!.agentId, commandId: p.data.commandId }, "результат для неизвестной команды");
 			res.json({ success: true, data: { ok: true, ignored: true } });
 			return;
+		}
+		// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
+		// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.
+		if (p.data.status === "SUCCESS" && row.base_key && (row.type === "IB_LIST_USERS" || row.type === "IB_LIST_EXTENSIONS")) {
+			const items = (p.data.result as { items?: unknown[] } | null)?.items;
+			if (Array.isArray(items)) {
+				const base = await bases.findByKeyGlobal(row.base_key);
+				if (base) {
+					if (row.type === "IB_LIST_USERS") await registry.syncUsers(base.id, items as IbUser[]);
+					else await registry.syncExtensions(base.id, items as IbExtension[]);
+				}
+			}
 		}
 		log.info({ commandId: row.id, status: p.data.status, code: p.data.error?.code }, "результат команды");
 		await audit.write({ event: "command.result", agentId: row.agent_id, organizationUuid: row.organization_uuid,

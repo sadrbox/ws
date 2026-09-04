@@ -81,6 +81,12 @@ export interface TableProps {
    *  таблица сдвигает activeRow и снимает выделение только с них (неудалённые,
    *  напр. документ-основание с 409, остаются активными/выделенными). */
   onDelete?: (selectedRows: Set<number>, rows: TDataItem[]) => void | Promise<{ deletedIds?: Set<number> } | void>;
+  /**
+   * Отметки строк наружу. Раньше выделение было доступно только внутри onDelete —
+   * то есть годилось лишь для удаления. Групповым операциям над выбранными строками
+   * (напр. установка расширения в отмеченные базы) нужен сам набор.
+   */
+  onSelectionChange?: (selectedRows: Set<number>, rows: TDataItem[]) => void;
   // ── Inline-редактирование ──────────────────────────────────────────────
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
@@ -265,6 +271,7 @@ const Table: FC<TableProps> = memo((props) => {
     variant = 'default',
     selectable = true,
     onSelectItem,
+    onSelectionChange,
     enableDateRange = true,
     componentName, rows, columns, total, totalPages,
     isLoading, error,
@@ -305,7 +312,25 @@ const Table: FC<TableProps> = memo((props) => {
   const [activeCell, setActiveCell] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isAllSelectedMode, setIsAllSelectedMode] = useState<boolean>(false);
+  // Уведомляем владельца об изменении отметок. Через ref, чтобы нестабильный колбэк
+  // из родителя не перезапускал эффект на каждый рендер.
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  useEffect(() => {
+    const notify = onSelectionChangeRef.current;
+    if (!notify) return;
+    // В режиме «выбраны все» selectedRows намеренно ПУСТ (иначе пришлось бы держать в нём
+    // весь список), а фактический выбор — это все строки за вычетом исключённых. Без этого
+    // «отметить всё» отдавало бы наружу пустой набор.
+    const effective = isAllSelectedMode
+      ? new Set(rows.map((r) => Number(r.id)).filter((id) => !excludedRows.has(id)))
+      : selectedRows;
+    notify(effective, rows);
+    // rows намеренно вне зависимостей: сообщаем именно о СМЕНЕ ОТМЕТОК, а не о
+    // каждой перезагрузке данных.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRows, isAllSelectedMode, excludedRows]);
   const [configModalAction, setConfigModalAction] = useState<TypeFormAction>('');
   const [dateRangeModalAction, setDateRangeModalAction] = useState<TypeFormAction>('');
   const [visibleFastSearch, setVisibleFastSearch] = useState(false);
@@ -477,6 +502,7 @@ const Table: FC<TableProps> = memo((props) => {
       hasNextPage, isFetchingNextPage,
       inlineEditing, renderCell, onInlineAdd,
       canDelete: !!onDelete,
+      canSelect: !!onDelete || !!onSelectionChange,
       renderCellRef, inlineEditingRef, getCellMetaRef,
       scrollRef,
       expandedRowIds,

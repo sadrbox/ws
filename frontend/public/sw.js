@@ -5,13 +5,13 @@
  *  - HTML / index.html → Network First (fallback на кэш)
  *  - JS / CSS / fonts  → Cache First (быстро из кэша, обновление в фоне)
  *  - Images            → Cache First с лимитом
- *  - API               → Network Only (данные через syncManager)
+ *  - API и чужие origin → не трогаем вовсе (см. fetch: SW обслуживает только свой origin)
  */
 
 /// <reference lib="webworker" />
 
-const CACHE_NAME = "app-static-v3";
-const RUNTIME_CACHE = "app-runtime-v2";
+const CACHE_NAME = "app-static-v4";
+const RUNTIME_CACHE = "app-runtime-v3";
 
 /**
  * Ресурсы, которые кэшируем при установке (precache).
@@ -92,13 +92,21 @@ self.addEventListener("fetch", (event) => {
 
   // Пропускаем:
   // - не-GET запросы
+  // - ЧУЖОЙ ORIGIN: запросы к AI Service (ai.buhprof.kz/v1/...) и любым внешним API.
+  //   Их перехват не давал ничего, а ломал по-крупному: networkFirst превращает ЛЮБОЙ
+  //   сбой в синтетический 503 «Offline», и длинные запросы (проверка расширений ждёт
+  //   ответа агента 1С до двух минут) падали с 503 «from service worker», когда браузер
+  //   останавливал SW вместе с его fetch. Плюс успешные ответы API оседали в кэше и
+  //   могли быть отданы повторно как свежие.
   // - API запросы (данные синхронизируются через syncManager)
   // - WebSocket
   // - chrome-extension и прочее
   // - модули Vite dev-сервера (см. isViteDev)
   if (
     event.request.method !== "GET" ||
+    url.origin !== self.location.origin ||
     url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/v1/") ||
     url.protocol === "ws:" ||
     url.protocol === "wss:" ||
     !url.protocol.startsWith("http") ||

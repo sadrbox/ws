@@ -157,8 +157,11 @@
 	// width: 100%;
 	// height: $heightFieldInput;
 
+	// Подпись поля — ВТОРИЧНЫЙ текст, а не декорация: раньше стоял хардкод #aaaaaa,
+	// одинаковый в обеих темах. На белом фоне светлой темы это 2.3:1 — имена полей
+	// читались с трудом. Токен $color51 инвертируется по теме: #666 (5.7:1) и #aeb6c0.
 	label {
-		color: #aaaaaa;
+		color: $color51;
 	}
 
 	// ── Table variant: no label, no border, stretch to fill td ──

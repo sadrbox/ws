@@ -314,7 +314,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     getCellMetaRef,
     expandedRowIds,
     renderExpandedRow,
-    canDelete,
+    canSelect,
     // Только сеттеры — значения выделения/навигации приходят пропсами.
     states: {
       setActiveRow,
@@ -540,7 +540,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             <div
               className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
             >
-              <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading || !canDelete} />
+              <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading || !canSelect} />
             </div>
           </td>
         )}

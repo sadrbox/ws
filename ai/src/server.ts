@@ -19,6 +19,8 @@ import { migrate } from "./db/migrate.ts";
 import { AgentService } from "./agents/service.ts";
 import { BaseService } from "./bases/service.ts";
 import { onecRouter } from "./http/onecRouter.ts";
+import { BatchService } from "./onec/batches.ts";
+import { OnecRegistry } from "./onec/registry.ts";
 import { CommandQueue } from "./commands/queue.ts";
 import { Audit } from "./audit/index.ts";
 import { agentRouter } from "./http/agentRouter.ts";
@@ -85,6 +87,8 @@ function createExtractor(cfg: Config, log: Logger): StatementExtractor | null {
 export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; agents: AgentService; workflow: ChatWorkflow | null } {
 	const { cfg, log, db, erp } = deps;
 	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS, cfg.AGENT_ORG_BINDING);
+	// Один реестр на оба роутера: списки из базы кладёт агентский путь, читает панель.
+	const onecRegistry = new OnecRegistry(db);
 	const baseRegistry = new BaseService(db);
 	const queue = new CommandQueue(db);
 	const audit = new Audit(db, log);
@@ -141,8 +145,11 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	});
 
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
-	app.use("/v1/onec", onecRouter({ erp, cfg, log, agents, bases: baseRegistry, queue, audit }));
-	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit }));
+	app.use("/v1/onec", onecRouter({
+		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
+		batches: new BatchService(db), registry: onecRegistry,
+	}));
+	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit, registry: onecRegistry }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));
 	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION }));
 

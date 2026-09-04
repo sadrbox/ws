@@ -1,88 +1,15 @@
-// Панель администрирования 1С (E15/A5). Отступы/радиусы — по шкале 3/6/12 и 3/6,
-// как в остальных панелях проекта.
-.Root {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	min-height: 0;
-}
-
-.Tabs {
-	display: flex;
-	gap: 3px;
-	padding: 6px;
-	border-bottom: 1px solid $color34;
-}
-
-.Tab,
-.TabActive {
-	font-family: inherit;
-	font-size: $fontsize;
-	padding: 6px 12px;
-	border-radius: var(--radius-6, 6px);
-	border: 1px solid transparent;
-	background: transparent;
-	color: $color6;
-	cursor: pointer;
-}
-
-.TabActive {
-	background: $color60;
-	border-color: $color34;
-	font-weight: 600;
-}
-
-.Notice {
-	margin: 6px;
-}
-
-.TableWrap {
-	display: flex;
-	flex-direction: column;
-	flex: 1 1 auto;
-	min-height: 0;
-}
-
-.Filter {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px;
-	flex-wrap: wrap;
-}
-
-.FilterLabel {
-	color: $color6;
-	font-size: $fontsize;
-}
-
-.Select {
-	font-family: inherit;
-	font-size: $fontsize;
-	padding: 3px 6px;
-	border: 1px solid $color34;
-	border-radius: var(--radius-3, 3px);
-	background: $color60;
-	color: $color6;
-	min-width: 180px;
-}
-
-.Action {
-	font-family: inherit;
-	font-size: $fontsize;
-	padding: 3px 12px;
-	border: 1px solid $color34;
-	border-radius: var(--radius-3, 3px);
-	background: $color60;
-	color: $color6;
-	cursor: pointer;
-
-	&:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-}
-
+// Панель администрирования 1С (E15/A5).
+//
+// Своих стилей здесь МИНИМУМ: каркас — общий .PaneFill, вкладки — components/Tabs,
+// кнопки — components/Button, выпадающий список — FieldSelect, таблицы — Table со
+// штатным тулбаром. Раньше панель несла собственные .Tabs/.Tab/.Select/.Action и
+// оттого выбивалась из общего вида списков. Остались подсказка и разметка модальных
+// окон подтверждения — того, чего в общих компонентах нет.
+//
+// Notice здесь тоже нет: это списковый пейн, а не форма. По правилу проекта <Notice />
+// показывает ошибки ДАННЫХ ФОРМЫ и живёт внутри формы (класс .FormNotice — нижняя
+// колонка макета формы). Итоги операций панели — системные сообщения, их место в
+// <UIToast />, как в Classifiers.
 .Hint {
 	padding: 6px;
 	color: $color6;
@@ -106,4 +33,32 @@
 // Предупреждение о необратимости — единственный акцентный элемент окна.
 .ConfirmWarning {
 	color: var(--c-red-42, #b91c1c);
+}
+
+// Заголовок раздела внутри вкладки (над таблицей). Шкала 3/6/12, как везде.
+.SectionTitle {
+	padding: 6px 6px 0;
+	color: $color51;
+	font-size: $fontsize;
+}
+
+// Форма в модалке групповой операции: колонка полей по общей вертикальной шкале.
+.ModalForm {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 6px;
+	min-width: 420px;
+}
+
+// Предупреждение о том, что операция невозможна в принципе (агент не умеет).
+// Не Notice: это не ошибка формы, а состояние среды — постоянное, пока не настроят агента.
+.Blocked {
+	margin: 6px;
+	padding: 6px 12px;
+	border: 1px solid $warnAccent;
+	border-left-width: 3px;
+	border-radius: var(--radius-3, 3px);
+	color: $color6;
+	font-size: $fontsize;
 }
