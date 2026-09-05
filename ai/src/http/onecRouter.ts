@@ -241,7 +241,7 @@ export function onecRouter(deps: Deps) {
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			capabilities: a.capabilities, lastSeenAt: a.lastSeenAt, disabled: a.disabled,
 		}));
-		res.json({ success: true, data: { items } });
+		res.json({ success: true, data: { items, limits: { checkParallel: cfg.ONEC_CHECK_PARALLEL } } });
 	});
 
 	// ── Сводки по всем базам (кэш, без обращения к 1С) ──────────────────────────
@@ -328,6 +328,51 @@ export function onecRouter(deps: Deps) {
 
 	r.get("/batches", async (req, res) => {
 		res.json({ success: true, data: { items: await batches.list(req.erpUser!.organizationUuid ?? "") } });
+	});
+
+	/**
+	 * Повторить только неуспешные базы задания.
+	 *
+	 * Payload берём из САМИХ КОМАНД, а не из задания: в задании пароль и содержимое .cfe
+	 * намеренно не хранятся (оно живёт в БД и попадает в журнал), а в команде payload
+	 * полный — иначе повтор создания пользователя пришлось бы набирать заново.
+	 */
+	r.post("/batches/:id/retry", async (req, res) => {
+		const u = req.erpUser!;
+		const src = await batches.progress(req.params.id);
+		if (!src) { send(res, fail(404, "NOT_FOUND", "Задание не найдено")); return; }
+
+		const failed = await batches.failedCommands(req.params.id);
+		if (!failed.length) { send(res, fail(409, "NOTHING_TO_RETRY", "В задании нет неуспешных баз")); return; }
+
+		const spec = findAdminCommand(src.type);
+		if (!spec) { send(res, fail(400, "UNKNOWN_COMMAND", `Команда ${src.type} больше не поддерживается`)); return; }
+
+		const batchId = await batches.create({
+			organizationUuid: u.organizationUuid ?? "",
+			userUuid: u.uuid, type: src.type, payload: { retryOf: req.params.id }, total: failed.length,
+		});
+
+		let queued = 0;
+		const skipped: { baseKey: string; reason: string }[] = [];
+		for (const cmd of failed) {
+			const key = cmd.base_key ?? "";
+			const agent = await agents.pickAdminAgent(key || null);
+			if (!agent || !agentCanRun(agent, spec)) {
+				skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });
+				continue;
+			}
+			const fresh = await queue.enqueue({
+				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: cmd.base_key,
+				type: cmd.type, payload: cmd.payload, userUuid: u.uuid, ttlSeconds: 900,
+			});
+			await batches.attach(batchId, fresh.id);
+			queued += 1;
+		}
+		await audit.write({ event: "onec.batch.retry", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
+			details: { type: src.type, retryOf: req.params.id, total: failed.length, queued, skipped: skipped.length } });
+
+		res.status(202).json({ success: true, data: { batchId, total: failed.length, queued, skipped } });
 	});
 
 	r.get("/batches/:id", async (req, res) => {

@@ -7,7 +7,7 @@
  * «поставлено 100» бесполезно, если в семнадцати базах не нашлось администратора.
  */
 import { FC, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
@@ -17,7 +17,9 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
-import { fetchBatches } from "src/services/onec/api";
+import { fetchBatches, retryBatch } from "src/services/onec/api";
+import { showToast } from "src/components/UIToast";
+import { translate as t } from "src/i18";
 import { SectionTitle } from "./shared";
 
 const batchColumns = (): TColumn[] => ([
@@ -44,6 +46,17 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 			const items = (q.state.data as { items?: { pending: number }[] } | undefined)?.items ?? [];
 			return items.some((b) => b.pending > 0) ? 3000 : false;
 		},
+	});
+
+	// Повтор только неуспешных: при ста базах пересобрать десяток отказов руками нереально.
+	const retry = useMutation({
+		mutationFn: retryBatch,
+		onSuccess: (d) => {
+			setOpened(d.batchId);
+			void batches.refetch();
+			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}`, d.queued ? "success" : "warning");
+		},
+		onError: (e) => showToast(e instanceof Error ? e.message : t("unknownError"), "error"),
 	});
 
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(batchColumns(), "OneCAdmin_batches"));
@@ -81,7 +94,16 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 						componentName: "OneCAdmin_batchItems", rows: itemSorted.rows, columns: itemCols,
 						setColumns: setItemCols, sorting: itemSorted.sorting, search: itemSorted.search,
 						onReload: () => void batches.refetch(),
-						extraButtons: <Button size="sm" onClick={() => setOpened("")}>{translate("onecBackToSummary")}</Button>,
+						extraButtons: (
+							<>
+								{current.failed > 0 && (
+									<Button size="sm" disabled={retry.isPending} onClick={() => retry.mutate(current.id)}>
+										{translate("onecBatchRetryFailed")} ({current.failed})
+									</Button>
+								)}
+								<Button size="sm" onClick={() => setOpened("")}>{translate("onecBackToSummary")}</Button>
+							</>
+						),
 					})} />
 				</>
 			)}

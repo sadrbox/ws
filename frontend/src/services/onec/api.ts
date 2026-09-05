@@ -122,8 +122,14 @@ export type OnecAgent = {
 	online: boolean; capabilities: string[]; lastSeenAt: string | null; disabled: boolean;
 };
 
-export const fetchAgents = () => aiFetch<{ items: OnecAgent[] }>("/v1/onec/agents");
+/** Вместе с агентами приходят лимиты: число одновременных проверок задаёт сервис. */
+export const fetchAgents = () =>
+	aiFetch<{ items: OnecAgent[]; limits: { checkParallel: number } }>("/v1/onec/agents");
 
 /** Есть ли на связи админ-агент с нужной способностью. */
 export const hasCapability = (agents: OnecAgent[] | undefined, capability: string): boolean =>
 	(agents ?? []).some((a) => a.role === "admin" && a.online && !a.disabled && a.capabilities.includes(capability));
+
+/** Повторить только неуспешные базы задания — создаётся новое задание. */
+export const retryBatch = (id: string) =>
+	aiFetch<BatchStart>(`/v1/onec/batches/${encodeURIComponent(id)}/retry`, { method: "POST" });

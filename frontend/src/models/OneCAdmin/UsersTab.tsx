@@ -22,7 +22,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchBaseUsers, fetchUserOccurrences, fetchUserSummary, runBatch, type BatchType } from "src/services/onec/api";
-import { CapabilityGuard, QueryError, SectionTitle, checkBases, useBaseTargets } from "./shared";
+import { CapabilityGuard, QueryError, SectionTitle, checkBases, useBaseTargets, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const summaryColumns = (): TColumn[] => ([
@@ -50,6 +50,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	const qc = useQueryClient();
 	const [openedBase, setOpenedBase] = useState("");
 	const [checking, setChecking] = useState(false);
+	const parallel = useCheckParallel();
 	const [lookupName, setLookupName] = useState("");
 	const [dialog, setDialog] = useState<null | "create" | "delete">(null);
 	const [form, setForm] = useState({ name: "", fullName: "", password: "" });
@@ -85,7 +86,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	/** Чтение списка пользователей выбранных баз — прямыми запросами, без задания. */
 	const checkSelected = useCallback(async (keys: string[]) => {
 		setChecking(true);
-		const r = await checkBases(keys, fetchBaseUsers);
+		const r = await checkBases(keys, fetchBaseUsers, parallel);
 		setChecking(false);
 		await qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
 		showToast(
@@ -94,7 +95,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 				: `${translate("onecChecked")}: ${r.ok}`,
 			r.failed.length ? "warning" : "success",
 		);
-	}, [qc]);
+	}, [qc, parallel]);
 
 	const targets = useBaseTargets({
 		componentName: "OneCAdmin_userTargets",

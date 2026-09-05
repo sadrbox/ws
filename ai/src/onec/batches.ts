@@ -71,6 +71,19 @@ export class BatchService {
 		};
 	}
 
+	/**
+	 * Команды задания, которые не удались. `expired` считаем неуспехом наравне с `failed`:
+	 * команда не выполнена, и повторять её нужно так же.
+	 */
+	async failedCommands(batchId: string): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown> }[]> {
+		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown> }>(
+			`SELECT base_key, type, payload FROM commands
+			  WHERE batch_id = $1 AND state IN ('failed', 'expired') ORDER BY created_at`,
+			[batchId],
+		);
+		return r.rows;
+	}
+
 	/** Последние задания организации — для вкладки «Задания». */
 	async list(organizationUuid: string, limit = 20): Promise<BatchProgress[]> {
 		const r = await this.db.query<{ id: string }>(

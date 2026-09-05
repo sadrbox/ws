@@ -22,7 +22,7 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchBaseExtensions, fetchExtensionSummary, runBatch, type BatchType } from "src/services/onec/api";
-import { CapabilityGuard, QueryError, SectionTitle, checkBases, useBaseTargets } from "./shared";
+import { CapabilityGuard, QueryError, SectionTitle, checkBases, useBaseTargets, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const summaryColumns = (): TColumn[] => ([
@@ -50,6 +50,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	const qc = useQueryClient();
 	const [openedBase, setOpenedBase] = useState<string>("");
 	const [checking, setChecking] = useState(false);
+	const parallel = useCheckParallel();
 	const [dialog, setDialog] = useState<null | "install" | "remove">(null);
 	const [extName, setExtName] = useState("");
 	const [safeMode, setSafeMode] = useState(true);
@@ -85,7 +86,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	 */
 	const checkSelected = useCallback(async (keys: string[]) => {
 		setChecking(true);
-		const r = await checkBases(keys, fetchBaseExtensions);
+		const r = await checkBases(keys, fetchBaseExtensions, parallel);
 		setChecking(false);
 		// Сводка и счётчики в «Базах» считаются по кэшу, который только что пополнился.
 		await qc.invalidateQueries({ queryKey: ["onec", "ext-summary"] });
@@ -96,7 +97,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 				: `${translate("onecChecked")}: ${r.ok}`,
 			r.failed.length ? "warning" : "success",
 		);
-	}, [qc]);
+	}, [qc, parallel]);
 
 	const targets = useBaseTargets({
 		componentName: "OneCAdmin_extTargets",

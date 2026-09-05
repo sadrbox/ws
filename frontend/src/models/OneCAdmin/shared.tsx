@@ -101,6 +101,16 @@ export const SectionTitle: FC<{ children: React.ReactNode }> = ({ children }) =>
  * без которой команда не будет даже поставлена в очередь. Показывается ДО нажатия кнопки —
  * иначе пользователь узнаёт о препятствии из отчёта «пропущено 110 из 110».
  */
+/**
+ * Сколько баз проверять одновременно. Значение приходит от сервиса (ONEC_CHECK_PARALLEL):
+ * каждое обращение к базе занимает у 1С сеанс и лицензию, и держать это число в двух
+ * местах — верный способ их развести.
+ */
+export function useCheckParallel(): number {
+	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	return agents.data?.limits?.checkParallel ?? 4;
+}
+
 export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNode }> = ({ capability }) => {
 	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
 	if (agents.isLoading || hasCapability(agents.data?.items, capability)) return null;
