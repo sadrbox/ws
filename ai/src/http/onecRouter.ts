@@ -15,7 +15,7 @@
 // Права: пока администратор организации или суперадмин. Именованное право OneCAdmin
 // заводится в ERP вместе с панелью (A5) — тогда проверка переедет на него.
 
-import { humanizeAgentError } from "../onec/errorHints.js";
+import { humanizeAgentError } from "../onec/errorHints.ts";
 import { Router, type Request, type Response } from "express";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";

@@ -9,7 +9,7 @@
  * дублировать их колонками — значит держать две правды в согласии, а команда может
  * завершиться, истечь по TTL или быть переставлена в очереди.
  */
-import { humanizeAgentError } from "./errorHints.js";
+import { humanizeAgentError } from "./errorHints.ts";
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 

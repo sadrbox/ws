@@ -13,9 +13,10 @@
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"tests/**/*.test.ts\"",
     "e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/e2e.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "tsc --noEmit",
+    "verify": "tsc --noEmit && node tools/check_imports.mjs",
     "chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/chat_e2e.ts",
-    "onec-probe": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env tools/onec_probe.ts"
+    "onec-probe": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env tools/onec_probe.ts",
+    "check-imports": "node tools/check_imports.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
