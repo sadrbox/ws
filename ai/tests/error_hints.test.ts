@@ -32,6 +32,20 @@ test("незнакомая ошибка и пустое значение про�
 	assert.equal(humanizeAgentError(null), null);
 });
 
+test("неаутентифицированный администратор кластера ведёт к настройкам агента, не базы", () => {
+	const out = humanizeAgentError({
+		code: "RAC_ERROR",
+		message: "rac завершился с ошибкой: Ошибка операции администрирования "
+			+ "Администратор кластера не аутентифицирован",
+	})!;
+	assert.match(out.message, /--cluster-user/);
+	// Администратора центрального сервера не путаем с администратором кластера.
+	const agentAdmin = humanizeAgentError({
+		code: "RAC_ERROR", message: "Администратор центрального сервера не аутентифицирован",
+	})!;
+	assert.match(agentAdmin.message, /--agent-user/);
+});
+
 test("незарегистрированный COMConnector отличается от отсутствующего члена", () => {
 	const out = humanizeAgentError({ code: "IB_ERROR", message: "Class not registered (0x80040154)" })!;
 	assert.match(out.message, /COMConnector/);

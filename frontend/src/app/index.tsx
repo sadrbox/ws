@@ -69,9 +69,13 @@ const App: React.FC = () => {
         networkMode: "offlineFirst",
         staleTime: 2 * 60 * 1000,
         gcTime: 30 * 60 * 1000,
-        retry: (failureCount, error: { code?: string; message?: string }) => {
+        retry: (failureCount, error: { code?: string; message?: string; status?: number }) => {
           // Не ретраить при сетевых ошибках — бессмысленно
           if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") return false;
+          // 4xx — отказ по существу (нет прав, не аутентифицирован, неверный вход), а не
+          // сбой связи: повтор даст тот же ответ. Для команд в 1С это ещё и цена —
+          // второй вызов rac и второй сеанс ради того же отказа.
+          if (typeof error?.status === "number" && error.status >= 400 && error.status < 500) return false;
           return failureCount < 1;
         },
       },

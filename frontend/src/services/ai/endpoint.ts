@@ -23,6 +23,22 @@ export function getAiUrl(): string {
 export type Envelope<T> = { success: boolean; data?: T; error?: { code: string; message: string } };
 
 /**
+ * Ошибка сервиса с HTTP-статусом и кодом.
+ *
+ * Статус нужен не для показа, а для решения «повторять ли»: 4xx от сервиса — это отказ
+ * предметной области (кластер не аутентифицировал администратора, агент не умеет команду),
+ * и повтор его не исправит. Молча повторяя, панель слала вторую команду агенту, вторую
+ * попытку `rac` и занимала второй сеанс 1С ради того же самого отказа — в консоли это
+ * видно парами одинаковых 422.
+ */
+export class AiServiceError extends Error {
+	constructor(message: string, readonly status: number, readonly code?: string) {
+		super(message);
+		this.name = "AiServiceError";
+	}
+}
+
+/**
  * Запрос к AI Service в общем конверте {success, data|error}.
  *
  * Ошибку не глотаем и не подменяем: текст из поля error осмысленный и написан для
@@ -61,7 +77,7 @@ export async function aiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 		body = null;
 	}
 	if (!res.ok || !body?.success) {
-		throw new Error(body?.error?.message || `HTTP ${res.status}`);
+		throw new AiServiceError(body?.error?.message || `HTTP ${res.status}`, res.status, body?.error?.code);
 	}
 	return body.data as T;
 }
