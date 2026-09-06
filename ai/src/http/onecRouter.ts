@@ -15,6 +15,7 @@
 // Права: пока администратор организации или суперадмин. Именованное право OneCAdmin
 // заводится в ERP вместе с панелью (A5) — тогда проверка переедет на него.
 
+import { humanizeAgentError } from "../onec/errorHints.js";
 import { Router, type Request, type Response } from "express";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
@@ -159,7 +160,7 @@ export function onecRouter(deps: Deps) {
 			return { status: 202, body: { success: true, data: { pending: true, commandId: cmd.id } } };
 		}
 		if (done.state !== "done") {
-			const e = done.error ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
+			const e = humanizeAgentError(done.error) ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
 			// 422, а НЕ 502. Агент отработал и вернул отказ — это ошибка предметной области,
 			// а не сбой шлюза. Cloudflare трактует 5xx от источника буквально: подменяет наш
 			// ответ своей HTML-страницей, у которой нет заголовков CORS, и браузер показывает
@@ -442,7 +443,7 @@ export function onecRouter(deps: Deps) {
 			return;
 		}
 		if (row.state !== "done") {
-			const e = row.error ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
+			const e = humanizeAgentError(row.error) ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
 			// 422 по той же причине, что и в run(): 5xx съедает прокси.
 			res.status(422).json({ success: false, error: e });
 			return;

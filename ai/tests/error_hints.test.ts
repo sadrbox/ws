@@ -1,0 +1,38 @@
+// E15: расшифровка ошибок 1С/COM в отчёте задания.
+//
+// Смысл проверок: подсказка не должна ни подменять исходный текст (он — единственное
+// доказательство), ни накапливаться при повторном чтении списка задания.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { humanizeAgentError } from "../src/onec/errorHints.ts";
+
+const COM_MEMBER_NOT_FOUND = {
+	code: "IB_ERROR",
+	message: 'Exception calling "InvokeMember" with "5" argument(s): "Member not found. '
+		+ '(Exception from HRESULT: 0x80020003 (DISP_E_MEMBERNOTFOUND))"',
+};
+
+test("HRESULT 0x80020003 получает диагноз, исходный текст сохраняется", () => {
+	const out = humanizeAgentError(COM_MEMBER_NOT_FOUND)!;
+	assert.ok(out.message.startsWith(COM_MEMBER_NOT_FOUND.message));
+	assert.match(out.message, /РасширенияКонфигурации/);
+	assert.equal(out.code, "IB_ERROR");
+});
+
+test("повторная расшифровка не наращивает текст", () => {
+	const once = humanizeAgentError(COM_MEMBER_NOT_FOUND)!;
+	const twice = humanizeAgentError(once)!;
+	assert.equal(twice.message, once.message);
+});
+
+test("незнакомая ошибка и пустое значение проходят как есть", () => {
+	const other = { code: "IB_ERROR", message: "Что-то своё" };
+	assert.equal(humanizeAgentError(other), other);
+	assert.equal(humanizeAgentError(null), null);
+});
+
+test("незарегистрированный COMConnector отличается от отсутствующего члена", () => {
+	const out = humanizeAgentError({ code: "IB_ERROR", message: "Class not registered (0x80040154)" })!;
+	assert.match(out.message, /COMConnector/);
+});

@@ -9,6 +9,7 @@
  * дублировать их колонками — значит держать две правды в согласии, а команда может
  * завершиться, истечь по TTL или быть переставлена в очереди.
  */
+import { humanizeAgentError } from "./errorHints.js";
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 
@@ -60,7 +61,11 @@ export class BatchService {
 		const c = await this.db.query<{ base_key: string | null; state: string; error: { code: string; message: string } | null }>(
 			`SELECT base_key, state, error FROM commands WHERE batch_id = $1 ORDER BY created_at`, [id],
 		);
-		const items = c.rows.map((r) => ({ baseKey: r.base_key, state: r.state, error: r.error }));
+		// Ошибку 1С/COM дополняем подсказкой «что чинить»: сырой HRESULT в отчёте задания
+		// не говорит пользователю ничего, а искать его в логах на Windows-машине дорого.
+		const items = c.rows.map((r) => ({
+			baseKey: r.base_key, state: r.state, error: humanizeAgentError(r.error),
+		}));
 		const done = items.filter((i) => i.state === "done").length;
 		// expired считаем неуспехом: команда не выполнена, и повторять её придётся так же.
 		const failed = items.filter((i) => i.state === "failed" || i.state === "expired").length;
