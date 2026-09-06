@@ -5,7 +5,7 @@
  * Групповые операции идут ПО ВЫБРАННЫМ базам, поэтому таблица баз повторяется на
  * нескольких вкладках — здесь она одна на всех, чтобы колонки и поведение не разошлись.
  */
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
@@ -13,6 +13,7 @@ import { Button } from "src/components/Button";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
+import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { fetchBases, fetchAgents, hasCapability, type OnecBase } from "src/services/onec/api";
@@ -234,8 +235,12 @@ export async function checkBases(
  * Вертикальное разделение вкладки: список слева, зависимые строки справа, с перетаскиваемой
  * границей.
  *
- * Ширина запоминается в localStorage по ключу вкладки: у «Расширений» и «Сеансов» разная
- * осмысленная пропорция, и общая настройка заставляла бы подгонять её при каждом переходе.
+ * Механика перетаскивания — общая (`useSplitResize` + `VSplitBar`), та же, что у списка с
+ * предпросмотром и у форм отчётов: своя копия с ручным pointermove, клампом и персистом
+ * разошлась бы с ними при первой же правке, а разделитель выглядел бы «похожим», но другим.
+ *
+ * Ширина запоминается по ключу вкладки: у «Расширений» и «Сеансов» разная осмысленная
+ * пропорция, и общая настройка заставляла бы подгонять её при каждом переходе.
  *
  * Заголовков разделов здесь нет намеренно: каждая половина — таблица со своей командной
  * панелью, и лишняя строка текста над ней только съедала высоту.
@@ -246,58 +251,21 @@ export const VSplit: FC<{
 	main: React.ReactNode;
 	side: React.ReactNode;
 }> = ({ storageKey, main, side }) => {
-	const key = `onec_vsplit_${storageKey}`;
-	const [ratio, setRatio] = useState<number>(() => {
-		const saved = Number(localStorage.getItem(key));
-		return Number.isFinite(saved) && saved >= 20 && saved <= 80 ? saved : 50;
+	// side: "left" — управляем левой (главной) половиной; границы 20–80%: узкая колонка
+	// бесполезна, а «схлопнуть» половину случайным движением мыши — потерять таблицу.
+	const { percent, containerRef, startResize, reset, nudge } = useSplitResize({
+		storageKey: `onec_vsplit_${storageKey}`,
+		side: "left",
+		defaultPercent: 50,
+		min: 20,
+		max: 80,
 	});
-	const wrapRef = useRef<HTMLDivElement>(null);
-	const dragging = useRef(false);
-
-	const onMove = useCallback((e: MouseEvent) => {
-		if (!dragging.current || !wrapRef.current) return;
-		const box = wrapRef.current.getBoundingClientRect();
-		// Границы 20–80%: узкая колонка бесполезна, а «схлопнуть» половину случайным
-		// движением мыши — потерять таблицу без очевидного способа её вернуть.
-		const next = Math.min(80, Math.max(20, ((e.clientX - box.left) / box.width) * 100));
-		setRatio(next);
-	}, []);
-
-	const stop = useCallback(() => {
-		if (!dragging.current) return;
-		dragging.current = false;
-		document.body.style.userSelect = "";
-		setRatio((r) => { try { localStorage.setItem(key, String(Math.round(r))); } catch { /* хранилище может быть запрещено */ } return r; });
-	}, [key]);
-
-	useEffect(() => {
-		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", stop);
-		return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", stop); };
-	}, [onMove, stop]);
 
 	return (
-		<div className={styles.VSplit} ref={wrapRef}>
-			<div className={styles.VSplitMain} style={{ flexBasis: `${ratio}%` }}>{main}</div>
-			<div
-				className={styles.VSplitBar}
-				role="separator"
-				aria-orientation="vertical"
-				onMouseDown={() => { dragging.current = true; document.body.style.userSelect = "none"; }}
-				// Клавиатура: разделитель должен двигаться и без мыши.
-				tabIndex={0}
-				onKeyDown={(e) => {
-					if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-					// Клавиатурный сдвиг запоминается так же, как перетаскивание: иначе
-					// ширина, выставленная с клавиатуры, терялась при переоткрытии вкладки.
-					setRatio((r) => {
-						const next = e.key === "ArrowLeft" ? Math.max(20, r - 2) : Math.min(80, r + 2);
-						try { localStorage.setItem(key, String(Math.round(next))); } catch { /* хранилище может быть запрещено */ }
-						return next;
-					});
-				}}
-			/>
-			<div className={styles.VSplitSide} style={{ flexBasis: `${100 - ratio}%` }}>{side}</div>
+		<div className={styles.VSplit} ref={containerRef}>
+			<div className={styles.VSplitMain} style={{ flexBasis: `${percent}%` }}>{main}</div>
+			<VSplitBar onPointerDown={startResize} onDoubleClick={reset} onNudge={nudge} />
+			<div className={styles.VSplitSide} style={{ flexBasis: `${100 - percent}%` }}>{side}</div>
 		</div>
 	);
 };

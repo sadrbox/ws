@@ -33,7 +33,7 @@ import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import { DocViewport, DocSheet, DocStatus } from "src/components/DocViewport";
-import { SplitResizer, useSplitResize } from "src/components/SplitPane";
+import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { GroupCol } from "src/components/UI";
 import styles from "./ReportPane.module.scss";
 
@@ -246,7 +246,7 @@ const ReportPane: FC<ReportPaneProps> = ({
             <GroupCol className={styles.ReportFormFields}>{form}</GroupCol>
 
           </div>
-          <SplitResizer onPointerDown={startResize} onDoubleClick={resetFormWidth} />
+          <VSplitBar onPointerDown={startResize} onDoubleClick={resetFormWidth} />
         </>
       )}
 

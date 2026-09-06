@@ -24,7 +24,7 @@ import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { Button } from "src/components/Button";
 
 // 7. Стили
-import { SplitResizer, useSplitResize } from "src/components/SplitPane";
+import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { isUnsavedRow } from "src/components/SubTable/rowModel";
 import styles from "./ModelList.module.scss";
 
@@ -438,7 +438,7 @@ const ModelList: FC<ModelListProps> = ({
   return (
     <div className={styles.splitView} ref={splitViewRef}>
       <div className={styles.splitList}>{table}</div>
-      <SplitResizer onPointerDown={startResize} onDoubleClick={resetPreviewWidth} />
+      <VSplitBar onPointerDown={startResize} onDoubleClick={resetPreviewWidth} />
       <div className={styles.splitPreview} style={{ flexBasis: `${previewWidth}%` }}>
         <ListPreview
           row={previewRow}

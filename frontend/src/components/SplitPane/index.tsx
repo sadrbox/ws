@@ -1,5 +1,5 @@
 /**
- * SplitPane — перетаскиваемый разделитель двух областей.
+ * SplitPane — перетаскиваемый разделитель двух областей (`VSplitBar`).
  *
  * Вынесен из ModelList: та же механика понадобилась формам отчётов (панель
  * фильтров ↔ область отчёта), и второй копии логики с ручным pointermove,
@@ -40,6 +40,8 @@ export interface SplitResizeApi {
   startResize: (e: ReactPointerEvent) => void;
   /** Сброс к значению по умолчанию (двойной клик по разделителю). */
   reset: () => void;
+  /** Сдвиг на дельту в процентах — для управления разделителем с клавиатуры. */
+  nudge: (deltaPercent: number) => void;
 }
 
 export function useSplitResize({
@@ -92,31 +94,51 @@ export function useSplitResize({
 
   const reset = useCallback(() => setPercent(defaultPercent), [defaultPercent]);
 
+  // Клавиатурный сдвиг живёт здесь, а не в разделителе: границы и персист — забота хука.
+  const nudge = useCallback(
+    (delta: number) => setPercent((p) => Math.min(max, Math.max(min, p + delta))),
+    [min, max],
+  );
+
   useEffect(() => {
     localStorage.setItem(storageKey, String(Math.round(percent)));
   }, [storageKey, percent]);
 
-  return { percent, containerRef, startResize, reset };
+  return { percent, containerRef, startResize, reset, nudge };
 }
 
-export interface SplitResizerProps {
+export interface VSplitBarProps {
   onPointerDown: (e: ReactPointerEvent) => void;
   onDoubleClick?: () => void;
   title?: string;
+  /**
+   * Сдвиг стрелками, % за нажатие. Передан — разделитель получает фокус и управляется
+   * с клавиатуры; не передан — остаётся чисто мышиным, как был.
+   */
+  onNudge?: (deltaPercent: number) => void;
 }
 
-/** Полоска-разделитель. Клавиатурой не управляется — размер не влияет на данные. */
-export const SplitResizer: FC<SplitResizerProps> = ({ onPointerDown, onDoubleClick, title }) => (
+/** Полоска-разделитель: одна на все раздвоенные области приложения. */
+export const VSplitBar: FC<VSplitBarProps> = ({ onPointerDown, onDoubleClick, title, onNudge }) => (
   <div
-    className={styles.SplitResizer}
+    className={styles.VSplitBar}
     role="separator"
     aria-orientation="vertical"
     title={title ?? translate("resizePanels")}
     onPointerDown={onPointerDown}
     onDoubleClick={onDoubleClick}
+    {...(onNudge ? {
+      tabIndex: 0,
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === "ArrowLeft") onNudge(-2);
+        else if (e.key === "ArrowRight") onNudge(2);
+        else return;
+        e.preventDefault();
+      },
+    } : {})}
   />
 );
 
-SplitResizer.displayName = "SplitResizer";
+VSplitBar.displayName = "VSplitBar";
 
-export default SplitResizer;
+export default VSplitBar;

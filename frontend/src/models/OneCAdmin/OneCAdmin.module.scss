@@ -118,7 +118,9 @@
 	display: flex;
 	flex: 1 1 auto;
 	min-height: 0;
-	gap: 12px;
+	// Отступ по 6px с каждой стороны разделителя: сам он рисует границы, и общий зазор
+	// 12px + полоска дают ту же вертикальную шкалу, что и остальная разметка.
+	gap: 6px;
 }
 
 .VSplitMain {
@@ -137,16 +139,3 @@
 	min-height: 0;
 }
 
-// Перетаскиваемая граница. Узкая полоса с широкой зоной захвата: попасть в 1px мышью
-// невозможно, а толстый разделитель съедает место под таблицы.
-.VSplitBar {
-	flex: 0 0 6px;
-	align-self: stretch;
-	cursor: col-resize;
-	background: $color34;
-	border-radius: var(--radius-3, 3px);
-	transition: background 0.12s;
-
-	&:hover,
-	&:focus-visible { background: $primary; outline: none; }
-}
