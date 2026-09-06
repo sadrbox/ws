@@ -212,6 +212,22 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		type: "IB_UNPUBLISH",
+		title: "Снять публикацию базы с веб-сервера",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		// Обратная IB_PUBLISH: удаление виртуального каталога и записи о базе с веб-сервера.
+		// CRITICAL не из-за данных (база не страдает), а из-за людей: у всех, кто работает
+		// через веб-клиент или тонкий клиент по HTTP, доступ пропадает немедленно.
+		schema: z.object({
+			baseKey,
+			alias: z.string().max(200).optional(),
+			webServer: z.enum(["iis", "apache24"]).optional(),
+		}).strict(),
+	},
+	{
 		type: "IB_DELETE_EXTENSION",
 		title: "Удалить расширение",
 		operation: "CRITICAL",

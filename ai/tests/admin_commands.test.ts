@@ -25,8 +25,9 @@ test("опасные операции помечены CRITICAL — они ид�
 		// снесённое расширение не вернуть, а установка меняет конфигурацию базы.
 		"IB_CREATE_USER", "IB_DELETE_EXTENSION", "IB_DELETE_USER", "IB_INSTALL_EXTENSION",
 		// Публикация меняет конфигурацию веб-сервера, а не базы, но так же необратима
-		// для стороннего наблюдателя — подтверждение обязательно.
-		"IB_PUBLISH",
+		// для стороннего наблюдателя — подтверждение обязательно. Снятие публикации
+		// критично не из-за данных, а из-за людей: доступ по HTTP пропадает немедленно.
+		"IB_PUBLISH", "IB_UNPUBLISH",
 	]);
 	// Всё остальное — только чтение: список баз или сеансов ничего не меняет.
 	assert.ok(ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL").every((c) => c.operation === "READ"));
@@ -96,6 +97,14 @@ test("списки содержимого базы — чтение: подтв�
 		assert.equal(findAdminCommand(t)!.operation, "READ", t);
 		assert.equal(findAdminCommand(t)!.requiresBase, true, t);
 	}
+});
+
+test("IB_UNPUBLISH: обязателен только baseKey, публикация снимается по имени базы", () => {
+	const spec = findAdminCommand("IB_UNPUBLISH")!;
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh_alma" }).ok, true);
+	assert.equal(buildAdminPayload(spec, {}).ok, false);
+	// Публикация — операция внутрибазового агента: способность та же, что у установки.
+	assert.equal(spec.capability, "ib.admin");
 });
 
 test("IB_PUBLISH: обязателен только baseKey, остальное — умолчания агента", () => {

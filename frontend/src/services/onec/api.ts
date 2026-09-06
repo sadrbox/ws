@@ -150,8 +150,9 @@ export const fetchExtensionSummary = () =>
 export type BatchType =
 	| "IB_CREATE_USER" | "IB_DELETE_USER"
 	| "IB_INSTALL_EXTENSION" | "IB_DELETE_EXTENSION"
-	// Публикация базы на веб-сервере — первый шаг раскатки (публикация → расширение → HTTP).
-	| "IB_PUBLISH"
+	// Публикация базы на веб-сервере — первый шаг раскатки (публикация → расширение → HTTP);
+	// снятие — обратная ей операция.
+	| "IB_PUBLISH" | "IB_UNPUBLISH"
 	// Чтение тоже пакетное: наполнить сводку по ста базам поштучно нереально.
 	| "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
 

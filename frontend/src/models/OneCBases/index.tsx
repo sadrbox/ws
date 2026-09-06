@@ -11,13 +11,11 @@
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
 import { FC, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
-import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
-import { showToast } from "src/components/UIToast";
 import { Field } from "src/components/Field";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { translate } from "src/i18";
@@ -29,8 +27,9 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { fetchBaseExtensions, fetchBaseUsers, fetchSessions, runBatch } from "src/services/onec/api";
-import { QueryError } from "src/models/OneCAdmin/shared";
+import { fetchBaseExtensions, fetchBaseUsers, fetchSessions } from "src/services/onec/api";
+import { QueryError, publishLabel } from "src/models/OneCAdmin/shared";
+import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import columnsJson from "./columns.json";
 
 const ENDPOINT = "onec-bases";
@@ -41,18 +40,6 @@ const statusLabel = (v: string): string => {
 	const key = { ONLINE: "onecBaseOnline", MISSING: "onecBaseMissing", DISABLED: "onecBaseDisabled", UNKNOWN: "onecBaseUnknown" }[v];
 	return key ? translate(key) : v;
 };
-
-/**
- * Публикация базы на веб-сервере — три состояния, а не два.
- *
- * `null` («не проверялась») — это НЕ «не опубликована»: первое означает, что срез от агента
- * ещё не приносил признак, второе — что публикацию надо раскатывать. Схлопнуть их в
- * «нет публикации» значило бы звать администратора публиковать уже опубликованные базы.
- */
-const publishLabel = (v: unknown): string =>
-	v === true ? translate("onecPublished")
-		: v === false ? translate("onecNotPublished")
-			: translate("onecPublishUnknown");
 
 const extColumns = (): TColumn[] => ([
 	{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
@@ -205,7 +192,7 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									value={row.extensionsCount == null ? translate("onecExtNotChecked") : asText(row.extensionsCount)}
 									disabled onChange={() => {}} width="170px" />
 								<Field name="ob_published" label={translate("onecPublication")}
-									value={publishLabel(row.published)} disabled onChange={() => {}} width="170px" />
+									value={publishLabel(row.published as boolean | null)} disabled onChange={() => {}} width="170px" />
 								<Field name="ob_seen" label={translate("lastSeenAt")}
 									value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} disabled onChange={() => {}} width="190px" />
 							</GroupRow>
@@ -222,62 +209,27 @@ OneCBasesForm.displayName = "OneCBasesForm";
 /** Вкладки предпросмотра в split-виде — те же, что и в форме. */
 const PreviewTabs: FC<{ row: TDataItem }> = ({ row }) => <>{useBaseTabs(row)[0].component}</>;
 
-export const OneCBasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => {
-	// Публикация — единственная изменяющая команда, применимая к базе как к целому,
-	// поэтому её место здесь, в командной панели списка баз, а не на вкладке расширений:
-	// выбирают базы, а не расширения.
-	const [confirm, setConfirm] = useState<TDataItem[] | null>(null);
-	const publish = useMutation({
-		mutationFn: (keys: string[]) => runBatch("IB_PUBLISH", keys, {}),
-		onSuccess: (r) => {
-			setConfirm(null);
-			showToast(r.skipped.length
-				? `${translate("onecPublishStarted")}: ${r.queued}/${r.total}`
-				: `${translate("onecPublishStarted")}: ${r.queued}`,
-			r.skipped.length ? "warning" : "success");
-		},
-		onError: (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error"),
-	});
-
-	return (
-		<>
-			<ModelList
-				endpoint={ENDPOINT}
-				listName={LIST_NAME}
-				columnsJson={columnsJson}
-				FormComponent={OneCBasesForm as never}
-				getLabel={(d) => asText(d?.baseKey)}
-				defaultSort={{ baseKey: "asc" }}
-				// Создание и удаление неприменимы: базы приходят из кластера 1С.
-				hideAddDelete
-				variant={variant}
-				onSelectItem={onSelectItem}
-				// Состояние публикации хранится булевым (с «не проверялась» = null), а подпись
-				// к нему — дело интерфейса: в API текста для человека быть не должно.
-				renderCell={(row, col) => (col.identifier === "published" ? publishLabel(row.published) : undefined)}
-				previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
-				extraButtons={(selected) => (
-					<Button size="sm" disabled={!selected.length || publish.isPending}
-						onClick={() => setConfirm(selected)}>
-						{translate("onecPublish")}
-					</Button>
-				)}
-			/>
-			{confirm && (
-				<Modal
-					title={translate("onecPublish")}
-					onClose={() => setConfirm(null)}
-					onApply={() => publish.mutate(confirm.map((r) => asText(r.baseKey)))}
-				>
-					{/* Публикация меняет конфигурацию веб-сервера, поэтому список баз показываем
-					    явно: групповая команда по случайно отмеченным строкам необратима. */}
-					<div>{translate("onecPublishConfirm")}: {confirm.length}</div>
-					<div>{confirm.map((r) => asText(r.baseKey)).join(", ")}</div>
-				</Modal>
-			)}
-		</>
-	);
-};
+export const OneCBasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
+	<ModelList
+		endpoint={ENDPOINT}
+		listName={LIST_NAME}
+		columnsJson={columnsJson}
+		FormComponent={OneCBasesForm as never}
+		getLabel={(d) => asText(d?.baseKey)}
+		defaultSort={{ baseKey: "asc" }}
+		// Создание и удаление неприменимы: базы приходят из кластера 1С.
+		hideAddDelete
+		variant={variant}
+		onSelectItem={onSelectItem}
+		// Состояние публикации хранится булевым (с «не проверялась» = null), а подпись
+		// к нему — дело интерфейса: в API текста для человека быть не должно.
+		renderCell={(row, col) => (col.identifier === "published" ? publishLabel(row.published as boolean | null) : undefined)}
+		previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
+		// Групповые команды по отмеченным базам: публикация и её снятие, пользователи,
+		// расширения. Здесь набор баз уже выбран — уходить за ним на другую вкладку незачем.
+		extraButtons={(selected) => <BaseGroupCommands selected={selected} />}
+	/>
+);
 OneCBasesList.displayName = "OneCBasesList";
 
 export default OneCBasesList;

@@ -1658,5 +1658,8 @@
   "onecExtSynonym": "Синоним",
   "onecOpenCard": "Карточка",
   "bases": "Баз",
-  "disabled": "Отключён"
+  "disabled": "Отключён",
+  "onecUnpublish": "Снять публикацию",
+  "onecUnpublishWarning": "Доступ к базе по HTTP (веб-клиент, тонкий клиент по адресу) пропадёт немедленно у всех пользователей.",
+  "onecSkippedBases": "Пропущены"
 }

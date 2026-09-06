@@ -1658,5 +1658,8 @@
   "onecExtSynonym": "Синоним",
   "onecOpenCard": "Карточка",
   "bases": "Базалар",
-  "disabled": "Өшірілген"
+  "disabled": "Өшірілген",
+  "onecUnpublish": "Жариялауды алу",
+  "onecUnpublishWarning": "HTTP арқылы қолжетімділік (веб-клиент, жіңішке клиент) барлық пайдаланушыларда бірден жоғалады.",
+  "onecSkippedBases": "Өткізілді"
 }

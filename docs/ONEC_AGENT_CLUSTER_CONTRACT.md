@@ -197,6 +197,7 @@ new UTF8Encoding(false)`, для Node — `spawn` без `encoding` и зате�
 | `IB_INSTALL_EXTENSION` | `{baseKey, name, contentBase64, safeMode?}` | `{ok:true}` |
 | `IB_DELETE_EXTENSION` | `{baseKey, name}` | `{ok:true}` |
 | `IB_PUBLISH` | `{baseKey, alias?, dir?, webServer?}` | `{ok:true, url:"http://localhost/<alias>"}` |
+| `IB_UNPUBLISH` | `{baseKey, alias?, webServer?}` | `{ok:true}` |
 
 Что важно соблюсти:
 
@@ -211,6 +212,15 @@ new UTF8Encoding(false)`, для Node — `spawn` без `encoding` и зате�
   `TIMEOUT` через 120 — пользователь может повторить операцию, которая на самом деле идёт.
   Повторное создание существующего пользователя и повторное удаление отсутствующего должны
   завершаться `SUCCESS`, а не ошибкой.
+- **`IB_UNPUBLISH` — обратная публикации:** снятие виртуального каталога и записи о базе
+  (`webinst -delete` или эквивалент). Идемпотентна: снятие публикации с неопубликованной
+  базы — `SUCCESS`, а не ошибка. После успеха сервис ставит базе `published = false` и
+  СТИРАЕТ `publishUrl`: ссылка на несуществующую страницу хуже её отсутствия.
+- **Публикация НЕ требуется внутрибазовым командам.** `IB_LIST_USERS`, `IB_CREATE_USER`,
+  `IB_DELETE_USER`, `IB_LIST_EXTENSIONS`, `IB_INSTALL_EXTENSION`, `IB_DELETE_EXTENSION` идут
+  через COM-соединение с сервером 1С напрямую. Веб-публикация нужна только каналу HTTP
+  (расширение `buhprof_api` бизнес-агента). Не отказывайте в этих командах неопубликованной
+  базе: её как раз готовят к публикации.
 - **`IB_PUBLISH` — не операция над базой.** Публикация делается настройкой веб-сервера
   (виртуальный каталог + `default.vrd`), в скриптовом API 1С её нет: агент выполняет её
   запуском `webinst`, как запускает `rac`. Публиковать **только на localhost** — агент ходит

@@ -201,15 +201,14 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
 			}
 		}
-		// Успешная публикация — сразу в реестр: иначе состояние обновилось бы только
+		// Публикация и её снятие — сразу в реестр: иначе состояние обновилось бы только
 		// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
-		if (p.data.status === "SUCCESS" && row.type === "IB_PUBLISH" && row.base_key) {
-			const url = (p.data.result as { url?: string } | null)?.url ?? null;
+		if (p.data.status === "SUCCESS" && row.base_key
+			&& (row.type === "IB_PUBLISH" || row.type === "IB_UNPUBLISH")) {
+			const published = row.type === "IB_PUBLISH";
+			const url = published ? (p.data.result as { url?: string } | null)?.url ?? null : null;
 			const me = await agents.findById(req.agent!.agentId);
-			if (me?.serverId) {
-				await bases.sync(me.serverId, [{ key: row.base_key, published: true, publishUrl: url }],
-					{ complete: false, authoritative: false });
-			}
+			if (me?.serverId) await bases.setPublication(me.serverId, row.base_key, published, url);
 		}
 		// База, которой нет: агент сообщил «не найдена». Помечаем в реестре — иначе фантом
 		// остаётся в списке наравне с рабочими, и о проблеме узнают только по ошибке при

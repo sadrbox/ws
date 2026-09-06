@@ -275,6 +275,21 @@ export class BaseService {
 		);
 	}
 
+	/**
+	 * Состояние публикации по результату команды.
+	 *
+	 * Отдельно от `sync`: тот бережёт прежние значения (`COALESCE`), потому что «поле не
+	 * прислали» значит «не знаю». Здесь ровно наоборот — команда ЗНАЕТ результат, и снятие
+	 * публикации обязано СТЕРЕТЬ адрес, а не оставить ссылку на страницу, которой больше нет.
+	 */
+	async setPublication(serverId: string, key: string, published: boolean, url: string | null): Promise<void> {
+		await this.db.query(
+			`UPDATE bases SET published = $3, publish_url = $4, publish_seen_at = now()
+			 WHERE server_id = $1 AND key = $2`,
+			[serverId, key, published, url],
+		);
+	}
+
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
 		const r = await this.db.query(
 			`UPDATE bases SET disabled_at = ${disabled ? "now()" : "NULL"} WHERE id = $1`,

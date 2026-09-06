@@ -368,7 +368,7 @@ export function onecRouter(deps: Deps) {
 		"IB_CREATE_USER", "IB_DELETE_USER", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION",
 		// Публикация — первый шаг раскатки: опубликовать → поставить расширение → перейти
 		// на HTTP. Делать это по одной базе из ста бессмысленно.
-		"IB_PUBLISH",
+		"IB_PUBLISH", "IB_UNPUBLISH",
 	]);
 
 	r.post("/batch", async (req, res) => {
