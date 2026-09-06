@@ -96,12 +96,19 @@ export const AgentsTab: FC = () => {
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecAgentsHint")}</div>
-			{doubled.map((a) => (
-				<div key={a.id} className={styles.Blocked}>
-					{translate("onecAgentDoubled")}: {a.name || a.id.slice(0, 8)} — {a.instances.length}.{" "}
-					{translate("onecAgentDoubledHint")}
-				</div>
-			))}
+			{doubled.map((a) => {
+				// Адреса источников: экземпляры с РАЗНЫХ адресов — это один токен на двух
+				// машинах (классика: сервер 1С и машина разработки), и лечится это не
+				// «убить лишний процесс», а отдельным агентом со своим токеном.
+				const addrs = [...new Set(a.instances.map((i) => i.remoteAddr).filter(Boolean))];
+				return (
+					<div key={a.id} className={styles.Blocked}>
+						{translate("onecAgentDoubled")}: {a.name || a.id.slice(0, 8)} — {a.instances.length}
+						{addrs.length > 1 ? ` (${translate("onecAgentFromHosts")}: ${addrs.join(", ")})` : ""}.{" "}
+						{addrs.length > 1 ? translate("onecAgentTokenShared") : translate("onecAgentDoubledHint")}
+					</div>
+				);
+			})}
 			<QueryError error={agents.error} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_agents", rows, columns: cols, setColumns: setCols,

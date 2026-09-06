@@ -240,25 +240,29 @@ export class AgentService {
 	 * два процесса под одним токеном разбирают одну очередь, и разошедшиеся настройки дают
 	 * плавающие отказы, необъяснимые ничем другим.
 	 */
-	async touchInstance(agentId: string, instanceId: string, version: string | null): Promise<void> {
+	async touchInstance(agentId: string, instanceId: string, version: string | null, remoteAddr?: string | null): Promise<void> {
 		await this.db.query(
-			`INSERT INTO agent_instances (agent_id, instance_id, version)
-			 VALUES ($1, $2, $3)
+			`INSERT INTO agent_instances (agent_id, instance_id, version, remote_addr)
+			 VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (agent_id, instance_id)
-			 DO UPDATE SET last_seen_at = now(), version = COALESCE(EXCLUDED.version, agent_instances.version)`,
-			[agentId, instanceId.slice(0, 200), version],
+			 DO UPDATE SET last_seen_at = now(),
+			               version = COALESCE(EXCLUDED.version, agent_instances.version),
+			               remote_addr = COALESCE(EXCLUDED.remote_addr, agent_instances.remote_addr)`,
+			[agentId, instanceId.slice(0, 200), version, remoteAddr ?? null],
 		);
 	}
 
 	/** Сколько экземпляров отзывалось за последние `secs` секунд. */
-	async liveInstances(agentId: string, secs: number): Promise<{ instanceId: string; version: string | null; lastSeenAt: Date }[]> {
-		const r = await this.db.query<{ instance_id: string; version: string | null; last_seen_at: Date }>(
-			`SELECT instance_id, version, last_seen_at FROM agent_instances
+	async liveInstances(agentId: string, secs: number): Promise<{ instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: Date }[]> {
+		const r = await this.db.query<{ instance_id: string; version: string | null; remote_addr: string | null; last_seen_at: Date }>(
+			`SELECT instance_id, version, remote_addr, last_seen_at FROM agent_instances
 			  WHERE agent_id = $1 AND last_seen_at > now() - ($2 || ' seconds')::interval
 			  ORDER BY last_seen_at DESC`,
 			[agentId, String(secs)],
 		);
-		return r.rows.map((x) => ({ instanceId: x.instance_id, version: x.version, lastSeenAt: x.last_seen_at }));
+		return r.rows.map((x) => ({
+			instanceId: x.instance_id, version: x.version, remoteAddr: x.remote_addr, lastSeenAt: x.last_seen_at,
+		}));
 	}
 
 	async touch(id: string): Promise<void> {

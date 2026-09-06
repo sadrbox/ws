@@ -93,7 +93,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		const instance = String(req.headers["x-agent-instance"] ?? "").trim();
 		if (instance) {
 			const ver = String(req.headers["x-agent-version"] ?? "").trim() || null;
-			void agents.touchInstance(req.agent!.agentId, instance, ver);
+			// Адрес источника: два экземпляра на РАЗНЫХ машинах — это один токен, скопированный
+			// с сервера 1С на машину разработки, и лечится он не так, как двойной запуск.
+			void agents.touchInstance(req.agent!.agentId, instance, ver, req.ip ?? null);
 		}
 		next();
 	});
@@ -130,7 +132,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
 			await agents.markBasesSynced(req.agent!.agentId);
 		}
-		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version);
+		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version, req.ip ?? null);
 		log.info({ agentId: req.agent!.agentId, version: p.data.version, role, bases: p.data.bases?.length ?? 0 }, "агент зарегистрирован");
 		await audit.write({ event: "agent.register", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
 			details: { version: p.data.version, os: p.data.os, role, capabilities: p.data.capabilities.length, bases: p.data.bases?.length ?? 0 } });
@@ -147,7 +149,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Некорректный heartbeat" } });
 			return;
 		}
-		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version ?? null);
+		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version ?? null, req.ip ?? null);
 		await agents.heartbeat(req.agent!.agentId, {
 			status: p.data.status,
 			version: p.data.version,

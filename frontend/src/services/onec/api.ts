@@ -186,7 +186,7 @@ export type OnecAgent = {
 	 * два процесса под одним токеном разбирают одну очередь команд, и стоит их настройкам
 	 * разойтись, как одна и та же команда начинает отказывать через раз.
 	 */
-	instances: { instanceId: string; version: string | null; lastSeenAt: string }[];
+	instances: { instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: string }[];
 };
 
 /** Вместе с агентами приходят лимиты: число одновременных проверок задаёт сервис. */
