@@ -13,6 +13,9 @@
 //   node --experimental-strip-types --env-file=.env tools/onec_probe.ts --base akacapital
 //   node --experimental-strip-types --env-file=.env tools/onec_probe.ts --cmd CLUSTER_LIST_INFOBASES --cluster
 //   node … tools/onec_probe.ts --parallel 4     # сколько ставить одновременно (потолок ищется так)
+//   node … tools/onec_probe.ts --cmd CLUSTER_LIST_CONNECTIONS --cluster --repeat 8 --parallel 1
+//        # одну и ту же команду N раз: так ловится ПЛАВАЮЩИЙ отказ (часть проходит, часть нет).
+//        # Сравнение --parallel 1 и --parallel 4 показывает, зависит ли отказ от одновременности.
 
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../src/config.ts";
@@ -31,6 +34,8 @@ const LIMIT = Number(args.get("limit") ?? 10);
 const ONE_BASE = args.get("base") ?? null;
 const CLUSTER_ONLY = args.has("cluster");
 const PARALLEL = Number(args.get("parallel") ?? 1);
+/** Сколько раз повторить команду: плавающий отказ одним прогоном не отличить от сбоя. */
+const REPEAT = Math.max(1, Number(args.get("repeat") ?? 1));
 const WAIT_SECS = Number(args.get("wait") ?? 300);
 
 type Row = { base: string; state: string; code: string; message: string; secs: number; summary: string };
@@ -66,9 +71,11 @@ async function main(): Promise<number> {
 				`SELECT key FROM bases WHERE status = 'ONLINE' AND disabled_at IS NULL ORDER BY key LIMIT $1`, [LIMIT],
 			)).rows.map((r) => r.key);
 
-	console.log(`команда: ${CMD} | баз: ${keys.length} | одновременно: ${PARALLEL}\n`);
+	// Повтор размножает цели: для кластерной команды это N одинаковых запусков подряд.
+	const targets = REPEAT > 1 ? keys.flatMap((k) => Array.from({ length: REPEAT }, () => k)) : keys;
+	console.log(`команда: ${CMD} | целей: ${targets.length}${REPEAT > 1 ? ` (повтор ×${REPEAT})` : ""} | одновременно: ${PARALLEL}\n`);
 
-	const queue = [...keys];
+	const queue = [...targets];
 	const rows: Row[] = [];
 
 	const worker = async () => {
@@ -105,7 +112,7 @@ async function main(): Promise<number> {
 			console.log(`  ${mark} ${row.base.padEnd(26)} ${String(row.secs).padStart(4)}с  ${row.summary}${row.code ? row.code + " " + row.message.slice(0, 70) : ""}`);
 		}
 	};
-	await Promise.all(Array.from({ length: Math.max(1, Math.min(PARALLEL, keys.length)) }, worker));
+	await Promise.all(Array.from({ length: Math.max(1, Math.min(PARALLEL, targets.length)) }, worker));
 
 	const ok = rows.filter((r) => r.state === "done");
 	const times = rows.map((r) => r.secs).sort((a, b) => a - b);

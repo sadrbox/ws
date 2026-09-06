@@ -300,10 +300,15 @@ export function onecRouter(deps: Deps) {
 	 * как нажмёт кнопку и получит «пропущено 110 из 110».
 	 */
 	r.get("/agents", async (_req, res) => {
-		const items = (await agents.listAll()).map((a) => ({
+		const all = await agents.listAll();
+		// Экземпляры (процессы) агента: два процесса под одним токеном разбирают одну
+		// очередь, и если их настройки разошлись — команды отказывают ЧЕРЕЗ РАЗ. Ни в одном
+		// логе это не написано, поэтому показываем счёт прямо в панели.
+		const items = await Promise.all(all.map(async (a) => ({
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			capabilities: a.capabilities, lastSeenAt: a.lastSeenAt, disabled: a.disabled,
-		}));
+			instances: await agents.liveInstances(a.id, cfg.AGENT_OFFLINE_AFTER_SECS),
+		})));
 		res.json({ success: true, data: { items, limits: { checkParallel: cfg.ONEC_CHECK_PARALLEL } } });
 	});
 

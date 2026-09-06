@@ -233,6 +233,34 @@ export class AgentService {
 	 * «На связи» должно означать «мы от него что-то слышали», а не «он прислал один
 	 * конкретный вид сообщения».
 	 */
+	/**
+	 * Отметить экземпляр агента (процесс), приславший запрос.
+	 *
+	 * Экземпляр называет себя сам: pid + время старта. Нам важно не кто он, а СКОЛЬКО их:
+	 * два процесса под одним токеном разбирают одну очередь, и разошедшиеся настройки дают
+	 * плавающие отказы, необъяснимые ничем другим.
+	 */
+	async touchInstance(agentId: string, instanceId: string, version: string | null): Promise<void> {
+		await this.db.query(
+			`INSERT INTO agent_instances (agent_id, instance_id, version)
+			 VALUES ($1, $2, $3)
+			 ON CONFLICT (agent_id, instance_id)
+			 DO UPDATE SET last_seen_at = now(), version = COALESCE(EXCLUDED.version, agent_instances.version)`,
+			[agentId, instanceId.slice(0, 200), version],
+		);
+	}
+
+	/** Сколько экземпляров отзывалось за последние `secs` секунд. */
+	async liveInstances(agentId: string, secs: number): Promise<{ instanceId: string; version: string | null; lastSeenAt: Date }[]> {
+		const r = await this.db.query<{ instance_id: string; version: string | null; last_seen_at: Date }>(
+			`SELECT instance_id, version, last_seen_at FROM agent_instances
+			  WHERE agent_id = $1 AND last_seen_at > now() - ($2 || ' seconds')::interval
+			  ORDER BY last_seen_at DESC`,
+			[agentId, String(secs)],
+		);
+		return r.rows.map((x) => ({ instanceId: x.instance_id, version: x.version, lastSeenAt: x.last_seen_at }));
+	}
+
 	async touch(id: string): Promise<void> {
 		await this.db.query(`UPDATE agents SET last_seen_at = now() WHERE id = $1`, [id]);
 	}

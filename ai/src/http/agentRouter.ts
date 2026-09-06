@@ -41,6 +41,8 @@ const registerSchema = z.object({
 	agentId: z.string().uuid(),
 	agentName: z.string().max(200).optional().default(""),
 	version: z.string().max(50),
+	/** Идентификатор ПРОЦЕССА (pid + время старта): им ловится второй запущенный экземпляр. */
+	instanceId: z.string().max(200).optional(),
 	os: z.string().max(50).optional().default(""),
 	capabilities: z.array(z.string().max(50)).max(100).optional().default([]),
 	// v2: роль службы (business | admin), сервер 1С и список его баз.
@@ -56,6 +58,7 @@ const registerSchema = z.object({
 const heartbeatSchema = z.object({
 	agentId: z.string().uuid(),
 	version: z.string().max(50).optional(),
+	instanceId: z.string().max(200).optional(),
 	status: z.string().max(20),
 	onec: z.object({ reachable: z.boolean(), version: z.string().nullable().optional() }).optional(),
 	commandsDone: z.number().int().optional(),
@@ -84,6 +87,14 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 	// а частота — раз в цикл опроса, то есть десятки секунд.
 	r.use((req, _res, next) => {
 		void agents.touch(req.agent!.agentId);
+		// Экземпляр (процесс) агента называет себя заголовком. Нужен не для доверия, а для
+		// счёта: два процесса под одним токеном разбирают одну очередь, и разошедшиеся
+		// настройки дают отказ через раз — с сервера это иначе не видно вовсе.
+		const instance = String(req.headers["x-agent-instance"] ?? "").trim();
+		if (instance) {
+			const ver = String(req.headers["x-agent-version"] ?? "").trim() || null;
+			void agents.touchInstance(req.agent!.agentId, instance, ver);
+		}
 		next();
 	});
 
@@ -119,6 +130,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
 			await agents.markBasesSynced(req.agent!.agentId);
 		}
+		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version);
 		log.info({ agentId: req.agent!.agentId, version: p.data.version, role, bases: p.data.bases?.length ?? 0 }, "агент зарегистрирован");
 		await audit.write({ event: "agent.register", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
 			details: { version: p.data.version, os: p.data.os, role, capabilities: p.data.capabilities.length, bases: p.data.bases?.length ?? 0 } });
@@ -135,6 +147,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Некорректный heartbeat" } });
 			return;
 		}
+		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version ?? null);
 		await agents.heartbeat(req.agent!.agentId, {
 			status: p.data.status,
 			version: p.data.version,

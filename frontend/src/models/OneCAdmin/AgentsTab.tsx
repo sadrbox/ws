@@ -33,6 +33,7 @@ const columns = (): TColumn[] => ([
 	{ identifier: "onlineLabel", type: "string", width: "130px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "lastSeenAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "capabilitiesCount", type: "number", width: "130px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
+	{ identifier: "instancesCount", type: "number", width: "140px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 export const AgentsTab: FC = () => {
@@ -76,7 +77,16 @@ export const AgentsTab: FC = () => {
 		onlineLabel: a.disabled ? translate("onecAgentDisabled") : a.online ? translate("onecAgentOnline") : translate("onecAgentOffline"),
 		lastSeenAt: a.lastSeenAt,
 		capabilitiesCount: a.capabilities.length,
+		instancesCount: a.instances?.length ?? 0,
 	})), [agents.data]);
+
+	// Больше одного процесса под одним токеном — предупреждаем прямо в панели. Симптом
+	// (команда отказывает через раз, при этом «пароль верный») ни на что другое не похож,
+	// но и не подсказывает причину: с сервера видно только чередование ответов.
+	const doubled = useMemo(
+		() => (agents.data?.items ?? []).filter((a) => !a.disabled && (a.instances?.length ?? 0) > 1),
+		[agents.data],
+	);
 
 	const view = useStaticTableView(rowsRaw, { name: "asc" });
 	const rows = view.rows.map((r) => ({ ...r, lastSeenAt: r.lastSeenAt ? getFormatDate(String(r.lastSeenAt)) : "—" }));
@@ -86,6 +96,12 @@ export const AgentsTab: FC = () => {
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecAgentsHint")}</div>
+			{doubled.map((a) => (
+				<div key={a.id} className={styles.Blocked}>
+					{translate("onecAgentDoubled")}: {a.name || a.id.slice(0, 8)} — {a.instances.length}.{" "}
+					{translate("onecAgentDoubledHint")}
+				</div>
+			))}
 			<QueryError error={agents.error} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_agents", rows, columns: cols, setColumns: setCols,
