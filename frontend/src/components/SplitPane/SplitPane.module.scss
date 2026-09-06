@@ -1,49 +1,30 @@
+@use "src/styles/variables" as *;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // VSplitBar — перетаскиваемый разделитель двух областей.
 //
-// Стиль перенесён из ModelList.module.scss без изменений: разделитель списка и
-// предпросмотра выглядел именно так, и формы отчётов должны получить ровно тот
-// же элемент, а не «похожий».
+// Узкая полоса с широкой зоной захвата: попасть в 1px мышью невозможно, а толстый
+// разделитель съедает место под содержимое. Подсветка — только по наведению и фокусу:
+// в покое разделитель не должен спорить с данными, между которыми он стоит.
+//
+// Прежний вид (штриховые границы, пунктирная риска по центру, свечение при наведении)
+// заменён на эту полосу намеренно: два разных разделителя в одном приложении читались
+// как два разных элемента управления.
 // ═══════════════════════════════════════════════════════════════════════════
 
 .VSplitBar {
-	border-radius: 3%;
 	flex: 0 0 6px;
+	align-self: stretch;
 	cursor: col-resize;
-	position: relative;
+	background: $color34;
+	border-radius: var(--radius-3, 3px);
 	// touch-action: none — иначе на планшете перетаскивание разделителя
 	// перехватывается прокруткой страницы.
 	touch-action: none;
-	background: linear-gradient(90deg, rgba(148, 163, 184, 0.08) 0%, rgba(148, 163, 184, 0.02) 100%);
-	border-left: 1px dashed rgba(148, 163, 184, 0.35);
-	border-right: 1px dashed rgba(148, 163, 184, 0.35);
-	transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-
-	&::before {
-		content: "";
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 50%;
-		width: 1px;
-		background-image: linear-gradient(to bottom, rgba(107, 114, 128, 0.8) 0 40%, transparent 40% 100%);
-		background-size: 100% 8px;
-		background-repeat: repeat-y;
-		transform: translateX(-50%);
-	}
+	transition: background 0.12s;
 
 	&:hover,
-	&:focus-visible {
-		background: linear-gradient(90deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.04) 100%);
-		border-color: rgba(59, 130, 246, 0.45);
-		box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08), 0 0 6px 3px rgba(59, 130, 246, 0.08);
-	}
-
-	&:hover::before,
-	&:focus-visible::before {
-		width: 3px;
-		background-image: linear-gradient(to bottom, rgba(59, 130, 246, 0.95) 0 40%, transparent 40% 100%);
-	}
+	&:focus-visible { background: $primary; outline: none; }
 }
 
 // В печать разделитель не идёт — это элемент управления.
