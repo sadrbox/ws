@@ -60,7 +60,21 @@ export function onecRouter(deps: Deps) {
 		max: cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN,
 		windowMs: 60_000,
 		key: () => "onec-cluster",
-		applies: (req) => !(req.method === "GET" && req.path === "/bases"),
+		// Из-под лимита выведено то, что до кластера НЕ доходит и отвечает из своей БД:
+		// реестр баз, опрос готовности команды (он идёт раз в 2 с и один в одиночку съел бы
+		// половину минутной квоты), сводки по кэшу, задания и список агентов.
+		applies: (req) => {
+			if (req.method !== "GET") return true;
+			return !(
+				req.path === "/bases" ||
+				req.path === "/agents" ||
+				req.path === "/extensions" ||
+				req.path === "/users" ||
+				req.path.startsWith("/commands/") ||
+				req.path.startsWith("/batches") ||
+				req.path.startsWith("/users/")
+			);
+		},
 		message: "Слишком часто обращаемся к кластеру 1С — подождите немного",
 	}));
 
@@ -95,10 +109,24 @@ export function onecRouter(deps: Deps) {
 		const built = buildAdminPayload(spec, input);
 		if (!built.ok) return fail(400, "VALIDATION_ERROR", built.message);
 
+		// База, которой нет в реестре, — это НЕ «нет агента». Маршрутизация идёт через
+		// реестр (база → сервер → агент), и при неизвестном ключе выбор исполнителя
+		// проваливается; раньше пользователь получал «админ-агент недоступен», хотя агент
+		// на связи, а не найдена именно база.
+		if (built.baseKey && !(await bases.findByKeyGlobal(built.baseKey))) {
+			return fail(404, "UNKNOWN_BASE",
+				`Базы «${built.baseKey}» нет в реестре. Обновите список из кластера — возможно, она появилась или была удалена`);
+		}
+
 		const agent = await agents.pickAdminAgent(built.baseKey);
 		if (!agent) return await explainNoAgent(built.baseKey, spec.role);
 		if (!agentCanRun(agent, spec)) {
-			return fail(409, "CAPABILITY_MISSING", `Агент не умеет «${spec.title}»: нет способности ${spec.capability}`);
+			// Разделяем два разных случая: агента не настроили на этот класс операций
+			// (нет способности) — или он просто старее сервиса и такой команды не знает.
+			const known = agent.capabilities.includes(spec.capability);
+			return fail(409, "CAPABILITY_MISSING", known
+				? `Агент не умеет команду «${spec.title}» (${spec.type}) — обновите агента на сервере 1С`
+				: `Агент не умеет «${spec.title}»: нет способности ${spec.capability}`);
 		}
 
 		const cmd = await queue.enqueue({
@@ -124,15 +152,20 @@ export function onecRouter(deps: Deps) {
 
 		const done: CommandRow | null = await queue.waitResult(cmd.id, cfg.ONEC_COMMAND_TIMEOUT_SECS * 1000);
 		if (!done || done.state === "queued" || done.state === "dispatched") {
-			return fail(504, "TIMEOUT", spec.operation === "CRITICAL"
-				? `Агент не ответил за ${cfg.ONEC_COMMAND_TIMEOUT_SECS} с. Команда осталась в очереди и, скорее всего, будет выполнена — проверьте состояние перед повтором`
-				// Для чтения важно сказать, что данные не потеряны: команда доработает,
-				// результат ляжет в кэш, и повторное открытие его покажет.
-				: `Агент 1С не ответил за ${cfg.ONEC_COMMAND_TIMEOUT_SECS} с. Команда доработает в фоне — откройте ещё раз чуть позже`);
+			// НЕ ошибка: команда исполняется. Отдаём её идентификатор, клиент дождётся
+			// короткими опросами. Держать HTTP-запрос дольше нельзя — вход в базу занимает
+			// у агента до 15 минут, а туннель обрывает такой запрос СВОИМ ответом, без
+			// заголовков CORS, и браузер показывает это как ошибку CORS.
+			return { status: 202, body: { success: true, data: { pending: true, commandId: cmd.id } } };
 		}
 		if (done.state !== "done") {
 			const e = done.error ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
-			return { status: 502, body: { success: false, error: e } };
+			// 422, а НЕ 502. Агент отработал и вернул отказ — это ошибка предметной области,
+			// а не сбой шлюза. Cloudflare трактует 5xx от источника буквально: подменяет наш
+			// ответ своей HTML-страницей, у которой нет заголовков CORS, и браузер показывает
+			// это как «Access-Control-Allow-Origin missing». Именно так терялись все
+			// сообщения об ошибках 1С — текст до панели не доезжал.
+			return { status: 422, body: { success: false, error: e } };
 		}
 		return { status: 200, body: { success: true, data: done.result ?? null }, data: done.result ?? null };
 	}
@@ -172,13 +205,21 @@ export function onecRouter(deps: Deps) {
 	r.post("/bases/refresh", async (req, res) => {
 		const agent = await agents.pickAdminAgent(null);
 		const outcome = await run(req, "CLUSTER_LIST_INFOBASES", {});
-		const items = (outcome.data as { items?: BaseState[] } | null)?.items;
-		if (outcome.status === 200 && agent?.serverId && Array.isArray(items) && items.length) {
-			await bases.sync(agent.serverId, items, { complete: true, authoritative: true });
-			send(res, { status: 200, body: { success: true, data: { items: await bases.listAll() } } });
+		if (outcome.status !== 200) {
+			// 202 (команда ещё идёт), 422 (агент отказал), 409 (агента нет) — как есть.
+			send(res, outcome);
 			return;
 		}
-		send(res, outcome);
+		const items = (outcome.data as { items?: BaseState[] } | null)?.items;
+		// Пустой список НЕ применяем: полный срез с complete+authoritative пометил бы все
+		// базы как пропавшие. Агент, вернувший ноль баз, скорее сломан, чем прав.
+		if (agent?.serverId && Array.isArray(items) && items.length) {
+			await bases.sync(agent.serverId, items, { complete: true, authoritative: true });
+		}
+		// Отвечаем ВСЕГДА реестром, а не сырым ответом rac: у них разная форма (у rac нет
+		// ни сервера, ни счётчика расширений), и панель на сыром ответе рисовала пустые
+		// колонки. Если применить было нечего — вернём то, что знаем сейчас.
+		send(res, { status: 200, body: { success: true, data: { items: await bases.listAll() } } });
 	});
 
 	r.get("/bases/:key/info", async (req, res) => {
@@ -193,6 +234,27 @@ export function onecRouter(deps: Deps) {
 	r.get("/connections", async (req, res) => {
 		const filter = typeof req.query.baseKey === "string" && req.query.baseKey ? { baseKey: req.query.baseKey } : {};
 		send(res, await run(req, "CLUSTER_LIST_CONNECTIONS", filter));
+	});
+
+	r.get("/locks", async (req, res) => {
+		const filter = typeof req.query.baseKey === "string" && req.query.baseKey ? { baseKey: req.query.baseKey } : {};
+		send(res, await run(req, "CLUSTER_LIST_LOCKS", filter));
+	});
+
+	r.get("/processes", async (req, res) => {
+		send(res, await run(req, "CLUSTER_LIST_PROCESSES", {}));
+	});
+
+	r.get("/licenses", async (req, res) => {
+		send(res, await run(req, "CLUSTER_LIST_LICENSES", {}));
+	});
+
+	r.post("/connections/:id/disconnect", async (req, res) => {
+		const body = (req.body ?? {}) as { baseKey?: string };
+		send(res, await run(req, "CLUSTER_DISCONNECT", {
+			connectionId: req.params.id,
+			...(body.baseKey ? { baseKey: body.baseKey } : {}),
+		}));
 	});
 
 	r.post("/sessions/:id/terminate", async (req, res) => {
@@ -244,6 +306,43 @@ export function onecRouter(deps: Deps) {
 		res.json({ success: true, data: { items, limits: { checkParallel: cfg.ONEC_CHECK_PARALLEL } } });
 	});
 
+	/**
+	 * Управление агентами из панели. Раньше агента заводили только консольной командой с
+	 * `AGENT_ADMIN_KEY` — то есть человек, у которого есть право «Администрирование 1С»,
+	 * всё равно шёл к тому, у кого есть доступ к серверу. Здесь те же операции под тем же
+	 * правом, что и остальная панель.
+	 *
+	 * Токен показывается ОДИН раз: в БД лежит только его SHA-256, восстановить нельзя —
+	 * забыли, значит ротация.
+	 */
+	r.post("/agents", async (req, res) => {
+		const u = req.erpUser!;
+		const name = String((req.body as { name?: unknown })?.name ?? "").trim();
+		if (!name) { send(res, fail(400, "VALIDATION_ERROR", "name: укажите имя агента")); return; }
+		if (!u.organizationUuid) { send(res, fail(409, "ORGANIZATION_REQUIRED", "Выберите активную организацию — к ней будет привязан агент")); return; }
+
+		const { agent, token } = await agents.create(u.organizationUuid, name);
+		log.info({ agentId: agent.id, userUuid: u.uuid }, "агент создан из панели");
+		await audit.write({ event: "agent.create", agentId: agent.id, organizationUuid: agent.organizationUuid, userUuid: u.uuid });
+		res.status(201).json({ success: true, data: { agent, token } });
+	});
+
+	r.post("/agents/:id/rotate-token", async (req, res) => {
+		const token = await agents.rotateToken(req.params.id);
+		if (!token) { send(res, fail(404, "NOT_FOUND", "Агент не найден")); return; }
+		await audit.write({ event: "agent.rotate_token", agentId: req.params.id, userUuid: req.erpUser!.uuid });
+		res.json({ success: true, data: { token } });
+	});
+
+	for (const action of ["disable", "enable"] as const) {
+		r.post(`/agents/:id/${action}`, async (req, res) => {
+			const ok = await agents.setDisabled(req.params.id, action === "disable");
+			if (!ok) { send(res, fail(404, "NOT_FOUND", "Агент не найден")); return; }
+			await audit.write({ event: `agent.${action}`, agentId: req.params.id, userUuid: req.erpUser!.uuid });
+			res.json({ success: true, data: { ok: true } });
+		});
+	}
+
 	// ── Сводки по всем базам (кэш, без обращения к 1С) ──────────────────────────
 	r.get("/users", async (_req, res) => {
 		res.json({ success: true, data: { items: await registry.userSummary() } });
@@ -264,7 +363,12 @@ export function onecRouter(deps: Deps) {
 	// Задание — только для ИЗМЕНЯЮЩИХ операций: их результат по каждой базе нужно хранить
 	// и к нему возвращаться. Чтение (IB_LIST_*) идёт обычными запросами по выбранным базам:
 	// нажал — увидел, заводить ради этого сущность и уходить на другую вкладку незачем.
-	const BATCHABLE = new Set(["IB_CREATE_USER", "IB_DELETE_USER", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION"]);
+	const BATCHABLE = new Set([
+		"IB_CREATE_USER", "IB_DELETE_USER", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION",
+		// Публикация — первый шаг раскатки: опубликовать → поставить расширение → перейти
+		// на HTTP. Делать это по одной базе из ста бессмысленно.
+		"IB_PUBLISH",
+	]);
 
 	r.post("/batch", async (req, res) => {
 		const u = req.erpUser!;
@@ -324,6 +428,28 @@ export function onecRouter(deps: Deps) {
 		log.info({ type, total: keys.length, queued, skipped: skipped.length, userUuid: u.uuid }, "пакетная команда 1С");
 
 		res.status(202).json({ success: true, data: { batchId, total: keys.length, queued, skipped } });
+	});
+
+	/**
+	 * Готовность команды — для опроса из панели после ответа 202. Отдаёт тот же конверт,
+	 * что и синхронный путь: либо `{pending:true}`, либо результат, либо ошибку агента.
+	 */
+	r.get("/commands/:id", async (req, res) => {
+		const row = await queue.get(req.params.id);
+		if (!row) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
+		if (row.state === "queued" || row.state === "dispatched") {
+			res.json({ success: true, data: { pending: true, commandId: row.id } });
+			return;
+		}
+		if (row.state !== "done") {
+			const e = row.error ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
+			// 422 по той же причине, что и в run(): 5xx съедает прокси.
+			res.status(422).json({ success: false, error: e });
+			return;
+		}
+		// Списки содержимого базы кладутся в кэш на общем пути приёма (agentRouter),
+		// здесь только отдаём готовое.
+		res.json({ success: true, data: row.result ?? null });
 	});
 
 	r.get("/batches", async (req, res) => {

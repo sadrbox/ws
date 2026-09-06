@@ -6,10 +6,24 @@
  * в базу. Всё это идёт через AI Service (`/v1/onec/*`) к админ-агенту, который работает с
  * кластером утилитой `rac` — из браузера в кластер никто не ходит.
  *
- * ЧТО ОТКУДА. Список баз берётся из реестра сервиса, а не опросом кластера на каждый показ:
- * состояние приходит с heartbeat агента, а сто баз опрашивать при каждом открытии вкладки
- * незачем. Кнопка «Обновить из кластера» существует для случая, когда ждать heartbeat не
- * хочется. Сеансы, наоборот, всегда спрашиваются вживую: список часовой давности бесполезен.
+ * ЧТО ОТКУДА (правило одно на всю панель). В кластер 1С ходит ТОЛЬКО агент, и только по
+ * явной команде сервиса; браузер не знает про 1С ничего и разговаривает с `/v1/onec/*`.
+ * Данные делятся на три вида, и это определяет, что вызывает обращение к 1С:
+ *
+ *   1. РЕЕСТР (базы, сводки по расширениям и пользователям) — таблицы БД сервиса.
+ *      Наполняются heartbeat'ом агента и результатами команд. Открытие вкладки, прокрутка,
+ *      сортировка, поиск и отбор по строке слева читают реестр и в 1С НЕ ходят.
+ *   2. ЖИВОЕ СОСТОЯНИЕ (сеансы, соединения, блокировки, процессы, лицензии) — всегда
+ *      команда в кластер: список часовой давности здесь бесполезен. Кэша нет (staleTime: 0).
+ *   3. СОДЕРЖИМОЕ БАЗЫ (пользователи и расширения конкретной ИБ) — вход в базу, десятки
+ *      секунд и занятый сеанс 1С. Само не грузится НИКОГДА: только по кнопкам «Проверить
+ *      пользователей» / «Проверить расширения» и «Обновить» в таблице. Прочитанное оседает
+ *      в реестре и дальше показывается оттуда — рядом видно, когда его последний раз видели.
+ *
+ * Итого в 1С стучат ровно четыре жеста: «Обновить из кластера» (полный срез баз),
+ * «Проверить пользователей»/«Проверить расширения» (по отмеченным базам), «Обновить» в
+ * таблице живого состояния и сама изменяющая команда. Двойной клик по строке и переключение
+ * вкладок запросов в кластер не порождают.
  *
  * ПОДТВЕРЖДЕНИЯ. Снятие сеанса и блокировка входа необратимы для того, кто в этот момент
  * работает в базе, поэтому обе операции проходят через модальное окно с явным «Да».
@@ -33,23 +47,19 @@ import {
 	fetchBases, refreshBases, fetchSessions, terminateSession, setSessionsLock,
 	type ClusterRow, type OnecBase,
 } from "src/services/onec/api";
+import { QueryError } from "./shared";
+import { OneCBasesList } from "src/models/OneCBases";
+import ConnectionsTab from "./ConnectionsTab";
+import ServerTab from "./ServerTab";
 import ExtensionsTab from "./ExtensionsTab";
 import UsersTab from "./UsersTab";
 import BatchesTab from "./BatchesTab";
+import AgentsTab from "./AgentsTab";
 import styles from "./OneCAdmin.module.scss";
 import main from "src/styles/main.module.scss";
 
-type Tab = "bases" | "sessions" | "extensions" | "users" | "batches";
+type Tab = "bases" | "sessions" | "connections" | "server" | "extensions" | "users" | "batches" | "agents";
 
-const basesColumns = (): TColumn[] => ([
-	{ identifier: "baseKey", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "name", type: "string", width: "220px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "status", type: "string", width: "110px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "sessionsCount", type: "number", width: "100px", minWidth: "70px", alignment: "right", visible: true, inlist: true },
-	{ identifier: "onecVersion", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "extensionsCount", type: "number", width: "130px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
-	{ identifier: "lastSeenAt", type: "string", width: "160px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
-] as unknown as TColumn[]);
 
 const sessionsColumns = (): TColumn[] => ([
 	{ identifier: "sessionId", type: "string", width: "90px", minWidth: "60px", alignment: "left", visible: true, inlist: true },
@@ -59,6 +69,7 @@ const sessionsColumns = (): TColumn[] => ([
 	{ identifier: "startedAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "lastActiveAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
+
 
 /** Дата от rac → формат приложения. Нераспознанное показываем как пришло: лучше сырая
  *  строка, чем «—» вместо реального значения (у разных версий платформы формат разный). */
@@ -77,15 +88,17 @@ export const OneCAdminList: FC = () => {
 	// Запущенное задание открываем сразу: иначе групповая операция уходит «в никуда».
 	const [watchBatch, setWatchBatch] = useState<string>("");
 	const [baseFilter, setBaseFilter] = useState<string>("");
-	const [baseColumns, setBaseColumns] = useState<TColumn[]>(() => getModelColumns(basesColumns(), "OneCAdmin_bases"));
 	const [sessionColumns, setSessionColumns] = useState<TColumn[]>(() => getModelColumns(sessionsColumns(), "OneCAdmin_sessions"));
-	const [confirm, setConfirm] = useState<null | { kind: "terminate"; session: ClusterRow } | { kind: "lock"; base: OnecBase; enabled: boolean }>(null);
+	const [confirm, setConfirm] = useState<null | { kind: "terminate"; session: ClusterRow } | { kind: "terminateMany"; ids: string[] } | { kind: "lock"; base: OnecBase; enabled: boolean }>(null);
+	/** UUID отмеченных сеансов — цель групповой команды «Завершить сеансы». */
+	const [pickedSessions, setPickedSessions] = useState<string[]>([]);
 	const [lockMessage, setLockMessage] = useState("");
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	const sessions = useQuery({
-		queryKey: ["onec", "sessions", baseFilter],
-		queryFn: () => fetchSessions(baseFilter || undefined),
+		// Срез всего кластера; отбор по базе — ниже, на месте (см. fetchSessions).
+		queryKey: ["onec", "sessions"],
+		queryFn: fetchSessions,
 		enabled: tab === "sessions",
 		// Сеансы живут секундами: закэшированный список вводит в заблуждение.
 		staleTime: 0,
@@ -110,6 +123,32 @@ export const OneCAdminList: FC = () => {
 		onError: toastError,
 	});
 
+	/**
+	 * Групповое снятие: последовательно, а не пачкой. Каждое снятие — отдельная команда
+	 * агенту, и параллелить их незачем: операция мгновенная, зато при ошибке видно,
+	 * на каком сеансе споткнулись.
+	 */
+	const terminateMany = useMutation({
+		mutationFn: async (ids: string[]) => {
+			let ok = 0;
+			const failed: string[] = [];
+			for (const id of ids) {
+				try { await terminateSession(id, baseFilter || undefined); ok += 1; }
+				catch { failed.push(id); }
+			}
+			return { ok, failed };
+		},
+		onSuccess: (r) => {
+			showToast(r.failed.length
+				? `${translate("onecSessionTerminated")}: ${r.ok}/${r.ok + r.failed.length}`
+				: `${translate("onecSessionTerminated")}: ${r.ok}`,
+				r.failed.length ? "warning" : "success");
+			setPickedSessions([]);
+			void sessions.refetch();
+		},
+		onError: toastError,
+	});
+
 	const lock = useMutation({
 		mutationFn: (p: { baseKey: string; enabled: boolean; message?: string }) => setSessionsLock(p.baseKey, p.enabled, p.message),
 		onSuccess: (_d, p) => {
@@ -119,23 +158,18 @@ export const OneCAdminList: FC = () => {
 		onError: toastError,
 	});
 
-	// СЫРЫЕ значения — их и сортируем: дату нельзя сортировать после форматирования
-	// («04.09.2026» сравнивалось бы посимвольно, т.е. по дню, а не по времени), а
-	// прочерк вместо числа сеансов превращал бы числовое сравнение в строковое («10» < «9»).
-	// null компаратор отправляет в конец — ровно то, что нужно для «нет данных».
-	const baseRowsRaw = useMemo(() => (bases.data?.items ?? []).map((b, i) => ({
-		id: i + 1,
-		uuid: b.id,
-		baseKey: b.key,
-		name: b.name || "",
-		status: b.status,
-		sessionsCount: b.sessionsCount ?? null,
-		onecVersion: b.onecVersion ?? null,
-		extensionsCount: b.extensionsCount,
-		lastSeenAt: b.lastSeenAt ?? null,
-	})), [bases.data]);
 
-	const sessionRows = useMemo(() => (sessions.data?.items ?? []).map((s, i) => ({
+	// Сеансы выбранной базы: строка кластера ссылается на базу по UUID (поле infobase).
+	const sessionSource = useMemo(() => {
+		const all = sessions.data?.items ?? [];
+		if (!baseFilter) return all;
+		const uuid = (bases.data?.items ?? []).find((b) => b.key === baseFilter)?.infobaseId;
+		// UUID ещё не знаем (срез кластера не приносил его) — показываем всё, а не пустоту:
+		// пустой список выглядел бы как «сеансов нет», что было бы неправдой.
+		return uuid ? all.filter((s) => s.infobase === uuid) : all;
+	}, [sessions.data, bases.data, baseFilter]);
+
+	const sessionRows = useMemo(() => sessionSource.map((s, i) => ({
 		id: i + 1,
 		uuid: s.session ?? String(i),
 		sessionId: s.sessionId ?? "",
@@ -144,23 +178,11 @@ export const OneCAdminList: FC = () => {
 		host: s.host || "",
 		startedAt: s.startedAt || "",
 		lastActiveAt: s.lastActiveAt || "",
-	})), [sessions.data]);
+	})), [sessionSource]);
 
 	// Сортировка обеих таблиц — на клиенте: данные целиком в памяти.
-	const basesSorted = useStaticTableView(baseRowsRaw, { baseKey: "asc" });
 	const sessionsSorted = useStaticTableView(sessionRows, { startedAt: "desc" });
 
-	// Формат — ПОСЛЕ сортировки, только для показа.
-	const baseRows = useMemo(() => basesSorted.rows.map((r) => ({
-		...r,
-		name: r.name || "—",
-		sessionsCount: r.sessionsCount ?? "—",
-		onecVersion: r.onecVersion ?? "—",
-		// null ≠ «не установлено»: базу просто ещё не проверяли. Утверждать обратное —
-		// врать про сто баз разом.
-		extensionsCount: r.extensionsCount ?? translate("onecExtNotChecked"),
-		lastSeenAt: r.lastSeenAt ? getFormatDate(r.lastSeenAt) : "—",
-	})), [basesSorted.rows]);
 
 	const sessionRowsView = useMemo(() => sessionsSorted.rows.map((r) => ({
 		...r,
@@ -173,54 +195,37 @@ export const OneCAdminList: FC = () => {
 		lastActiveAt: onecDate(r.lastActiveAt),
 	})), [sessionsSorted.rows]);
 
-	// Клик по базе — переход к её сеансам: это первое, что нужно, когда база «висит».
-	const openSessions = useCallback((row: Partial<TDataItem>) => {
-		setBaseFilter(asText(row.baseKey));
-		setTab("sessions");
-	}, []);
 
 	const askTerminate = useCallback((row: Partial<TDataItem>) => {
-		const raw = (sessions.data?.items ?? []).find((s) => (s.sessionId ?? "") === asText(row.sessionId));
+		const raw = sessionSource.find((s) => (s.sessionId ?? "") === asText(row.sessionId));
 		if (raw) setConfirm({ kind: "terminate", session: raw });
-	}, [sessions.data]);
+	}, [sessionSource]);
+
 
 	const selectedBase = useMemo(
 		() => (bases.data?.items ?? []).find((b) => b.key === baseFilter) ?? null,
 		[bases.data, baseFilter],
 	);
 
+	// Таблица баз — одна на оба вида (обычный и раздельный), чтобы колонки, сортировка и
+	// набор кнопок не разошлись между ними.
 	// Вкладки — общий <Tabs> (тот же вид, что в формах), а не самодельные кнопки.
 	// Режим управляемый: клик по базе переводит на её сеансы, а не только клик по вкладке.
 	const tabs = useMemo(() => [
 		{
 			id: "bases",
 			label: translate("onecTabBases"),
-			component: (
-				<Table
-					{...buildStaticTableProps({
-						componentName: "OneCAdmin_bases",
-						rows: baseRows,
-						sorting: basesSorted.sorting,
-						search: basesSorted.search,
-						columns: baseColumns,
-						setColumns: setBaseColumns,
-						isLoading: bases.isLoading || refresh.isPending,
-						onReload: () => void bases.refetch(),
-						onRowClick: openSessions,
-						extraButtons: (
-							<Button disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-								{translate("onecRefreshFromCluster")}
-							</Button>
-						),
-					})}
-				/>
-			),
+			// Штатный список: ModelList даёт отметки строк, поиск, сортировку, курсорную
+			// подгрузку, предпросмотр по «Переключить вид списка» и открытие карточки
+			// отдельным пейном. Своя таблица здесь была ровно тем же, но хуже.
+			component: <OneCBasesList />,
 		},
 		{
 			id: "sessions",
 			label: translate("onecTabSessions"),
 			component: (
 				<>
+					<QueryError error={sessions.error} />
 					<Table
 						{...buildStaticTableProps({
 							componentName: "OneCAdmin_sessions",
@@ -232,10 +237,20 @@ export const OneCAdminList: FC = () => {
 							isLoading: sessions.isLoading || sessions.isFetching || terminate.isPending,
 							onReload: () => void sessions.refetch(),
 							onRowClick: askTerminate,
+							selectable: true,
+							// В отметках нужен UUID сеанса (rac адресует им), а не номер.
+							onSelectionChange: (sel, all) =>
+								setPickedSessions(all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.uuid))),
 							// Фильтр по базе и блокировка входа — в штатный слот кнопок таблицы,
 							// а не в отдельную полосу над ней: свой ряд контролов ломал ритм списка.
 							extraButtons: (
 								<>
+									{pickedSessions.length > 0 && (
+										<Button size="sm" variant="danger"
+											onClick={() => setConfirm({ kind: "terminateMany", ids: pickedSessions })}>
+											{translate("onecTerminateMany")} ({pickedSessions.length})
+										</Button>
+									)}
 									<FieldSelect
 										name="onec_base_filter"
 										value={baseFilter}
@@ -267,6 +282,16 @@ export const OneCAdminList: FC = () => {
 			),
 		},
 		{
+			id: "connections",
+			label: translate("onecTabConnections"),
+			component: <ConnectionsTab />,
+		},
+		{
+			id: "server",
+			label: translate("onecTabServer"),
+			component: <ServerTab />,
+		},
+		{
 			id: "extensions",
 			label: translate("onecTabExtensions"),
 			component: <ExtensionsTab onBatchStarted={(id) => { setWatchBatch(id); setTab("batches"); }} />,
@@ -281,8 +306,13 @@ export const OneCAdminList: FC = () => {
 			label: translate("onecTabBatches"),
 			component: <BatchesTab watchId={watchBatch} />,
 		},
-	], [watchBatch, baseRows, basesSorted.sorting, baseColumns, sessionRowsView, sessionsSorted.sorting, sessionColumns,
-		baseFilter, selectedBase, bases, sessions, refresh, terminate.isPending, openSessions, askTerminate]);
+		{
+			id: "agents",
+			label: translate("onecTabAgents"),
+			component: <AgentsTab />,
+		},
+	], [watchBatch, sessionRowsView, sessionsSorted.sorting, sessionColumns,
+		baseFilter, selectedBase, bases, sessions, refresh, terminate.isPending, askTerminate]);
 
 	return (
 		<div className={main.PaneFill}>
@@ -307,6 +337,20 @@ export const OneCAdminList: FC = () => {
 							{" · "}{translate("onecSessionUser")}: {confirm.session.userName || "—"}
 							{" · "}{translate("onecSessionHost")}: {confirm.session.host || "—"}
 						</div>
+						<div className={styles.ConfirmWarning}>{translate("onecTerminateWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
+			{confirm?.kind === "terminateMany" && (
+				<Modal
+					title={translate("onecTerminateMany")}
+					onClose={() => setConfirm(null)}
+					onApply={() => { terminateMany.mutate(confirm.ids); setConfirm(null); }}
+				>
+					<div className={styles.ConfirmText}>
+						{translate("onecTerminateQuestion")}
+						<div className={styles.ConfirmDetails}>{translate("onecSessions")}: {confirm.ids.length}</div>
 						<div className={styles.ConfirmWarning}>{translate("onecTerminateWarning")}</div>
 					</div>
 				</Modal>

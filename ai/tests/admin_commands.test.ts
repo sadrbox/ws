@@ -20,10 +20,13 @@ test("список закрыт: чужой тип команды не нахо�
 test("опасные операции помечены CRITICAL — они идут через подтверждение", () => {
 	const critical = ADMIN_COMMANDS.filter((c) => c.operation === "CRITICAL").map((c) => c.type);
 	assert.deepEqual(critical.sort(), [
-		"CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_TERMINATE_SESSION",
+		"CLUSTER_DISCONNECT", "CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_TERMINATE_SESSION",
 		// Внутрибазовые изменения так же необратимы: удалённого пользователя ИБ или
 		// снесённое расширение не вернуть, а установка меняет конфигурацию базы.
 		"IB_CREATE_USER", "IB_DELETE_EXTENSION", "IB_DELETE_USER", "IB_INSTALL_EXTENSION",
+		// Публикация меняет конфигурацию веб-сервера, а не базы, но так же необратима
+		// для стороннего наблюдателя — подтверждение обязательно.
+		"IB_PUBLISH",
 	]);
 	// Всё остальное — только чтение: список баз или сеансов ничего не меняет.
 	assert.ok(ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL").every((c) => c.operation === "READ"));
@@ -93,4 +96,42 @@ test("списки содержимого базы — чтение: подтв�
 		assert.equal(findAdminCommand(t)!.operation, "READ", t);
 		assert.equal(findAdminCommand(t)!.requiresBase, true, t);
 	}
+});
+
+test("IB_PUBLISH: обязателен только baseKey, остальное — умолчания агента", () => {
+	const spec = findAdminCommand("IB_PUBLISH")!;
+	assert.equal(spec.capability, "ib.admin");
+	assert.equal(buildAdminPayload(spec, {}).ok, false, "без baseKey");
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh" }).ok, true, "alias/dir/webServer необязательны");
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh", webServer: "nginx" }).ok, false, "только iis|apache24");
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh", webServer: "iis", alias: "b", dir: "C:/x" }).ok, true);
+});
+
+test("новые кластерные команды: чтение — без базы, разрыв — по UUID соединения", () => {
+	for (const t of ["CLUSTER_LIST_PROCESSES", "CLUSTER_LIST_LICENSES"]) {
+		const spec = findAdminCommand(t)!;
+		assert.equal(spec.operation, "READ", t);
+		assert.equal(spec.requiresBase, false, t);
+		assert.equal(buildAdminPayload(spec, {}).ok, true, t);
+	}
+	// Блокировки можно спросить и по одной базе.
+	const locks = findAdminCommand("CLUSTER_LIST_LOCKS")!;
+	assert.equal(buildAdminPayload(locks, { baseKey: "buh" }).ok, true);
+
+	const dis = findAdminCommand("CLUSTER_DISCONNECT")!;
+	assert.equal(dis.operation, "CRITICAL", "разрыв соединения необратим");
+	assert.equal(buildAdminPayload(dis, {}).ok, false, "без connectionId");
+	assert.equal(buildAdminPayload(dis, { connectionId: "abc" }).ok, true);
+});
+
+test("гейт: агент старее сервиса не получает неизвестную ему команду", () => {
+	const locks = findAdminCommand("CLUSTER_LIST_LOCKS")!;
+	// Агент перечисляет конкретные типы — значит перечень закрытый, и новой команды в нём нет.
+	const old = { role: "admin" as const, capabilities: ["CLUSTER_LIST_SESSIONS", "cluster.admin"] };
+	assert.equal(agentCanRun(old, locks), false);
+	assert.equal(agentCanRun({ ...old, capabilities: [...old.capabilities, "CLUSTER_LIST_LOCKS"] }, locks), true);
+
+	// Агент без перечня типов (только способности) — проверяем лишь способность:
+	// иначе старые сборки перестали бы работать вовсе.
+	assert.equal(agentCanRun({ role: "admin", capabilities: ["cluster.admin"] }, locks), true);
 });

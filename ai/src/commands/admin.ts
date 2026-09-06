@@ -86,6 +86,48 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		// к нужному серверу и для записи в аудит.
 		schema: z.object({ sessionId: z.string().min(1).max(64), baseKey: baseKey.optional() }).strict(),
 	},
+	{
+		type: "CLUSTER_LIST_LOCKS",
+		title: "Блокировки",
+		operation: "READ",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: false,
+		// «База висит» почти всегда означает блокировку. Без этого списка снятие сеанса —
+		// действие наугад: не видно, кто кого держит.
+		schema: z.object({ baseKey: baseKey.optional() }).strict(),
+	},
+	{
+		type: "CLUSTER_LIST_PROCESSES",
+		title: "Рабочие процессы",
+		operation: "READ",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: false,
+		schema: z.object({}).strict(),
+	},
+	{
+		type: "CLUSTER_LIST_LICENSES",
+		title: "Лицензии",
+		operation: "READ",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: false,
+		// Отказы при одновременных подключениях упирались в лицензии, а увидеть их было
+		// нечем: кто держит лицензию — единственный способ это понять.
+		schema: z.object({}).strict(),
+	},
+	{
+		type: "CLUSTER_DISCONNECT",
+		title: "Разорвать соединение",
+		operation: "CRITICAL",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: false,
+		// Соединение адресуется UUID (как и сеанс — номер rac не принимает).
+		schema: z.object({ connectionId: z.string().min(1).max(64), baseKey: baseKey.optional() }).strict(),
+	},
+
 	// ── Внутрибазовые операции (A3-P1). Идут НЕ через rac: агенту нужно войти в базу
 	// (COM-соединение или расширение), поэтому отдельная способность ib.admin и
 	// служебный администратор ИБ в каждой базе. Роль та же — admin.
@@ -151,6 +193,25 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		type: "IB_PUBLISH",
+		title: "Опубликовать базу на веб-сервере",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		// Публикация — НЕ операция над базой: это настройка веб-сервера (виртуальный каталог
+		// + default.vrd), в скриптовом API 1С её нет. Агент делает её запуском webinst,
+		// ровно как запускает rac. Здесь она потому, что адресуется базой и нужна ровно для
+		// того, чтобы у базы появился HTTP-канал вместо медленного COM.
+		schema: z.object({
+			baseKey,
+			// Всё необязательно: агент подставляет свои умолчания (alias = имя базы).
+			alias: z.string().max(200).optional(),
+			dir: z.string().max(500).optional(),
+			webServer: z.enum(["iis", "apache24"]).optional(),
+		}).strict(),
+	},
+	{
 		type: "IB_DELETE_EXTENSION",
 		title: "Удалить расширение",
 		operation: "CRITICAL",
@@ -196,7 +257,15 @@ export function isAdminCommand(type: string): boolean {
  * права учётной записи ОС, под которой служба работает.
  */
 export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spec: AdminCommandSpec): boolean {
-	return agent.role === spec.role && agent.capabilities.includes(spec.capability);
+	if (agent.role !== spec.role || !agent.capabilities.includes(spec.capability)) return false;
+
+	// Агент перечисляет не только способности (`cluster.admin`), но и КОНКРЕТНЫЕ типы
+	// команд, которые умеет. Если такой перечень есть — проверяем по нему: иначе команда,
+	// добавленная в сервисе раньше, чем в агенте, уходит в очередь и возвращается через
+	// сеть с «тип команды не поддерживается». Отказать сразу и сказать, что агент устарел,
+	// полезнее, чем round-trip ради того же вывода.
+	const declaresTypes = agent.capabilities.some((c) => /^[A-Z][A-Z0-9_]+$/.test(c));
+	return declaresTypes ? agent.capabilities.includes(spec.type) : true;
 }
 
 export type AdminPayloadResult =

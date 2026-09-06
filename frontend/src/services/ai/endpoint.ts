@@ -6,7 +6,7 @@
 // models/AiAssistant: её понадобилось повторить для панели администрирования 1С, а две копии
 // разошлись бы при первом же переезде сервиса.
 
-import { getToken } from "src/services/auth";
+import { AUTH_TOKEN_KEY, AUTH_USER_KEY, getToken } from "src/services/auth";
 
 const LOCAL_AI_URL = (import.meta.env.VITE_LOCAL_AI_URL as string | undefined) || "http://192.168.1.112:3100";
 const REMOTE_AI_URL = (import.meta.env.VITE_AI_URL as string | undefined) || "https://ai.buhprof.kz";
@@ -38,6 +38,21 @@ export async function aiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 			...(init?.headers ?? {}),
 		},
 	});
+
+	// Просроченный токен: сервис отвечает 401, а панель до сих пор просто роняла запрос —
+	// в консоли «Недействительный токен», на экране ничего, приложение выглядит рабочим.
+	// Ведём себя как штатный клиент ERP: чистим сессию и просим войти заново, иначе каждый
+	// следующий запрос будет падать с тем же 401 до перезагрузки вкладки.
+	if (res.status === 401) {
+		try {
+			localStorage.removeItem(AUTH_TOKEN_KEY);
+			localStorage.removeItem(AUTH_USER_KEY);
+		} catch {
+			/* приватный режим/запрет хранилища — выходим по событию всё равно */
+		}
+		window.dispatchEvent(new Event("auth_logout"));
+		throw new Error("Сессия истекла — войдите заново");
+	}
 
 	let body: Envelope<T> | null = null;
 	try {

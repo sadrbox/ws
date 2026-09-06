@@ -153,6 +153,11 @@ export const DealsForm = lazyView("DealsForm", () => import('src/models/Deals').
 export const DealsKanban = lazyView("DealsKanban", () => import('src/models/Deals/DealsKanban').then(m => ({ default: m.DealsKanban })));
 export const PriceListReport = lazyView("PriceListReport", () => import('src/models/Reports/PriceListReport').then(m => ({ default: m.PriceListReport })));
 export const SalesTerminal = lazyView("SalesTerminal", () => import('src/models/SalesTerminal').then(m => ({ default: m.SalesTerminal })));
+// Второй вариант оформления терминала — отдельный компонент, чтобы рабочий экран
+// можно было сравнить с новым вживую, не трогая его.
+export const OneCBasesList = lazyView("OneCBasesList", () => import('src/models/OneCBases').then(m => ({ default: m.OneCBasesList })));
+export const OneCBasesForm = lazyView("OneCBasesForm", () => import('src/models/OneCBases').then(m => ({ default: m.OneCBasesForm })));
+export const SalesTerminalV2 = lazyView("SalesTerminalV2", () => import('src/models/SalesTerminalV2').then(m => ({ default: m.SalesTerminalV2 })));
 export const ChartOfAccountsList = lazyView("ChartOfAccountsList", () => import('src/models/ChartOfAccounts').then(m => ({ default: m.ChartOfAccountsList })));
 export const SubkontoTypesList = lazyView("SubkontoTypesList", () => import('src/models/SubkontoTypes').then(m => ({ default: m.SubkontoTypesList })));
 export const UnsavedFormsList = lazyView("UnsavedFormsList", () => import('src/models/UnsavedForms').then(m => ({ default: m.UnsavedFormsList })));
@@ -256,6 +261,9 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	DealsKanban: DealsKanban,
 	PriceListReport: PriceListReport,
 	SalesTerminal: SalesTerminal,
+	SalesTerminalV2: SalesTerminalV2,
+	OneCBasesList: OneCBasesList,
+	OneCBasesForm: OneCBasesForm,
 	ChartOfAccountsList: ChartOfAccountsList,
 	SubkontoTypesList: SubkontoTypesList,
 	UnsavedFormsList: UnsavedFormsList,

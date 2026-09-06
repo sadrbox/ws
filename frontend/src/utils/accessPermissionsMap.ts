@@ -4,6 +4,8 @@
  */
 export const ENDPOINT_TO_MODEL: Record<string, string> = {
 	organizations: "Organization",
+	// Реестр баз 1С — не модель ERP, а прокси сервиса; право на раздел одно.
+	"onec-bases": "OneCAdmin",
 	counterparties: "Counterparty",
 	contracts: "Contract",
 	"contract-files": "AttachedFile",

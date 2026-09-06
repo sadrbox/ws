@@ -1,0 +1,717 @@
+// Терминал кассира — POS-раскладка: шапка, слева корзина/просмотр, справа панель
+// оформления продажи (оплата, реквизиты, недавние продажи, итог, действия).
+//
+// ПАЛИТРА ЭКРАНА — свои токены, объявленные на .Terminal и переопределённые для
+// тёмной темы. Так экран получает собственный, более «продуктовый» вид, не утаскивая
+// за собой остальное приложение: общие Button/Field/Table остаются как везде.
+// Хардкодить цвета нельзя — тёмную тему сломает; поэтому всё через переменные.
+//
+// Отступы и радиусы здесь КРУПНЕЕ общей шкалы 3/6/12: это витринный экран с большими
+// зонами (корзина, оплата, итог), и на шкале форм он выглядит тесным. Отклонение
+// намеренное и ограничено этим файлом.
+.Terminal {
+	--t-bg: #f5f7fb;
+	--t-card: #ffffff;
+	--t-ink: #172033;
+	--t-ink-2: #667085;
+	--t-border: #e2e8f0;
+	--t-primary: #2563eb;
+	--t-primary-soft: #eaf0fe;
+	--t-success: #16a34a;
+	--t-danger: #dc2626;
+	--t-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.06);
+	--t-radius: 12px;
+
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	height: 100%;
+	min-height: 0;
+	padding: 16px;
+	background: var(--t-bg);
+	color: var(--t-ink);
+	box-sizing: border-box;
+}
+
+// Тёмная тема: те же роли, другие значения. Синий подсвечен — на графите исходный
+// #2563eb почти сливается с фоном.
+:global(html[data-theme="dark"]) .Terminal {
+	--t-bg: #1f232a;
+	--t-card: #1c2027;
+	--t-ink: #c9cfd8;
+	--t-ink-2: #949daa;
+	--t-border: #2b3038;
+	--t-primary: #7aa7dd;
+	--t-primary-soft: #26313f;
+	--t-success: #4c9d63;
+	--t-danger: #b4505c;
+	--t-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+// ── Шапка экрана ──
+.Head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+.HeadMain {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.HeadTitle {
+	margin: 0;
+	font-size: 28px;
+	line-height: 1.15;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	color: var(--t-ink);
+}
+
+.HeadSub {
+	margin: 0;
+	font-size: 13px;
+	color: var(--t-ink-2);
+}
+
+.HeadMeta {
+	display: flex;
+	gap: 12px;
+	flex-shrink: 0;
+}
+
+// Дата-время и горячие клавиши: одинаковые карточки — читаются как один блок статуса.
+.MetaCard {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 16px;
+	background: var(--t-card);
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	box-shadow: var(--t-shadow);
+}
+
+.MetaLabel {
+	font-size: 12px;
+	color: var(--t-ink-2);
+	white-space: nowrap;
+}
+
+.MetaValue {
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 1.1;
+	font-variant-numeric: tabular-nums;
+	color: var(--t-ink);
+}
+
+.MetaHint {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--t-primary);
+	white-space: nowrap;
+}
+
+// ── Тело: корзина слева, оформление справа ──
+.Body {
+	display: flex;
+	gap: 16px;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+// ── Левая колонка ──
+.Left {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+// Строка поиска товара — отдельная карточка: это главное поле экрана, и оно не должно
+// теряться среди тулбара таблицы.
+.Search {
+	background: var(--t-card);
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	box-shadow: var(--t-shadow);
+	padding: 12px 16px;
+	flex-shrink: 0;
+}
+
+.CartWrap {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	background: var(--t-card);
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	box-shadow: var(--t-shadow);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+// ── Просмотр выбранной продажи (read-only) ──
+.ViewPane {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	border: 1px solid $gray200;
+	border-radius: 10px;
+	background: var(--sv-color60);
+	padding: 12px;
+	box-sizing: border-box;
+}
+
+.ViewHead {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.ViewTitle {
+	font-size: 14px;
+	color: $gray700;
+}
+
+.ViewActions {
+	display: flex;
+	gap: 6px;
+}
+
+.ViewTable {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	border-top: 1px solid $gray200;
+}
+
+.ViewRow {
+	display: grid;
+	grid-template-columns: 1fr 70px 100px 110px;
+	gap: 8px;
+	padding: 6px 4px;
+	border-bottom: 1px solid color-mix(in srgb, $gray200 60%, transparent);
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+
+	> span:not(.ViewName) {
+		text-align: right;
+	}
+}
+
+.ViewRowHead {
+	position: sticky;
+	top: 0;
+	background: var(--sv-color60);
+	color: $gray500;
+	font-weight: 600;
+	font-size: 12px;
+}
+
+.ViewName {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+// ── Правая панель (хостит <Tabs/>) ──
+.Right {
+	flex: 0 0 360px;
+	display: flex;
+	flex-direction: column;
+	background: var(--t-card);
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	box-shadow: var(--t-shadow);
+	overflow: hidden;
+	box-sizing: border-box;
+	min-height: 0;
+}
+
+// Тело вкладки: колонка с отступами и скроллом.
+.TabBody {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 16px;
+	min-height: 0;
+	overflow: auto;
+	flex: 1 1 auto;
+}
+
+// Реквизиты — тонкая строка-сводка + раскрытие.
+.ReqBar {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	height: 30px;
+	padding: 0 10px;
+	border: 1px solid $gray200;
+	border-radius: 8px;
+	background: $gray50;
+	color: $gray700;
+	font-size: 12px;
+	cursor: pointer;
+
+	&:hover { border-color: $gray300; }
+}
+
+.ReqBarText {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ReqBarChevron {
+	color: $gray500;
+	flex-shrink: 0;
+}
+
+.Fields {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+// ── Сегментные переключатели (режим/оплата) ──
+.Segmented {
+	display: flex;
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	overflow: hidden;
+	background: var(--t-card);
+	flex-shrink: 0;
+}
+
+.Seg {
+	flex: 1 1 0;
+	min-width: 0;
+	height: 44px;
+	padding: 0 12px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	border: none;
+	border-right: 1px solid var(--t-border);
+	background: transparent;
+	color: var(--t-ink-2);
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: pointer;
+	transition: background 0.12s, color 0.12s;
+
+	&:last-child { border-right: none; }
+	&:hover { background: var(--t-primary-soft); color: var(--t-ink); }
+	// Клавиатура: кольцо внутрь, иначе его срезает overflow сегментированного контрола.
+	&:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--t-primary); }
+}
+
+.SegOn {
+	background: var(--t-primary-soft);
+	color: var(--t-primary);
+	box-shadow: inset 0 -2px 0 0 var(--t-primary);
+}
+
+.SegReturnOn {
+	background: $warnSoftBg;
+	color: $warnAccent;
+}
+
+// Чип «Основание: Реализация № …» для возврата.
+.BasisChip {
+	font-size: 12px;
+	color: $warnAccent;
+	background: $warnSoftBg;
+	border: 1px solid color-mix(in srgb, $warnAccent 30%, transparent);
+	border-radius: 6px;
+	padding: 4px 8px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+// ── Недавние продажи (занимает свободное место, скроллится) ──
+.Recent {
+	flex: 1 1 auto;
+	min-height: 60px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.RecentHead {
+	font-size: 12px;
+	font-weight: 600;
+	color: $gray500;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+}
+
+.RecentList {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.RecentEmpty {
+	color: $gray300;
+	font-size: 13px;
+	padding: 4px;
+}
+
+.RecentItem {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 12px 16px;
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	background: var(--t-card);
+	color: var(--t-ink);
+	font-size: 13px;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.12s, border-color 0.12s;
+
+	&:hover { background: var(--t-primary-soft); border-color: var(--t-primary); }
+	&:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 1px; }
+}
+
+.RecentItemOn {
+	border-color: $primary;
+	background: $accentBlueSoft;
+}
+
+.RecentNum { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.RecentDate { color: $gray500; }
+.RecentAmt { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+// ── Итог (в чекаут-вкладке прижимается к низу) ──
+.Summary {
+	margin-top: auto;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 16px;
+	background: var(--t-primary-soft);
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+}
+
+.SummaryRow {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	font-size: 13px;
+	color: var(--t-ink-2);
+
+	span:last-child {
+		font-variant-numeric: tabular-nums;
+		font-weight: 600;
+		color: var(--t-ink);
+	}
+}
+
+.TotalRow {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding-top: 8px;
+	border-top: 1px solid var(--t-border);
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--t-ink);
+}
+
+.TotalAmount {
+	font-size: 28px;
+	line-height: 1.1;
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	font-variant-numeric: tabular-nums;
+	color: var(--t-primary);
+}
+
+// ── Inline-баннер успеха ──
+.Banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: color-mix(in srgb, $successGradFrom 16%, var(--sv-color60));
+	border: 1px solid color-mix(in srgb, $successGradTo 45%, transparent);
+	color: color-mix(in srgb, $successGradTo 85%, $gray900);
+	font-weight: 600;
+	font-size: 14px;
+	flex-shrink: 0;
+	animation: terminalBannerIn 0.18s ease-out;
+}
+
+.BannerReturn {
+	background: color-mix(in srgb, $warnAccent 14%, var(--sv-color60));
+	border-color: color-mix(in srgb, $warnAccent 45%, transparent);
+	color: color-mix(in srgb, $warnAccent 90%, $gray900);
+}
+
+.BannerCheck {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: $successGradTo;
+	color: var(--sv-color60);
+	font-size: 13px;
+	flex-shrink: 0;
+
+	.BannerReturn & { background: $warnAccent; }
+}
+
+.BannerText { flex: 1 1 auto; font-variant-numeric: tabular-nums; }
+
+.BannerLink {
+	border: none;
+	background: transparent;
+	color: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 13px;
+	flex-shrink: 0;
+
+	&:hover { opacity: 0.85; }
+}
+
+.BannerClose {
+	border: none;
+	background: transparent;
+	color: inherit;
+	opacity: 0.6;
+	cursor: pointer;
+	font-size: 13px;
+
+	&:hover { opacity: 1; }
+}
+
+@keyframes terminalBannerIn {
+	from { opacity: 0; transform: translateY(-4px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+// ── Действия ──
+.Actions {
+	display: flex;
+	gap: 12px;
+	padding: 16px;
+	border-top: 1px solid var(--t-border);
+	background: var(--t-card);
+	flex-shrink: 0;
+}
+
+.PayBtn {
+	flex: 1 1 auto;
+	border: none;
+	border-radius: var(--t-radius);
+	padding: 16px 24px;
+	font-size: 16px;
+	font-weight: 700;
+	color: #ffffff;
+	cursor: pointer;
+	background: var(--t-success);
+	box-shadow: 0 6px 16px rgba(22, 163, 74, 0.25);
+	transition: filter 0.12s, transform 0.05s, box-shadow 0.12s;
+
+	&:hover:not(:disabled) { filter: brightness(1.06); }
+	&:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 3px 8px rgba(22, 163, 74, 0.25); }
+	&:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 2px; }
+	// Пустая корзина: кнопка не должна выглядеть нажимаемой.
+	&:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+}
+
+.PayBtnReturn {
+	background: linear-gradient(180deg, var(--c-orange-61), $warnAccent);
+}
+
+
+// ── Карточка внутри вкладки оформления («Информация о продаже») ──
+// Отдельная карточка, а не просто пара полей: покупатель и комментарий — это
+// необязательные реквизиты, и они не должны спорить за внимание с итогом и оплатой.
+.Card {
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	background: var(--t-card);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.CardHead {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--t-border);
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--t-ink);
+}
+
+.CardBody {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+}
+
+// Подсказка-указатель, а не предупреждение: тон спокойный, акцент только слева.
+.InfoNote {
+	display: flex;
+	gap: 8px;
+	padding: 12px 16px;
+	border-left: 3px solid var(--t-primary);
+	border-radius: var(--t-radius);
+	background: var(--t-primary-soft);
+	color: var(--t-ink-2);
+	font-size: 12px;
+	line-height: 1.4;
+	flex-shrink: 0;
+}
+
+// ── Пустое состояние корзины ──
+// Кладётся ПОВЕРХ пустого тела таблицы, а не вместо неё: в тулбаре таблицы живут
+// «Добавить», «Удалить», сканер и фильтры — они нужны и при пустой корзине.
+// pointer-events: none — подсказка не должна перехватывать клики по тулбару.
+.Empty {
+	position: absolute;
+	inset: 56px 0 0;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 24px;
+	text-align: center;
+	pointer-events: none;
+	background: var(--t-card);
+}
+
+.EmptyIcon {
+	font-size: 56px;
+	line-height: 1;
+	opacity: 0.35;
+}
+
+.EmptyTitle {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--t-ink);
+}
+
+.EmptyText {
+	max-width: 460px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--t-ink-2);
+}
+
+.EmptyCards {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	justify-content: center;
+	margin-top: 12px;
+}
+
+.EmptyCard {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto auto;
+	align-items: center;
+	gap: 2px 12px;
+	width: 220px;
+	padding: 12px 16px;
+	text-align: left;
+	border: 1px solid var(--t-border);
+	border-radius: var(--t-radius);
+	background: var(--t-card);
+	box-shadow: var(--t-shadow);
+}
+
+.EmptyCardIcon {
+	grid-row: 1 / span 2;
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 10px;
+	background: var(--t-primary-soft);
+	color: var(--t-primary);
+	font-size: 16px;
+}
+
+.EmptyCardTitle {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--t-ink);
+}
+
+.EmptyCardText {
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--t-ink-2);
+}
+
+// ── Подписи секций правой панели («Тип операции», «Способ оплаты») ──
+.FieldLabel {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--t-ink-2);
+	margin-bottom: -8px;
+}
+
+// Крестик сворачивания карточки «Информация о продаже».
+.CardClose {
+	border: none;
+	background: transparent;
+	color: var(--t-ink-2);
+	font-size: 13px;
+	line-height: 1;
+	padding: 2px 4px;
+	border-radius: 6px;
+	cursor: pointer;
+
+	&:hover { background: var(--t-primary-soft); color: var(--t-ink); }
+	&:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 1px; }
+}

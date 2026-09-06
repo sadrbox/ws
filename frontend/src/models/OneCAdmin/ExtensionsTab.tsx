@@ -21,14 +21,18 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
+import { asText } from "src/utils/asText";
 import { fetchBaseExtensions, fetchExtensionSummary, runBatch, type BatchType } from "src/services/onec/api";
-import { CapabilityGuard, QueryError, SectionTitle, checkBases, useBaseTargets, useCheckParallel } from "./shared";
+import ElementCard from "./ElementCard";
+import { CapabilityGuard, QueryError, VSplit, checkBases, useBaseTargets, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
+
 const summaryColumns = (): TColumn[] => ([
-	{ identifier: "name", type: "string", width: "300px", minWidth: "160px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "basesCount", type: "number", width: "120px", minWidth: "80px", alignment: "right", visible: true, inlist: true },
-	{ identifier: "versions", type: "string", width: "220px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "name", type: "string", width: "230px", minWidth: "130px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "synonym", type: "string", width: "240px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "basesCount", type: "number", width: "110px", minWidth: "80px", alignment: "right", visible: true, inlist: true },
+	{ identifier: "versions", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 const baseExtColumns = (): TColumn[] => ([
@@ -51,12 +55,24 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	const [openedBase, setOpenedBase] = useState<string>("");
 	const [checking, setChecking] = useState(false);
 	const parallel = useCheckParallel();
+	// Отбор целей раскатки: имя расширения + «только те, где его нет». Иначе базы без
+	// расширения пришлось бы выискивать глазами среди сотни строк.
+	const [needle, setNeedle] = useState("");
+	const [onlyMissing, setOnlyMissing] = useState(false);
+	/** Выбранное расширение — справа показываются базы, где оно стоит. */
+	const [pickedExt, setPickedExt] = useState("");
+	const [pickedSynonym, setPickedSynonym] = useState("");
+	/** Карточка расширения: реквизиты + базы, куда его поставить. */
+	const [card, setCard] = useState(false);
+
+	const summary = useQuery({ queryKey: ["onec", "ext-summary"], queryFn: fetchExtensionSummary });
+	const [sumCols, setSumCols] = useState<TColumn[]>(() => getModelColumns(summaryColumns(), "OneCAdmin_extSummary"));
+	// Публикация переехала в командную панель списка баз: там выбирают базы, а не расширения.
 	const [dialog, setDialog] = useState<null | "install" | "remove">(null);
 	const [extName, setExtName] = useState("");
 	const [safeMode, setSafeMode] = useState(true);
 	const [file, setFile] = useState<File | null>(null);
 
-	const summary = useQuery({ queryKey: ["onec", "ext-summary"], queryFn: fetchExtensionSummary });
 	const baseExt = useQuery({
 		queryKey: ["onec", "base-ext", openedBase],
 		queryFn: () => fetchBaseExtensions(openedBase),
@@ -64,7 +80,6 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 		staleTime: 0,
 	});
 
-	const [sumColumns, setSumColumns] = useState<TColumn[]>(() => getModelColumns(summaryColumns(), "OneCAdmin_extSummary"));
 	const [baseColumns, setBaseColumns] = useState<TColumn[]>(() => getModelColumns(baseExtColumns(), "OneCAdmin_baseExt"));
 
 	const batch = useMutation({
@@ -89,7 +104,6 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 		const r = await checkBases(keys, fetchBaseExtensions, parallel);
 		setChecking(false);
 		// Сводка и счётчики в «Базах» считаются по кэшу, который только что пополнился.
-		await qc.invalidateQueries({ queryKey: ["onec", "ext-summary"] });
 		await qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 		showToast(
 			r.failed.length
@@ -99,11 +113,37 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 		);
 	}, [qc, parallel]);
 
+	const summaryRows = (summary.data?.items ?? []).map((x, i) => ({
+		id: i + 1, uuid: `${x.name}|${x.synonym}`, name: x.name,
+		synonym: x.synonym || "—", basesCount: x.bases,
+		versions: x.versions.length ? x.versions.join(", ") : "—",
+	}));
+	const sumView = useStaticTableView(summaryRows, { name: "asc" });
+
+	const missingFilter = useCallback((b: { extensionNames: string[]; extensionsCount: number | null }) => {
+		// Выбрано расширение слева — справа только базы, где оно стоит.
+		if (pickedExt && !b.extensionNames.some((n) => n.toLowerCase() === pickedExt.toLowerCase())) return false;
+		if (!onlyMissing || !needle.trim()) return true;
+		// Базу, которую ещё не проверяли, в «где нет» не берём: мы про неё не знаем.
+		if (b.extensionsCount == null) return false;
+		return !b.extensionNames.some((n) => n.toLowerCase() === needle.trim().toLowerCase());
+	}, [onlyMissing, needle, pickedExt]);
+
 	const targets = useBaseTargets({
 		componentName: "OneCAdmin_extTargets",
 		onOpenBase: setOpenedBase,
+		filter: missingFilter,
+		// Расширение ставится внутрь базы: пропавшая база команду не примет.
+		applicableFor: "ib",
 		extraButtons: (selected) => (
 			<>
+				<Field name="onec_ext_filter" value={needle} placeholder={translate("onecExtName")}
+					width="180px"
+					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNeedle(e.target.value)} />
+				<Button size="sm" active={onlyMissing} disabled={!needle.trim()}
+					onClick={() => setOnlyMissing((v) => !v)}>
+					{translate("onecExtOnlyMissing")}
+				</Button>
 				<Button size="sm" disabled={!selected.length || checking}
 					onClick={() => void checkSelected(selected)}>
 					{translate("onecExtCheck")}
@@ -119,11 +159,6 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 		),
 	});
 
-	const summaryRows = (summary.data?.items ?? []).map((x, i) => ({
-		id: i + 1, uuid: x.name, name: x.name, basesCount: x.bases,
-		versions: x.versions.length ? x.versions.join(", ") : "—",
-	}));
-	const sumSorted = useStaticTableView(summaryRows, { name: "asc" });
 
 	const baseRows = (baseExt.data?.items ?? []).map((x, i) => ({
 		id: i + 1, uuid: x.name, name: x.name,
@@ -134,7 +169,8 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 
 	const apply = useCallback(async () => {
 		const keys = targets.selectedKeys;
-		if (!keys.length || !extName.trim()) return;
+		if (!keys.length) return;
+		if (!extName.trim()) return;
 		if (dialog === "remove") {
 			batch.mutate({ type: "IB_DELETE_EXTENSION", keys, payload: { name: extName.trim() } });
 			return;
@@ -149,29 +185,45 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
-			<SectionTitle>{translate("onecExtTargetsHint")}</SectionTitle>
-			{targets.table}
-
-			<SectionTitle>
-				{openedBase ? `${translate("onecExtOfBase")}: ${openedBase}` : translate("onecExtSummary")}
-			</SectionTitle>
-			<QueryError error={openedBase ? baseExt.error : summary.error} />
-
-			{openedBase ? (
-				<Table {...buildStaticTableProps({
-					componentName: "OneCAdmin_baseExt", rows: baseSorted.rows, columns: baseColumns,
-					setColumns: setBaseColumns, sorting: baseSorted.sorting, search: baseSorted.search,
-					isLoading: baseExt.isLoading || baseExt.isFetching,
-					onReload: () => void baseExt.refetch(),
-					extraButtons: <Button size="sm" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,
-				})} />
-			) : (
-				<Table {...buildStaticTableProps({
-					componentName: "OneCAdmin_extSummary", rows: sumSorted.rows, columns: sumColumns,
-					setColumns: setSumColumns, sorting: sumSorted.sorting, search: sumSorted.search,
-					isLoading: summary.isLoading, onReload: () => void summary.refetch(),
-				})} />
-			)}
+			<VSplit
+				storageKey="extensions"
+				main={
+					<>
+						<QueryError error={summary.error} />
+						{/* Группировка по паре имя+синоним: служебное имя (EF_00_…) без синонима
+						    ничего не говорит, а одно и то же имя в разных базах может
+						    принадлежать разным расширениям. */}
+						<Table {...buildStaticTableProps({
+							componentName: "OneCAdmin_extSummary", rows: sumView.rows, columns: sumCols,
+							setColumns: setSumCols, sorting: sumView.sorting, search: sumView.search,
+							isLoading: summary.isLoading,
+							onReload: () => void summary.refetch(),
+							onRowClick: (row) => { setPickedExt(asText(row.name)); setPickedSynonym(asText(row.synonym)); },
+							extraButtons: (
+								<>
+									{/* Карточка расширения: реквизиты + базы, куда его поставить, в одном окне. */}
+									<Button size="sm" onClick={() => setCard(true)}>{translate("onecOpenCard")}</Button>
+									{pickedExt && (
+										<Button size="sm" onClick={() => setPickedExt("")}>{translate("onecExtAllBases")}</Button>
+									)}
+								</>
+							),
+						})} />
+					</>
+				}
+				side={openedBase ? (
+					<>
+						<QueryError error={baseExt.error} />
+						<Table {...buildStaticTableProps({
+							componentName: "OneCAdmin_baseExt", rows: baseSorted.rows, columns: baseColumns,
+							setColumns: setBaseColumns, sorting: baseSorted.sorting, search: baseSorted.search,
+							isLoading: baseExt.isLoading || baseExt.isFetching,
+							onReload: () => void baseExt.refetch(),
+							extraButtons: <Button size="sm" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,
+						})} />
+					</>
+				) : targets.table}
+			/>
 
 			{dialog && (
 				<Modal
@@ -195,6 +247,19 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 						</div>
 					</div>
 				</Modal>
+			)}
+			{card && (
+				<ElementCard
+					kind="extension"
+					initialName={pickedExt}
+					initialSynonym={pickedSynonym}
+					// Базы, где расширение уже стоит, — из кэша имён расширений базы.
+					presentIn={targets.bases
+						.filter((b) => pickedExt && b.extensionNames.some((n) => n.toLowerCase() === pickedExt.toLowerCase()))
+						.map((b) => b.key)}
+					onClose={() => setCard(false)}
+					onBatchStarted={onBatchStarted}
+				/>
 			)}
 		</>
 	);

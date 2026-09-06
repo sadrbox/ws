@@ -11,7 +11,12 @@ import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 
 export type IbUser = { name: string; fullName?: string; disabled?: boolean; roles?: string[] };
-export type IbExtension = { name: string; version?: string | null; purpose?: string | null; safeMode?: boolean | null };
+export type IbExtension = {
+	name: string;
+	/** Синоним — человеческое имя расширения; служебное Имя часто нечитаемо. */
+	synonym?: string | null;
+	version?: string | null; purpose?: string | null; safeMode?: boolean | null;
+};
 
 export type UserOccurrence = {
 	baseKey: string; baseName: string; serverName: string;
@@ -50,12 +55,13 @@ export class OnecRegistry {
 			const name = (e.name ?? "").trim();
 			if (!name) continue;
 			await this.db.query(
-				`INSERT INTO base_extensions (id, base_id, name, version, purpose, safe_mode, seen_at)
-				 VALUES ($1, $2, $3, $4, $5, $6, now())
+				`INSERT INTO base_extensions (id, base_id, name, synonym, version, purpose, safe_mode, seen_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 				 ON CONFLICT (base_id, lower(name)) DO UPDATE
-				    SET name = EXCLUDED.name, version = EXCLUDED.version, purpose = EXCLUDED.purpose,
+				    SET name = EXCLUDED.name, synonym = COALESCE(EXCLUDED.synonym, base_extensions.synonym),
+				        version = EXCLUDED.version, purpose = EXCLUDED.purpose,
 				        safe_mode = EXCLUDED.safe_mode, seen_at = now()`,
-				[randomUUID(), baseId, name, e.version ?? null, e.purpose ?? null, e.safeMode ?? null],
+				[randomUUID(), baseId, name, e.synonym ?? null, e.version ?? null, e.purpose ?? null, e.safeMode ?? null],
 			);
 		}
 		await this.db.query(
@@ -95,15 +101,23 @@ export class OnecRegistry {
 		return r.rows.map((x) => ({ name: x.name, bases: Number(x.bases), disabled: Number(x.disabled) }));
 	}
 
-	/** Сводка по расширениям: имя, версии, в скольких базах стоит. */
-	async extensionSummary(): Promise<{ name: string; bases: number; versions: string[] }[]> {
-		const r = await this.db.query<{ name: string; bases: string; versions: (string | null)[] }>(
-			`SELECT min(name) AS name, count(*)::text AS bases,
+	/**
+	 * Сводка по расширениям: имя + синоним, версии, в скольких базах стоит.
+	 *
+	 * Группируем по ПАРЕ имя+синоним: одно и то же служебное имя в разных базах может
+	 * принадлежать разным расширениям (типовые «EF_00_…» — исправления от поставщика),
+	 * и склеивать их в одну строку значило бы врать о том, что стоит одинаковое.
+	 */
+	async extensionSummary(): Promise<{ name: string; synonym: string; bases: number; versions: string[] }[]> {
+		const r = await this.db.query<{ name: string; synonym: string | null; bases: string; versions: (string | null)[] }>(
+			`SELECT min(name) AS name, coalesce(min(synonym), '') AS synonym, count(*)::text AS bases,
 			        array_agg(DISTINCT version) AS versions
-			   FROM base_extensions GROUP BY lower(name) ORDER BY min(name)`,
+			   FROM base_extensions
+			  GROUP BY lower(name), lower(coalesce(synonym, ''))
+			  ORDER BY min(name)`,
 		);
 		return r.rows.map((x) => ({
-			name: x.name, bases: Number(x.bases),
+			name: x.name, synonym: x.synonym ?? "", bases: Number(x.bases),
 			versions: (x.versions ?? []).filter((v): v is string => !!v),
 		}));
 	}
@@ -119,11 +133,11 @@ export class OnecRegistry {
 	}
 
 	async extensionsOfBase(baseId: string): Promise<(IbExtension & { seenAt: string })[]> {
-		const r = await this.db.query<{ name: string; version: string | null; purpose: string | null; safe_mode: boolean | null; seen_at: Date }>(
-			`SELECT name, version, purpose, safe_mode, seen_at FROM base_extensions WHERE base_id = $1 ORDER BY name`, [baseId],
+		const r = await this.db.query<{ name: string; synonym: string | null; version: string | null; purpose: string | null; safe_mode: boolean | null; seen_at: Date }>(
+			`SELECT name, synonym, version, purpose, safe_mode, seen_at FROM base_extensions WHERE base_id = $1 ORDER BY name`, [baseId],
 		);
 		return r.rows.map((x) => ({
-			name: x.name, version: x.version, purpose: x.purpose,
+			name: x.name, synonym: x.synonym, version: x.version, purpose: x.purpose,
 			safeMode: x.safe_mode, seenAt: x.seen_at.toISOString(),
 		}));
 	}

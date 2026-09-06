@@ -35,12 +35,6 @@
 	color: var(--c-red-42, #b91c1c);
 }
 
-// Заголовок раздела внутри вкладки (над таблицей). Шкала 3/6/12, как везде.
-.SectionTitle {
-	padding: 6px 6px 0;
-	color: $color51;
-	font-size: $fontsize;
-}
 
 // Форма в модалке групповой операции: колонка полей по общей вертикальной шкале.
 .ModalForm {
@@ -49,6 +43,19 @@
 	gap: 12px;
 	padding: 6px;
 	min-width: 420px;
+}
+
+// Карточка элемента (расширение/пользователь): реквизиты сверху, таблица баз снизу.
+// Ширина больше обычной модалки — внутри полноценная таблица с командной панелью,
+// а высота ограничена: список баз прокручивается сам, окно не растёт на весь экран.
+.CardForm {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 6px;
+	width: min(1000px, 88vw);
+	max-height: 70vh;
+	overflow: auto;
 }
 
 // Предупреждение о том, что операция невозможна в принципе (агент не умеет).
@@ -61,4 +68,85 @@
 	border-radius: var(--radius-3, 3px);
 	color: $color6;
 	font-size: $fontsize;
+}
+
+// ── Карточка базы ──
+.Form {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 12px;
+	min-height: 0;
+	flex: 1 1 auto;
+	overflow: auto;
+}
+
+.FormFoot {
+	display: flex;
+	justify-content: flex-end;
+	padding-top: 6px;
+}
+
+// ── Раздельный вид списка: список слева, карточка справа ──
+.Split {
+	display: flex;
+	gap: 12px;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.SplitList {
+	flex: 1 1 55%;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.SplitPreview {
+	flex: 1 1 45%;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid $color34;
+}
+
+// ── Вертикальное разделение вкладки: две таблицы бок о бок ──
+// Список слева, зависимые строки справа. Раньше таблицы шли одна под другой, и на
+// широком экране нижняя оказывалась ниже сгиба: чтобы посмотреть, где стоит расширение,
+// приходилось прокручивать всю вкладку.
+.VSplit {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	gap: 12px;
+}
+
+.VSplitMain {
+	flex: 1 1 50%;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.VSplitSide {
+	flex: 1 1 50%;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+// Перетаскиваемая граница. Узкая полоса с широкой зоной захвата: попасть в 1px мышью
+// невозможно, а толстый разделитель съедает место под таблицы.
+.VSplitBar {
+	flex: 0 0 6px;
+	align-self: stretch;
+	cursor: col-resize;
+	background: $color34;
+	border-radius: var(--radius-3, 3px);
+	transition: background 0.12s;
+
+	&:hover,
+	&:focus-visible { background: $primary; outline: none; }
 }

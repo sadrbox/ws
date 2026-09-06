@@ -111,8 +111,15 @@ interface ModelListProps {
    * записи админу при этом можно.
    */
   hideAdd?: boolean;
-  /** Доп. кнопки в тулбаре списка (opt-in), напр. «Импорт выписки» в BankStatements. */
-  extraButtons?: ReactNode;
+  /**
+   * Доп. кнопки в тулбаре списка (opt-in), напр. «Импорт выписки» в BankStatements.
+   *
+   * Функция — для команд ПО ВЫБРАННЫМ строкам («Опубликовать базу» в списке баз 1С):
+   * она получает отмеченные строки и включает отметки в таблице даже там, где удаление
+   * скрыто (hideAddDelete). Обычный узел отметки не включает: список, которому групповые
+   * команды не нужны, не должен обрастать колонкой чекбоксов.
+   */
+  extraButtons?: ReactNode | ((selected: TDataItem[]) => ReactNode);
 }
 
 // ─── Вспомогательный компонент состояния ошибки ───────────────────────────────
@@ -254,6 +261,12 @@ const ModelList: FC<ModelListProps> = ({
     () => ((localStorage.getItem(layoutKey) as "list" | "split") || "list"),
   );
   const [previewRow, setPreviewRow] = useState<TDataItem | null>(null);
+  // Отмеченные строки нужны только спискам с групповыми командами (extraButtons-функция).
+  const [selectedRows, setSelectedRows] = useState<TDataItem[]>([]);
+  const selectableButtons = typeof extraButtons === "function";
+  const onSelectionChange = useCallback((selected: Set<number>, all: TDataItem[]) => {
+    setSelectedRows(all.filter((r) => selected.has(Number(r.id))));
+  }, []);
 
   // Ширина панели предпросмотра (% от split-контейнера) — общий механизм
   // SplitPane, тот же, что у панели фильтров в формах отчётов.
@@ -414,7 +427,8 @@ const ModelList: FC<ModelListProps> = ({
       })}
       hideAddDelete={hideAddDelete}
       hideAdd={hideAdd}
-      extraButtons={extraButtons}
+      {...(selectableButtons ? { onSelectionChange } : {})}
+      extraButtons={typeof extraButtons === "function" ? extraButtons(selectedRows) : extraButtons}
     />
   );
 

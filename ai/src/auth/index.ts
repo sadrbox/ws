@@ -95,6 +95,10 @@ export function requireAgent(db: Db) {
 		);
 		const agent = row.rows[0];
 		if (!agent || !safeEqual(agent.token_hash, sha256(token))) {
+			// Отказ по токену пишем в лог: агент при этом молча ретраит, и снаружи это
+			// неотличимо от «служба не запущена» — а разница между «не подключается» и
+			// «подключается, но не тем токеном» решает, где искать причину.
+			console.warn(`[agent] отказ по токену: agentId=${agentId} known=${!!agent}`);
 			deny(res, 401, "NOT_AUTHORIZED", "Неверный токен агента");
 			return;
 		}

@@ -17,27 +17,77 @@ export type OnecBase = {
 	onecVersion: string | null;
 	/** Версия расширения buhprof_api по данным heartbeat бизнес-агента; null — неизвестно. */
 	extVersion: string | null;
+	/** UUID базы в кластере — по нему сеансы ссылаются на базу. */
+	infobaseId: string | null;
 	/** Сколько расширений видели в базе; null — базу ещё ни разу не проверяли. */
 	extensionsCount: number | null;
 	extensionsSeenAt: string | null;
+	/** Имена расширений из кэша — по ним отбираются базы БЕЗ нужного расширения. */
+	extensionNames: string[];
 	sessionsCount: number | null;
 	lastSeenAt: string | null;
 	disabled: boolean;
+	/**
+	 * Публикация на веб-сервере: null — не проверялась, false — точно не опубликована.
+	 * Различать важно: первое значит «спроси агента», второе — «нужно публиковать».
+	 */
+	published: boolean | null;
+	publishUrl: string | null;
 };
 
 /** Строка сеанса или соединения: состав полей задаёт `rac`, поэтому словарь, а не жёсткий тип. */
 export type ClusterRow = Record<string, string>;
 
+/**
+ * Ответ команды, которая не успела выполниться за время HTTP-запроса.
+ *
+ * Вход в базу занимает у агента от 20 секунд до 15 минут — держать столько открытый
+ * запрос нельзя: туннель обрывает его СВОИМ ответом, без заголовков CORS, и браузер
+ * показывает это как ошибку CORS (симптом, который мы ловили трижды). Поэтому сервис
+ * отвечает 202 с идентификатором команды, а клиент дожидается короткими опросами.
+ */
+type Pending = { pending: true; commandId: string };
+const isPending = (d: unknown): d is Pending =>
+	!!d && typeof d === "object" && (d as Pending).pending === true;
+
+/** Дождаться готовности команды. Пауза 2 с: операция идёт минутами, чаще спрашивать незачем. */
+async function awaitCommand<T>(first: T | Pending, limitMs = 15 * 60_000): Promise<T> {
+	let data = first;
+	const until = Date.now() + limitMs;
+	while (isPending(data)) {
+		if (Date.now() > until) throw new Error("Команда 1С выполняется слишком долго");
+		await new Promise((r) => setTimeout(r, 2000));
+		data = await aiFetch<T | Pending>(`/v1/onec/commands/${encodeURIComponent(data.commandId)}`);
+	}
+	return data;
+}
+
 export const fetchBases = () => aiFetch<{ items: OnecBase[] }>("/v1/onec/bases");
 
-/** Перечитать список баз у кластера. Возвращает уже обновлённый реестр. */
-export const refreshBases = () => aiFetch<{ items: OnecBase[] }>("/v1/onec/bases/refresh", { method: "POST" });
+/**
+ * Перечитать список баз у кластера. Возвращает уже обновлённый реестр.
+ * Если агент не успел ответить за отведённое запросу время — дожидаемся опросом, а затем
+ * перечитываем реестр: применение среза выполняется на приёме результата, в сервисе.
+ */
+export const refreshBases = () =>
+	aiFetch<{ items: OnecBase[] } | Pending>("/v1/onec/bases/refresh", { method: "POST" })
+		.then((d) => (isPending(d) ? awaitCommand<{ items: unknown[] }>(d).then(() => fetchBases()) : d));
 
-export const fetchSessions = (baseKey?: string) =>
-	aiFetch<{ items: ClusterRow[] }>(`/v1/onec/sessions${baseKey ? `?baseKey=${encodeURIComponent(baseKey)}` : ""}`);
+/**
+ * Сеансы ВСЕГО кластера, одним запросом.
+ *
+ * По базе не фильтруем на стороне агента: у него отбор по baseKey ломается там, где сеансов
+ * нет, и вместо пустого списка приходило «база не найдена в кластере». Срез кластера и так
+ * приходит за доли секунды, а каждая строка несёт UUID своей базы (`infobase`) — отобрать
+ * нужные дешевле и надёжнее на месте.
+ */
+export const fetchSessions = () =>
+	aiFetch<{ items: ClusterRow[] } | Pending>("/v1/onec/sessions")
+		.then((d) => awaitCommand<{ items: ClusterRow[] }>(d));
 
 export const fetchConnections = (baseKey?: string) =>
-	aiFetch<{ items: ClusterRow[] }>(`/v1/onec/connections${baseKey ? `?baseKey=${encodeURIComponent(baseKey)}` : ""}`);
+	aiFetch<{ items: ClusterRow[] } | Pending>(`/v1/onec/connections${baseKey ? `?baseKey=${encodeURIComponent(baseKey)}` : ""}`)
+		.then((d) => awaitCommand<{ items: ClusterRow[] }>(d));
 
 /**
  * Снятие сеанса необратимо: несохранённые данные пользователя теряются.
@@ -46,29 +96,36 @@ export const fetchConnections = (baseKey?: string) =>
  * «Ошибка разбора параметра: session».
  */
 export const terminateSession = (sessionId: string, baseKey?: string) =>
-	aiFetch<{ ok: boolean }>(`/v1/onec/sessions/${encodeURIComponent(sessionId)}/terminate`, {
+	aiFetch<{ ok: boolean } | Pending>(`/v1/onec/sessions/${encodeURIComponent(sessionId)}/terminate`, {
 		method: "POST",
 		body: JSON.stringify(baseKey ? { baseKey } : {}),
-	});
+	}).then((d) => awaitCommand<{ ok: boolean }>(d));
 
 /** Блокировка начала сеансов: пользователи не смогут войти в базу, уже вошедшие продолжат работу. */
 export const setSessionsLock = (baseKey: string, enabled: boolean, message?: string) =>
-	aiFetch<{ ok: boolean }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/lock`, {
+	aiFetch<{ ok: boolean } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/lock`, {
 		method: "POST",
 		body: JSON.stringify({ enabled, ...(message ? { message } : {}) }),
-	});
+	}).then((d) => awaitCommand<{ ok: boolean }>(d));
 
 // ── Содержимое базы: пользователи ИБ и расширения (E15/A3-P1) ───────────────
 // Списки спрашиваются у 1С вживую (это команда агенту), сводки — из кэша сервиса.
 
 export type IbUser = { name: string; fullName?: string; disabled?: boolean; roles?: string[] };
-export type IbExtension = { name: string; version?: string | null; purpose?: string | null; safeMode?: boolean | null };
+export type IbExtension = {
+	name: string;
+	/** Синоним — человеческое имя расширения; служебное Имя часто нечитаемо. */
+	synonym?: string | null;
+	version?: string | null; purpose?: string | null; safeMode?: boolean | null;
+};
 
 export const fetchBaseUsers = (baseKey: string) =>
-	aiFetch<{ items: IbUser[] }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/users`);
+	aiFetch<{ items: IbUser[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/users`)
+		.then((d) => awaitCommand<{ items: IbUser[] }>(d));
 
 export const fetchBaseExtensions = (baseKey: string) =>
-	aiFetch<{ items: IbExtension[] }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`);
+	aiFetch<{ items: IbExtension[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`)
+		.then((d) => awaitCommand<{ items: IbExtension[] }>(d));
 
 /** Сводка «кто есть в скольких базах» — из кэша, без обращения к 1С. */
 export const fetchUserSummary = () =>
@@ -82,8 +139,9 @@ export type UserOccurrence = {
 export const fetchUserOccurrences = (name: string) =>
 	aiFetch<{ items: UserOccurrence[] }>(`/v1/onec/users/${encodeURIComponent(name)}`);
 
+/** Сводка расширений по всем базам: группировка по паре имя+синоним. */
 export const fetchExtensionSummary = () =>
-	aiFetch<{ items: { name: string; bases: number; versions: string[] }[] }>("/v1/onec/extensions");
+	aiFetch<{ items: { name: string; synonym: string; bases: number; versions: string[] }[] }>("/v1/onec/extensions");
 
 // ── Пакетные операции (E15/A4) ──────────────────────────────────────────────
 // Сервис отвечает СРАЗУ идентификатором задания: сто подключений к 1С в один HTTP-запрос
@@ -92,6 +150,8 @@ export const fetchExtensionSummary = () =>
 export type BatchType =
 	| "IB_CREATE_USER" | "IB_DELETE_USER"
 	| "IB_INSTALL_EXTENSION" | "IB_DELETE_EXTENSION"
+	// Публикация базы на веб-сервере — первый шаг раскатки (публикация → расширение → HTTP).
+	| "IB_PUBLISH"
 	// Чтение тоже пакетное: наполнить сводку по ста базам поштучно нереально.
 	| "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
 
@@ -133,3 +193,43 @@ export const hasCapability = (agents: OnecAgent[] | undefined, capability: strin
 /** Повторить только неуспешные базы задания — создаётся новое задание. */
 export const retryBatch = (id: string) =>
 	aiFetch<BatchStart>(`/v1/onec/batches/${encodeURIComponent(id)}/retry`, { method: "POST" });
+
+// ── Управление агентами ─────────────────────────────────────────────────────
+// Токен возвращается ОДИН раз при создании и при ротации: в БД лежит только его
+// SHA-256, восстановить нельзя.
+
+export const createAgent = (name: string) =>
+	aiFetch<{ agent: OnecAgent; token: string }>("/v1/onec/agents", {
+		method: "POST", body: JSON.stringify({ name }),
+	});
+
+export const rotateAgentToken = (id: string) =>
+	aiFetch<{ token: string }>(`/v1/onec/agents/${encodeURIComponent(id)}/rotate-token`, { method: "POST" });
+
+export const setAgentDisabled = (id: string, disabled: boolean) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}/${disabled ? "disable" : "enable"}`, { method: "POST" });
+
+// ── Состояние сервера: блокировки, процессы, лицензии (E15) ─────────────────
+// Всё читающее, всё идёт через rac и не заходит в базы. Форму строк задаёт rac,
+// поэтому словарь строк — как у сеансов и соединений.
+
+/** Кто кого держит. «База висит» почти всегда означает блокировку. */
+export const fetchLocks = (baseKey?: string) =>
+	aiFetch<{ items: ClusterRow[] } | Pending>(`/v1/onec/locks${baseKey ? `?baseKey=${encodeURIComponent(baseKey)}` : ""}`)
+		.then((d) => awaitCommand<{ items: ClusterRow[] }>(d));
+
+/** Рабочие процессы кластера: память, доступность, распределение баз. */
+export const fetchProcesses = () =>
+	aiFetch<{ items: ClusterRow[] } | Pending>("/v1/onec/processes")
+		.then((d) => awaitCommand<{ items: ClusterRow[] }>(d));
+
+/** Кто держит лицензии — единственный способ понять отказы при одновременной работе. */
+export const fetchLicenses = () =>
+	aiFetch<{ items: ClusterRow[] } | Pending>("/v1/onec/licenses")
+		.then((d) => awaitCommand<{ items: ClusterRow[] }>(d));
+
+/** Разрыв соединения необратим — как и снятие сеанса. Адресуется UUID соединения. */
+export const disconnectConnection = (connectionId: string, baseKey?: string) =>
+	aiFetch<{ ok: boolean } | Pending>(`/v1/onec/connections/${encodeURIComponent(connectionId)}/disconnect`, {
+		method: "POST", body: JSON.stringify(baseKey ? { baseKey } : {}),
+	}).then((d) => awaitCommand<{ ok: boolean }>(d));

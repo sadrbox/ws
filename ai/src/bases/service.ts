@@ -17,6 +17,11 @@ export const DEFAULT_BASE_KEY = "default";
 
 export type BaseState = {
 	key: string;
+	/** Публикация на веб-сервере: агент сообщает её вместе со срезом баз. */
+	published?: boolean | null;
+	publishUrl?: string | null;
+	/** UUID информационной базы в кластере — им сеансы ссылаются на базу. */
+	id?: string;
 	name?: string;
 	status?: string;
 	onecVersion?: string | null;
@@ -25,8 +30,13 @@ export type BaseState = {
 };
 
 export type BaseRow = {
+	infobase_id: string | null;
+	published: boolean | null;
+	publish_url: string | null;
+	publish_seen_at: Date | null;
 	extensions_count: number | null;
 	extensions_seen_at: Date | null;
+	extension_names: string[] | null;
 	id: string;
 	server_id: string;
 	key: string;
@@ -50,8 +60,14 @@ export type BaseView = {
 	onecVersion: string | null;
 	extVersion: string | null;
 	/** Сколько расширений видели в базе; null — базу ещё ни разу не проверяли. */
+	/** UUID базы в кластере; null — срез ещё не приносил его. */
+	infobaseId: string | null;
+	/** Публикация на веб-сервере: null — не проверялась, false — точно нет. */
+	published: boolean | null;
+	publishUrl: string | null;
 	extensionsCount: number | null;
 	extensionsSeenAt: string | null;
+	extensionNames: string[];
 	sessionsCount: number | null;
 	lastSeenAt: string | null;
 	disabled: boolean;
@@ -72,11 +88,14 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	-- а не флаг: колонка «Расширение» показывала «не установлено» всем базам подряд, хотя
 	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ — ext_version заполняет только heartbeat
 	-- бизнес-агента, и то лишь про своё расширение bpapi.
-	x.n AS extensions_count, x.seen AS extensions_seen_at`;
+	b.infobase_id, b.published, b.publish_url, b.publish_seen_at,
+	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
 const EXT_JOIN = `LEFT JOIN LATERAL (
-	SELECT count(*)::int AS n, max(seen_at) AS seen FROM base_extensions e WHERE e.base_id = b.id
+	SELECT count(*)::int AS n, max(seen_at) AS seen,
+	       coalesce(array_agg(e.name ORDER BY e.name), '{}') AS names
+	  FROM base_extensions e WHERE e.base_id = b.id
 ) x ON true`;
 
 export class BaseService {
@@ -93,6 +112,27 @@ export class BaseService {
 	 * стенд). Такой сервер тоже нужен: без него базам не на чем висеть, а маршрутизация
 	 * «база → сервер → агент» должна работать одинаково в обоих случаях.
 	 */
+	/**
+	 * Переименовать сервер, за которым агент уже закреплён.
+	 *
+	 * Идентичность сервера — это ЗАКРЕПЛЁННАЯ ЗА АГЕНТОМ строка, а не его имя. Раньше
+	 * ключом было имя: агент прислал «SERVER» вместо «Сервер 1С» — и в реестре появился
+	 * ВТОРОЙ сервер с теми же 110 базами, то есть каждая база задвоилась в панели.
+	 * Имя — атрибут, менять его должно быть безопасно.
+	 */
+	async renameServer(serverId: string, name: string, ras?: { host?: string | null; port?: number | null }): Promise<ServerRow | null> {
+		const r = await this.db.query<ServerRow>(
+			`UPDATE servers
+			    SET name = CASE WHEN $2 <> '' THEN $2 ELSE name END,
+			        ras_host = COALESCE($3, ras_host),
+			        ras_port = COALESCE($4, ras_port)
+			  WHERE id = $1
+			 RETURNING *`,
+			[serverId, name, ras?.host ?? null, ras?.port ?? null],
+		);
+		return r.rows[0] ?? null;
+	}
+
 	async ensureServer(organizationUuid: string, name: string, ras?: { host?: string | null; port?: number | null }): Promise<ServerRow> {
 		const r = await this.db.query<ServerRow>(
 			`INSERT INTO servers (id, organization_uuid, name, ras_host, ras_port)
@@ -125,8 +165,9 @@ export class BaseService {
 			// когда своего ещё нет.
 			const mangled = !!s.name && s.name.includes("?");
 			await this.db.query(
-				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version, sessions_count, last_seen_at)
-				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, 'UNKNOWN'), $6, $7, $8, now())
+				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version, sessions_count, infobase_id, last_seen_at, published, publish_url, publish_seen_at)
+				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, 'UNKNOWN'), $6, $7, $8, $10, now(), $11, $12,
+				         CASE WHEN $11::boolean IS NULL THEN NULL ELSE now() END)
 				 ON CONFLICT (server_id, key) DO UPDATE
 				    SET name           = CASE
 				                           WHEN EXCLUDED.name = '' THEN bases.name
@@ -137,9 +178,14 @@ export class BaseService {
 				        onec_version   = COALESCE(EXCLUDED.onec_version, bases.onec_version),
 				        ext_version    = COALESCE(EXCLUDED.ext_version, bases.ext_version),
 				        sessions_count = COALESCE(EXCLUDED.sessions_count, bases.sessions_count),
+				        infobase_id    = COALESCE(EXCLUDED.infobase_id, bases.infobase_id),
+				        published      = COALESCE(EXCLUDED.published, bases.published),
+				        publish_url    = COALESCE(EXCLUDED.publish_url, bases.publish_url),
+				        publish_seen_at = COALESCE(EXCLUDED.publish_seen_at, bases.publish_seen_at),
 				        last_seen_at   = now()`,
 				[randomUUID(), serverId, key, s.name ?? null, s.status ?? null,
-					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled],
+					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled, s.id ?? null,
+					s.published ?? null, s.publishUrl ?? null],
 			);
 		}
 
@@ -213,6 +259,22 @@ export class BaseService {
 		return r.rows[0] ? this.view(r.rows[0]) : null;
 	}
 
+	/**
+	 * Пометить базу статусом по факту обращения к ней.
+	 *
+	 * Список баз приходит из кластера: если `rac` базу перечисляет, она в кластере
+	 * зарегистрирована — даже когда самой базы уже нет (снесли на СУБД, а запись в
+	 * кластере осталась). Такая база доходит до панели и выглядит рабочей, а любая
+	 * команда по ней отвечает «не найдена». Отмечаем это в реестре, чтобы фантом было
+	 * видно в списке, а не только в тексте очередной ошибки.
+	 */
+	async markStatus(serverId: string, key: string, status: string): Promise<void> {
+		await this.db.query(
+			`UPDATE bases SET status = $3 WHERE server_id = $1 AND key = $2 AND status <> $3`,
+			[serverId, key, status],
+		);
+	}
+
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
 		const r = await this.db.query(
 			`UPDATE bases SET disabled_at = ${disabled ? "now()" : "NULL"} WHERE id = $1`,
@@ -231,7 +293,13 @@ export class BaseService {
 			status: r.disabled_at ? "DISABLED" : r.status,
 			onecVersion: r.onec_version,
 			extVersion: r.ext_version,
+			infobaseId: r.infobase_id,
+			published: r.published,
+			publishUrl: r.publish_url,
 			extensionsCount: r.extensions_count,
+			// Имена нужны панели, чтобы отобрать базы БЕЗ нужного расширения: иначе их
+			// пришлось бы выискивать глазами среди ста строк.
+			extensionNames: r.extension_names ?? [],
 			extensionsSeenAt: r.extensions_seen_at?.toISOString() ?? null,
 			sessionsCount: r.sessions_count,
 			lastSeenAt: r.last_seen_at?.toISOString() ?? null,

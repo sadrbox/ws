@@ -20,7 +20,7 @@ import { getFormatDate } from "src/utils/datetime";
 import { fetchBatches, retryBatch } from "src/services/onec/api";
 import { showToast } from "src/components/UIToast";
 import { translate as t } from "src/i18";
-import { SectionTitle } from "./shared";
+import styles from "./OneCAdmin.module.scss";
 
 const batchColumns = (): TColumn[] => ([
 	{ identifier: "createdAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
@@ -79,7 +79,7 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 
 	return (
 		<>
-			<SectionTitle>{translate("onecBatchesHint")}</SectionTitle>
+			<div className={styles.Hint}>{translate("onecBatchesHint")}</div>
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_batches", rows, columns: cols, setColumns: setCols,
 				sorting: sorted.sorting, search: sorted.search, isLoading: batches.isLoading,
@@ -89,7 +89,6 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 
 			{current && (
 				<>
-					<SectionTitle>{translate("onecBatchByBase")}: {current.type}</SectionTitle>
 					<Table {...buildStaticTableProps({
 						componentName: "OneCAdmin_batchItems", rows: itemSorted.rows, columns: itemCols,
 						setColumns: setItemCols, sorting: itemSorted.sorting, search: itemSorted.search,

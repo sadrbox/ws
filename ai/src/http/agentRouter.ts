@@ -24,6 +24,12 @@ import { type BaseService, type BaseState, needsFullBases } from "../bases/servi
 // затирать чужие данные своими пропусками нельзя.
 const baseStateSchema = z.object({
 	key: z.string().min(1).max(200),
+	// UUID базы в кластере: им сеансы ссылаются на базу, без него отбор сеансов по базе
+	// требовал бы отдельной команды агенту.
+	id: z.string().max(64).optional(),
+	// Публикация на веб-сервере: null/отсутствие — «не знаю», а не «нет».
+	published: z.boolean().nullable().optional(),
+	publishUrl: z.string().max(500).nullable().optional(),
 	name: z.string().max(200).optional(),
 	status: z.string().max(20).optional(),
 	onecVersion: z.string().max(50).nullable().optional(),
@@ -74,6 +80,12 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 	const { db, cfg, log, agents, bases, queue, audit, registry } = deps;
 	const r = Router();
 	r.use(requireAgent(db));
+	// Любой запрос агента = он на связи. Запись лёгкая (одно UPDATE по первичному ключу),
+	// а частота — раз в цикл опроса, то есть десятки секунд.
+	r.use((req, _res, next) => {
+		void agents.touch(req.agent!.agentId);
+		next();
+	});
 
 	// Агент вправе говорить только от своего имени: agentId в теле обязан совпадать с X-Agent-Id.
 	const ownAgent = (bodyAgentId: string, req: { agent?: { agentId: string } }) =>
@@ -87,9 +99,18 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		}
 		// Сервер заводится по имени, которое прислал агент: со ста базами никто не будет
 		// вносить серверы руками, а любой ручной список разойдётся с кластером за неделю.
+		//
+		// НО имя — не идентичность. Агент, уже закреплённый за сервером, при смене имени
+		// (обновили сборку — прислал «SERVER» вместо «Сервер 1С») ДОЛЖЕН переименовать свой
+		// сервер, а не заводить второй: иначе те же 110 баз появляются в реестре дважды,
+		// и в панели каждая база двоится.
 		const role = p.data.role ?? "business";
-		const server = await bases.ensureServer(req.agent!.organizationUuid, p.data.server?.name ?? "",
-			{ host: p.data.server?.rasHost ?? null, port: p.data.server?.rasPort ?? null });
+		const ras = { host: p.data.server?.rasHost ?? null, port: p.data.server?.rasPort ?? null };
+		const known = await agents.findById(req.agent!.agentId);
+		const server = known?.serverId
+			? (await bases.renameServer(known.serverId, p.data.server?.name ?? "", ras))
+				?? await bases.ensureServer(req.agent!.organizationUuid, p.data.server?.name ?? "", ras)
+			: await bases.ensureServer(req.agent!.organizationUuid, p.data.server?.name ?? "", ras);
 		await agents.register(req.agent!.agentId, {
 			name: p.data.agentName, version: p.data.version, os: p.data.os, capabilities: p.data.capabilities,
 			role, serverId: server.id,
@@ -169,6 +190,33 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			log.warn({ agentId: req.agent!.agentId, commandId: p.data.commandId }, "результат для неизвестной команды");
 			res.json({ success: true, data: { ok: true, ignored: true } });
 			return;
+		}
+		// Полный срез баз применяем к реестру ЗДЕСЬ же. Панель могла не дождаться ответа
+		// (запрос ограничен 20 с, а rac по сотне баз бывает дольше) — тогда синхронизация
+		// в её обработчике не выполнится, и «Обновить из кластера» тихо ничего не сделает.
+		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_LIST_INFOBASES") {
+			const items = (p.data.result as { items?: BaseState[] } | null)?.items;
+			const me = await agents.findById(req.agent!.agentId);
+			if (Array.isArray(items) && items.length && me?.serverId) {
+				await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
+			}
+		}
+		// Успешная публикация — сразу в реестр: иначе состояние обновилось бы только
+		// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
+		if (p.data.status === "SUCCESS" && row.type === "IB_PUBLISH" && row.base_key) {
+			const url = (p.data.result as { url?: string } | null)?.url ?? null;
+			const me = await agents.findById(req.agent!.agentId);
+			if (me?.serverId) {
+				await bases.sync(me.serverId, [{ key: row.base_key, published: true, publishUrl: url }],
+					{ complete: false, authoritative: false });
+			}
+		}
+		// База, которой нет: агент сообщил «не найдена». Помечаем в реестре — иначе фантом
+		// остаётся в списке наравне с рабочими, и о проблеме узнают только по ошибке при
+		// каждой попытке. Обратно в ONLINE её вернёт ближайший успешный срез кластера.
+		if (p.data.status === "ERROR" && p.data.error?.code === "INFOBASE_NOT_FOUND" && row.base_key) {
+			const me = await agents.findById(req.agent!.agentId);
+			if (me?.serverId) await bases.markStatus(me.serverId, row.base_key, "MISSING");
 		}
 		// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
 		// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.

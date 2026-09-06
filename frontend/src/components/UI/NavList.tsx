@@ -100,6 +100,7 @@ import {
   DealsKanban,
   PriceListReport,
   SalesTerminal,
+  SalesTerminalV2,
   ChartOfAccountsList,
   SubkontoTypesList,
   UnsavedFormsList,
@@ -253,6 +254,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <h3>{translate("processings")}</h3>
         <ul className={styles.NavList}>
           {can("Sale") && <NavItem className={styles.NavListAccent} onClick={() => addPane({ component: SalesTerminal, label: translate("salesTerminal") })}>⚡ {translate("salesTerminal")}</NavItem>}
+          {/* Второй вариант оформления — рядом с рабочим, для сравнения вживую. */}
+          {can("Sale") && <NavItem onClick={() => addPane({ component: SalesTerminalV2, label: translate("salesTerminalV2") })}>{translate("salesTerminalV2")}</NavItem>}
           {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: ProductPriceCorrection })}>{translate("ProductPriceCorrection")}</NavItem>}
           {(can("ProductPrice") || can("Product")) && <NavItem onClick={() => addPane({ component: ProductPriceImport })}>{translate("ProductPriceImport")}</NavItem>}
           {can("Product") && <NavItem onClick={() => addPane({ component: ProductImportExport })}>{translate("ProductImportExport")}</NavItem>}

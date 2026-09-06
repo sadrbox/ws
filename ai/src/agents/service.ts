@@ -110,6 +110,12 @@ export class AgentService {
 		return r.rows.map((row) => this.view(row));
 	}
 
+	/** Агент по id — нужен, чтобы узнать, за каким сервером он уже закреплён. */
+	async findById(id: string): Promise<AgentView | null> {
+		const r = await this.db.query<AgentRow>(`SELECT ${COLS} FROM agents WHERE id = $1`, [id]);
+		return r.rows[0] ? this.view(r.rows[0]) : null;
+	}
+
 	async listAll(): Promise<AgentView[]> {
 		const r = await this.db.query<AgentRow>(`SELECT ${COLS} FROM agents ORDER BY created_at`);
 		return r.rows.map((row) => this.view(row));
@@ -214,6 +220,21 @@ export class AgentService {
 			  WHERE id = $1`,
 			[id, hb.status, hb.onecReachable, hb.onecVersion, hb.version ?? null],
 		);
+	}
+
+	/**
+	 * Отметка «агент на связи» по ЛЮБОМУ его запросу.
+	 *
+	 * Раньше `last_seen_at` обновлял только heartbeat. Агент, который исправно забирает
+	 * команды длинным опросом, но чей heartbeat отвалился (например, оборвался при
+	 * перезапуске сервиса и не переподключился), считался офлайн — панель отвечала
+	 * «не на связи», хотя служба работала и команды выполняла.
+	 *
+	 * «На связи» должно означать «мы от него что-то слышали», а не «он прислал один
+	 * конкретный вид сообщения».
+	 */
+	async touch(id: string): Promise<void> {
+		await this.db.query(`UPDATE agents SET last_seen_at = now() WHERE id = $1`, [id]);
 	}
 
 	private view(r: AgentRow): AgentView {
