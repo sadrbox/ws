@@ -201,6 +201,28 @@ export function onecRouter(deps: Deps) {
 		res.json({ success: true, data: { items } });
 	});
 
+	/**
+	 * Обновить состояние публикаций: спрашиваем веб-сервер один раз за все базы.
+	 *
+	 * Раньше признак публикации мог прийти только со срезом баз (агент его не шлёт) или
+	 * после нашей же команды IB_PUBLISH — то есть у ста баз он оставался «не проверялся»
+	 * навсегда. Здесь он берётся у источника.
+	 */
+	r.post("/publications/refresh", async (req, res) => {
+		const outcome = await run(req, "CLUSTER_LIST_PUBLICATIONS", {});
+		if (outcome.status !== 200) { send(res, outcome); return; }
+
+		// Применять здесь нечего: срез уже применён на общем пути приёма результатов
+		// (agentRouter), куда он попадает раньше, чем run() возвращает управление. Второе
+		// применение было бы не ошибкой, а лишней парой мест, которые обязаны совпадать.
+		const data = outcome.data as { items?: unknown[] } | null;
+		const found = Array.isArray(data?.items) ? data.items.length : 0;
+
+		// Отвечаем реестром, как и обновление баз: панели нужен готовый список, а не сырой
+		// ответ агента, у которого другая форма.
+		res.json({ success: true, data: { items: await bases.listAll(), found } });
+	});
+
 	// Ручное обновление реестра: спрашиваем список у кластера и сразу применяем к базе сервиса,
 	// чтобы панель обновилась в этом же запросе, не дожидаясь ближайшего heartbeat.
 	r.post("/bases/refresh", async (req, res) => {

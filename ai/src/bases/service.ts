@@ -290,6 +290,37 @@ export class BaseService {
 		);
 	}
 
+	/**
+	 * Применить срез публикаций с веб-сервера.
+	 *
+	 * `complete` — обещание агента, что список ПОЛНЫЙ (просмотрены все веб-серверы). Только
+	 * тогда отсутствие базы в списке означает «не опубликована»; иначе мы лишь отмечаем
+	 * найденное. Разница не теоретическая: агент, видящий один веб-сервер из двух, иначе
+	 * объявил бы неопубликованными сотню работающих баз.
+	 */
+	async applyPublications(
+		serverId: string,
+		items: { key: string; published?: boolean; url?: string | null }[],
+		complete: boolean,
+	): Promise<{ marked: number; cleared: number }> {
+		let marked = 0;
+		for (const it of items) {
+			if (!it.key) continue;
+			await this.setPublication(serverId, it.key, it.published !== false, it.url ?? null);
+			marked += 1;
+		}
+		if (!complete || !items.length) return { marked, cleared: 0 };
+
+		const keys = items.filter((i) => i.published !== false).map((i) => i.key);
+		const r = await this.db.query(
+			`UPDATE bases SET published = false, publish_url = NULL, publish_seen_at = now()
+			  WHERE server_id = $1 AND NOT (key = ANY($2::text[]))
+			    AND (published IS DISTINCT FROM false)`,
+			[serverId, keys],
+		);
+		return { marked, cleared: r.rowCount ?? 0 };
+	}
+
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
 		const r = await this.db.query(
 			`UPDATE bases SET disabled_at = ${disabled ? "now()" : "NULL"} WHERE id = $1`,

@@ -212,6 +212,17 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		type: "CLUSTER_LIST_PUBLICATIONS",
+		title: "Список публикаций на веб-сервере",
+		operation: "READ",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: false,
+		// Публикации читаются с веб-сервера (каталоги + default.vrd/web.config), а не из
+		// кластера, поэтому базу команда не адресует: спрашиваем сразу все.
+		schema: z.object({}).strict(),
+	},
+	{
 		type: "IB_UNPUBLISH",
 		title: "Снять публикацию базы с веб-сервера",
 		operation: "CRITICAL",

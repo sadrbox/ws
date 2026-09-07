@@ -99,6 +99,15 @@ test("списки содержимого базы — чтение: подтв�
 	}
 });
 
+test("CLUSTER_LIST_PUBLICATIONS: чтение по всему веб-серверу, базу не адресует", () => {
+	const spec = findAdminCommand("CLUSTER_LIST_PUBLICATIONS")!;
+	assert.equal(spec.operation, "READ");
+	assert.equal(spec.requiresBase, false);
+	assert.equal(buildAdminPayload(spec, {}).ok, true);
+	// Публикации читаются с веб-сервера — это работа кластерного администратора.
+	assert.equal(spec.capability, "cluster.admin");
+});
+
 test("IB_UNPUBLISH: обязателен только baseKey, публикация снимается по имени базы", () => {
 	const spec = findAdminCommand("IB_UNPUBLISH")!;
 	assert.equal(buildAdminPayload(spec, { baseKey: "buh_alma" }).ok, true);

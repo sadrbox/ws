@@ -225,6 +225,15 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			const me = await agents.findById(req.agent!.agentId);
 			if (me?.serverId) await bases.setPublication(me.serverId, row.base_key, published, url);
 		}
+		// Срез публикаций может прийти и не из ручки панели (пакет, повтор задания) —
+		// применяем его на общем пути приёма результатов.
+		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_LIST_PUBLICATIONS") {
+			const data = p.data.result as { items?: { key: string; published?: boolean; url?: string | null }[]; complete?: boolean } | null;
+			const me = await agents.findById(req.agent!.agentId);
+			if (me?.serverId && Array.isArray(data?.items) && data.items.length) {
+				await bases.applyPublications(me.serverId, data.items, data.complete === true);
+			}
+		}
 		// База, которой нет: агент сообщил «не найдена». Помечаем в реестре — иначе фантом
 		// остаётся в списке наравне с рабочими, и о проблеме узнают только по ошибке при
 		// каждой попытке. Обратно в ONLINE её вернёт ближайший успешный срез кластера.

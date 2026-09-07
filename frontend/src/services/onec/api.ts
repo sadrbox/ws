@@ -139,6 +139,14 @@ export type UserOccurrence = {
 export const fetchUserOccurrences = (name: string) =>
 	aiFetch<{ items: UserOccurrence[] }>(`/v1/onec/users/${encodeURIComponent(name)}`);
 
+/**
+ * Обновить состояние публикаций: агент читает веб-сервер и отдаёт список опубликованных
+ * баз. Без этого признак публикации у сотни баз оставался «не проверялся» до тех пор,
+ * пока публикацию не сделают из панели.
+ */
+export const refreshPublications = () =>
+	aiFetch<{ items: OnecBase[]; found: number }>("/v1/onec/publications/refresh", { method: "POST" });
+
 /** Сводка расширений по всем базам: группировка по паре имя+синоним. */
 export const fetchExtensionSummary = () =>
 	aiFetch<{ items: { name: string; synonym: string; bases: number; versions: string[] }[] }>("/v1/onec/extensions");

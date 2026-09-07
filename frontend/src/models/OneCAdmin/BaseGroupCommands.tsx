@@ -28,7 +28,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { showToast } from "src/components/UIToast";
 import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
-import { runBatch, type BatchType } from "src/services/onec/api";
+import { refreshPublications, runBatch, type BatchType } from "src/services/onec/api";
 import { isApplicable, type OnecOperation } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -141,6 +141,18 @@ export const BaseGroupCommands: FC<{
 		batch.mutate();
 	};
 
+	// Чтение публикаций: одна команда на весь веб-сервер, отметки строк ей не нужны —
+	// поэтому кнопка активна всегда, в отличие от групповых операций.
+	const checkPublications = useMutation({
+		mutationFn: refreshPublications,
+		onSuccess: (d) => {
+			qc.setQueryData(["onec", "bases"], { items: d.items });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+			showToast(`${translate("onecPublicationsChecked")}: ${d.found}`, "success");
+		},
+		onError: (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error"),
+	});
+
 	const btn = (o: Op, label: string) => (
 		<Button size="sm" disabled={!selected.length} onClick={() => { setName(""); setOp(o); }}>
 			{translate(label)}
@@ -149,6 +161,9 @@ export const BaseGroupCommands: FC<{
 
 	return (
 		<>
+			<Button size="sm" disabled={checkPublications.isPending} onClick={() => checkPublications.mutate()}>
+				{translate("onecPublicationsCheck")}
+			</Button>
 			{btn("publish", "onecPublish")}
 			{btn("unpublish", "onecUnpublish")}
 			{btn("createUser", "onecUserCreate")}
