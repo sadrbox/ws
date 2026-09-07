@@ -230,6 +230,7 @@ new UTF8Encoding(false)`, для Node — `spawn` без `encoding` и зате�
 |---|---|---|
 | `IB_LIST_USERS` | `{baseKey}` | `{items:[{name, fullName?, disabled?, roles?[]}]}` |
 | `IB_CREATE_USER` | `{baseKey, name, fullName?, password?, roles?[], osUser?, showInList?}` | `{ok:true}` |
+| `IB_LIST_ROLES` | `{baseKey}` | `{items:[{name, synonym?}]}` |
 | `IB_UPDATE_USER` | `{baseKey, name, newName?, fullName?, password?, roles?[], disabled?, showInList?}` | `{ok:true}` |
 | `IB_DELETE_USER` | `{baseKey, name}` | `{ok:true}` |
 | `IB_LIST_EXTENSIONS` | `{baseKey}` | `{items:[{name, synonym?, version?, purpose?, safeMode?}]}` |

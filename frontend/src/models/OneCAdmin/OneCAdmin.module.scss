@@ -96,6 +96,42 @@
 	white-space: nowrap;
 }
 
+// Выбор ролей: строка поиска, прокручиваемый список отметок, ручное добавление.
+// Список ограничен по высоте: ролей в типовой конфигурации сотни, и без ограничения
+// форма превращалась бы в километровую ленту.
+.Roles {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.RolesHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.RolesList {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	max-height: 240px;
+	overflow: auto;
+	padding: 6px;
+	border: 1px solid $color34;
+	border-radius: var(--radius-3, 3px);
+}
+
+.RoleItem {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: $fontsize;
+	color: $color6;
+	cursor: pointer;
+}
+
 // Предупреждение о том, что операция невозможна в принципе (агент не умеет).
 // Не Notice: это не ошибка формы, а состояние среды — постоянное, пока не настроят агента.
 .Blocked {

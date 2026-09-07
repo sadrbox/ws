@@ -1696,5 +1696,13 @@
   "onecAgentRename": "Переименовать",
   "onecAgentDeleteHint": "Сначала отключите агента",
   "onecAgentLive": "Работают сейчас",
-  "onecAgentHistory": "Прежние запуски"
+  "onecAgentHistory": "Прежние запуски",
+  "onecRolesHint": "Отмеченные роли будут назначены при создании и при изменении. Пустой набор при изменении означает «не трогать роли».",
+  "onecRolesByBase": "Назначено сейчас по базам",
+  "onecRolesNoData": "Данных нет: базы ещё не проверялись кнопкой «Проверить пользователей»",
+  "onecRolesSelected": "Выбрано",
+  "onecRolesFromBase": "Справочник из базы",
+  "onecRolesCustom": "Идентификатор роли",
+  "onecRolesEmpty": "Ролей не найдено",
+  "clearAll": "Очистить"
 }

@@ -160,6 +160,17 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		type: "IB_LIST_ROLES",
+		title: "Роли конфигурации базы",
+		operation: "READ",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		// Набор ролей задаёт КОНФИГУРАЦИЯ, а не пользователь: у «Бухгалтерии» и «Зарплаты»
+		// он разный. Поэтому список берётся у базы, а не из общего справочника.
+		schema: z.object({ baseKey }).strict(),
+	},
+	{
 		type: "IB_UPDATE_USER",
 		title: "Изменить пользователя базы",
 		operation: "CRITICAL",

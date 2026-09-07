@@ -92,6 +92,27 @@ export class OnecRegistry {
 	}
 
 	/** Сводка по всем базам: кто где есть — список имён с числом баз. */
+	/**
+	 * Роли, встречавшиеся в базах, — по кэшу прочитанных пользователей.
+	 *
+	 * Это не справочник конфигурации (его отдаёт IB_LIST_ROLES у самой базы), а то, что мы
+	 * УЖЕ видели: ролей в типовой конфигурации сотни, но реально назначают десяток, и для
+	 * выбора при создании пользователя этого достаточно. Работает без обращения к 1С.
+	 */
+	async knownRoles(baseKey?: string): Promise<{ name: string; users: number }[]> {
+		const r = await this.db.query<{ name: string; users: string }>(
+			`SELECT role AS name, count(*)::text AS users
+			   FROM base_users u
+			   JOIN bases b ON b.id = u.base_id
+			   CROSS JOIN LATERAL jsonb_array_elements_text(u.roles) AS role
+			  WHERE ($1::text IS NULL OR b.key = $1)
+			  GROUP BY role
+			  ORDER BY count(*) DESC, role`,
+			[baseKey ?? null],
+		);
+		return r.rows.map((x) => ({ name: x.name, users: Number(x.users) }));
+	}
+
 	async userSummary(): Promise<{ name: string; bases: number; disabled: number }[]> {
 		const r = await this.db.query<{ name: string; bases: string; disabled: string }>(
 			`SELECT min(name) AS name, count(*)::text AS bases,

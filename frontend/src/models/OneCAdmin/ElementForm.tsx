@@ -37,6 +37,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBases, fetchUserOccurrences, runBatch, type BatchType, type OnecBase,
 } from "src/services/onec/api";
+import RolesPicker from "./RolesPicker";
 import { QueryError, isApplicable, publishLabel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -78,6 +79,10 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 	const [disabled, setDisabled] = useState(row.disabledFlag === true);
 	const [safeMode, setSafeMode] = useState(true);
 	const [file, setFile] = useState<File | null>(null);
+	// Роли: пустой набор в изменении означает «не трогать» — как и прочие поля. Явное
+	// «снять все роли» пришлось бы делать отдельной командой, и это к лучшему: случайно
+	// разослать «без ролей» на сотню баз здесь невозможно.
+	const [roles, setRoles] = useState<string[]>(Array.isArray(row.roles) ? (row.roles as string[]) : []);
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	// «Где заведён» для пользователя — из кэша реестра, без обращения к 1С.
@@ -120,12 +125,14 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 						...(name.trim() && name.trim() !== elementName ? { newName: name.trim() } : {}),
 						...(fullName.trim() ? { fullName: fullName.trim() } : {}),
 						...(password ? { password } : {}),
+						...(roles.length ? { roles } : {}),
 						disabled,
 					}
 						: isUser ? {
 							name: name.trim(),
 							...(fullName.trim() ? { fullName: fullName.trim() } : {}),
 							...(password ? { password } : {}),
+							...(roles.length ? { roles } : {}),
 						}
 							: { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" };
 
@@ -147,7 +154,9 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 		batch.mutate();
 	};
 
-	const roles = Array.isArray(row.roles) ? (row.roles as string[]) : [];
+	// База, у которой спрашивать справочник ролей: отмеченная, иначе первая, где
+	// пользователь уже заведён — у неё та же конфигурация.
+	const firstBase = (occurrences.data?.items ?? [])[0]?.baseKey ?? (bases.data?.items ?? [])[0]?.key;
 
 	return (
 		<>
@@ -199,14 +208,35 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 									</GroupRow>
 								)}
 
-								{isUser && roles.length > 0 && (
-									// Роли показываем как есть: их десятки, и любое «сокращение для
-									// красоты» здесь скрывало бы права.
-									<div className={styles.Hint}>{translate("roles")}: {roles.join(", ")}</div>
-								)}
+
 							</GroupCol>
 						),
 					},
+					...(isUser ? [{
+						id: "roles", label: translate("roles"),
+						component: (
+							<GroupCol>
+								<div className={styles.Hint}>{translate("onecRolesHint")}</div>
+								<RolesPicker value={roles} onChange={setRoles} baseKey={picked[0] ?? firstBase} />
+
+								{/* Что назначено СЕЙЧАС и где: одинаковое имя в разных базах не
+								    означает одинаковых прав, и до этой таблицы расхождение было
+								    видно только по одной базе за раз. */}
+								<div className={styles.Hint}>{translate("onecRolesByBase")}</div>
+								<div className={styles.RolesList}>
+									{(occurrences.data?.items ?? []).map((o) => (
+										<div key={o.baseKey} className={styles.InstanceRow}>
+											<span className={styles.InstanceName}>{o.baseKey}</span>
+											<span>{(o.roles ?? []).join(", ") || "—"}</span>
+										</div>
+									))}
+									{!(occurrences.data?.items ?? []).length && (
+										<div className={styles.Hint}>{translate("onecRolesNoData")}</div>
+									)}
+								</div>
+							</GroupCol>
+						),
+					}] : []),
 					{
 						id: "bases", label: translate("onecTabBases"),
 						component: (

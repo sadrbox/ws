@@ -71,6 +71,8 @@ export function onecRouter(deps: Deps) {
 				req.path === "/agents" ||
 				req.path === "/extensions" ||
 				req.path === "/users" ||
+				// Роли из кэша (без ?live=1) в 1С не ходят — лимит кластера к ним не относится.
+				(req.path === "/roles" && req.query.live !== "1") ||
 				req.path.startsWith("/commands/") ||
 				req.path.startsWith("/batches") ||
 				req.path.startsWith("/users/")
@@ -444,6 +446,24 @@ export function onecRouter(deps: Deps) {
 	// ── Сводки по всем базам (кэш, без обращения к 1С) ──────────────────────────
 	r.get("/users", async (_req, res) => {
 		res.json({ success: true, data: { items: await registry.userSummary() } });
+	});
+
+	/**
+	 * Роли для выбора при создании и изменении пользователя.
+	 *
+	 * По умолчанию — те, что уже встречались в базах (кэш, без обращения к 1С): их десяток,
+	 * и обычно назначают именно их. `?baseKey=` сужает до одной базы, `?live=1` спрашивает
+	 * справочник конфигурации у самой базы командой IB_LIST_ROLES — там их сотни, но зато
+	 * это полный список с точными идентификаторами.
+	 */
+	r.get("/roles", async (req, res) => {
+		const baseKey = typeof req.query.baseKey === "string" ? req.query.baseKey : undefined;
+		if (req.query.live === "1" && baseKey) {
+			const outcome = await run(req, "IB_LIST_ROLES", { baseKey });
+			send(res, outcome);
+			return;
+		}
+		res.json({ success: true, data: { items: await registry.knownRoles(baseKey) } });
 	});
 
 	/** Где есть этот пользователь — ответ на «покажи его во всех базах». */

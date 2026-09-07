@@ -161,6 +161,17 @@ export const fetchUserOccurrences = (name: string) =>
 export const refreshPublications = () =>
 	aiFetch<{ items: OnecBase[]; found: number }>("/v1/onec/publications/refresh", { method: "POST" });
 
+/**
+ * Роли для выбора при создании и изменении пользователя.
+ *
+ * Без `baseKey` — те, что уже встречались в базах (кэш реестра, без обращения к 1С).
+ * С `live` — справочник конфигурации у самой базы: полный, но это команда агенту.
+ */
+export const fetchRoles = (baseKey?: string, live?: boolean) =>
+	aiFetch<{ items: { name: string; users?: number; synonym?: string }[] } | Pending>(
+		`/v1/onec/roles${baseKey ? `?baseKey=${encodeURIComponent(baseKey)}${live ? "&live=1" : ""}` : ""}`,
+	).then((d) => awaitCommand<{ items: { name: string; users?: number; synonym?: string }[] }>(d));
+
 /** Сводка расширений по всем базам: группировка по паре имя+синоним. */
 export const fetchExtensionSummary = () =>
 	aiFetch<{ items: { name: string; synonym: string; bases: number; versions: string[] }[] }>("/v1/onec/extensions");
