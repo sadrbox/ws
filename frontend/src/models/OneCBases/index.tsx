@@ -223,7 +223,11 @@ export const OneCBasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: 
 		onSelectItem={onSelectItem}
 		// Состояние публикации хранится булевым (с «не проверялась» = null), а подпись
 		// к нему — дело интерфейса: в API текста для человека быть не должно.
-		renderCell={(row, col) => (col.identifier === "published" ? publishLabel(row.published as boolean | null) : undefined)}
+		// Значение обёрнуто в <span>, как и штатный рендер ячейки: голая строка ложится
+		// прямым потомком ячейки и выпадает из общей вёрстки (обрезка, выравнивание).
+		renderCell={(row, col) => (col.identifier === "published"
+			? <span>{publishLabel(row.published as boolean | null)}</span>
+			: undefined)}
 		previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
 		// Групповые команды по отмеченным базам: публикация и её снятие, пользователи,
 		// расширения. Здесь набор баз уже выбран — уходить за ним на другую вкладку незачем.
