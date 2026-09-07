@@ -1,0 +1,206 @@
+/**
+ * Форма агента — всё об одном агенте и все действия над ним в одном месте.
+ *
+ * ЗАЧЕМ. Действия жили в командной панели списка и работали над «выбранной строкой»:
+ * какая строка выбрана, было видно плохо, кнопки то гасли, то прятались, а «Сменить токен»
+ * стояла между безобидными — и однажды отключила живого агента случайным нажатием.
+ * В списках приложения элемент открывают двойным щелчком и правят в его форме; агент
+ * ничем не особеннее прочих.
+ *
+ * ТОЛЬКО ЧТЕНИЕ РЕКВИЗИТОВ. Имя и роль приходят от самого агента при регистрации, панель их
+ * не назначает. Здесь — состояние, способности, экземпляры и команды над ними.
+ */
+import { FC, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAppContext } from "src/app/context";
+import ModelForm from "src/components/ModelForm";
+import Modal from "src/components/Modal";
+import { Button } from "src/components/Button";
+import { Field } from "src/components/Field";
+import { GroupCol, GroupRow } from "src/components/UI";
+import { showToast } from "src/components/UIToast";
+import { translate } from "src/i18";
+import { asText } from "src/utils/asText";
+import { getFormatDate } from "src/utils/datetime";
+import type { TDataItem } from "src/components/Table/types";
+import type { TPane } from "src/app/types";
+import {
+	fetchAgents, releaseAgentInstance, rotateAgentToken, setAgentDisabled, setAgentOwner,
+} from "src/services/onec/api";
+import { QueryError } from "./shared";
+import styles from "./OneCAdmin.module.scss";
+
+/** Состояние агента одним словом: отключён — это не «оффлайн», а решение администратора. */
+const stateLabel = (a: { disabled: boolean; online: boolean }): string =>
+	a.disabled ? translate("onecAgentDisabled") : a.online ? translate("onecAgentOnline") : translate("onecAgentOffline");
+
+export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
+	const row = (paneProps.data ?? {}) as TDataItem;
+	const agentId = asText(row.agentId) || asText(row.uuid);
+	const qc = useQueryClient();
+	const [confirm, setConfirm] = useState<null | "rotate" | "release">(null);
+	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
+	const [issued, setIssued] = useState<string>("");
+
+	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agent = useMemo(
+		() => (agents.data?.items ?? []).find((a) => a.id === agentId) ?? null,
+		[agents.data, agentId],
+	);
+
+	const refresh = () => qc.invalidateQueries({ queryKey: ["onec", "agents"] });
+	const fail = (e: unknown) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error");
+
+	const rotate = useMutation({
+		mutationFn: () => rotateAgentToken(agentId),
+		onSuccess: (d) => { setConfirm(null); setIssued(d.token); void refresh(); },
+		onError: fail,
+	});
+	const toggle = useMutation({
+		mutationFn: (disabled: boolean) => setAgentDisabled(agentId, disabled),
+		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
+		onError: fail,
+	});
+	const release = useMutation({
+		mutationFn: () => releaseAgentInstance(agentId),
+		onSuccess: () => { setConfirm(null); showToast(translate("saved"), "success"); void refresh(); },
+		onError: fail,
+	});
+	const assign = useMutation({
+		mutationFn: (instanceId: string) => setAgentOwner(agentId, instanceId),
+		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
+		onError: fail,
+	});
+
+	const instances = agent?.instances ?? [];
+
+	return (
+		<>
+			<ModelForm
+				paneId={paneProps.uniqId}
+				// endpoint не передаём: у агентов нет эндпойнта ERP, а он нужен ModelForm
+				// только для кнопок шапки («Показать в списке», заметки) — которым здесь
+				// нечего показывать. Выдуманный адрес рано или поздно ушёл бы в запрос.
+				readonly
+				isLoading={agents.isLoading}
+				// Реквизиты присылает сам агент — сохранять нечего.
+				onSave={() => {}} onSaveAndClose={() => {}} onClose={() => {}}
+				tabs={[
+					{
+						id: "main", label: translate("general"),
+						component: (
+							<GroupCol>
+								<QueryError error={agents.error} />
+								<GroupRow>
+									<Field name="ag_name" label={translate("name")} value={agent?.name || "—"} disabled onChange={() => {}} />
+									<Field name="ag_role" label={translate("role")} value={agent?.role ?? "—"} disabled onChange={() => {}} width="150px" />
+									<Field name="ag_state" label={translate("status")} value={agent ? stateLabel(agent) : "—"} disabled onChange={() => {}} width="170px" />
+									<Field name="ag_seen" label={translate("lastSeenAt")}
+										value={agent?.lastSeenAt ? getFormatDate(agent.lastSeenAt) : "—"} disabled onChange={() => {}} width="190px" />
+								</GroupRow>
+								<GroupRow>
+									<Field name="ag_id" label={translate("id")} value={agentId} disabled onChange={() => {}} width="320px" />
+									<Field name="ag_owner" label={translate("ownerInstance")}
+										value={agent?.owner?.instanceId || "—"} disabled onChange={() => {}} />
+								</GroupRow>
+
+								{/* Команды над агентом — здесь, а не в командной панели списка: тут
+								    видно, НАД КЕМ они выполняются. */}
+								<GroupRow>
+									<Button variant="danger" disabled={rotate.isPending} onClick={() => setConfirm("rotate")}>
+										{translate("onecAgentRotate")}
+									</Button>
+									<Button disabled={toggle.isPending || !agent}
+										onClick={() => agent && toggle.mutate(!agent.disabled)}>
+										{agent?.disabled ? translate("onecAgentEnable") : translate("onecAgentDisable")}
+									</Button>
+									<Button
+										disabled={release.isPending || !agent?.owner?.instanceId}
+										title={agent?.owner?.instanceId
+											? `${translate("ownerInstance")}: ${agent.owner.instanceId}`
+											: translate("onecAgentNoOwnerHint")}
+										onClick={() => setConfirm("release")}>
+										{translate("onecAgentReleaseInstance")}
+									</Button>
+								</GroupRow>
+
+								<div className={styles.Hint}>
+									{translate("onecAgentCapabilities")}: {agent?.capabilities.join(", ") || "—"}
+								</div>
+							</GroupCol>
+						),
+					},
+					{
+						id: "instances", label: translate("onecAgentInstances"),
+						component: (
+							<div className={styles.Instances}>
+								<div className={styles.Hint}>{translate("onecAgentInstancesHint")}</div>
+								{instances.map((inst) => {
+									const isOwner = agent?.owner?.instanceId === inst.instanceId;
+									return (
+										<div key={inst.instanceId}
+											className={[styles.InstanceRow, isOwner ? styles.InstanceOwner : ""].filter(Boolean).join(" ")}>
+											<span className={styles.InstanceName}>{inst.instanceId}</span>
+											<span>{inst.remoteAddr ?? "—"}</span>
+											<span>{getFormatDate(inst.lastSeenAt)}</span>
+											{isOwner
+												? <span className={styles.InstanceOwnerMark}>{translate("onecAgentOwnerNow")}</span>
+												: (
+													<Button variant="primary" disabled={assign.isPending}
+														onClick={() => assign.mutate(inst.instanceId)}>
+														{translate("onecAgentMakeOwner")}
+													</Button>
+												)}
+										</div>
+									);
+								})}
+								{!instances.length && <div className={styles.Hint}>{translate("onecAgentNoInstances")}</div>}
+							</div>
+						),
+					},
+				]}
+			/>
+
+			{confirm === "rotate" && (
+				<Modal title={translate("onecAgentRotate")} onClose={() => setConfirm(null)} onApply={() => rotate.mutate()}>
+					<div className={styles.ModalForm}>
+						<div>{agent?.name || agentId.slice(0, 8)}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecAgentRotateWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
+			{confirm === "release" && (
+				<Modal title={translate("onecAgentReleaseInstance")} onClose={() => setConfirm(null)} onApply={() => release.mutate()}>
+					<div className={styles.ModalForm}>
+						<div>{translate("ownerInstance")}: {agent?.owner?.instanceId || "—"}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecAgentReleaseWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
+			{issued && (
+				// Токен показывается ОДИН раз: в БД лежит только его SHA-256.
+				<Modal title={translate("onecAgentToken")} onClose={() => setIssued("")}>
+					<div className={styles.ModalForm}>
+						<Field name="ag_token" value={issued} onChange={() => {}} />
+						<div className={styles.ConfirmWarning}>{translate("onecAgentTokenOnce")}</div>
+					</div>
+				</Modal>
+			)}
+		</>
+	);
+};
+AgentForm.displayName = "AgentForm";
+
+/** Открыть форму агента отдельным пейном — двойным щелчком по строке списка. */
+export function useOpenAgent() {
+	const { addPane } = useAppContext().windows;
+	return (row: Partial<TDataItem>) => addPane({
+		label: `${translate("onecTabAgents")}: ${asText(row.name) || asText(row.agentId).slice(0, 8)}`,
+		component: AgentForm as never,
+		data: row as TDataItem,
+	});
+}
+
+export default AgentForm;

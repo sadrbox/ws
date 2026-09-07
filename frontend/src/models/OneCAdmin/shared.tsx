@@ -154,7 +154,7 @@ export function useBaseTargets(opts: {
 					<>
 						{opts.extraButtons ? opts.extraButtons(selectedKeys) : null}
 						{op && (hidden > 0 || showAll) && (
-							<Button size="sm" active={showAll} onClick={() => setShowAll((v) => !v)}>
+							<Button variant="secondary" active={showAll} onClick={() => setShowAll((v) => !v)}>
 								{translate("onecShowInapplicable")}{hidden > 0 && !showAll ? ` (${hidden})` : ""}
 							</Button>
 						)}

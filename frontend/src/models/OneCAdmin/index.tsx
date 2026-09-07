@@ -289,7 +289,7 @@ export const OneCAdminList: FC = () => {
 							extraButtons: (
 								<>
 									{pickedSessions.length > 0 && (
-										<Button size="sm" variant="danger"
+										<Button variant="danger"
 											onClick={() => setConfirm({ kind: "terminateMany", ids: pickedSessions })}>
 											{translate("onecTerminateMany")} ({pickedSessions.length})
 										</Button>
@@ -304,17 +304,16 @@ export const OneCAdminList: FC = () => {
 										]}
 										// Тот же компактный размер, что у кнопок рядом: тулбар таблицы
 										// держит одну высоту элементов.
-										size="sm"
-										style={{ width: "200px" }}
+														style={{ width: "200px" }}
 									/>
 									{selectedBase && (
-										<Button size="sm"
+										<Button variant="secondary"
 											onClick={() => { setLockMessage(""); setConfirm({ kind: "lock", base: selectedBase, enabled: true }); }}>
 											{translate("onecLockSessions")}
 										</Button>
 									)}
 									{selectedBase && (
-										<Button size="sm"
+										<Button variant="secondary"
 											onClick={() => setConfirm({ kind: "lock", base: selectedBase, enabled: false })}>
 											{translate("onecUnlockSessions")}
 										</Button>

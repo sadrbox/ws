@@ -149,7 +149,7 @@ export const ElementCard: FC<{
 					onSelectionChange: (sel: Set<number>, all: TDataItem[]) =>
 						setPicked(all.filter((r) => sel.has(Number(r.id))).map((r) => String(r.baseKey))),
 					extraButtons: (hidden > 0 || showAll) ? (
-						<Button size="sm" active={showAll} onClick={() => setShowAll((v) => !v)}>
+						<Button variant="secondary" active={showAll} onClick={() => setShowAll((v) => !v)}>
 							{translate("onecShowInapplicable")}{hidden > 0 && !showAll ? ` (${hidden})` : ""}
 						</Button>
 					) : undefined,

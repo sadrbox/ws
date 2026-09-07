@@ -139,7 +139,7 @@ const useBaseTabs = (row: TDataItem) => {
 					sorting: extView.sorting, search: extView.search,
 					isLoading: ext.isLoading || ext.isFetching,
 					onReload: () => (loadExt ? void ext.refetch() : setLoadExt(true)),
-					extraButtons: loadExt ? undefined : <Button size="sm" onClick={() => setLoadExt(true)}>{translate("onecExtCheck")}</Button>,
+					extraButtons: loadExt ? undefined : <Button variant="secondary" onClick={() => setLoadExt(true)}>{translate("onecExtCheck")}</Button>,
 				})} />
 				</>
 			),
@@ -154,7 +154,7 @@ const useBaseTabs = (row: TDataItem) => {
 					sorting: userView.sorting, search: userView.search,
 					isLoading: users.isLoading || users.isFetching,
 					onReload: () => (loadUsers ? void users.refetch() : setLoadUsers(true)),
-					extraButtons: loadUsers ? undefined : <Button size="sm" onClick={() => setLoadUsers(true)}>{translate("onecUsersCheck")}</Button>,
+					extraButtons: loadUsers ? undefined : <Button variant="secondary" onClick={() => setLoadUsers(true)}>{translate("onecUsersCheck")}</Button>,
 				})} />
 				</>
 			),
@@ -172,7 +172,7 @@ const useBaseTabs = (row: TDataItem) => {
 						isLoading: own.query.isLoading || own.query.isFetching,
 						onReload: () => (loadSessions ? void own.query.refetch() : setLoadSessions(true)),
 						extraButtons: loadSessions ? undefined
-							: <Button size="sm" onClick={() => setLoadSessions(true)}>{translate("onecSessionsShow")}</Button>,
+							: <Button variant="secondary" onClick={() => setLoadSessions(true)}>{translate("onecSessionsShow")}</Button>,
 					})} />
 				</>
 			),

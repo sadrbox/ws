@@ -1,13 +1,14 @@
 /**
- * Вкладка «Агенты» (E15/A5): кто подключён к серверу 1С и чем управляет.
+ * Вкладка «Агенты» (E15/A5): кто подключён к серверу 1С.
  *
- * ЗАЧЕМ В ПАНЕЛИ. Агента заводили консольной командой с `AGENT_ADMIN_KEY` — то есть
- * человек с правом «Администрирование 1С» всё равно шёл к тому, у кого есть доступ к
- * серверу. Здесь те же операции под тем же правом, что и остальная панель.
+ * СПИСОК — ТОЛЬКО СПИСОК. Команды над агентом переехали в его форму (AgentForm), которая
+ * открывается двойным щелчком по строке, как у всех списков приложения. В командной панели
+ * действия работали над «выбранной строкой»: какая выбрана — видно плохо, кнопки то гасли,
+ * то прятались, а «Сменить токен» стояла между безобидными и однажды отключила живого
+ * агента случайным нажатием.
  *
  * ТОКЕН ПОКАЗЫВАЕТСЯ ОДИН РАЗ. В БД лежит только его SHA-256; забыли — значит ротация,
- * а не «посмотреть ещё раз». Поэтому окно с токеном нельзя закрыть случайно: копирование
- * и явное подтверждение.
+ * а не «посмотреть ещё раз».
  */
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,13 +18,13 @@ import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import { showToast } from "src/components/UIToast";
-import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
-import type { TColumn, TDataItem } from "src/components/Table/types";
+import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
-import { createAgent, fetchAgents, releaseAgentInstance, rotateAgentToken, setAgentDisabled, setAgentOwner } from "src/services/onec/api";
+import { createAgent, fetchAgents } from "src/services/onec/api";
+import { useOpenAgent } from "./AgentForm";
 import { QueryError } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -42,50 +43,17 @@ export const AgentsTab: FC = () => {
 	const qc = useQueryClient();
 	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_agents"));
-	const [selected, setSelected] = useState<string>("");
-	// Ротация токена ломает работающего агента до тех пор, пока новый токен не вставят
-	// в его настройки, — и стоит в тулбаре рядом с безобидными кнопками. Подтверждение
-	// здесь не формальность: именно так живой агент и был отключён случайным нажатием.
-	const [dialog, setDialog] = useState<null | "create" | "rotate">(null);
+	const [dialog, setDialog] = useState<null | "create">(null);
 	const [name, setName] = useState("");
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<{ token: string; name: string } | null>(null);
+	const openAgent = useOpenAgent();
 
 	const refresh = () => qc.invalidateQueries({ queryKey: ["onec", "agents"] });
 
 	const create = useMutation({
 		mutationFn: () => createAgent(name.trim()),
 		onSuccess: (d) => { setDialog(null); setIssued({ token: d.token, name: d.agent.name || name }); void refresh(); },
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
-	});
-
-	const rotate = useMutation({
-		mutationFn: (id: string) => rotateAgentToken(id),
-		onSuccess: (d, id) => {
-			const a = (agents.data?.items ?? []).find((x) => x.id === id);
-			setIssued({ token: d.token, name: a?.name ?? "" });
-			void refresh();
-		},
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
-	});
-
-	// Снятие владения: следующий запустившийся экземпляр займёт место. Нужно там, где
-	// владелец не отдал его сам — машину выключили, службу перенесли.
-	const release = useMutation({
-		mutationFn: (id: string) => releaseAgentInstance(id),
-		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
-	});
-
-	const assign = useMutation({
-		mutationFn: (p: { id: string; instanceId: string }) => setAgentOwner(p.id, p.instanceId),
-		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
-	});
-
-	const toggle = useMutation({
-		mutationFn: (p: { id: string; disabled: boolean }) => setAgentDisabled(p.id, p.disabled),
-		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
 		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
 	});
 
@@ -111,8 +79,6 @@ export const AgentsTab: FC = () => {
 	const view = useStaticTableView(rowsRaw, { name: "asc" });
 	const rows = view.rows.map((r) => ({ ...r, lastSeenAt: r.lastSeenAt ? getFormatDate(String(r.lastSeenAt)) : "—" }));
 
-	const current = (agents.data?.items ?? []).find((a) => a.id === selected) ?? null;
-
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecAgentsHint")}</div>
@@ -134,102 +100,17 @@ export const AgentsTab: FC = () => {
 				componentName: "OneCAdmin_agents", rows, columns: cols, setColumns: setCols,
 				sorting: view.sorting, search: view.search,
 				isLoading: agents.isLoading, onReload: () => void agents.refetch(),
-				onRowClick: (row: Partial<TDataItem>) => setSelected(asText(row.agentId)),
+				// Двойной щелчок открывает форму агента — тот же жест, что во всех списках.
+				onRowClick: openAgent,
 				extraButtons: (
-					<>
-						<Button size="sm" onClick={() => { setName(""); setDialog("create"); }}>
-							{translate("onecAgentCreate")}
-						</Button>
-						{current && (
-							<Button size="sm" variant="danger" disabled={rotate.isPending}
-								onClick={() => setDialog("rotate")}>
-								{translate("onecAgentRotate")}
-							</Button>
-						)}
-						{current && (
-							// Не прячем, а гасим: спрятанная кнопка выглядит как отсутствующая
-							// возможность, и её начинают искать в другом месте. Подсказка
-							// объясняет, ПОЧЕМУ недоступна: иначе гашение так же загадочно.
-							<Button size="sm"
-								disabled={release.isPending || !current.owner?.instanceId}
-								title={current.owner?.instanceId
-									? `${translate("ownerInstance")}: ${current.owner.instanceId}`
-									: translate("onecAgentNoOwnerHint")}
-								onClick={() => release.mutate(current.id)}>
-								{translate("onecAgentReleaseInstance")}
-							</Button>
-						)}
-						{current && (
-							<Button size="sm" disabled={toggle.isPending}
-								onClick={() => toggle.mutate({ id: current.id, disabled: !current.disabled })}>
-								{current.disabled ? translate("onecAgentEnable") : translate("onecAgentDisable")}
-							</Button>
-						)}
-					</>
+					<Button variant="secondary" onClick={() => { setName(""); setDialog("create"); }}>
+						{translate("onecAgentCreate")}
+					</Button>
 				),
 			})} />
 
-			{current && (
-				// Экземпляры выбранного агента: кто держит аренду и кого можно назначить.
-				// «Кто первым пришёл» — правило для машин: выиграть может машина разработки,
-				// и тогда боевой агент заблокирован. Здесь это решается одним нажатием.
-				<div className={styles.Instances}>
-					<div className={styles.Hint}>
-						{translate("onecAgentInstances")} — {current.name || current.id.slice(0, 8)}:{" "}
-						{current.instances?.length ?? 0}
-					</div>
-					{(current.instances ?? []).map((inst) => {
-						const isOwner = current.owner?.instanceId === inst.instanceId;
-						return (
-							<div key={inst.instanceId}
-								className={[styles.InstanceRow, isOwner ? styles.InstanceOwner : ""].filter(Boolean).join(" ")}>
-								<span className={styles.InstanceName}>{inst.instanceId}</span>
-								<span>{inst.remoteAddr ?? "—"}</span>
-								<span>{getFormatDate(inst.lastSeenAt)}</span>
-								{isOwner
-									// Владелец подписан, а не «кнопкой, которую нельзя нажать»: у него
-									// действие ровно одно — освободить, и оно в командной панели.
-									? <span className={styles.InstanceOwnerMark}>{translate("onecAgentOwnerNow")}</span>
-									: (
-										// Акцентная кнопка: это единственное действие в блоке, и раньше
-										// оно терялось в ряду серого текста.
-										<Button size="sm" variant="primary" disabled={assign.isPending}
-											onClick={() => assign.mutate({ id: current.id, instanceId: inst.instanceId })}>
-											{translate("onecAgentMakeOwner")}
-										</Button>
-									)}
-							</div>
-						);
-					})}
-					{!(current.instances ?? []).length && (
-						<div className={styles.Hint}>{translate("onecAgentNoInstances")}</div>
-					)}
-				</div>
-			)}
-
-			{current && (
-				// Способности выбранного агента — одной строкой под таблицей: отдельный
-				// заголовок над ними только съедал высоту, а подпись и так в тексте.
-				<div className={styles.Hint}>
-					{translate("onecAgentCapabilities")} ({current.name || current.id.slice(0, 8)}):{" "}
-					{current.capabilities.join(", ") || "—"}
-				</div>
-			)}
-
-			{dialog === "rotate" && current && (
-				<Modal
-					title={translate("onecAgentRotate")}
-					onClose={() => setDialog(null)}
-					onApply={() => { rotate.mutate(current.id); setDialog(null); }}
-				>
-					<div className={styles.ModalForm}>
-						<div>{current.name || current.id.slice(0, 8)}</div>
-						<div className={styles.ConfirmWarning}>{translate("onecAgentRotateWarning")}</div>
-					</div>
-				</Modal>
-			)}
-
 			{dialog === "create" && (
+
 				<Modal title={translate("onecAgentCreate")} onClose={() => setDialog(null)} onApply={() => create.mutate()}>
 					<div className={styles.ModalForm}>
 						<Field name="onec_agent_name" label={translate("name")} value={name}

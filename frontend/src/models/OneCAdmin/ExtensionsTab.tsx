@@ -57,8 +57,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	const parallel = useCheckParallel();
 	// Отбор целей раскатки: имя расширения + «только те, где его нет». Иначе базы без
 	// расширения пришлось бы выискивать глазами среди сотни строк.
-	const [needle, setNeedle] = useState("");
-	const [onlyMissing, setOnlyMissing] = useState(false);
+		const [onlyMissing, setOnlyMissing] = useState(false);
 	/** Выбранное расширение — справа показываются базы, где оно стоит. */
 	const [pickedExt, setPickedExt] = useState("");
 	const [pickedSynonym, setPickedSynonym] = useState("");
@@ -122,12 +121,16 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 
 	const missingFilter = useCallback((b: { extensionNames: string[]; extensionsCount: number | null }) => {
 		// Выбрано расширение слева — справа только базы, где оно стоит.
-		if (pickedExt && !b.extensionNames.some((n) => n.toLowerCase() === pickedExt.toLowerCase())) return false;
-		if (!onlyMissing || !needle.trim()) return true;
+		// Отбор идёт по расширению, ВЫБРАННОМУ в сводке слева: своё поле ввода здесь было
+		// вторым поиском рядом со штатным (у таблицы он свой, в командной панели) — и
+		// требовало набирать руками то, что уже выбрано щелчком.
+		if (!pickedExt) return true;
+		const has = b.extensionNames.some((n) => n.toLowerCase() === pickedExt.toLowerCase());
+		if (!onlyMissing) return has;
 		// Базу, которую ещё не проверяли, в «где нет» не берём: мы про неё не знаем.
 		if (b.extensionsCount == null) return false;
-		return !b.extensionNames.some((n) => n.toLowerCase() === needle.trim().toLowerCase());
-	}, [onlyMissing, needle, pickedExt]);
+		return !has;
+	}, [onlyMissing, pickedExt]);
 
 	const targets = useBaseTargets({
 		componentName: "OneCAdmin_extTargets",
@@ -137,22 +140,20 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 		applicableFor: "ib",
 		extraButtons: (selected) => (
 			<>
-				<Field name="onec_ext_filter" value={needle} placeholder={translate("onecExtName")}
-					width="180px"
-					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNeedle(e.target.value)} />
-				<Button size="sm" active={onlyMissing} disabled={!needle.trim()}
+				<Button variant="secondary" active={onlyMissing} disabled={!pickedExt}
+					title={pickedExt ? pickedExt : translate("onecExtPickFirst")}
 					onClick={() => setOnlyMissing((v) => !v)}>
 					{translate("onecExtOnlyMissing")}
 				</Button>
-				<Button size="sm" disabled={!selected.length || checking}
+				<Button variant="secondary" disabled={!selected.length || checking}
 					onClick={() => void checkSelected(selected)}>
 					{translate("onecExtCheck")}
 				</Button>
-				<Button size="sm" disabled={!selected.length}
+				<Button variant="secondary" disabled={!selected.length}
 					onClick={() => { setExtName(""); setFile(null); setSafeMode(true); setDialog("install"); }}>
 					{translate("onecExtInstall")}
 				</Button>
-				<Button size="sm" disabled={!selected.length} onClick={() => { setExtName(""); setDialog("remove"); }}>
+				<Button variant="secondary" disabled={!selected.length} onClick={() => { setExtName(""); setDialog("remove"); }}>
 					{translate("onecExtRemove")}
 				</Button>
 			</>
@@ -202,9 +203,9 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							extraButtons: (
 								<>
 									{/* Карточка расширения: реквизиты + базы, куда его поставить, в одном окне. */}
-									<Button size="sm" onClick={() => setCard(true)}>{translate("onecOpenCard")}</Button>
+									<Button variant="secondary" onClick={() => setCard(true)}>{translate("onecOpenCard")}</Button>
 									{pickedExt && (
-										<Button size="sm" onClick={() => setPickedExt("")}>{translate("onecExtAllBases")}</Button>
+										<Button variant="secondary" onClick={() => setPickedExt("")}>{translate("onecExtAllBases")}</Button>
 									)}
 								</>
 							),
@@ -219,7 +220,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							setColumns: setBaseColumns, sorting: baseSorted.sorting, search: baseSorted.search,
 							isLoading: baseExt.isLoading || baseExt.isFetching,
 							onReload: () => void baseExt.refetch(),
-							extraButtons: <Button size="sm" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,
+							extraButtons: <Button variant="secondary" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,
 						})} />
 					</>
 				) : targets.table}

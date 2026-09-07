@@ -99,11 +99,11 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 						extraButtons: (
 							<>
 								{current.failed > 0 && (
-									<Button size="sm" disabled={retry.isPending} onClick={() => retry.mutate(current.id)}>
+									<Button variant="secondary" disabled={retry.isPending} onClick={() => retry.mutate(current.id)}>
 										{translate("onecBatchRetryFailed")} ({current.failed})
 									</Button>
 								)}
-								<Button size="sm" onClick={() => setOpened("")}>{translate("onecBackToSummary")}</Button>
+								<Button variant="secondary" onClick={() => setOpened("")}>{translate("onecBackToSummary")}</Button>
 							</>
 						),
 					})} />

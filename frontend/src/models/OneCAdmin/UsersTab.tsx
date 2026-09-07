@@ -114,17 +114,17 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 		extraButtons: (selected) => (
 			<>
 				{pickedUser && (
-					<Button size="sm" onClick={() => setPickedUser("")}>{translate("onecExtAllBases")}</Button>
+					<Button variant="secondary" onClick={() => setPickedUser("")}>{translate("onecExtAllBases")}</Button>
 				)}
-				<Button size="sm" disabled={!selected.length || checking}
+				<Button variant="secondary" disabled={!selected.length || checking}
 					onClick={() => void checkSelected(selected)}>
 					{translate("onecUsersCheck")}
 				</Button>
-				<Button size="sm" disabled={!selected.length}
+				<Button variant="secondary" disabled={!selected.length}
 					onClick={() => { setForm({ name: "", fullName: "", password: "" }); setDialog("create"); }}>
 					{translate("onecUserCreate")}
 				</Button>
-				<Button size="sm" disabled={!selected.length}
+				<Button variant="secondary" disabled={!selected.length}
 					onClick={() => { setForm({ name: "", fullName: "", password: "" }); setDialog("delete"); }}>
 					{translate("onecUserDelete")}
 				</Button>
@@ -181,9 +181,9 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							onRowClick: (row) => { setOpenedBase(""); setPickedUser(asText(row.name)); },
 							extraButtons: (
 								<>
-									<Button size="sm" onClick={() => setCard(true)}>{translate("onecOpenCard")}</Button>
+									<Button variant="secondary" onClick={() => setCard(true)}>{translate("onecOpenCard")}</Button>
 									{pickedUser && (
-										<Button size="sm" onClick={() => setPickedUser("")}>{translate("onecExtAllBases")}</Button>
+										<Button variant="secondary" onClick={() => setPickedUser("")}>{translate("onecExtAllBases")}</Button>
 									)}
 								</>
 							),
@@ -199,7 +199,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 								setColumns: setBaseColumns, sorting: baseSorted.sorting, search: baseSorted.search,
 								isLoading: baseUsers.isLoading || baseUsers.isFetching,
 								onReload: () => void baseUsers.refetch(),
-								extraButtons: <Button size="sm" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,
+								extraButtons: <Button variant="secondary" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,
 							})} />
 						</>
 					) : (

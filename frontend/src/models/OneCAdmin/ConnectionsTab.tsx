@@ -86,7 +86,7 @@ export const ConnectionsTab: FC = () => {
 				onSelectionChange: (sel, all) =>
 					setPicked(all.filter((r: TDataItem) => sel.has(Number(r.id))).map((r) => asText(r.uuid))),
 				extraButtons: picked.length > 0
-					? <Button size="sm" variant="danger" onClick={() => setConfirm(true)}>
+					? <Button variant="danger" onClick={() => setConfirm(true)}>
 						{translate("onecDisconnect")} ({picked.length})
 					</Button>
 					: undefined,

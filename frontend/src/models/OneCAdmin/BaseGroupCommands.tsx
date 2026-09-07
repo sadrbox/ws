@@ -177,14 +177,14 @@ export const BaseGroupCommands: FC<{
 	});
 
 	const btn = (o: Op, label: string) => (
-		<Button size="sm" disabled={!selected.length} onClick={() => { setName(""); setOp(o); }}>
+		<Button variant="secondary" disabled={!selected.length} onClick={() => { setName(""); setOp(o); }}>
 			{translate(label)}
 		</Button>
 	);
 
 	return (
 		<>
-			<Button size="sm" disabled={checkPublications.isPending} onClick={() => checkPublications.mutate()}>
+			<Button variant="secondary" disabled={checkPublications.isPending} onClick={() => checkPublications.mutate()}>
 				{translate("onecPublicationsCheck")}
 			</Button>
 			{btn("publish", "onecPublish")}
