@@ -86,20 +86,64 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 	r.use(requireAgent(db));
 	// Любой запрос агента = он на связи. Запись лёгкая (одно UPDATE по первичному ключу),
 	// а частота — раз в цикл опроса, то есть десятки секунд.
-	r.use((req, _res, next) => {
+	/**
+	 * Единственность экземпляра: под одним токеном работает ОДИН процесс.
+	 *
+	 * Второй получает 409 и не выполняет ни одной команды. Это защита от ошибки (забытая
+	 * копия, токен, скопированный на вторую машину), а не аутентификация: идентификатор
+	 * экземпляра агент называет сам. Кто не прислал заголовок — работает как раньше:
+	 * ломать связь со старыми сборками из-за диагностики нельзя.
+	 *
+	 * Владение — АРЕНДА: молчащий дольше AGENT_OFFLINE_AFTER_SECS владелец уступает место
+	 * сам. Без этого перезапуск службы (новый pid = новый идентификатор) закрывал бы агенту
+	 * дорогу навсегда, а ручное «Сделать владельцем» пришлось бы повторять после каждого.
+	 */
+	r.use(async (req, res, next) => {
 		void agents.touch(req.agent!.agentId);
-		// Экземпляр (процесс) агента называет себя заголовком. Нужен не для доверия, а для
-		// счёта: два процесса под одним токеном разбирают одну очередь, и разошедшиеся
-		// настройки дают отказ через раз — с сервера это иначе не видно вовсе.
-		const instance = String(req.headers["x-agent-instance"] ?? "").trim();
-		if (instance) {
-			const ver = String(req.headers["x-agent-version"] ?? "").trim() || null;
-			// Адрес источника: два экземпляра на РАЗНЫХ машинах — это один токен, скопированный
-			// с сервера 1С на машину разработки, и лечится он не так, как двойной запуск.
-			void agents.touchInstance(req.agent!.agentId, instance, ver, req.ip ?? null);
-			// Чистка попутно, без крона: строк единицы, а без неё за месяц копятся сотни
-			// мёртвых записей о перезапусках.
-			if (Math.random() < 0.01) void agents.pruneInstances();
+		const instance = String(req.headers["x-agent-instance"] ?? "").trim().slice(0, 200);
+		if (!instance) { next(); return; }
+
+		const ver = String(req.headers["x-agent-version"] ?? "").trim() || null;
+		// Адрес источника: два экземпляра на РАЗНЫХ машинах — это один токен, скопированный
+		// с сервера 1С на машину разработки, и лечится он не так, как двойной запуск.
+		void agents.touchInstance(req.agent!.agentId, instance, ver, req.ip ?? null);
+		// Чистка попутно, без крона: строк единицы, а без неё за месяц копятся сотни
+		// мёртвых записей о перезапусках.
+		if (Math.random() < 0.01) void agents.pruneInstances();
+
+		const own = await agents.owner(req.agent!.agentId);
+		const decision = decideInstance({
+			ownerInstanceId: own.instanceId,
+			ownerSeenAt: own.seenAt,
+			incomingInstanceId: instance,
+			now: new Date(),
+			offlineAfterSecs: cfg.AGENT_OFFLINE_AFTER_SECS,
+		});
+
+		if (decision.kind === "reject") {
+			log.warn({ agentId: req.agent!.agentId, owner: decision.ownerInstanceId, incoming: instance },
+				"второй экземпляр агента отклонён");
+			res.status(409).json({ success: false, error: {
+				code: "AGENT_INSTANCE_CONFLICT",
+				message: instanceConflictMessage(decision.ownerInstanceId, decision.ownerSeenSecsAgo),
+			} });
+			return;
+		}
+
+		// Гонку двух стартующих процессов решает сам UPDATE с условием: у проигравшего
+		// владельцем окажется чужой идентификатор, и он получит отказ на следующем запросе.
+		const claimed = await agents.claimOwnership(req.agent!.agentId, instance, cfg.AGENT_OFFLINE_AFTER_SECS);
+		if (!claimed) {
+			const now = await agents.owner(req.agent!.agentId);
+			res.status(409).json({ success: false, error: {
+				code: "AGENT_INSTANCE_CONFLICT",
+				message: instanceConflictMessage(now.instanceId ?? "неизвестный", 0),
+			} });
+			return;
+		}
+		if (decision.kind === "claim" && own.instanceId && own.instanceId !== instance) {
+			await audit.write({ event: "agent.instance.takeover", agentId: req.agent!.agentId,
+				details: { from: own.instanceId, to: instance } });
 		}
 		next();
 	});
@@ -220,19 +264,11 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
 			}
 		}
-		// Кто именно ответил. Агент кладёт машину и процесс в details ошибки — используем это
-		// как замену ещё не реализованного X-Agent-Instance: два процесса под одним токеном
-		// иначе неразличимы, а именно они дают отказ через раз.
-		{
-			const d = (p.data.error?.details ?? {}) as { host?: unknown; pid?: unknown; build?: unknown };
-			if (typeof d.host === "string" && d.host) {
-				const pid = typeof d.pid === "number" || typeof d.pid === "string" ? String(d.pid) : "?";
-				await agents.touchInstance(
-					req.agent!.agentId, `${d.host}#${pid}`,
-					typeof d.build === "string" ? d.build : null, req.ip ?? null,
-				);
-			}
-		}
+		// Экземпляр из details ошибки БОЛЬШЕ НЕ ЗАВОДИМ. Это была замена ещё не
+		// реализованного X-Agent-Instance; теперь агент шлёт заголовок, а «host#pid»
+		// заводил ВТОРУЮ запись для того же процесса — и список экземпляров показывал
+		// один процесс дважды, под разными именами. Машина и процесс из details
+		// по-прежнему видны в тексте ошибки (describeResponder).
 		// Публикация и её снятие — сразу в реестр: иначе состояние обновилось бы только
 		// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
 		if (p.data.status === "SUCCESS" && row.base_key
