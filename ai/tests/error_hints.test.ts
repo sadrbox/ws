@@ -26,6 +26,17 @@ test("повторная расшифровка не наращивает тек
 	assert.equal(twice.message, once.message);
 });
 
+test("массив .NET вместо коллекции 1С: подсказан менеджер НайтиПоИмени", () => {
+	const out = humanizeAgentError({
+		code: "IB_ERROR",
+		message: 'платформа не знает метод Найти / Find: Exception calling "InvokeMember" with "5" '
+			+ 'argument(s): "Method \'System.Object[].Find\' not found."',
+	})!;
+	assert.match(out.message, /НайтиПоИмени/);
+	// Про роли сказано там же: следующий шаг после поиска пользователя — именно они.
+	assert.match(out.message, /Метаданные\.Роли\.Найти/);
+});
+
 test("незнакомая ошибка и пустое значение проходят как есть", () => {
 	const other = { code: "IB_ERROR", message: "Что-то своё" };
 	assert.equal(humanizeAgentError(other), other);
