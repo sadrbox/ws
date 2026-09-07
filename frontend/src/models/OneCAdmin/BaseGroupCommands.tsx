@@ -72,12 +72,18 @@ const toBase = (r: TDataItem): BaseRow => ({
 	published: typeof r.published === "boolean" ? r.published : null,
 });
 
-/** Почему база не годится — по-русски и по делу; на этом основан отчёт «пропущено». */
-const skipReason = (b: BaseRow, needs: OnecOperation): string | null => {
+/**
+ * Почему база не годится — по-русски и по делу; на этом основан отчёт «пропущено».
+ *
+ * ЗДЕСЬ ТОЛЬКО НЕВОЗМОЖНОЕ. Состояние публикации из реестра целью НЕ отбирает: оно
+ * кэшированное и отстаёт от жизни. Публикацию сняли мимо панели — реестр по-прежнему
+ * считает базу опубликованной, и «уже опубликована» превращалось в тупик: повторная
+ * публикация, которой и лечится расхождение, оказывалась запрещена. Обе команды
+ * идемпотентны (это в контракте), поэтому лишний запуск безвреден, а запрет — вреден.
+ */
+const skipReason = (b: BaseRow, _needs: OnecOperation): string | null => {
 	if (b.disabled) return translate("onecBaseDisabled");
 	if (b.status === "MISSING") return translate("onecBaseMissing");
-	if (needs === "publish" && b.published === true) return translate("onecPublished");
-	if (needs === "unpublish" && b.published === false) return translate("onecNotPublished");
 	return null;
 };
 
@@ -105,13 +111,23 @@ export const BaseGroupCommands: FC<{
 	const spec = op ? SPECS[op] : null;
 
 	// Разбор целей на пригодные и пропущенные — до отправки, а не по отчёту задания.
-	const { targets, skipped } = useMemo(() => {
-		if (!spec) return { targets: [] as string[], skipped: [] as { key: string; reason: string }[] };
+	const { targets, skipped, note } = useMemo(() => {
+		if (!spec) return { targets: [] as string[], skipped: [] as { key: string; reason: string }[], note: "" };
 		const rows = selected.map(toBase);
+		// Состояние публикации не отбирает цели, но сказать о нём стоит: «из десяти баз
+		// восемь уже опубликованы» меняет ожидания, не мешая нажать.
+		const already = spec.needs === "publish"
+			? rows.filter((b) => b.published === true).length
+			: spec.needs === "unpublish"
+				? rows.filter((b) => b.published === false).length
+				: 0;
 		return {
 			targets: rows.filter((b) => isApplicable(b, spec.needs) && !skipReason(b, spec.needs)).map((b) => b.key),
 			skipped: rows.map((b) => ({ key: b.key, reason: skipReason(b, spec.needs) ?? "" }))
 				.filter((x) => x.reason),
+			note: already
+				? `${spec.needs === "publish" ? translate("onecPublished") : translate("onecNotPublished")}: ${already}`
+				: "",
 		};
 	}, [selected, spec]);
 
@@ -183,6 +199,11 @@ export const BaseGroupCommands: FC<{
 				<Modal title={translate(spec.title)} onClose={close} onApply={apply}>
 					<div className={styles.ModalForm}>
 						<div>{translate("onecBatchTargets")}: {targets.length} / {selected.length}</div>
+						{note && (
+							// Не отказ, а состояние по данным реестра: они могли устареть,
+							// поэтому это подпись, а не запрет.
+							<div className={styles.Hint}>{note}</div>
+						)}
 						{skipped.length > 0 && (
 							// Пропущенные называем поимённо: «применимо 40 из 100» без причин
 							// выглядит как потеря половины выбора.
@@ -200,9 +221,9 @@ export const BaseGroupCommands: FC<{
 						)}
 						{spec.type === "IB_CREATE_USER" && (
 							<>
-								<Field name="onec_group_full" label={translate("onecUserFullName")} value={fullName}
+								<Field name="onec_group_full" autoComplete="off" label={translate("onecUserFullName")} value={fullName}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
-								<Field name="onec_group_pwd" label={translate("onecUserPassword")} type="password" value={password}
+								<Field name="onec_group_pwd" autoComplete="new-password" label={translate("onecUserPassword")} type="password" value={password}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 							</>
 						)}

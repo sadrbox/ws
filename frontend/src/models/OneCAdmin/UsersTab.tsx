@@ -223,9 +223,9 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
 						{dialog === "create" && (
 							<>
-								<Field name="onec_user_full" label={translate("onecUserFullName")} value={form.fullName}
+								<Field name="onec_user_full" autoComplete="off" label={translate("onecUserFullName")} value={form.fullName}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
-								<Field name="onec_user_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
+								<Field name="onec_user_pwd" autoComplete="new-password" label={translate("onecUserPassword")} type="password" value={form.password}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
 							</>
 						)}

@@ -119,7 +119,7 @@ export const ElementCard: FC<{
 							value={name} width="240px"
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 						{kind === "user" ? (
-							<Field name="card_full" label={translate("onecUserFullName")} value={fullName} width="260px"
+							<Field name="card_full" autoComplete="off" label={translate("onecUserFullName")} value={fullName} width="260px"
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
 						) : (
 							<Field name="card_syn" label={translate("onecExtSynonym")} value={initialSynonym || "—"} disabled
@@ -128,7 +128,7 @@ export const ElementCard: FC<{
 					</GroupRow>
 					<GroupRow>
 						{kind === "user" ? (
-							<Field name="card_pwd" label={translate("onecUserPassword")} type="password" value={password}
+							<Field name="card_pwd" autoComplete="new-password" label={translate("onecUserPassword")} type="password" value={password}
 								width="240px"
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 						) : (

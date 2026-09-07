@@ -46,6 +46,16 @@ interface TypeFieldStringProps {
   isDirty?: boolean;
   /** Видимая подсказка-help ПОД полем (не путать с `title`). Связывается через aria-describedby. */
   hint?: React.ReactNode;
+  /**
+   * Значение атрибута autocomplete. По умолчанию "off".
+   *
+   * Для паролей "off" браузеру не указ: рядом с полем пароля Chrome и Firefox предлагают
+   * СОХРАНЁННЫЕ учётные данные сайта и подставляют их в соседние поля. Единственное, что
+   * они слушают, — "new-password": оно означает «это новый пароль, а не вход», и подстановка
+   * не срабатывает. Поэтому там, где заводят пароль чужой системы (пользователь базы 1С),
+   * нужно передавать его явно.
+   */
+  autoComplete?: string;
 }
 
 // Пропсы для FieldGroup
@@ -121,6 +131,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   maxLength,
   isDirty,
   hint,
+  autoComplete = "off",
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -174,12 +185,15 @@ export const Field: FC<TypeFieldStringProps> = ({
       maxLength={maxLength}
       isDirty={isDirty}
       hint={hint}
+      autoComplete={autoComplete}
     />
   );
 };
 
 // Компонент FieldGroup
-export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength?: number; type?: "text" | "password" }> = ({
+export const FieldGroup: FC<TypeFieldGroupProps & {
+  isDirty?: boolean; maxLength?: number; type?: "text" | "password"; autoComplete?: string;
+}> = ({
   name,
   label,
   value = '',
@@ -199,6 +213,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
   isDirty,
   hint,
   type = "text",
+  autoComplete = "off",
 }) => {
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
@@ -217,7 +232,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & { isDirty?: boolean; maxLength
           onChange={onChange}
           onBlur={onBlur}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
-          autoComplete='off'
+          autoComplete={autoComplete}
           disabled={disabled}
           placeholder={placeholder}
           title={title}
