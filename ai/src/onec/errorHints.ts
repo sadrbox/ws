@@ -69,14 +69,37 @@ const HINTS: Hint[] = [
 	},
 ];
 
+/** Кто ответил: агент кладёт машину и процесс в `details` ошибки. */
+export type AgentErrorDetails = { host?: unknown; pid?: unknown; build?: unknown };
+
+/**
+ * Строка «ответил агент на такой-то машине».
+ *
+ * Под одним токеном может работать несколько процессов на разных машинах, и тогда одна и та
+ * же команда то проходит, то падает «база не найдена». Без имени машины в тексте ошибки это
+ * не разгадать: в отчёте видно только чередование.
+ */
+export function describeResponder(details: unknown): string | null {
+	const d = (details ?? {}) as AgentErrorDetails;
+	const host = typeof d.host === "string" ? d.host : null;
+	if (!host) return null;
+	const pid = typeof d.pid === "number" || typeof d.pid === "string" ? `, pid ${d.pid}` : "";
+	const build = typeof d.build === "string" ? `, сборка ${d.build}` : "";
+	return `Ответил агент на машине ${host}${pid}${build}.`;
+}
+
 /** Ошибка агента с приписанной подсказкой; исходный текст сохраняется целиком. */
 export function humanizeAgentError(
-	e: { code: string; message: string } | null,
-): { code: string; message: string } | null {
+	e: { code: string; message: string; details?: unknown } | null,
+): { code: string; message: string; details?: unknown } | null {
 	if (!e?.message) return e;
+	const parts: string[] = [];
 	const found = HINTS.find((h) => h.match.test(e.message));
 	// Подсказка приписывается один раз: повторный проход по уже дополненному тексту
 	// (список задания читают многократно) не должен наращивать его бесконечно.
-	if (!found || e.message.includes(found.hint)) return e;
-	return { ...e, message: `${e.message}\n\n${found.hint}` };
+	if (found && !e.message.includes(found.hint)) parts.push(found.hint);
+	const who = describeResponder(e.details);
+	if (who && !e.message.includes(who)) parts.push(who);
+	if (!parts.length) return e;
+	return { ...e, message: [e.message, ...parts].join("\n\n") };
 }

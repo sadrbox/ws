@@ -216,6 +216,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
 			}
 		}
+		// Кто именно ответил. Агент кладёт машину и процесс в details ошибки — используем это
+		// как замену ещё не реализованного X-Agent-Instance: два процесса под одним токеном
+		// иначе неразличимы, а именно они дают отказ через раз.
+		{
+			const d = (p.data.error?.details ?? {}) as { host?: unknown; pid?: unknown; build?: unknown };
+			if (typeof d.host === "string" && d.host) {
+				const pid = typeof d.pid === "number" || typeof d.pid === "string" ? String(d.pid) : "?";
+				await agents.touchInstance(
+					req.agent!.agentId, `${d.host}#${pid}`,
+					typeof d.build === "string" ? d.build : null, req.ip ?? null,
+				);
+			}
+		}
 		// Публикация и её снятие — сразу в реестр: иначе состояние обновилось бы только
 		// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
 		if (p.data.status === "SUCCESS" && row.base_key

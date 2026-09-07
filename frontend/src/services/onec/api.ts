@@ -50,13 +50,27 @@ type Pending = { pending: true; commandId: string };
 const isPending = (d: unknown): d is Pending =>
 	!!d && typeof d === "object" && (d as Pending).pending === true;
 
-/** Дождаться готовности команды. Пауза 2 с: операция идёт минутами, чаще спрашивать незачем. */
+/**
+ * Дождаться готовности команды после ответа 202 `{pending, commandId}`.
+ *
+ * ПОЧЕМУ ОПРОС ВООБЩЕ. Сервис ждёт агента ONEC_COMMAND_TIMEOUT_SECS и, если тот не успел,
+ * отвечает 202 с идентификатором команды. Держать HTTP-запрос дольше нельзя: вход в базу
+ * занимает у агента до 15 минут, а туннель обрывает такой запрос СВОИМ ответом — без
+ * заголовков CORS, и браузер показывает это как ошибку CORS вместо результата.
+ *
+ * ПАУЗА РАСТЁТ. Первые ответы ждём часто (команда может завершиться сразу), дальше реже:
+ * ровная пауза в 2 секунды на пятнадцатиминутной команде давала 450 запросов подряд — в
+ * консоли это выглядит как непрерывный поток, а узнаём мы из него ровно то же самое.
+ * С нарастанием до 10 секунд их остаётся около шестидесяти.
+ */
 async function awaitCommand<T>(first: T | Pending, limitMs = 15 * 60_000): Promise<T> {
 	let data = first;
+	let pauseMs = 1000;
 	const until = Date.now() + limitMs;
 	while (isPending(data)) {
 		if (Date.now() > until) throw new Error("Команда 1С выполняется слишком долго");
-		await new Promise((r) => setTimeout(r, 2000));
+		await new Promise((r) => setTimeout(r, pauseMs));
+		pauseMs = Math.min(10_000, Math.round(pauseMs * 1.5));
 		data = await aiFetch<T | Pending>(`/v1/onec/commands/${encodeURIComponent(data.commandId)}`);
 	}
 	return data;

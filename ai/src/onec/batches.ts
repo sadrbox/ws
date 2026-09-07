@@ -28,6 +28,13 @@ export type BatchProgress = {
 	}[];
 };
 
+/**
+ * Через сколько считать команду задания потерянной. Команды живут час (`expires_at`) и
+ * вычищаются, а задание остаётся навсегда: без этого срока оно вечно показывало бы
+ * «выполняется», ожидая того, кого уже нет.
+ */
+const LOST_AFTER_MS = 2 * 60 * 60 * 1000;
+
 export class BatchService {
 	private readonly db: Db;
 
@@ -75,6 +82,19 @@ export class BatchService {
 		const items = c.rows.map((r) => ({
 			baseKey: r.base_key, state: r.state, error: humanizeAgentError(r.error), outcome: r.outcome,
 		}));
+		// Команд может НЕ ХВАТАТЬ: они живут час и вычищаются, а задание остаётся. Без этого
+		// такое задание вечно показывало «выполняется 1 из 1» — хотя ждать уже некого.
+		const ageMs = Date.now() - head.created_at.getTime();
+		const missing = head.total - items.length;
+		if (missing > 0 && ageMs > LOST_AFTER_MS) {
+			for (let i = 0; i < missing; i++) {
+				items.push({
+					baseKey: null, state: "expired", outcome: null,
+					error: { code: "COMMAND_LOST", message: "Команда не найдена: срок её жизни истёк. Повторите операцию." },
+				});
+			}
+		}
+
 		const done = items.filter((i) => i.state === "done").length;
 		// expired считаем неуспехом: команда не выполнена, и повторять её придётся так же.
 		const failed = items.filter((i) => i.state === "failed" || i.state === "expired").length;
