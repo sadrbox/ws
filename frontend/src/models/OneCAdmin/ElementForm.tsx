@@ -16,7 +16,7 @@
  * шансов остановиться на середине и потерять настройки пользователя. Изменение идёт
  * отдельной командой, где незаполненное поле значит «не трогать».
  */
-import { FC, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
@@ -68,7 +68,10 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 
 	const qc = useQueryClient();
 	const [dialog, setDialog] = useState<Op | null>(null);
-	const [picked, setPicked] = useState<string[]>([]);
+	const [picked, setPicked] = useState<string[]>(() => {
+		const scope = asText((paneProps.data as TDataItem | undefined)?.scopeBase);
+		return scope ? [scope] : [];
+	});
 	const [showAll, setShowAll] = useState(false);
 
 	// Реквизиты. Пустое поле в изменении означает «не трогать»: групповая правка полного
@@ -91,6 +94,20 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 		queryFn: () => fetchUserOccurrences(elementName),
 		enabled: isUser && !!elementName,
 	});
+
+	/** Из какой базы взяты показанные роли — чтобы «текущие» не выглядели общими для всех. */
+	const [rolesFrom, setRolesFrom] = useState<string>(asText(row.baseKey) || asText(row.scopeBase));
+	// Сводка ролей не несёт (там имя, число баз и признак отключения), поэтому при открытии
+	// из неё поле ролей было пустым — и выглядело как «ролей нет». Подтягиваем их из базы:
+	// из открытой, если форма вызвана в контексте базы, иначе из первой, где он заведён.
+	useEffect(() => {
+		if (!isUser || roles.length || !occurrences.data?.items?.length) return;
+		const scope = asText(row.scopeBase);
+		const src = scope
+			? occurrences.data.items.find((o) => o.baseKey === scope)
+			: occurrences.data.items.find((o) => (o.roles ?? []).length);
+		if (src?.roles?.length) { setRoles(src.roles); setRolesFrom(src.baseKey); }
+	}, [isUser, roles.length, occurrences.data, row.scopeBase]);
 
 	const present = useMemo(() => {
 		if (isUser) return new Set((occurrences.data?.items ?? []).map((o) => o.baseKey.toLowerCase()));
@@ -217,6 +234,22 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 						component: (
 							<GroupCol>
 								<div className={styles.Hint}>{translate("onecRolesHint")}</div>
+								{/* Применение — прямо здесь: уходить за ним на вкладку «Базы» значит
+								    забыть про него. Что отмечено, написано рядом с кнопкой. */}
+								<GroupRow>
+									<span className={styles.Hint}>
+										{translate("onecBatchTargets")}: {picked.length}
+										{picked.length ? ` (${picked.slice(0, 3).join(", ")}${picked.length > 3 ? "…" : ""})` : ""}
+									</span>
+									<Button variant="primary" disabled={!picked.length || !elementName}
+										onClick={() => setDialog("update")}>
+										{translate("onecUserUpdate")}
+									</Button>
+									{!picked.length && <span className={styles.Hint}>{translate("onecPickBasesFirst")}</span>}
+								</GroupRow>
+								{rolesFrom && (
+									<div className={styles.Hint}>{translate("onecRolesTakenFrom")}: {rolesFrom}</div>
+								)}
 								<RolesPicker value={roles} onChange={setRoles} baseKey={picked[0] ?? firstBase} />
 
 								{/* Что назначено СЕЙЧАС и где: одинаковое имя в разных базах не
@@ -311,10 +344,18 @@ ElementForm.displayName = "ElementForm";
 /** Открыть форму элемента отдельным пейном — двойным щелчком по строке сводки. */
 export function useOpenElement(kind: ElementKind) {
 	const { addPane } = useAppContext().windows;
-	return (row: Partial<TDataItem>) => addPane({
-		label: `${kind === "user" ? translate("onecUserCard") : translate("onecExtCard")}: ${asText(row.name)}`,
+	/**
+	 * `baseKey` — открыть элемент В КОНКРЕТНОЙ БАЗЕ: она сразу отмечена, роли и реквизиты
+	 * взяты из неё. Без него открывается группа (одно имя во всех базах).
+	 *
+	 * Разница существенная: «поменять роли Иванову в базе клиента» и «поменять их во всех
+	 * базах» — разные задачи, и вторая по ошибке правит сотню чужих баз.
+	 */
+	return (row: Partial<TDataItem>, baseKey?: string) => addPane({
+		label: `${kind === "user" ? translate("onecUserCard") : translate("onecExtCard")}: ${asText(row.name)}`
+			+ (baseKey ? ` — ${baseKey}` : ""),
 		component: ElementForm as never,
-		data: { ...row, kind } as TDataItem,
+		data: { ...row, kind, scopeBase: baseKey ?? "" } as TDataItem,
 	});
 }
 

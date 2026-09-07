@@ -1704,5 +1704,7 @@
   "onecRolesFromBase": "Справочник из базы",
   "onecRolesCustom": "Идентификатор роли",
   "onecRolesEmpty": "Ролей не найдено",
-  "clearAll": "Очистить"
+  "clearAll": "Очистить",
+  "onecRolesTakenFrom": "Показаны роли из базы",
+  "onecPickBasesFirst": "Отметьте базы во вкладке «Базы»"
 }

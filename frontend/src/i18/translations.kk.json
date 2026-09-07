@@ -1704,5 +1704,7 @@
   "onecRolesFromBase": "Базадан анықтамалық",
   "onecRolesCustom": "Рөл идентификаторы",
   "onecRolesEmpty": "Рөлдер табылмады",
-  "clearAll": "Тазарту"
+  "clearAll": "Тазарту",
+  "onecRolesTakenFrom": "Рөлдер базадан көрсетілген",
+  "onecPickBasesFirst": "«Базалар» қойындысында базаларды белгілеңіз"
 }

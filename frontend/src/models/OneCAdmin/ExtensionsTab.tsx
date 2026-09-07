@@ -226,6 +226,8 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 						<Table {...buildStaticTableProps({
 							componentName: "OneCAdmin_baseExt", rows: baseSorted.rows, columns: baseColumns,
 							setColumns: setBaseColumns, sorting: baseSorted.sorting, search: baseSorted.search,
+							// Двойной щелчок по расширению ЭТОЙ базы — его форма с отмеченной базой.
+							onRowClick: (row) => openElement(row, openedBase),
 							isLoading: baseExt.isLoading || baseExt.isFetching,
 							onReload: () => void baseExt.refetch(),
 							extraButtons: <Button variant="secondary" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,

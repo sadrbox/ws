@@ -205,6 +205,10 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							<Table {...buildStaticTableProps({
 								componentName: "OneCAdmin_baseUsers", rows: baseSorted.rows, columns: baseColumns,
 								setColumns: setBaseColumns, sorting: baseSorted.sorting, search: baseSorted.search,
+								// Двойной щелчок по пользователю ЭТОЙ базы открывает его форму с уже
+								// отмеченной базой: «поменять роли в базе клиента» — самая частая
+								// задача, и она не должна начинаться с поиска базы среди сотни.
+								onRowClick: (row) => openElement(row, openedBase),
 								isLoading: baseUsers.isLoading || baseUsers.isFetching,
 								onReload: () => void baseUsers.refetch(),
 								extraButtons: <Button variant="secondary" onClick={() => setOpenedBase("")}>{translate("onecBackToSummary")}</Button>,

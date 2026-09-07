@@ -29,6 +29,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchBaseExtensions, fetchBaseUsers, fetchSessions } from "src/services/onec/api";
 import { QueryError, publishLabel } from "src/models/OneCAdmin/shared";
+import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import columnsJson from "./columns.json";
 
@@ -97,6 +98,10 @@ const useBaseTabs = (row: TDataItem) => {
 	const baseKey = asText(row.baseKey);
 	const [loadExt, setLoadExt] = useState(false);
 	const [loadUsers, setLoadUsers] = useState(false);
+	// Из карточки базы элемент открывается В КОНТЕКСТЕ ЭТОЙ БАЗЫ: она сразу отмечена,
+	// роли и реквизиты взяты из неё.
+	const openUser = useOpenElement("user");
+	const openExt = useOpenElement("extension");
 	const [loadSessions, setLoadSessions] = useState(false);
 
 	// enabled требует ключа базы: без него запрос уходил бы в `/bases//extensions`.
@@ -136,6 +141,7 @@ const useBaseTabs = (row: TDataItem) => {
 				<QueryError error={ext.error} />
 				<Table {...buildStaticTableProps({
 					componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
+					onRowClick: (r) => openExt(r, baseKey),
 					sorting: extView.sorting, search: extView.search,
 					isLoading: ext.isLoading || ext.isFetching,
 					onReload: () => (loadExt ? void ext.refetch() : setLoadExt(true)),
@@ -151,6 +157,7 @@ const useBaseTabs = (row: TDataItem) => {
 				<QueryError error={users.error} />
 				<Table {...buildStaticTableProps({
 					componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
+					onRowClick: (r) => openUser(r, baseKey),
 					sorting: userView.sorting, search: userView.search,
 					isLoading: users.isLoading || users.isFetching,
 					onReload: () => (loadUsers ? void users.refetch() : setLoadUsers(true)),
