@@ -43,7 +43,10 @@ export const AgentsTab: FC = () => {
 	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_agents"));
 	const [selected, setSelected] = useState<string>("");
-	const [dialog, setDialog] = useState<null | "create">(null);
+	// Ротация токена ломает работающего агента до тех пор, пока новый токен не вставят
+	// в его настройки, — и стоит в тулбаре рядом с безобидными кнопками. Подтверждение
+	// здесь не формальность: именно так живой агент и был отключён случайным нажатием.
+	const [dialog, setDialog] = useState<null | "create" | "rotate">(null);
 	const [name, setName] = useState("");
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<{ token: string; name: string } | null>(null);
@@ -138,7 +141,8 @@ export const AgentsTab: FC = () => {
 							{translate("onecAgentCreate")}
 						</Button>
 						{current && (
-							<Button size="sm" disabled={rotate.isPending} onClick={() => rotate.mutate(current.id)}>
+							<Button size="sm" variant="danger" disabled={rotate.isPending}
+								onClick={() => setDialog("rotate")}>
 								{translate("onecAgentRotate")}
 							</Button>
 						)}
@@ -210,6 +214,19 @@ export const AgentsTab: FC = () => {
 					{translate("onecAgentCapabilities")} ({current.name || current.id.slice(0, 8)}):{" "}
 					{current.capabilities.join(", ") || "—"}
 				</div>
+			)}
+
+			{dialog === "rotate" && current && (
+				<Modal
+					title={translate("onecAgentRotate")}
+					onClose={() => setDialog(null)}
+					onApply={() => { rotate.mutate(current.id); setDialog(null); }}
+				>
+					<div className={styles.ModalForm}>
+						<div>{current.name || current.id.slice(0, 8)}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecAgentRotateWarning")}</div>
+					</div>
+				</Modal>
 			)}
 
 			{dialog === "create" && (
