@@ -23,7 +23,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
-import { createAgent, fetchAgents, releaseAgentInstance, rotateAgentToken, setAgentDisabled } from "src/services/onec/api";
+import { createAgent, fetchAgents, releaseAgentInstance, rotateAgentToken, setAgentDisabled, setAgentOwner } from "src/services/onec/api";
 import { QueryError } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -70,6 +70,12 @@ export const AgentsTab: FC = () => {
 	// владелец не отдал его сам — машину выключили, службу перенесли.
 	const release = useMutation({
 		mutationFn: (id: string) => releaseAgentInstance(id),
+		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
+		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+	});
+
+	const assign = useMutation({
+		mutationFn: (p: { id: string; instanceId: string }) => setAgentOwner(p.id, p.instanceId),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
 		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
 	});
@@ -136,8 +142,12 @@ export const AgentsTab: FC = () => {
 								{translate("onecAgentRotate")}
 							</Button>
 						)}
-						{current?.owner?.instanceId && (
-							<Button size="sm" disabled={release.isPending} onClick={() => release.mutate(current.id)}>
+						{current && (
+							// Не прячем, а гасим: спрятанная кнопка выглядит как отсутствующая
+							// возможность, и её начинают искать в другом месте.
+							<Button size="sm"
+								disabled={release.isPending || !current.owner?.instanceId}
+								onClick={() => release.mutate(current.id)}>
 								{translate("onecAgentReleaseInstance")}
 							</Button>
 						)}
@@ -150,6 +160,33 @@ export const AgentsTab: FC = () => {
 					</>
 				),
 			})} />
+
+			{current && (
+				// Экземпляры выбранного агента: кто держит аренду и кого можно назначить.
+				// «Кто первым пришёл» — правило для машин: выиграть может машина разработки,
+				// и тогда боевой агент заблокирован. Здесь это решается одним нажатием.
+				<div className={styles.Instances}>
+					<div className={styles.Hint}>
+						{translate("onecAgentInstances")}: {current.instances?.length ?? 0}
+						{current.owner?.instanceId ? ` · ${translate("ownerInstance")}: ${current.owner.instanceId}` : ""}
+					</div>
+					{(current.instances ?? []).map((inst) => (
+						<div key={inst.instanceId} className={styles.InstanceRow}>
+							<span>{inst.instanceId}</span>
+							<span>{inst.remoteAddr ?? "—"}</span>
+							<span>{getFormatDate(inst.lastSeenAt)}</span>
+							{current.owner?.instanceId === inst.instanceId
+								? <span>{translate("onecAgentOwnerNow")}</span>
+								: (
+									<Button size="sm" disabled={assign.isPending}
+										onClick={() => assign.mutate({ id: current.id, instanceId: inst.instanceId })}>
+										{translate("onecAgentMakeOwner")}
+									</Button>
+								)}
+						</div>
+					))}
+				</div>
+			)}
 
 			{current && (
 				// Способности выбранного агента — одной строкой под таблицей: отдельный

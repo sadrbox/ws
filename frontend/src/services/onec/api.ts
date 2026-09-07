@@ -226,6 +226,12 @@ export type OnecAgent = {
 export const fetchAgents = () =>
 	aiFetch<{ items: OnecAgent[]; limits: { checkParallel: number } }>("/v1/onec/agents");
 
+/** Назначить владельцем конкретный экземпляр: аренду мог занять не тот компьютер. */
+export const setAgentOwner = (id: string, instanceId: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}/owner`, {
+		method: "POST", body: JSON.stringify({ instanceId }),
+	});
+
 /** Снять владение токеном: следующий запустившийся экземпляр займёт его место. */
 export const releaseAgentInstance = (id: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}/release-instance`, { method: "POST" });

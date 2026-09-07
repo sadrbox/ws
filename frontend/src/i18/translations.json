@@ -1675,5 +1675,8 @@
   "outcome": "Итог",
   "ownerInstance": "Владелец токена",
   "onecAgentReleaseInstance": "Освободить экземпляр",
-  "onecSessionsShow": "Показать сеансы"
+  "onecSessionsShow": "Показать сеансы",
+  "onecAgentInstances": "Экземпляры агента",
+  "onecAgentMakeOwner": "Сделать владельцем",
+  "onecAgentOwnerNow": "Владелец"
 }

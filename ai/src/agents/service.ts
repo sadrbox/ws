@@ -272,6 +272,21 @@ export class AgentService {
 		return (r.rowCount ?? 0) > 0;
 	}
 
+	/**
+	 * Назначить владельца вручную — из панели.
+	 *
+	 * «Кто первым пришёл» — правило для машин, а не для людей: выиграть аренду может не тот
+	 * компьютер (машина разработки вместо сервера 1С), и тогда боевой агент оказывается
+	 * заблокирован. Явное назначение решает это одним нажатием, без гонок и перезапусков.
+	 */
+	async setOwnership(agentId: string, instanceId: string): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE agents SET owner_instance_id = $2, owner_seen_at = now(), owner_since = now() WHERE id = $1`,
+			[agentId, instanceId.slice(0, 200)],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	/** Снять владение вручную — из панели, когда экземпляр не отдаёт его сам. */
 	async releaseOwnership(agentId: string): Promise<boolean> {
 		const r = await this.db.query(

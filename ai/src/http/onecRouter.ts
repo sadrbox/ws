@@ -352,6 +352,18 @@ export function onecRouter(deps: Deps) {
 	 * перенесли, экземпляр «завис». Аренда истечёт и сама, но ждать полный интервал
 	 * офлайна, глядя на неработающую панель, — не то, чего ждут от администратора.
 	 */
+	/** Назначить владельцем конкретный экземпляр: аренду мог занять не тот компьютер. */
+	r.post("/agents/:id/owner", async (req, res) => {
+		const u = req.erpUser!;
+		const instanceId = String((req.body as { instanceId?: unknown })?.instanceId ?? "").trim();
+		if (!instanceId) { send(res, fail(400, "VALIDATION_ERROR", "instanceId: укажите экземпляр")); return; }
+		const ok = await agents.setOwnership(req.params.id, instanceId);
+		if (!ok) { send(res, fail(404, "NOT_FOUND", "Агент не найден")); return; }
+		await audit.write({ event: "agent.instance.assign", agentId: req.params.id, userUuid: u.uuid,
+			details: { instanceId } });
+		res.json({ success: true, data: { ok: true } });
+	});
+
 	r.post("/agents/:id/release-instance", async (req, res) => {
 		const u = req.erpUser!;
 		const ok = await agents.releaseOwnership(req.params.id);
