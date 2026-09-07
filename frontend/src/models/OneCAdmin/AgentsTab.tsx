@@ -64,7 +64,9 @@ export const AgentsTab: FC = () => {
 		onlineLabel: a.disabled ? translate("onecAgentDisabled") : a.online ? translate("onecAgentOnline") : translate("onecAgentOffline"),
 		lastSeenAt: a.lastSeenAt,
 		capabilitiesCount: a.capabilities.length,
-		instancesCount: a.instances?.length ?? 0,
+		// Считаем РАБОТАЮЩИЕ, а не всю историю: идентификатор меняется при каждом
+		// перезапуске службы, и за сутки их набирается десяток.
+		instancesCount: (a.instances ?? []).filter((i) => i.live).length,
 		ownerInstance: a.owner?.instanceId || "—",
 	})), [agents.data]);
 
@@ -72,7 +74,9 @@ export const AgentsTab: FC = () => {
 	// (команда отказывает через раз, при этом «пароль верный») ни на что другое не похож,
 	// но и не подсказывает причину: с сервера видно только чередование ответов.
 	const doubled = useMemo(
-		() => (agents.data?.items ?? []).filter((a) => !a.disabled && (a.instances?.length ?? 0) > 1),
+		() => (agents.data?.items ?? []).filter(
+			(a) => !a.disabled && (a.instances ?? []).filter((i) => i.live).length > 1,
+		),
 		[agents.data],
 	);
 
@@ -86,10 +90,11 @@ export const AgentsTab: FC = () => {
 				// Адреса источников: экземпляры с РАЗНЫХ адресов — это один токен на двух
 				// машинах (классика: сервер 1С и машина разработки), и лечится это не
 				// «убить лишний процесс», а отдельным агентом со своим токеном.
-				const addrs = [...new Set(a.instances.map((i) => i.remoteAddr).filter(Boolean))];
+				const live = a.instances.filter((i) => i.live);
+				const addrs = [...new Set(live.map((i) => i.remoteAddr).filter(Boolean))];
 				return (
 					<div key={a.id} className={styles.Blocked}>
-						{translate("onecAgentDoubled")}: {a.name || a.id.slice(0, 8)} — {a.instances.length}
+						{translate("onecAgentDoubled")}: {a.name || a.id.slice(0, 8)} — {live.length}
 						{addrs.length > 1 ? ` (${translate("onecAgentFromHosts")}: ${addrs.join(", ")})` : ""}.{" "}
 						{addrs.length > 1 ? translate("onecAgentTokenShared") : translate("onecAgentDoubledHint")}
 					</div>

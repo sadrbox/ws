@@ -1694,5 +1694,7 @@
   "onecAgentDelete": "Агентті жою",
   "onecAgentDeleteWarning": "Агент және оның барлық команда тарихы қайтарымсыз жойылады. 1С сервериндегі қызмет іске қосулы қалады — оны бөлек тоқтатыңыз.",
   "onecAgentRename": "Атын өзгерту",
-  "onecAgentDeleteHint": "Алдымен агентті өшіріңіз"
+  "onecAgentDeleteHint": "Алдымен агентті өшіріңіз",
+  "onecAgentLive": "Қазір жұмыс істейді",
+  "onecAgentHistory": "Бұрынғы іске қосулар"
 }

@@ -329,10 +329,11 @@ export function onecRouter(deps: Deps) {
 		const items = await Promise.all(all.map(async (a) => ({
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			capabilities: a.capabilities, lastSeenAt: a.lastSeenAt, disabled: a.disabled,
-			// Сутки, а не интервал офлайна: владельца назначают и молчащему экземпляру —
-			// например, чтобы боевой сервер занял аренду сразу, как поднимется. Живой он
-			// или нет, видно по времени последнего обращения в самой строке.
-			instances: await agents.liveInstances(a.id, 24 * 60 * 60),
+			// Сутки истории — чтобы владельцем можно было назначить и молчащий экземпляр
+			// (займёт аренду, как поднимется). Признак `live` у каждой строки отделяет
+			// работающие процессы от прежних запусков: смешивать их нельзя, иначе панель
+			// объявляет двойным запуском обычную историю перезапусков.
+			instances: await agents.liveInstances(a.id, 24 * 60 * 60, cfg.AGENT_OFFLINE_AFTER_SECS),
 			// Владелец токена: единственный экземпляр, которому разрешено работать.
 			owner: await agents.owner(a.id),
 		})));

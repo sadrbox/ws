@@ -43,6 +43,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	// Имя правится прямо здесь: агент присылает своё при регистрации, но подпись для
 	// человека — дело панели.
 	const [name, setName] = useState("");
+	const [showHistory, setShowHistory] = useState(false);
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<string>("");
 
@@ -93,7 +94,12 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 		onError: fail,
 	});
 
-	const instances = agent?.instances ?? [];
+	const all = agent?.instances ?? [];
+	const live = all.filter((i) => i.live);
+	// Прежние запуски прячем: их за сутки десяток, а нужны они редко — назначить
+	// владельцем молчащий процесс. Список из десяти похожих строк, где девять мертвы,
+	// читается как «запущено десять экземпляров» — ровно то, чего мы избегаем.
+	const instances = showHistory ? all : (live.length ? live : all.slice(0, 1));
 
 	return (
 		<>
@@ -169,6 +175,16 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 						component: (
 							<div className={styles.Instances}>
 								<div className={styles.Hint}>{translate("onecAgentInstancesHint")}</div>
+								<GroupRow>
+									<span className={styles.Hint}>
+										{translate("onecAgentLive")}: {live.length} · {translate("onecAgentInstances")}: {all.length}
+									</span>
+									{all.length > live.length && (
+										<Button active={showHistory} onClick={() => setShowHistory((v) => !v)}>
+											{translate("onecAgentHistory")}
+										</Button>
+									)}
+								</GroupRow>
 								{instances.map((inst) => {
 									const isOwner = agent?.owner?.instanceId === inst.instanceId;
 									return (
@@ -177,6 +193,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											<span className={styles.InstanceName}>{inst.instanceId}</span>
 											<span>{inst.remoteAddr ?? "—"}</span>
 											<span>{getFormatDate(inst.lastSeenAt)}</span>
+											<span>{inst.live ? translate("onecAgentOnline") : translate("onecAgentOffline")}</span>
 											{isOwner
 												? <span className={styles.InstanceOwnerMark}>{translate("onecAgentOwnerNow")}</span>
 												: (

@@ -1694,5 +1694,7 @@
   "onecAgentDelete": "Удалить агента",
   "onecAgentDeleteWarning": "Агент и вся история его команд будут удалены безвозвратно. Служба на сервере 1С останется запущенной — остановите её отдельно.",
   "onecAgentRename": "Переименовать",
-  "onecAgentDeleteHint": "Сначала отключите агента"
+  "onecAgentDeleteHint": "Сначала отключите агента",
+  "onecAgentLive": "Работают сейчас",
+  "onecAgentHistory": "Прежние запуски"
 }

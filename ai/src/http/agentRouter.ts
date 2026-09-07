@@ -97,6 +97,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			// Адрес источника: два экземпляра на РАЗНЫХ машинах — это один токен, скопированный
 			// с сервера 1С на машину разработки, и лечится он не так, как двойной запуск.
 			void agents.touchInstance(req.agent!.agentId, instance, ver, req.ip ?? null);
+			// Чистка попутно, без крона: строк единицы, а без неё за месяц копятся сотни
+			// мёртвых записей о перезапусках.
+			if (Math.random() < 0.01) void agents.pruneInstances();
 		}
 		next();
 	});

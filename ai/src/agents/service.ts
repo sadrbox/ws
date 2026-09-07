@@ -338,17 +338,48 @@ export class AgentService {
 		);
 	}
 
-	/** Сколько экземпляров отзывалось за последние `secs` секунд. */
-	async liveInstances(agentId: string, secs: number): Promise<{ instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: Date }[]> {
-		const r = await this.db.query<{ instance_id: string; version: string | null; remote_addr: string | null; last_seen_at: Date }>(
-			`SELECT instance_id, version, remote_addr, last_seen_at FROM agent_instances
+	/**
+	 * Экземпляры за `secs` секунд, каждый с признаком «на связи сейчас».
+	 *
+	 * ЭТО ДВА РАЗНЫХ ВОПРОСА, и путать их нельзя. «Кто работает прямо сейчас» — это
+	 * `live`: по нему считается число экземпляров и поднимается тревога о двойном запуске.
+	 * «Какие процессы были» — вся выборка: идентификатор меняется при каждом перезапуске
+	 * (pid + время старта), и за сутки их набирается десяток. Один раз я это уже смешал —
+	 * панель показала «запущено 8 экземпляров» там, где работал один, а семь были историей.
+	 *
+	 * История нужна не для красоты: владельцем назначают и молчащий экземпляр, чтобы он
+	 * занял аренду при старте.
+	 */
+	async liveInstances(agentId: string, secs: number, liveSecs: number): Promise<{
+		instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: Date; live: boolean;
+	}[]> {
+		const r = await this.db.query<{
+			instance_id: string; version: string | null; remote_addr: string | null; last_seen_at: Date; live: boolean;
+		}>(
+			`SELECT instance_id, version, remote_addr, last_seen_at,
+			        (last_seen_at > now() - ($3 || ' seconds')::interval) AS live
+			   FROM agent_instances
 			  WHERE agent_id = $1 AND last_seen_at > now() - ($2 || ' seconds')::interval
 			  ORDER BY last_seen_at DESC`,
-			[agentId, String(secs)],
+			[agentId, String(secs), String(liveSecs)],
 		);
 		return r.rows.map((x) => ({
-			instanceId: x.instance_id, version: x.version, remoteAddr: x.remote_addr, lastSeenAt: x.last_seen_at,
+			instanceId: x.instance_id, version: x.version, remoteAddr: x.remote_addr,
+			lastSeenAt: x.last_seen_at, live: x.live,
 		}));
+	}
+
+	/**
+	 * Убрать давно замолчавшие экземпляры.
+	 *
+	 * Каждый перезапуск службы добавляет строку и не убирает прежнюю: за месяц работы это
+	 * сотни записей, из которых полезны единицы. Неделя — запас, покрывающий выходные.
+	 */
+	async pruneInstances(olderThanDays = 7): Promise<void> {
+		await this.db.query(
+			`DELETE FROM agent_instances WHERE last_seen_at < now() - ($1 || ' days')::interval`,
+			[String(olderThanDays)],
+		);
 	}
 
 	async touch(id: string): Promise<void> {
