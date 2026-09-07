@@ -25,7 +25,8 @@ import { getFormatDate } from "src/utils/datetime";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import {
-	fetchAgents, releaseAgentInstance, rotateAgentToken, setAgentDisabled, setAgentOwner,
+	deleteAgent, fetchAgents, releaseAgentInstance, renameAgent, rotateAgentToken,
+	setAgentDisabled, setAgentOwner,
 } from "src/services/onec/api";
 import { QueryError } from "./shared";
 import styles from "./OneCAdmin.module.scss";
@@ -38,7 +39,10 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const agentId = asText(row.agentId) || asText(row.uuid);
 	const qc = useQueryClient();
-	const [confirm, setConfirm] = useState<null | "rotate" | "release">(null);
+	const [confirm, setConfirm] = useState<null | "rotate" | "release" | "delete">(null);
+	// Имя правится прямо здесь: агент присылает своё при регистрации, но подпись для
+	// человека — дело панели.
+	const [name, setName] = useState("");
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<string>("");
 
@@ -66,6 +70,23 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 		onSuccess: () => { setConfirm(null); showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
+	const rename = useMutation({
+		mutationFn: () => renameAgent(agentId, name.trim()),
+		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
+		onError: fail,
+	});
+	const remove = useMutation({
+		mutationFn: () => deleteAgent(agentId),
+		onSuccess: () => {
+			setConfirm(null);
+			showToast(translate("saved"), "success");
+			void refresh();
+			// Удалённого показывать нечего: закрываем пейн.
+			void paneProps.onClose?.();
+		},
+		onError: fail,
+	});
+
 	const assign = useMutation({
 		mutationFn: (instanceId: string) => setAgentOwner(agentId, instanceId),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
@@ -92,7 +113,14 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 							<GroupCol>
 								<QueryError error={agents.error} />
 								<GroupRow>
-									<Field name="ag_name" label={translate("name")} value={agent?.name || "—"} disabled onChange={() => {}} />
+									{/* Имя — единственный правимый реквизит: остальное присылает агент. */}
+									<Field name="ag_name" label={translate("name")}
+										value={name || agent?.name || ""}
+										onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+									<Button disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
+										onClick={() => rename.mutate()}>
+										{translate("onecAgentRename")}
+									</Button>
 									<Field name="ag_role" label={translate("role")} value={agent?.role ?? "—"} disabled onChange={() => {}} width="150px" />
 									<Field name="ag_state" label={translate("status")} value={agent ? stateLabel(agent) : "—"} disabled onChange={() => {}} width="170px" />
 									<Field name="ag_seen" label={translate("lastSeenAt")}
@@ -113,6 +141,12 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 									<Button disabled={toggle.isPending || !agent}
 										onClick={() => agent && toggle.mutate(!agent.disabled)}>
 										{agent?.disabled ? translate("onecAgentEnable") : translate("onecAgentDisable")}
+									</Button>
+									<Button variant="danger"
+										disabled={remove.isPending || !agent || !agent.disabled}
+										title={agent && !agent.disabled ? translate("onecAgentDeleteHint") : undefined}
+										onClick={() => setConfirm("delete")}>
+										{translate("onecAgentDelete")}
 									</Button>
 									<Button
 										disabled={release.isPending || !agent?.owner?.instanceId}
@@ -175,6 +209,15 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 					<div className={styles.ModalForm}>
 						<div>{translate("ownerInstance")}: {agent?.owner?.instanceId || "—"}</div>
 						<div className={styles.ConfirmWarning}>{translate("onecAgentReleaseWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
+			{confirm === "delete" && (
+				<Modal title={translate("onecAgentDelete")} onClose={() => setConfirm(null)} onApply={() => remove.mutate()}>
+					<div className={styles.ModalForm}>
+						<div>{agent?.name || agentId.slice(0, 8)}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecAgentDeleteWarning")}</div>
 					</div>
 				</Modal>
 			)}

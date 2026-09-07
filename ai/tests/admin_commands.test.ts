@@ -31,6 +31,8 @@ test("опасные операции помечены CRITICAL — они ид�
 		// для стороннего наблюдателя — подтверждение обязательно. Снятие публикации
 		// критично не из-за данных, а из-за людей: доступ по HTTP пропадает немедленно.
 		"IB_PUBLISH", "IB_UNPUBLISH",
+		// Изменение пользователя правит чужую базу — подтверждение обязательно.
+		"IB_UPDATE_USER",
 	]);
 	// Всё остальное — только чтение: список баз или сеансов ничего не меняет.
 	assert.ok(ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL").every((c) => c.operation === "READ"));
@@ -100,6 +102,19 @@ test("списки содержимого базы — чтение: подтв�
 		assert.equal(findAdminCommand(t)!.operation, "READ", t);
 		assert.equal(findAdminCommand(t)!.requiresBase, true, t);
 	}
+});
+
+test("IB_UPDATE_USER: незаполненное поле значит «не трогать», а не «очистить»", () => {
+	const spec = findAdminCommand("IB_UPDATE_USER")!;
+	// Меняем только полное имя — пароль и роли не упоминаются и остаются как были.
+	const only = buildAdminPayload(spec, { baseKey: "b", name: "ivanov", fullName: "Иванов И.И." });
+	assert.equal(only.ok, true);
+	assert.deepEqual(only.ok && only.payload, { baseKey: "b", name: "ivanov", fullName: "Иванов И.И." });
+	// Имя обязательно: без него непонятно, кого менять.
+	assert.equal(buildAdminPayload(spec, { baseKey: "b", fullName: "Х" }).ok, false);
+	// Переименование — отдельным полем, чтобы `name` оставался адресом записи.
+	assert.equal(buildAdminPayload(spec, { baseKey: "b", name: "ivanov", newName: "ivanov2" }).ok, true);
+	assert.equal(buildAdminPayload(spec, { baseKey: "b", name: "ivanov", nickname: "x" }).ok, false);
 });
 
 test("IB_BACKUP: нужна база, каталог необязателен — раскладку дисков знает агент", () => {

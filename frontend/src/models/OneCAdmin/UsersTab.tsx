@@ -27,6 +27,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchBaseUsers, fetchUserOccurrences, fetchUserSummary, runBatch, type BatchType } from "src/services/onec/api";
 import { CapabilityGuard, QueryError, VSplit, checkBases, useBaseTargets, useCheckParallel } from "./shared";
 import ElementCard from "./ElementCard";
+import { useOpenElement } from "./ElementForm";
 import styles from "./OneCAdmin.module.scss";
 
 
@@ -54,6 +55,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	const [dialog, setDialog] = useState<null | "create" | "delete">(null);
 	/** Карточка пользователя: реквизиты + базы, куда его завести. */
 	const [card, setCard] = useState(false);
+	const openElement = useOpenElement("user");
 	const [form, setForm] = useState({ name: "", fullName: "", password: "" });
 
 	const baseUsers = useQuery({
@@ -178,7 +180,13 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							setColumns: setSumColumns, sorting: sumView.sorting, search: sumView.search,
 							isLoading: summary.isLoading,
 							onReload: () => void summary.refetch(),
-							onRowClick: (row) => { setOpenedBase(""); setPickedUser(asText(row.name)); },
+							// Двойной щелчок — форма пользователя: там его реквизиты, базы и
+							// групповые команды. Отбор баз справа по нему же.
+							onRowClick: (row) => {
+								setOpenedBase("");
+								setPickedUser(asText(row.name));
+								openElement(row);
+							},
 							extraButtons: (
 								<>
 									<Button variant="secondary" onClick={() => setCard(true)}>{translate("onecOpenCard")}</Button>

@@ -355,6 +355,43 @@ export function onecRouter(deps: Deps) {
 	 * перенесли, экземпляр «завис». Аренда истечёт и сама, но ждать полный интервал
 	 * офлайна, глядя на неработающую панель, — не то, чего ждут от администратора.
 	 */
+	/**
+	 * Переименовать агента. Имя — подпись для человека: агент присылает своё при
+	 * регистрации, но «Сервер 1С, админ (кластер)» понятнее, чем то, как назвалась служба.
+	 */
+	r.patch("/agents/:id", async (req, res) => {
+		const u = req.erpUser!;
+		const name = String((req.body as { name?: unknown })?.name ?? "").trim();
+		if (!name) { send(res, fail(400, "VALIDATION_ERROR", "name: укажите имя агента")); return; }
+		const ok = await agents.rename(req.params.id, name);
+		if (!ok) { send(res, fail(404, "NOT_FOUND", "Агент не найден")); return; }
+		await audit.write({ event: "agent.rename", agentId: req.params.id, userUuid: u.uuid, details: { name } });
+		res.json({ success: true, data: { ok: true } });
+	});
+
+	/**
+	 * Удалить агента.
+	 *
+	 * Только отключённого: удалить работающего — значит оборвать команды на полпути и
+	 * оставить службу на сервере 1С стучаться в никуда с валидным токеном. Сначала
+	 * «Отключить», убедиться, что ничего не сломалось, потом удалять.
+	 */
+	r.delete("/agents/:id", async (req, res) => {
+		const u = req.erpUser!;
+		const agent = await agents.findById(req.params.id);
+		if (!agent) { send(res, fail(404, "NOT_FOUND", "Агент не найден")); return; }
+		if (!agent.disabled) {
+			send(res, fail(409, "AGENT_ENABLED",
+				"Сначала отключите агента: у работающей службы останется действующий токен, "
+				+ "а незавершённые команды оборвутся."));
+			return;
+		}
+		await agents.remove(req.params.id);
+		await audit.write({ event: "agent.delete", agentId: null, userUuid: u.uuid,
+			details: { id: req.params.id, name: agent.name } });
+		res.json({ success: true, data: { ok: true } });
+	});
+
 	/** Назначить владельцем конкретный экземпляр: аренду мог занять не тот компьютер. */
 	r.post("/agents/:id/owner", async (req, res) => {
 		const u = req.erpUser!;
@@ -424,7 +461,7 @@ export function onecRouter(deps: Deps) {
 	// и к нему возвращаться. Чтение (IB_LIST_*) идёт обычными запросами по выбранным базам:
 	// нажал — увидел, заводить ради этого сущность и уходить на другую вкладку незачем.
 	const BATCHABLE = new Set([
-		"IB_CREATE_USER", "IB_DELETE_USER", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION",
+		"IB_CREATE_USER", "IB_UPDATE_USER", "IB_DELETE_USER", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION",
 		// Публикация — первый шаг раскатки: опубликовать → поставить расширение → перейти
 		// на HTTP. Делать это по одной базе из ста бессмысленно.
 		"IB_PUBLISH", "IB_UNPUBLISH",

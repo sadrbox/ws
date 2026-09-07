@@ -175,6 +175,8 @@ export type BatchType =
 	// Публикация базы на веб-сервере — первый шаг раскатки (публикация → расширение → HTTP);
 	// снятие — обратная ей операция.
 	| "IB_PUBLISH" | "IB_UNPUBLISH"
+	// Изменение пользователя: незаполненное поле значит «не трогать», а не «очистить».
+	| "IB_UPDATE_USER"
 	// Выгрузка .dt: агент делает её ibcmd (без клиентской лицензии), запасной путь — конфигуратор.
 	| "IB_BACKUP"
 	// Чтение тоже пакетное: наполнить сводку по ста базам поштучно нереально.
@@ -231,6 +233,16 @@ export const setAgentOwner = (id: string, instanceId: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}/owner`, {
 		method: "POST", body: JSON.stringify({ instanceId }),
 	});
+
+/** Переименовать агента: имя — подпись для человека, а не то, как назвалась служба. */
+export const renameAgent = (id: string, name: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}`, {
+		method: "PATCH", body: JSON.stringify({ name }),
+	});
+
+/** Удалить агента вместе с историей его команд. Работающего сервис удалить не даст. */
+export const deleteAgent = (id: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}`, { method: "DELETE" });
 
 /** Снять владение токеном: следующий запустившийся экземпляр займёт его место. */
 export const releaseAgentInstance = (id: string) =>

@@ -24,6 +24,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { fetchBaseExtensions, fetchExtensionSummary, runBatch, type BatchType } from "src/services/onec/api";
 import ElementCard from "./ElementCard";
+import { useOpenElement } from "./ElementForm";
 import { CapabilityGuard, QueryError, VSplit, checkBases, useBaseTargets, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -63,6 +64,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	const [pickedSynonym, setPickedSynonym] = useState("");
 	/** Карточка расширения: реквизиты + базы, куда его поставить. */
 	const [card, setCard] = useState(false);
+	const openElement = useOpenElement("extension");
 
 	const summary = useQuery({ queryKey: ["onec", "ext-summary"], queryFn: fetchExtensionSummary });
 	const [sumCols, setSumCols] = useState<TColumn[]>(() => getModelColumns(summaryColumns(), "OneCAdmin_extSummary"));
@@ -199,7 +201,13 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							setColumns: setSumCols, sorting: sumView.sorting, search: sumView.search,
 							isLoading: summary.isLoading,
 							onReload: () => void summary.refetch(),
-							onRowClick: (row) => { setPickedExt(asText(row.name)); setPickedSynonym(asText(row.synonym)); },
+							// Двойной щелчок — форма расширения (общий жест списков); отбор баз
+							// по выбранному расширению остаётся его же побочным действием.
+							onRowClick: (row) => {
+								setPickedExt(asText(row.name));
+								setPickedSynonym(asText(row.synonym));
+								openElement(row);
+							},
 							extraButtons: (
 								<>
 									{/* Карточка расширения: реквизиты + базы, куда его поставить, в одном окне. */}

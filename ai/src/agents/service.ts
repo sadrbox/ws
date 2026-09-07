@@ -89,6 +89,36 @@ export class AgentService {
 		return r.rowCount ? token : null;
 	}
 
+	/** Переименовать агента: имя — подпись для человека, агент присылает своё при регистрации. */
+	async rename(id: string, name: string): Promise<boolean> {
+		const r = await this.db.query(`UPDATE agents SET name = $2 WHERE id = $1`, [id, name.slice(0, 200)]);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/**
+	 * Удалить агента вместе с его историей команд.
+	 *
+	 * Команды ссылаются на агента внешним ключом, поэтому удаляются здесь же и в одной
+	 * транзакции: иначе удаление падало бы на первом же агенте, который хоть раз работал.
+	 * История команд без агента бессмысленна — она вся про то, кто и что исполнял.
+	 */
+	async remove(id: string): Promise<boolean> {
+		const client = await this.db.connect();
+		try {
+			await client.query("BEGIN");
+			await client.query(`DELETE FROM commands WHERE agent_id = $1`, [id]);
+			await client.query(`UPDATE audit_log SET agent_id = NULL WHERE agent_id = $1`, [id]);
+			const r = await client.query(`DELETE FROM agents WHERE id = $1`, [id]);
+			await client.query("COMMIT");
+			return (r.rowCount ?? 0) > 0;
+		} catch (e) {
+			await client.query("ROLLBACK");
+			throw e;
+		} finally {
+			client.release();
+		}
+	}
+
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
 		const r = await this.db.query(
 			`UPDATE agents SET disabled_at = ${disabled ? "now()" : "NULL"} WHERE id = $1`,

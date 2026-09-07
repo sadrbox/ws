@@ -160,6 +160,31 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		type: "IB_UPDATE_USER",
+		title: "Изменить пользователя базы",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		// Изменение, а не пересоздание: пересоздать пользователя нельзя без потери его
+		// настроек и ссылок в базе, а «удалить и создать заново» на сотне баз — это ещё и
+		// сотня шансов остановиться на середине.
+		//
+		// Незаполненное поле означает «не трогать», а НЕ «очистить»: групповое изменение
+		// полного имени не должно заодно стирать всем пароли.
+		schema: z.object({
+			baseKey,
+			name: ibName,
+			/** Новое имя входа; без него имя не меняется. */
+			newName: ibName.optional(),
+			fullName: z.string().max(200).optional(),
+			password: z.string().max(200).optional(),
+			roles: z.array(z.string().max(200)).max(100).optional(),
+			disabled: z.boolean().optional(),
+			showInList: z.boolean().optional(),
+		}).strict(),
+	},
+	{
 		type: "IB_DELETE_USER",
 		title: "Удалить пользователя базы",
 		operation: "CRITICAL",
