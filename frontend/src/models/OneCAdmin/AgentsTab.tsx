@@ -23,7 +23,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
-import { createAgent, fetchAgents, rotateAgentToken, setAgentDisabled } from "src/services/onec/api";
+import { createAgent, fetchAgents, releaseAgentInstance, rotateAgentToken, setAgentDisabled } from "src/services/onec/api";
 import { QueryError } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -34,6 +34,8 @@ const columns = (): TColumn[] => ([
 	{ identifier: "lastSeenAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "capabilitiesCount", type: "number", width: "130px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
 	{ identifier: "instancesCount", type: "number", width: "140px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
+	// Владелец токена: под ним и работает агент; остальные экземпляры получают отказ.
+	{ identifier: "ownerInstance", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 export const AgentsTab: FC = () => {
@@ -64,6 +66,14 @@ export const AgentsTab: FC = () => {
 		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
 	});
 
+	// Снятие владения: следующий запустившийся экземпляр займёт место. Нужно там, где
+	// владелец не отдал его сам — машину выключили, службу перенесли.
+	const release = useMutation({
+		mutationFn: (id: string) => releaseAgentInstance(id),
+		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
+		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+	});
+
 	const toggle = useMutation({
 		mutationFn: (p: { id: string; disabled: boolean }) => setAgentDisabled(p.id, p.disabled),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
@@ -78,6 +88,7 @@ export const AgentsTab: FC = () => {
 		lastSeenAt: a.lastSeenAt,
 		capabilitiesCount: a.capabilities.length,
 		instancesCount: a.instances?.length ?? 0,
+		ownerInstance: a.owner?.instanceId || "—",
 	})), [agents.data]);
 
 	// Больше одного процесса под одним токеном — предупреждаем прямо в панели. Симптом
@@ -123,6 +134,11 @@ export const AgentsTab: FC = () => {
 						{current && (
 							<Button size="sm" disabled={rotate.isPending} onClick={() => rotate.mutate(current.id)}>
 								{translate("onecAgentRotate")}
+							</Button>
+						)}
+						{current?.owner?.instanceId && (
+							<Button size="sm" disabled={release.isPending} onClick={() => release.mutate(current.id)}>
+								{translate("onecAgentReleaseInstance")}
 							</Button>
 						)}
 						{current && (

@@ -330,6 +330,8 @@ export function onecRouter(deps: Deps) {
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			capabilities: a.capabilities, lastSeenAt: a.lastSeenAt, disabled: a.disabled,
 			instances: await agents.liveInstances(a.id, cfg.AGENT_OFFLINE_AFTER_SECS),
+			// Владелец токена: единственный экземпляр, которому разрешено работать.
+			owner: await agents.owner(a.id),
 		})));
 		res.json({ success: true, data: { items, limits: { checkParallel: cfg.ONEC_CHECK_PARALLEL } } });
 	});
@@ -343,6 +345,21 @@ export function onecRouter(deps: Deps) {
 	 * Токен показывается ОДИН раз: в БД лежит только его SHA-256, восстановить нельзя —
 	 * забыли, значит ротация.
 	 */
+	/**
+	 * Снять владение токеном вручную.
+	 *
+	 * Нужно там, где владелец не отдаёт его сам: машину выключили жёстко, службу
+	 * перенесли, экземпляр «завис». Аренда истечёт и сама, но ждать полный интервал
+	 * офлайна, глядя на неработающую панель, — не то, чего ждут от администратора.
+	 */
+	r.post("/agents/:id/release-instance", async (req, res) => {
+		const u = req.erpUser!;
+		const ok = await agents.releaseOwnership(req.params.id);
+		if (!ok) { send(res, fail(404, "NOT_FOUND", "Агент не найден")); return; }
+		await audit.write({ event: "agent.instance.release", agentId: req.params.id, userUuid: u.uuid });
+		res.json({ success: true, data: { ok: true } });
+	});
+
 	r.post("/agents", async (req, res) => {
 		const u = req.erpUser!;
 		const name = String((req.body as { name?: unknown })?.name ?? "").trim();

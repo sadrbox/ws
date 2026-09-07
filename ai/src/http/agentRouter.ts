@@ -13,6 +13,7 @@ import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import { requireAgent } from "../auth/index.ts";
+import { decideInstance, instanceConflictMessage } from "../agents/instances.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";

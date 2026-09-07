@@ -215,11 +215,20 @@ export type OnecAgent = {
 	 * разойтись, как одна и та же команда начинает отказывать через раз.
 	 */
 	instances: { instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: string }[];
+	/**
+	 * Владелец токена — единственный экземпляр, которому разрешено работать. Остальные
+	 * получают отказ и не выполняют ни одной команды.
+	 */
+	owner: { instanceId: string | null; seenAt: string | null };
 };
 
 /** Вместе с агентами приходят лимиты: число одновременных проверок задаёт сервис. */
 export const fetchAgents = () =>
 	aiFetch<{ items: OnecAgent[]; limits: { checkParallel: number } }>("/v1/onec/agents");
+
+/** Снять владение токеном: следующий запустившийся экземпляр займёт его место. */
+export const releaseAgentInstance = (id: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}/release-instance`, { method: "POST" });
 
 /** Есть ли на связи админ-агент с нужной способностью. */
 export const hasCapability = (agents: OnecAgent[] | undefined, capability: string): boolean =>

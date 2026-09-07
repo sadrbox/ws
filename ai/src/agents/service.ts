@@ -240,6 +240,47 @@ export class AgentService {
 	 * два процесса под одним токеном разбирают одну очередь, и разошедшиеся настройки дают
 	 * плавающие отказы, необъяснимые ничем другим.
 	 */
+	/** Текущий владелец токена: единственный экземпляр, которому разрешено работать. */
+	async owner(agentId: string): Promise<{ instanceId: string | null; seenAt: Date | null }> {
+		const r = await this.db.query<{ owner_instance_id: string | null; owner_seen_at: Date | null }>(
+			`SELECT owner_instance_id, owner_seen_at FROM agents WHERE id = $1`, [agentId],
+		);
+		const row = r.rows[0];
+		return { instanceId: row?.owner_instance_id ?? null, seenAt: row?.owner_seen_at ?? null };
+	}
+
+	/**
+	 * Занять владение (новый экземпляр) или продлить его (тот же).
+	 *
+	 * Условие в WHERE — не украшение: два процесса стартуют одновременно, и без него оба
+	 * решат, что владельцы они. Побеждает тот, чей UPDATE прошёл первым; второй увидит
+	 * чужой идентификатор и получит отказ.
+	 */
+	async claimOwnership(agentId: string, instanceId: string, offlineAfterSecs: number): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE agents
+			    SET owner_instance_id = $2,
+			        owner_seen_at = now(),
+			        owner_since = CASE WHEN owner_instance_id IS DISTINCT FROM $2 THEN now() ELSE owner_since END
+			  WHERE id = $1
+			    AND (owner_instance_id IS NULL
+			         OR owner_instance_id = $2
+			         OR owner_seen_at IS NULL
+			         OR owner_seen_at < now() - ($3 || ' seconds')::interval)`,
+			[agentId, instanceId, String(offlineAfterSecs)],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/** Снять владение вручную — из панели, когда экземпляр не отдаёт его сам. */
+	async releaseOwnership(agentId: string): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE agents SET owner_instance_id = NULL, owner_seen_at = NULL, owner_since = NULL WHERE id = $1`,
+			[agentId],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	async touchInstance(agentId: string, instanceId: string, version: string | null, remoteAddr?: string | null): Promise<void> {
 		await this.db.query(
 			`INSERT INTO agent_instances (agent_id, instance_id, version, remote_addr)
