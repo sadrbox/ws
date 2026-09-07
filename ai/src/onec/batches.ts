@@ -63,6 +63,12 @@ export class BatchService {
 	}
 
 	async progress(id: string): Promise<BatchProgress | null> {
+		// Просроченные команды закрываем перед чтением отчёта: иначе задание, чьи команды
+		// никто не забрал, вечно показывает «выполняется».
+		await this.db.query(
+			`UPDATE commands SET state = 'expired', finished_at = now()
+			  WHERE batch_id = $1 AND state IN ('queued','dispatched') AND expires_at < now()`, [id],
+		);
 		const b = await this.db.query<{ id: string; type: string; total: number; created_at: Date }>(
 			`SELECT id, type, total, created_at FROM command_batches WHERE id = $1`, [id],
 		);

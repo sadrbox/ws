@@ -483,14 +483,32 @@ export function onecRouter(deps: Deps) {
 	 * что и синхронный путь: либо `{pending:true}`, либо результат, либо ошибку агента.
 	 */
 	r.get("/commands/:id", async (req, res) => {
+		// Просроченное закрываем здесь же: агент, который замолчал, этого не сделает, а
+		// панель иначе опрашивает несуществующую работу до своего предела.
+		await queue.expireOverdue();
 		const row = await queue.get(req.params.id);
 		if (!row) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
 		if (row.state === "queued" || row.state === "dispatched") {
+			// Ждать нечего, если исполнителя нет на связи: говорим об этом сразу, а не
+			// через пятнадцать минут молчаливого опроса.
+			const owner = await agents.findById(row.agent_id);
+			const silentSecs = owner?.lastSeenAt
+				? Math.floor((Date.now() - new Date(owner.lastSeenAt).getTime()) / 1000)
+				: Number.MAX_SAFE_INTEGER;
+			if (silentSecs > cfg.AGENT_OFFLINE_AFTER_SECS) {
+				send(res, fail(409, "AGENT_OFFLINE",
+					`Агент 1С не на связи${owner?.lastSeenAt ? ` (молчит ${silentSecs} с)` : ""}: команда поставлена в очередь, но забрать её некому. `
+					+ "Проверьте службу агента на сервере 1С."));
+				return;
+			}
 			res.json({ success: true, data: { pending: true, commandId: row.id } });
 			return;
 		}
 		if (row.state !== "done") {
-			const e = humanizeAgentError(row.error) ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
+			const e = humanizeAgentError(row.error)
+				?? (row.state === "expired"
+					? { code: "COMMAND_EXPIRED", message: "Агент не забрал команду до истечения срока — служба 1С-агента не на связи." }
+					: { code: "COMMAND_FAILED", message: "Команда не выполнена" });
 			// 422 по той же причине, что и в run(): 5xx съедает прокси.
 			res.status(422).json({ success: false, error: e });
 			return;

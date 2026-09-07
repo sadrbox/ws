@@ -132,6 +132,22 @@ export class CommandQueue {
 		}
 	}
 
+	/**
+	 * Просроченные команды — в `expired`, независимо от того, приходил ли агент.
+	 *
+	 * Раньше это делалось ТОЛЬКО при опросе очереди самим агентом. Пока агент на связи,
+	 * разницы нет; стоит ему замолчать — и команда навсегда остаётся `queued`, а панель
+	 * опрашивает её до своего пятнадцатиминутного предела: в консоли непрерывный поток
+	 * запросов, на экране ничего. Срок истёк — значит выполнять её уже некому.
+	 */
+	async expireOverdue(): Promise<number> {
+		const r = await this.db.query(
+			`UPDATE commands SET state = 'expired', finished_at = now()
+			  WHERE state IN ('queued', 'dispatched') AND expires_at < now()`,
+		);
+		return r.rowCount ?? 0;
+	}
+
 	private async dispatchQueued(agentId: string): Promise<WireCommand[]> {
 		// Просроченные — в expired, чтобы агент не выполнял то, чего уже никто не ждёт.
 		await this.db.query(
