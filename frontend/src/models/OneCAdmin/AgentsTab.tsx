@@ -144,9 +144,13 @@ export const AgentsTab: FC = () => {
 						)}
 						{current && (
 							// Не прячем, а гасим: спрятанная кнопка выглядит как отсутствующая
-							// возможность, и её начинают искать в другом месте.
+							// возможность, и её начинают искать в другом месте. Подсказка
+							// объясняет, ПОЧЕМУ недоступна: иначе гашение так же загадочно.
 							<Button size="sm"
 								disabled={release.isPending || !current.owner?.instanceId}
+								title={current.owner?.instanceId
+									? `${translate("ownerInstance")}: ${current.owner.instanceId}`
+									: translate("onecAgentNoOwnerHint")}
 								onClick={() => release.mutate(current.id)}>
 								{translate("onecAgentReleaseInstance")}
 							</Button>
@@ -167,24 +171,35 @@ export const AgentsTab: FC = () => {
 				// и тогда боевой агент заблокирован. Здесь это решается одним нажатием.
 				<div className={styles.Instances}>
 					<div className={styles.Hint}>
-						{translate("onecAgentInstances")}: {current.instances?.length ?? 0}
-						{current.owner?.instanceId ? ` · ${translate("ownerInstance")}: ${current.owner.instanceId}` : ""}
+						{translate("onecAgentInstances")} — {current.name || current.id.slice(0, 8)}:{" "}
+						{current.instances?.length ?? 0}
 					</div>
-					{(current.instances ?? []).map((inst) => (
-						<div key={inst.instanceId} className={styles.InstanceRow}>
-							<span>{inst.instanceId}</span>
-							<span>{inst.remoteAddr ?? "—"}</span>
-							<span>{getFormatDate(inst.lastSeenAt)}</span>
-							{current.owner?.instanceId === inst.instanceId
-								? <span>{translate("onecAgentOwnerNow")}</span>
-								: (
-									<Button size="sm" disabled={assign.isPending}
-										onClick={() => assign.mutate({ id: current.id, instanceId: inst.instanceId })}>
-										{translate("onecAgentMakeOwner")}
-									</Button>
-								)}
-						</div>
-					))}
+					{(current.instances ?? []).map((inst) => {
+						const isOwner = current.owner?.instanceId === inst.instanceId;
+						return (
+							<div key={inst.instanceId}
+								className={[styles.InstanceRow, isOwner ? styles.InstanceOwner : ""].filter(Boolean).join(" ")}>
+								<span className={styles.InstanceName}>{inst.instanceId}</span>
+								<span>{inst.remoteAddr ?? "—"}</span>
+								<span>{getFormatDate(inst.lastSeenAt)}</span>
+								{isOwner
+									// Владелец подписан, а не «кнопкой, которую нельзя нажать»: у него
+									// действие ровно одно — освободить, и оно в командной панели.
+									? <span className={styles.InstanceOwnerMark}>{translate("onecAgentOwnerNow")}</span>
+									: (
+										// Акцентная кнопка: это единственное действие в блоке, и раньше
+										// оно терялось в ряду серого текста.
+										<Button size="sm" variant="primary" disabled={assign.isPending}
+											onClick={() => assign.mutate({ id: current.id, instanceId: inst.instanceId })}>
+											{translate("onecAgentMakeOwner")}
+										</Button>
+									)}
+							</div>
+						);
+					})}
+					{!(current.instances ?? []).length && (
+						<div className={styles.Hint}>{translate("onecAgentNoInstances")}</div>
+					)}
 				</div>
 			)}
 

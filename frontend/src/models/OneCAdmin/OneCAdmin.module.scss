@@ -73,6 +73,27 @@
 	gap: 12px;
 	font-size: $fontsize;
 	color: $color6;
+	padding: 3px 6px;
+	border-radius: var(--radius-3, 3px);
+}
+
+// Владелец выделен фоном: в списке из трёх похожих строк глазами его не найти.
+.InstanceOwner {
+	background: $color30;
+}
+
+.InstanceOwnerMark {
+	color: $primary;
+	font-weight: 600;
+}
+
+// Идентификатор процесса длинный; ему нужна вся свободная ширина, остальному — по месту.
+.InstanceName {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 // Предупреждение о том, что операция невозможна в принципе (агент не умеет).

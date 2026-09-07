@@ -1678,5 +1678,7 @@
   "onecSessionsShow": "Показать сеансы",
   "onecAgentInstances": "Экземпляры агента",
   "onecAgentMakeOwner": "Сделать владельцем",
-  "onecAgentOwnerNow": "Владелец"
+  "onecAgentOwnerNow": "Владелец",
+  "onecAgentNoInstances": "Экземпляры не отзывались: агент не присылает идентификатор процесса или не на связи",
+  "onecAgentNoOwnerHint": "Владельца нет — освобождать нечего"
 }

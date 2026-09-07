@@ -1678,5 +1678,7 @@
   "onecSessionsShow": "Сеанстарды көрсету",
   "onecAgentInstances": "Агент даналары",
   "onecAgentMakeOwner": "Иесі ету",
-  "onecAgentOwnerNow": "Иесі"
+  "onecAgentOwnerNow": "Иесі",
+  "onecAgentNoInstances": "Даналар жауап бермеді: агент процесс идентификаторын жібермейді немесе байланыста емес",
+  "onecAgentNoOwnerHint": "Иесі жоқ — босататын ештеңе жоқ"
 }
