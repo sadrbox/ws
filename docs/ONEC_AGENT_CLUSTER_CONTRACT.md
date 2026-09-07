@@ -218,6 +218,7 @@ new UTF8Encoding(false)`, для Node — `spawn` без `encoding` и зате�
 | `IB_DELETE_EXTENSION` | `{baseKey, name}` | `{ok:true}` |
 | `IB_PUBLISH` | `{baseKey, alias?, dir?, webServer?}` | `{ok:true, url:"http://localhost/<alias>"}` |
 | `IB_UNPUBLISH` | `{baseKey, alias?, webServer?}` | `{ok:true}` |
+| `IB_BACKUP` | `{baseKey, dir?}` | `{ok:true, path, sizeBytes?, transport?}` |
 
 Что важно соблюсти:
 
@@ -232,6 +233,10 @@ new UTF8Encoding(false)`, для Node — `spawn` без `encoding` и зате�
   `TIMEOUT` через 120 — пользователь может повторить операцию, которая на самом деле идёт.
   Повторное создание существующего пользователя и повторное удаление отсутствующего должны
   завершаться `SUCCESS`, а не ошибкой.
+- **`IB_BACKUP` обязан вернуть `path`.** Отчёт «выгружено 110 баз» без пути не отвечает на
+  единственный вопрос, который после него задают, — куда легло. Имя файла назначает агент:
+  раскладку дисков сервера панель не знает и знать не должна; `dir` лишь перенаправляет
+  выгрузку. Подробности и остальные команды обслуживания — в `docs/PROMPT_AGENT_MAINTENANCE.md`.
 - **`IB_UNPUBLISH` — обратная публикации:** снятие виртуального каталога и записи о базе
   (`webinst -delete` или эквивалент). Идемпотентна: снятие публикации с неопубликованной
   базы — `SUCCESS`, а не ошибка. После успеха сервис ставит базе `published = false` и

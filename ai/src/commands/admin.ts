@@ -212,6 +212,23 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		type: "IB_BACKUP",
+		title: "Выгрузить базу (.dt)",
+		// CRITICAL не из-за риска для данных — выгрузка ничего не портит, — а из-за цены:
+		// на сотне баз это часы работы сервера и десятки гигабайт на диске. Такое
+		// запускают осознанно, а не случайным нажатием.
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({
+			baseKey,
+			// Каталог назначения; без него агент берёт свой из настроек. Панель не должна
+			// знать раскладку дисков сервера 1С — это его дело.
+			dir: z.string().max(500).optional(),
+		}).strict(),
+	},
+	{
 		type: "CLUSTER_LIST_PUBLICATIONS",
 		title: "Список публикаций на веб-сервере",
 		operation: "READ",

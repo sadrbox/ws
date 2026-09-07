@@ -36,7 +36,8 @@ import styles from "./OneCAdmin.module.scss";
 type Op =
 	| "publish" | "unpublish"
 	| "createUser" | "deleteUser"
-	| "installExt" | "deleteExt";
+	| "installExt" | "deleteExt"
+	| "backup";
 
 type OpSpec = {
 	type: BatchType;
@@ -47,6 +48,8 @@ type OpSpec = {
 	/** Нужно ли имя (пользователя или расширения). */
 	needsName?: "user" | "extension";
 	needsFile?: boolean;
+	/** Каталог назначения — необязательный: без него агент берёт свой из настроек. */
+	needsDir?: boolean;
 };
 
 const SPECS: Record<Op, OpSpec> = {
@@ -56,6 +59,7 @@ const SPECS: Record<Op, OpSpec> = {
 	deleteUser: { type: "IB_DELETE_USER", title: "onecUserDelete", warning: "onecUserDeleteWarning", needs: "ib", needsName: "user" },
 	installExt: { type: "IB_INSTALL_EXTENSION", title: "onecExtInstall", warning: "onecExtInstallWarning", needs: "ib", needsName: "extension", needsFile: true },
 	deleteExt: { type: "IB_DELETE_EXTENSION", title: "onecExtRemove", warning: "onecExtRemoveWarning", needs: "ib", needsName: "extension" },
+	backup: { type: "IB_BACKUP", title: "onecBackup", warning: "onecBackupWarning", needs: "ib", needsDir: true },
 };
 
 /** Строка списка баз ERP-прокси в терминах применимости. */
@@ -96,6 +100,7 @@ export const BaseGroupCommands: FC<{
 	const [password, setPassword] = useState("");
 	const [safeMode, setSafeMode] = useState(true);
 	const [file, setFile] = useState<File | null>(null);
+	const [dir, setDir] = useState("");
 
 	const spec = op ? SPECS[op] : null;
 
@@ -120,7 +125,9 @@ export const BaseGroupCommands: FC<{
 					? { name: name.trim(), ...(fullName.trim() ? { fullName: fullName.trim() } : {}), ...(password ? { password } : {}) }
 					: spec.type === "IB_INSTALL_EXTENSION"
 						? { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" }
-						: spec.needsName ? { name: name.trim() } : {};
+						: spec.needsDir
+							? (dir.trim() ? { dir: dir.trim() } : {})
+							: spec.needsName ? { name: name.trim() } : {};
 			return runBatch(spec.type, targets, payload);
 		},
 		onSuccess: (d) => {
@@ -170,6 +177,7 @@ export const BaseGroupCommands: FC<{
 			{btn("deleteUser", "onecUserDelete")}
 			{btn("installExt", "onecExtInstall")}
 			{btn("deleteExt", "onecExtRemove")}
+			{btn("backup", "onecBackup")}
 
 			{spec && (
 				<Modal title={translate(spec.title)} onClose={close} onApply={apply}>
@@ -197,6 +205,12 @@ export const BaseGroupCommands: FC<{
 								<Field name="onec_group_pwd" label={translate("onecUserPassword")} type="password" value={password}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 							</>
+						)}
+						{spec.needsDir && (
+							// Каталог необязателен: раскладку дисков сервера 1С знает агент,
+							// панель лишь позволяет отправить выгрузку в другое место.
+							<Field name="onec_group_dir" label={translate("onecBackupDir")} value={dir}
+								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDir(e.target.value)} />
 						)}
 						{spec.needsFile && (
 							<>

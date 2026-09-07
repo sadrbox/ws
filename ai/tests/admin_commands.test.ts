@@ -23,6 +23,9 @@ test("опасные операции помечены CRITICAL — они ид�
 		"CLUSTER_DISCONNECT", "CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_TERMINATE_SESSION",
 		// Внутрибазовые изменения так же необратимы: удалённого пользователя ИБ или
 		// снесённое расширение не вернуть, а установка меняет конфигурацию базы.
+		// Выгрузка данным не вредит, но стоит часов работы сервера и десятков гигабайт:
+		// подтверждение здесь про цену, а не про риск.
+		"IB_BACKUP",
 		"IB_CREATE_USER", "IB_DELETE_EXTENSION", "IB_DELETE_USER", "IB_INSTALL_EXTENSION",
 		// Публикация меняет конфигурацию веб-сервера, а не базы, но так же необратима
 		// для стороннего наблюдателя — подтверждение обязательно. Снятие публикации
@@ -97,6 +100,15 @@ test("списки содержимого базы — чтение: подтв�
 		assert.equal(findAdminCommand(t)!.operation, "READ", t);
 		assert.equal(findAdminCommand(t)!.requiresBase, true, t);
 	}
+});
+
+test("IB_BACKUP: нужна база, каталог необязателен — раскладку дисков знает агент", () => {
+	const spec = findAdminCommand("IB_BACKUP")!;
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh_alma" }).ok, true);
+	assert.equal(buildAdminPayload(spec, { baseKey: "buh_alma", dir: "D:\\dt" }).ok, true);
+	assert.equal(buildAdminPayload(spec, {}).ok, false);
+	// Лишнее поле не проходит: путь к файлу назначает агент, а не панель.
+	assert.equal(buildAdminPayload(spec, { baseKey: "b", path: "D:\\x.dt" }).ok, false);
 });
 
 test("CLUSTER_LIST_PUBLICATIONS: чтение по всему веб-серверу, базу не адресует", () => {

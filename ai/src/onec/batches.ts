@@ -21,7 +21,11 @@ export type BatchProgress = {
 	failed: number;
 	pending: number;
 	createdAt: string;
-	items: { baseKey: string | null; state: string; error: { code: string; message: string } | null }[];
+	items: {
+		baseKey: string | null; state: string; error: { code: string; message: string } | null;
+		/** Итог операции одной строкой: путь к выгрузке, адрес публикации. */
+		outcome: string | null;
+	}[];
 };
 
 export class BatchService {
@@ -58,13 +62,18 @@ export class BatchService {
 		const head = b.rows[0];
 		if (!head) return null;
 
-		const c = await this.db.query<{ base_key: string | null; state: string; error: { code: string; message: string } | null }>(
-			`SELECT base_key, state, error FROM commands WHERE batch_id = $1 ORDER BY created_at`, [id],
+		const c = await this.db.query<{
+			base_key: string | null; state: string; error: { code: string; message: string } | null; outcome: string | null;
+		}>(
+			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
+			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
+			`SELECT base_key, state, error, COALESCE(result->>'path', result->>'url') AS outcome
+			   FROM commands WHERE batch_id = $1 ORDER BY created_at`, [id],
 		);
 		// Ошибку 1С/COM дополняем подсказкой «что чинить»: сырой HRESULT в отчёте задания
 		// не говорит пользователю ничего, а искать его в логах на Windows-машине дорого.
 		const items = c.rows.map((r) => ({
-			baseKey: r.base_key, state: r.state, error: humanizeAgentError(r.error),
+			baseKey: r.base_key, state: r.state, error: humanizeAgentError(r.error), outcome: r.outcome,
 		}));
 		const done = items.filter((i) => i.state === "done").length;
 		// expired считаем неуспехом: команда не выполнена, и повторять её придётся так же.

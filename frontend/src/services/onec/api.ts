@@ -161,6 +161,8 @@ export type BatchType =
 	// Публикация базы на веб-сервере — первый шаг раскатки (публикация → расширение → HTTP);
 	// снятие — обратная ей операция.
 	| "IB_PUBLISH" | "IB_UNPUBLISH"
+	// Выгрузка .dt: агент делает её ibcmd (без клиентской лицензии), запасной путь — конфигуратор.
+	| "IB_BACKUP"
 	// Чтение тоже пакетное: наполнить сводку по ста базам поштучно нереально.
 	| "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
 
@@ -176,7 +178,11 @@ export const runBatch = (type: BatchType, baseKeys: string[], payload: Record<st
 export type BatchProgress = {
 	id: string; type: string; total: number; done: number; failed: number; pending: number;
 	createdAt: string;
-	items: { baseKey: string | null; state: string; error: { code: string; message: string } | null }[];
+	items: {
+		baseKey: string | null; state: string; error: { code: string; message: string } | null;
+		/** Итог одной строкой: путь к выгрузке или адрес публикации. */
+		outcome: string | null;
+	}[];
 };
 
 export const fetchBatch = (id: string) => aiFetch<BatchProgress>(`/v1/onec/batches/${encodeURIComponent(id)}`);

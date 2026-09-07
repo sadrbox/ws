@@ -32,6 +32,9 @@ const batchColumns = (): TColumn[] => ([
 const itemColumns = (): TColumn[] => ([
 	{ identifier: "baseKey", type: "string", width: "220px", minWidth: "130px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "state", type: "string", width: "130px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
+	// Итог операции: путь к выгрузке, адрес публикации. Без него отчёт об успешной
+	// выгрузке ста баз не отвечал на вопрос «а куда она легла».
+	{ identifier: "outcome", type: "string", width: "300px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "errorText", type: "string", width: "420px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
@@ -72,7 +75,7 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 
 	const current = (batches.data?.items ?? []).find((b) => b.id === opened) ?? null;
 	const itemRows = (current?.items ?? []).map((it, i) => ({
-		id: i + 1, uuid: `${it.baseKey ?? i}`, baseKey: it.baseKey ?? "—",
+		id: i + 1, uuid: `${it.baseKey ?? i}`, baseKey: it.baseKey ?? "—", outcome: it.outcome || "—",
 		state: it.state, errorText: it.error ? `${it.error.code}: ${it.error.message}` : "—",
 	}));
 	const itemSorted = useStaticTableView(itemRows, { baseKey: "asc" });
