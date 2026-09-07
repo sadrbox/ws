@@ -63,6 +63,9 @@ type Tab = "bases" | "sessions" | "connections" | "server" | "extensions" | "use
 
 const sessionsColumns = (): TColumn[] => ([
 	{ identifier: "sessionId", type: "string", width: "90px", minWidth: "60px", alignment: "left", visible: true, inlist: true },
+	// База, в которой работает сеанс. Срез приходит по всему кластеру, и без этой колонки
+	// список из сотни сеансов не отвечал на первый же вопрос — «а это чья база?».
+	{ identifier: "baseKey", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "userName", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "appId", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "host", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
@@ -130,10 +133,13 @@ export const OneCAdminList: FC = () => {
 	 */
 	const terminateMany = useMutation({
 		mutationFn: async (ids: string[]) => {
+			// База у каждого сеанса своя: список приходит по всему кластеру, и отбор в
+			// панели мог быть снят. Раньше сюда шёл baseFilter — то есть при снятом отборе
+			// база не передавалась вовсе, а при включённом навязывалась всем отмеченным.
 			let ok = 0;
 			const failed: string[] = [];
 			for (const id of ids) {
-				try { await terminateSession(id, baseFilter || undefined); ok += 1; }
+				try { await terminateSession(id, sessionBase(id)); ok += 1; }
 				catch { failed.push(id); }
 			}
 			return { ok, failed };
@@ -169,16 +175,31 @@ export const OneCAdminList: FC = () => {
 		return uuid ? all.filter((s) => s.infobase === uuid) : all;
 	}, [sessions.data, bases.data, baseFilter]);
 
+	// UUID базы → её имя в кластере: сеанс знает базу только по UUID (поле infobase),
+	// а человеку нужно имя. Карта строится один раз на список баз, а не на каждую строку.
+	const baseByUuid = useMemo(() => {
+		const m = new Map<string, string>();
+		for (const b of bases.data?.items ?? []) if (b.infobaseId) m.set(b.infobaseId, b.key);
+		return m;
+	}, [bases.data]);
+
+	/** База сеанса по его UUID — для команд, которые адресуются базой (снятие сеанса). */
+	const sessionBase = useCallback((sessionUuid: string): string | undefined => {
+		const raw = (sessions.data?.items ?? []).find((s) => s.session === sessionUuid);
+		return baseByUuid.get(raw?.infobase ?? "") || undefined;
+	}, [sessions.data, baseByUuid]);
+
 	const sessionRows = useMemo(() => sessionSource.map((s, i) => ({
 		id: i + 1,
 		uuid: s.session ?? String(i),
 		sessionId: s.sessionId ?? "",
+		baseKey: baseByUuid.get(s.infobase ?? "") ?? "",
 		userName: s.userName || "",
 		appId: s.appId || "",
 		host: s.host || "",
 		startedAt: s.startedAt || "",
 		lastActiveAt: s.lastActiveAt || "",
-	})), [sessionSource]);
+	})), [sessionSource, baseByUuid]);
 
 	// Сортировка обеих таблиц — на клиенте: данные целиком в памяти.
 	const sessionsSorted = useStaticTableView(sessionRows, { startedAt: "desc" });
@@ -187,6 +208,9 @@ export const OneCAdminList: FC = () => {
 	const sessionRowsView = useMemo(() => sessionsSorted.rows.map((r) => ({
 		...r,
 		sessionId: r.sessionId || "—",
+		// Базы нет в реестре — показываем это прямо, а не пустой ячейкой: сеанс в базе,
+		// о которой мы не знаем, сам по себе повод разобраться.
+		baseKey: r.baseKey || translate("onecBaseUnknown"),
 		userName: r.userName || "—",
 		appId: r.appId || "—",
 		host: r.host || "—",
@@ -225,6 +249,9 @@ export const OneCAdminList: FC = () => {
 			label: translate("onecTabSessions"),
 			component: (
 				<>
+					{/* Подсказка над таблицей — там же, где на остальных вкладках: снизу её
+					    не видно, пока список не прокручен до конца. */}
+					<div className={styles.Hint}>{translate("onecSessionsHint")}</div>
 					<QueryError error={sessions.error} />
 					<Table
 						{...buildStaticTableProps({
@@ -259,16 +286,19 @@ export const OneCAdminList: FC = () => {
 											{ value: "", label: translate("onecAllBases") },
 											...(bases.data?.items ?? []).map((b) => ({ value: b.key, label: b.key })),
 										]}
-									// size="sm"
+										// Тот же компактный размер, что у кнопок рядом: тулбар таблицы
+										// держит одну высоту элементов.
+										size="sm"
+										style={{ width: "200px" }}
 									/>
 									{selectedBase && (
-										<Button
+										<Button size="sm"
 											onClick={() => { setLockMessage(""); setConfirm({ kind: "lock", base: selectedBase, enabled: true }); }}>
 											{translate("onecLockSessions")}
 										</Button>
 									)}
 									{selectedBase && (
-										<Button
+										<Button size="sm"
 											onClick={() => setConfirm({ kind: "lock", base: selectedBase, enabled: false })}>
 											{translate("onecUnlockSessions")}
 										</Button>
@@ -277,7 +307,6 @@ export const OneCAdminList: FC = () => {
 							),
 						})}
 					/>
-					<div className={styles.Hint}>{translate("onecSessionsHint")}</div>
 				</>
 			),
 		},
@@ -326,14 +355,18 @@ export const OneCAdminList: FC = () => {
 						// rac адресует сеанс UUID (поле `session`), а НЕ номером (`sessionId`):
 						// с номером он отвечает «Ошибка разбора параметра: session». Номер
 						// оставляем только для показа — человек узнаёт сеанс по нему.
-						terminate.mutate({ sessionId: confirm.session.session ?? "", baseKey: baseFilter || undefined });
+						terminate.mutate({
+							sessionId: confirm.session.session ?? "",
+							baseKey: baseByUuid.get(confirm.session.infobase ?? "") || undefined,
+						});
 						setConfirm(null);
 					}}
 				>
 					<div className={styles.ConfirmText}>
 						{translate("onecTerminateQuestion")}
 						<div className={styles.ConfirmDetails}>
-							{translate("onecSessionId")}: {confirm.session.sessionId ?? "—"}
+							{translate("baseKey")}: {baseByUuid.get(confirm.session.infobase ?? "") || translate("onecBaseUnknown")}
+							{" · "}{translate("onecSessionId")}: {confirm.session.sessionId ?? "—"}
 							{" · "}{translate("onecSessionUser")}: {confirm.session.userName || "—"}
 							{" · "}{translate("onecSessionHost")}: {confirm.session.host || "—"}
 						</div>
