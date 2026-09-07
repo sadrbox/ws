@@ -63,13 +63,27 @@ const sessionColumns = (): TColumn[] => ([
 	{ identifier: "startedAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
-/** Сеансы базы — из общего среза кластера, по UUID базы. Отдельной команды не нужно. */
-function useBaseSessions(infobaseId: string) {
-	const sessions = useQuery({ queryKey: ["onec", "sessions"], queryFn: fetchSessions });
-	return useMemo(
+/**
+ * Сеансы базы — из общего среза кластера, по UUID базы. Отдельной команды агенту не нужно:
+ * его отбор по базе ломается там, где сеансов нет (см. fetchSessions).
+ *
+ * НО САМ СОБОЙ СРЕЗ НЕ БЕРЁТСЯ. Открытие карточки ОДНОЙ базы запускало команду в кластер по
+ * ВСЕМУ кластеру — и так на каждое открытие: сто карточек = сто команд, причём вкладку
+ * «Сеансы» при этом чаще всего не открывают. Теперь срез читается по кнопке, как расширения
+ * и пользователи, а `staleTime` позволяет переиспользовать уже полученный вкладкой «Сеансы»
+ * ответ вместо нового обращения к 1С.
+ */
+function useBaseSessions(infobaseId: string, enabled: boolean) {
+	const sessions = useQuery({
+		queryKey: ["onec", "sessions"], queryFn: fetchSessions,
+		enabled,
+		staleTime: 30_000,
+	});
+	const rows = useMemo(
 		() => (infobaseId ? (sessions.data?.items ?? []).filter((s) => s.infobase === infobaseId) : []),
 		[sessions.data, infobaseId],
 	);
+	return { rows, query: sessions };
 }
 
 /**
@@ -83,6 +97,7 @@ const useBaseTabs = (row: TDataItem) => {
 	const baseKey = asText(row.baseKey);
 	const [loadExt, setLoadExt] = useState(false);
 	const [loadUsers, setLoadUsers] = useState(false);
+	const [loadSessions, setLoadSessions] = useState(false);
 
 	// enabled требует ключа базы: без него запрос уходил бы в `/bases//extensions`.
 	const ext = useQuery({ queryKey: ["onec", "base-ext", baseKey], queryFn: () => fetchBaseExtensions(baseKey), enabled: loadExt && !!baseKey, staleTime: 0 });
@@ -105,8 +120,8 @@ const useBaseTabs = (row: TDataItem) => {
 	}));
 	const userView = useStaticTableView(userRows, { name: "asc" });
 
-	const own = useBaseSessions(asText(row.infobaseId));
-	const sesRows = own.map((s, i) => ({
+	const own = useBaseSessions(asText(row.infobaseId), loadSessions);
+	const sesRows = own.rows.map((s, i) => ({
 		id: i + 1, uuid: s.session ?? String(i), sessionId: s.sessionId || "—",
 		userName: s.userName || "—", appId: s.appId || "—", host: s.host || "—",
 		startedAt: s.startedAt ? getFormatDate(s.startedAt) : "—",
@@ -147,10 +162,19 @@ const useBaseTabs = (row: TDataItem) => {
 		{
 			id: "sessions", label: translate("onecTabSessions"),
 			component: (
-				<Table {...buildStaticTableProps({
-					componentName: "OneCBases_sessions", rows: sesView.rows, columns: sesCols, setColumns: setSesCols,
-					sorting: sesView.sorting, search: sesView.search,
-				})} />
+				<>
+					{/* Ошибку среза показываем здесь же: раньше вкладка молчала — ни данных,
+					    ни причины, хотя команда в кластер могла отказать. */}
+					<QueryError error={own.query.error} />
+					<Table {...buildStaticTableProps({
+						componentName: "OneCBases_sessions", rows: sesView.rows, columns: sesCols, setColumns: setSesCols,
+						sorting: sesView.sorting, search: sesView.search,
+						isLoading: own.query.isLoading || own.query.isFetching,
+						onReload: () => (loadSessions ? void own.query.refetch() : setLoadSessions(true)),
+						extraButtons: loadSessions ? undefined
+							: <Button size="sm" onClick={() => setLoadSessions(true)}>{translate("onecSessionsShow")}</Button>,
+					})} />
+				</>
 			),
 		},
 	];

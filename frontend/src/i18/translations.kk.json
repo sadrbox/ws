@@ -1674,5 +1674,6 @@
   "onecBackupWarning": "Түсіру базаны және диск орнын алады: жүз базада бұл сағаттар мен ондаған гигабайт. Каталогты көрсетпесе, агент өзінікін алады.",
   "outcome": "Нәтиже",
   "ownerInstance": "Токен иесі",
-  "onecAgentReleaseInstance": "Данасын босату"
+  "onecAgentReleaseInstance": "Данасын босату",
+  "onecSessionsShow": "Сеанстарды көрсету"
 }

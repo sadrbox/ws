@@ -6,6 +6,16 @@
  * в базу. Всё это идёт через AI Service (`/v1/onec/*`) к админ-агенту, который работает с
  * кластером утилитой `rac` — из браузера в кластер никто не ходит.
  *
+ * ОТКУДА ДАННЫЕ У КНОПКИ «ОБНОВИТЬ». Она перечитывает ТОТ ЖЕ источник, из которого таблица
+ * читала при открытии, и никогда не меняет его на другой:
+ *   «Базы» — реестр сервиса (через прокси ERP), в кластер не ходит вовсе;
+ *   «Расширения»/«Пользователи», левые таблицы — кэш реестра, тоже без 1С;
+ *   «Сеансы», «Соединения», «Сервер» — команда агенту, живое состояние кластера;
+ *   правые таблицы содержимого базы — команда агенту по ОДНОЙ базе;
+ *   «Задания», «Агенты» — база сервиса.
+ * Единственная кнопка, которая спрашивает кластер о базах, называется «Обновить из кластера»
+ * и стоит отдельно: перепутать её с обычным обновлением списка нельзя.
+ *
  * ЧТО ОТКУДА (правило одно на всю панель). В кластер 1С ходит ТОЛЬКО агент, и только по
  * явной команде сервиса; браузер не знает про 1С ничего и разговаривает с `/v1/onec/*`.
  * Данные делятся на три вида, и это определяет, что вызывает обращение к 1С:
@@ -235,6 +245,12 @@ export const OneCAdminList: FC = () => {
 	// набор кнопок не разошлись между ними.
 	// Вкладки — общий <Tabs> (тот же вид, что в формах), а не самодельные кнопки.
 	// Режим управляемый: клик по базе переводит на её сеансы, а не только клик по вкладке.
+	//
+	// СОДЕРЖИМОЕ НЕАКТИВНОЙ ВКЛАДКИ НЕ МОНТИРУЕТСЯ. Общий <Tabs> рисует все панели разом
+	// (неактивные прячет классом), а каждая здешняя вкладка при монтировании спрашивает
+	// кластер: соединения, блокировки, процессы, лицензии. Открытие панели на вкладке
+	// «Базы» стоило пяти команд в 1С, из которых ни одна не была нужна. Своё состояние
+	// вкладки при переключении теряют — для таблиц, читающих кластер заново, это не потеря.
 	const tabs = useMemo(() => [
 		{
 			id: "bases",
@@ -242,12 +258,12 @@ export const OneCAdminList: FC = () => {
 			// Штатный список: ModelList даёт отметки строк, поиск, сортировку, курсорную
 			// подгрузку, предпросмотр по «Переключить вид списка» и открытие карточки
 			// отдельным пейном. Своя таблица здесь была ровно тем же, но хуже.
-			component: <OneCBasesList />,
+			component: tab === "bases" ? <OneCBasesList /> : null,
 		},
 		{
 			id: "sessions",
 			label: translate("onecTabSessions"),
-			component: (
+			component: tab !== "sessions" ? null : (
 				<>
 					{/* Подсказка над таблицей — там же, где на остальных вкладках: снизу её
 					    не видно, пока список не прокручен до конца. */}
@@ -313,34 +329,38 @@ export const OneCAdminList: FC = () => {
 		{
 			id: "connections",
 			label: translate("onecTabConnections"),
-			component: <ConnectionsTab />,
+			component: tab === "connections" ? <ConnectionsTab /> : null,
 		},
 		{
 			id: "server",
 			label: translate("onecTabServer"),
-			component: <ServerTab />,
+			component: tab === "server" ? <ServerTab /> : null,
 		},
 		{
 			id: "extensions",
 			label: translate("onecTabExtensions"),
-			component: <ExtensionsTab onBatchStarted={(id) => { setWatchBatch(id); setTab("batches"); }} />,
+			component: tab === "extensions"
+				? <ExtensionsTab onBatchStarted={(id) => { setWatchBatch(id); setTab("batches"); }} />
+				: null,
 		},
 		{
 			id: "users",
 			label: translate("onecTabUsers"),
-			component: <UsersTab onBatchStarted={(id) => { setWatchBatch(id); setTab("batches"); }} />,
+			component: tab === "users"
+				? <UsersTab onBatchStarted={(id) => { setWatchBatch(id); setTab("batches"); }} />
+				: null,
 		},
 		{
 			id: "batches",
 			label: translate("onecTabBatches"),
-			component: <BatchesTab watchId={watchBatch} />,
+			component: tab === "batches" ? <BatchesTab watchId={watchBatch} /> : null,
 		},
 		{
 			id: "agents",
 			label: translate("onecTabAgents"),
-			component: <AgentsTab />,
+			component: tab === "agents" ? <AgentsTab /> : null,
 		},
-	], [watchBatch, sessionRowsView, sessionsSorted.sorting, sessionColumns,
+	], [tab, watchBatch, sessionRowsView, sessionsSorted.sorting, sessionColumns,
 		baseFilter, selectedBase, bases, sessions, refresh, terminate.isPending, askTerminate]);
 
 	return (
