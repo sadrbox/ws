@@ -287,6 +287,35 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				await bases.applyPublications(me.serverId, data.items, data.complete === true);
 			}
 		}
+		/**
+		 * После УДАЧНОГО изменения содержимого базы сразу ставим чтение того же содержимого.
+		 *
+		 * Иначе реестр остаётся с данными «до»: панель показывает прежние роли и прежний
+		 * список расширений, пока кто-нибудь не нажмёт «Проверить». Человек, только что
+		 * назначивший роль, видит, что её нет, — и жмёт назначить ещё раз.
+		 *
+		 * `requestId` делает это идемпотентным: если чтение по этой базе уже стоит в
+		 * очереди, второе не создаётся (частичный уникальный индекс среди незавершённых).
+		 */
+		const REFRESH_AFTER: Record<string, "IB_LIST_USERS" | "IB_LIST_EXTENSIONS"> = {
+			IB_CREATE_USER: "IB_LIST_USERS",
+			IB_UPDATE_USER: "IB_LIST_USERS",
+			IB_DELETE_USER: "IB_LIST_USERS",
+			IB_INSTALL_EXTENSION: "IB_LIST_EXTENSIONS",
+			IB_DELETE_EXTENSION: "IB_LIST_EXTENSIONS",
+		};
+		const refreshType = REFRESH_AFTER[row.type];
+		if (p.data.status === "SUCCESS" && refreshType && row.base_key) {
+			await queue.enqueue({
+				agentId: req.agent!.agentId,
+				organizationUuid: row.organization_uuid,
+				baseKey: row.base_key,
+				type: refreshType,
+				payload: { baseKey: row.base_key },
+				requestId: `refresh:${refreshType}:${row.base_key}`,
+				ttlSeconds: 900,
+			});
+		}
 		// База, которой нет: агент сообщил «не найдена». Помечаем в реестре — иначе фантом
 		// остаётся в списке наравне с рабочими, и о проблеме узнают только по ошибке при
 		// каждой попытке. Обратно в ONLINE её вернёт ближайший успешный срез кластера.

@@ -74,6 +74,7 @@ export function onecRouter(deps: Deps) {
 				// Роли из кэша (без ?live=1) в 1С не ходят — лимит кластера к ним не относится.
 				(req.path === "/roles" && req.query.live !== "1") ||
 				req.path.startsWith("/roles/") ||
+				req.path.endsWith("/users/cached") ||
 				req.path.startsWith("/commands/") ||
 				req.path.startsWith("/batches") ||
 				req.path.startsWith("/users/")
@@ -294,6 +295,19 @@ export function onecRouter(deps: Deps) {
 	// ── Содержимое базы: пользователи ИБ и расширения (A3-P1) ───────────────────
 	// Спрашиваем 1С вживую и тут же кладём в кэш: сводные экраны («в каких базах есть
 	// пользователь») читают кэш, иначе каждый показ стоил бы ста подключений.
+	/**
+	 * Пользователи базы ИЗ КЭША — без обращения к 1С.
+	 *
+	 * Нужен, чтобы смотреть базу «сверху вниз» (кто в ней заведён) так же дёшево, как
+	 * пользователя «сверху вниз» (в каких он базах). Чтение живой базы стоит десятки секунд
+	 * и занимает сеанс 1С — для просмотра списка это неприемлемая цена.
+	 */
+	r.get("/bases/:key/users/cached", async (req, res) => {
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		res.json({ success: true, data: { items: await registry.usersOfBase(base.id) } });
+	});
+
 	r.get("/bases/:key/users", async (req, res) => {
 		const outcome = await run(req, "IB_LIST_USERS", { baseKey: req.params.key });
 		await cacheList(req.params.key, outcome, (id, items) => registry.syncUsers(id, items as IbUser[]));

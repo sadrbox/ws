@@ -206,6 +206,14 @@
 	}
 }
 
+// Кнопки в заголовке секции: прижаты вправо, высота — как у самой полосы.
+.HeadActions {
+	margin-left: auto;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
 .SecBody {
 	display: flex;
 	flex-direction: column;

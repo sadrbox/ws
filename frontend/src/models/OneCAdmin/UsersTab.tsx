@@ -37,10 +37,10 @@ import type { TCellValidator } from "src/components/SubTable";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBases, fetchRoleHolders, fetchRoles, fetchUserOccurrences, fetchUserSummary,
-	runBatch, type BatchType,
+	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchBatch, fetchRoleHolders, fetchRoles,
+	fetchUserOccurrences, fetchUserSummary, runBatch, type BatchType,
 } from "src/services/onec/api";
-import { CapabilityGuard, QueryError, isApplicable } from "./shared";
+import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 /** Роль, снятие которой способно оставить базу без администратора. */
@@ -63,6 +63,14 @@ const baseColumns = (): TColumn[] => ([
 	{ identifier: "rolesLabel", type: "string", width: "300px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
+/** Пользователи одной базы: имя, полное имя, роли, состояние. */
+const baseUserColumns = (): TColumn[] => ([
+	{ identifier: "name", type: "string", width: "200px", minWidth: "130px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "fullName", type: "string", width: "200px", minWidth: "130px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "state", type: "string", width: "110px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "rolesLabel", type: "string", width: "320px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
+] as unknown as TColumn[]);
+
 /** Роли: строка = роль + что с ней сделать. Правится в самой таблице. */
 const roleColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "300px", minWidth: "160px", alignment: "left", visible: true, inlist: true },
@@ -74,6 +82,18 @@ type RoleAct = "keep" | "grant" | "revoke";
 
 export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatchStarted }) => {
 	const qc = useQueryClient();
+
+	/**
+	 * Две точки входа в одни и те же данные.
+	 *
+	 * «По пользователю» отвечает на вопрос «в каких он базах», «по базе» — «кто в ней
+	 * заведён». Второй вопрос задают не реже первого (пришёл клиент — кто у него в базе),
+	 * а раньше на него нельзя было ответить вовсе: пришлось бы перебирать людей по одному.
+	 * Карточка справа одна и та же, меняется только то, что выбирают слева.
+	 */
+	const [mode, setMode] = useState<"byUser" | "byBase">("byUser");
+	/** База, чьих пользователей смотрим (режим «по базе»). */
+	const [openedBase, setOpenedBase] = useState("");
 
 	// Отметки строк — единственный способ выбрать цель: команды живут в панелях таблиц.
 	const [pickedUsers, setPickedUsers] = useState<string[]>([]);
@@ -97,14 +117,36 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 		enabled: !!current,
 	});
 
+	// Пользователи выбранной базы — из кэша: просмотр не должен стоить сеанса 1С.
+	const baseUsers = useQuery({
+		queryKey: ["onec", "base-users-cached", openedBase],
+		queryFn: () => fetchBaseUsersCached(openedBase),
+		enabled: mode === "byBase" && !!openedBase,
+	});
+
 	const [userCols, setUserCols] = useState<TColumn[]>(() => getModelColumns(userColumns(), "OneCAdmin_userSummary"));
 	const [baseCols, setBaseCols] = useState<TColumn[]>(() => getModelColumns(baseColumns(), "OneCAdmin_userBases"));
+	const [buCols, setBuCols] = useState<TColumn[]>(() => getModelColumns(baseUserColumns(), "OneCAdmin_baseUsersCached"));
 
-	// ── Список пользователей ────────────────────────────────────────────────
+	// ── Левый список: люди или базы, смотря что спрашивают ──────────────────
 	const userRows = useMemo(() => (summary.data?.items ?? []).map((x, i) => ({
 		id: i + 1, uuid: x.name, name: x.name, bases: x.bases, disabled: x.disabled,
 	})), [summary.data]);
 	const userView = useStaticTableView(userRows, { name: "asc" });
+
+	const baseUserRows = useMemo(() => (baseUsers.data?.items ?? []).map((u, i) => ({
+		id: i + 1, uuid: u.name, name: u.name,
+		fullName: u.fullName || "—",
+		rolesLabel: (u.roles ?? []).join(", ") || "—",
+		state: u.disabled ? translate("onecUserDisabled") : translate("onecUserActive"),
+	})), [baseUsers.data]);
+	const baseUserView = useStaticTableView(baseUserRows, { name: "asc" });
+
+	const basePickRows = useMemo(() => (bases.data?.items ?? [])
+		.filter((b) => isApplicable(b, "ib"))
+		.map((b, i) => ({ id: i + 1, uuid: b.key, baseKey: b.key, name: b.name || "—",
+			presence: String(b.extensionsCount ?? ""), rolesLabel: "" })), [bases.data]);
+	const basePickView = useStaticTableView(basePickRows, { baseKey: "asc" });
 
 	// ── Базы: где пользователь есть и какие у него там роли ─────────────────
 	const occByBase = useMemo(() => {
@@ -189,12 +231,15 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	const batch = useMutation({
 		mutationFn: (p: { type: BatchType; keys: string[]; payload: Record<string, unknown> }) =>
 			runBatch(p.type, p.keys, p.payload),
-		onSuccess: (d) => {
+		onSuccess: (d, p) => {
 			setDialog(null);
 			const skipped = d.skipped.length ? ` ${translate("onecBatchSkipped")}: ${d.skipped.length}` : "";
 			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}.${skipped}`, d.skipped.length ? "warning" : "success");
 			void qc.invalidateQueries({ queryKey: ["onec"] });
 			onBatchStarted(d.batchId);
+			// Данные обновятся сами, когда задание закончится: панель не должна показывать
+			// прежние роли после того, как их изменили.
+			void watchBatch(d.batchId, p.keys);
 		},
 		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
 	});
@@ -262,6 +307,49 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 		return roleOptions.find((r) => !used.has(r)) ?? "";
 	}, [roleRows, roleOptions]);
 
+	const parallel = useCheckParallel();
+	const [checking, setChecking] = useState(false);
+
+	/**
+	 * Перечитать пользователей баз у самой 1С и обновить экран.
+	 *
+	 * Сервис после каждой удачной изменяющей команды сам ставит чтение той же базы, но
+	 * ждать его результата панель не обязана: кнопка делает это сразу и по выбранным
+	 * базам. Чтение безопасно — базу оно не меняет.
+	 */
+	const recheck = useCallback(async (keys: string[]) => {
+		if (!keys.length) return;
+		setChecking(true);
+		const r = await checkBases(keys, fetchBaseUsers, parallel);
+		setChecking(false);
+		await qc.invalidateQueries({ queryKey: ["onec"] });
+		showToast(
+			r.failed.length
+				? `${translate("onecChecked")}: ${r.ok}/${keys.length}. ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
+				: `${translate("onecChecked")}: ${r.ok}`,
+			r.failed.length ? "warning" : "success",
+		);
+	}, [parallel, qc]);
+
+	/**
+	 * Дождаться конца задания и перечитать данные.
+	 *
+	 * Без этого экран остаётся с картиной «до»: роли назначены, а в таблице прежние —
+	 * и человек назначает их второй раз. Опрос редкий: задание на сотню баз идёт минутами.
+	 */
+	const watchBatch = useCallback(async (batchId: string, keys: string[]) => {
+		for (let i = 0; i < 120; i++) {
+			await new Promise((r) => setTimeout(r, 3000));
+			const b = await fetchBatch(batchId).catch(() => null);
+			if (!b) return;
+			if (b.pending === 0) break;
+		}
+		await qc.invalidateQueries({ queryKey: ["onec"] });
+		// Сервис уже поставил чтение по каждой изменённой базе; здесь только забираем
+		// результат в панель, не гоняя 1С повторно.
+		if (keys.length) await qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+	}, [qc]);
+
 	const systemPicked = pickedUsers.some(isSystemUser);
 
 	return (
@@ -271,33 +359,107 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 			<div className={styles.UsersLayout}>
 				{/* ── Слева: кого меняем. Команды — в панели таблицы ───────────── */}
 				<div className={styles.UsersList}>
-					<QueryError error={summary.error} />
-					<Table {...buildStaticTableProps({
-						componentName: "OneCAdmin_userSummary", rows: userView.rows, columns: userCols,
-						setColumns: setUserCols, sorting: userView.sorting, search: userView.search,
-						isLoading: summary.isLoading,
-						onReload: () => void summary.refetch(),
-						selectable: true,
-						onSelectionChange: (sel, all) => {
-							const names = all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.name));
-							setPickedUsers(names);
-							// Реквизиты подставляем от первого отмеченного: он же в карточке.
-							if (names[0]) setForm((f) => ({ ...f, name: names[0], fullName: "", password: "" }));
-						},
-						extraButtons: (
-							<Button variant="secondary" disabled={!pickedBases.length}
-								title={pickedBases.length ? undefined : translate("onecPickBasesFirst")}
-								onClick={() => { setForm({ name: "", fullName: "", password: "", disabled: false, showInList: true }); setDialog("create"); }}>
-								{translate("onecUserCreateInBases")}
-							</Button>
-						),
-					})} />
+					<QueryError error={mode === "byUser" ? summary.error : bases.error} />
+					{mode === "byUser" ? (
+						<Table {...buildStaticTableProps({
+							componentName: "OneCAdmin_userSummary", rows: userView.rows, columns: userCols,
+							setColumns: setUserCols, sorting: userView.sorting, search: userView.search,
+							isLoading: summary.isLoading,
+							onReload: () => void summary.refetch(),
+							selectable: true,
+							onSelectionChange: (sel, all) => {
+								const names = all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.name));
+								setPickedUsers(names);
+								if (names[0]) setForm((f) => ({ ...f, name: names[0], fullName: "", password: "" }));
+							},
+							extraButtons: (
+								<>
+									<Button variant="secondary" active onClick={() => setMode("byUser")}>
+										{translate("onecByUser")}
+									</Button>
+									<Button variant="secondary" onClick={() => { setMode("byBase"); setPickedUsers([]); }}>
+										{translate("onecByBase")}
+									</Button>
+									<Button variant="secondary" disabled={!pickedBases.length}
+										title={pickedBases.length ? undefined : translate("onecPickBasesFirst")}
+										onClick={() => { setForm({ name: "", fullName: "", password: "", disabled: false, showInList: true }); setDialog("create"); }}>
+										{translate("onecUserCreateInBases")}
+									</Button>
+								</>
+							),
+						})} />
+					) : (
+						<Table {...buildStaticTableProps({
+							componentName: "OneCAdmin_basePick", rows: basePickView.rows, columns: baseCols,
+							setColumns: setBaseCols, sorting: basePickView.sorting, search: basePickView.search,
+							isLoading: bases.isLoading,
+							onReload: () => void bases.refetch(),
+							selectable: true,
+							// Отмечают базы: первая становится открытой, все отмеченные — цель команды.
+							onSelectionChange: (sel, all) => {
+								const keys = all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey));
+								setPickedBases(keys);
+								setOpenedBase(keys[0] ?? "");
+								setPickedUsers([]);
+							},
+							extraButtons: (
+								<>
+									<Button variant="secondary" onClick={() => { setMode("byUser"); setOpenedBase(""); }}>
+										{translate("onecByUser")}
+									</Button>
+									<Button variant="secondary" active onClick={() => setMode("byBase")}>
+										{translate("onecByBase")}
+									</Button>
+									<Button variant="secondary" disabled={!openedBase || checking}
+										onClick={() => void recheck(pickedBases)}>
+										{translate("onecUsersCheck")}
+									</Button>
+								</>
+							),
+						})} />
+					)}
 				</div>
 
 				{/* ── Справа: карточка. Секции идут вплотную, без воздуха ──────── */}
 				<div className={styles.UsersCard}>
+					{mode === "byBase" && (
+						<>
+							<div className={styles.SecHead}>
+								{translate("onecBaseUsers")}{openedBase ? `: ${openedBase}` : ""}
+								{pickedBases.length > 1 && ` · ${translate("onecBatchTargets")}: ${pickedBases.length}`}
+							</div>
+							{!openedBase ? (
+								<div className={styles.SecBody}>
+									<Notice items={[{ type: "info", text: translate("onecPickBaseFirst") }]} />
+								</div>
+							) : (
+								<Table {...buildStaticTableProps({
+									componentName: "OneCAdmin_baseUsersCached", rows: baseUserView.rows, columns: buCols,
+									setColumns: setBuCols, sorting: baseUserView.sorting, search: baseUserView.search,
+									isLoading: baseUsers.isLoading,
+									onReload: () => void recheck([openedBase]),
+									selectable: true,
+									onSelectionChange: (sel, all) => {
+										const names = all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.name));
+										setPickedUsers(names);
+										if (names[0]) setForm((f) => ({ ...f, name: names[0], fullName: "", password: "" }));
+									},
+									extraButtons: (
+										<span className={styles.Hint}>
+											{baseUserView.rows.length
+												? translate("onecPickUserInBase")
+												: translate("onecBaseUsersEmpty")}
+										</span>
+									),
+								})} />
+							)}
+						</>
+					)}
+
 					{!current ? (
-						<Notice items={[{ type: "info", text: translate("onecPickUserFirst") }]} />
+						mode === "byUser"
+							? <Notice items={[{ type: "info", text: translate("onecPickUserFirst") }]} />
+							: null
 					) : (
 						<>
 							<div className={styles.SecHead}>
@@ -377,9 +539,9 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 								}}
 							/>
 
-							{/* ── Базы: цель команды. Все действия — в её панели ────── */}
-							<div className={styles.SecHead}>{translate("onecTabBases")}</div>
-							<Table {...buildStaticTableProps({
+							{/* ── Базы: цель команды. В режиме «по базе» цель уже выбрана слева. ── */}
+							{mode === "byUser" && <div className={styles.SecHead}>{translate("onecTabBases")}</div>}
+							{mode === "byUser" && <Table {...buildStaticTableProps({
 								componentName: "OneCAdmin_userBases", rows: baseView.rows, columns: baseCols,
 								setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
 								isLoading: bases.isLoading,
@@ -399,10 +561,23 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 										</Button>
 									</>
 								),
-							})} />
+							})} />}
 
-							{/* ── Что произойдёт ───────────────────────────────────── */}
-							<div className={styles.SecHead}>{translate("onecWhatHappens")}</div>
+							{/* ── Что произойдёт. Команды режима «по базе» — здесь же. ── */}
+							<div className={styles.SecHead}>{translate("onecWhatHappens")}
+								{mode === "byBase" && (
+									<span className={styles.HeadActions}>
+										<Button variant="primary" disabled={!targets.length} onClick={() => setDialog("apply")}>
+											{translate("apply")}
+										</Button>
+										<Button variant="danger" disabled={!pickedBases.length || systemPicked}
+											title={systemPicked ? translate("onecSystemUserWarn") : undefined}
+											onClick={() => setDialog("delete")}>
+											{translate("onecUserDelete")}
+										</Button>
+									</span>
+								)}
+							</div>
 							<div className={styles.SecBody}>
 								{!pickedBases.length && <Notice items={[{ type: "info", text: translate("onecPickBasesFirst") }]} />}
 								{blocked.length > 0 && (

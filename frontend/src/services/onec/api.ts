@@ -173,6 +173,13 @@ export const fetchRoles = (baseKey?: string, live?: boolean) =>
 	).then((d) => awaitCommand<{ items: { name: string; users?: number; synonym?: string }[] }>(d));
 
 /**
+ * Пользователи базы ИЗ КЭША реестра — без обращения к 1С.
+ * Тем и отличается от `fetchBaseUsers`: та читает живую базу и стоит десятки секунд.
+ */
+export const fetchBaseUsersCached = (baseKey: string) =>
+	aiFetch<{ items: IbUser[] }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/users/cached`);
+
+/**
  * Сколько держателей роли в каждой базе — для защиты «последний администратор».
  * Кэш реестра, в 1С не ходит.
  */
