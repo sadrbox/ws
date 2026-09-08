@@ -327,6 +327,23 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 						{dialog === "update" && (
 							<div className={styles.Hint}>{translate("onecUserUpdateHint")}</div>
 						)}
+						{/* Что именно уйдёт в базу — показываем ДО применения: подтверждают вслепую, а
+						    роли на сотне баз стереть/переписать легко. Пустое поле = «не трогать»,
+						    поэтому здесь только заполненное; disabled шлётся всегда. */}
+						{isUser && (dialog === "update" || dialog === "create") && (
+							<div className={styles.ModalChanges}>
+								<div className={styles.ModalChangesTitle}>{translate("onecChangesTitle")}:</div>
+								{dialog === "update" && name.trim() && name.trim() !== elementName && (
+									<div>{translate("onecUserNewName")}: {name.trim()}</div>
+								)}
+								{fullName.trim() && <div>{translate("onecUserFullName")}: {fullName.trim()}</div>}
+								{password && <div>{translate("onecUserPassword")}: {translate("onecPwdWillChange")}</div>}
+								{dialog === "update" && (
+									<div>{translate("onecUserDisabled")}: {disabled ? translate("yes") : translate("no")}</div>
+								)}
+								<div>{translate("roles")}: {roles.length ? roles.join(", ") : translate("onecRolesUnchanged")}</div>
+							</div>
+						)}
 						<div className={styles.ConfirmWarning}>
 							{dialog === "delete"
 								? (isUser ? translate("onecUserDeleteWarning") : translate("onecExtRemoveWarning"))

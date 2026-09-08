@@ -113,6 +113,26 @@ export class OnecRegistry {
 		return r.rows.map((x) => ({ name: x.name, users: Number(x.users) }));
 	}
 
+	/**
+	 * Сколько пользователей в каждой базе держат указанную роль.
+	 *
+	 * Нужно ровно для одной защиты: снятие «ПолныеПрава» у ЕДИНСТВЕННОГО администратора
+	 * оставляет базу без администратора вовсе. Без этих чисел панель не может отличить
+	 * безопасное снятие от разрушительного и вынуждена либо запрещать всё, либо всё
+	 * разрешать. Считается по кэшу прочитанных пользователей, в 1С не ходит.
+	 */
+	async roleHolders(role: string): Promise<{ baseKey: string; users: number }[]> {
+		const r = await this.db.query<{ key: string; users: string }>(
+			`SELECT b.key, count(*)::text AS users
+			   FROM base_users u
+			   JOIN bases b ON b.id = u.base_id
+			  WHERE u.roles ? $1 AND NOT u.disabled
+			  GROUP BY b.key`,
+			[role],
+		);
+		return r.rows.map((x) => ({ baseKey: x.key, users: Number(x.users) }));
+	}
+
 	async userSummary(): Promise<{ name: string; bases: number; disabled: number }[]> {
 		const r = await this.db.query<{ name: string; bases: string; disabled: string }>(
 			`SELECT min(name) AS name, count(*)::text AS bases,

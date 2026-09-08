@@ -172,6 +172,14 @@ export const fetchRoles = (baseKey?: string, live?: boolean) =>
 		`/v1/onec/roles${baseKey ? `?baseKey=${encodeURIComponent(baseKey)}${live ? "&live=1" : ""}` : ""}`,
 	).then((d) => awaitCommand<{ items: { name: string; users?: number; synonym?: string }[] }>(d));
 
+/**
+ * Сколько держателей роли в каждой базе — для защиты «последний администратор».
+ * Кэш реестра, в 1С не ходит.
+ */
+export const fetchRoleHolders = (role: string) =>
+	aiFetch<{ items: { baseKey: string; users: number }[] }>(
+		`/v1/onec/roles/${encodeURIComponent(role)}/holders`);
+
 /** Сводка расширений по всем базам: группировка по паре имя+синоним. */
 export const fetchExtensionSummary = () =>
 	aiFetch<{ items: { name: string; synonym: string; bases: number; versions: string[] }[] }>("/v1/onec/extensions");

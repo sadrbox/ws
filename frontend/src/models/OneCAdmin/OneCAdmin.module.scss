@@ -35,6 +35,23 @@
 	color: var(--c-red-42, #b91c1c);
 }
 
+// Что применится: сводка изменений в окне подтверждения, чтобы не подтверждали вслепую.
+.ModalChanges {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 10px;
+	border: 1px solid var(--c-border, #d4d4d8);
+	border-radius: 6px;
+	background: var(--c-surface-2, #f4f4f5);
+	font-size: 13px;
+	word-break: break-word;
+}
+
+.ModalChangesTitle {
+	font-weight: 600;
+}
+
 
 // Форма в модалке групповой операции: колонка полей по общей вертикальной шкале.
 .ModalForm {
@@ -130,6 +147,78 @@
 	font-size: $fontsize;
 	color: $color6;
 	cursor: pointer;
+}
+
+// ── Вкладка «Пользователи баз» ────────────────────────────────────────────
+// Слева список, справа карточка. Внутри карточки секции идут ВПЛОТНУЮ: их разделяют
+// заголовок-полоса и линия, а не пустое место. Воздух между ними прибавлял бы к каждой
+// границе третий отступ — при четырёх секциях экран переставал помещаться.
+.UsersLayout {
+	display: grid;
+	grid-template-columns: 320px minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.UsersList {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	border-right: 1px solid $color33;
+}
+
+.UsersCard {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+}
+
+// Заголовок секции: та же высота, что у командной панели таблицы, — секции
+// выстраиваются в один ритм с тулбарами внутри них.
+.SecHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 12px;
+	background: $silverLightest;
+	border-top: 1px solid $color33;
+	border-bottom: 1px solid $color33;
+	font-weight: 700;
+	font-size: $fontsize;
+}
+
+.SecBody {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px;
+}
+
+// Строка предпросмотра: база и что с ней станет — в одну строку, чтобы список
+// из десятка баз читался сверху вниз без переносов.
+.PlanRow {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	flex-wrap: wrap;
+	font-size: $fontsize;
+}
+
+.PlanBase {
+	font-weight: 700;
+	min-width: 160px;
+}
+
+.PlanAdd {
+	color: var(--sv-successText, #145523);
+}
+
+.PlanDel {
+	color: var(--sv-attentionText, #6b1119);
 }
 
 // Предупреждение о том, что операция невозможна в принципе (агент не умеет).

@@ -73,6 +73,7 @@ export function onecRouter(deps: Deps) {
 				req.path === "/users" ||
 				// Роли из кэша (без ?live=1) в 1С не ходят — лимит кластера к ним не относится.
 				(req.path === "/roles" && req.query.live !== "1") ||
+				req.path.startsWith("/roles/") ||
 				req.path.startsWith("/commands/") ||
 				req.path.startsWith("/batches") ||
 				req.path.startsWith("/users/")
@@ -464,6 +465,14 @@ export function onecRouter(deps: Deps) {
 			return;
 		}
 		res.json({ success: true, data: { items: await registry.knownRoles(baseKey) } });
+	});
+
+	/**
+	 * Сколько держателей роли в каждой базе — для защиты «последний администратор».
+	 * Кэш, без обращения к 1С.
+	 */
+	r.get("/roles/:role/holders", async (req, res) => {
+		res.json({ success: true, data: { items: await registry.roleHolders(req.params.role) } });
 	});
 
 	/** Где есть этот пользователь — ответ на «покажи его во всех базах». */
