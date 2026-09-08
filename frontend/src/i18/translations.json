@@ -1725,5 +1725,7 @@
   "onecWhatHappens": "Что произойдёт",
   "onecNoChanges": "без изменений",
   "act": "Действие",
-  "inBases": "Есть в базах"
+  "inBases": "Есть в базах",
+  "onecRoleDuplicate": "Эта роль уже есть в таблице",
+  "onecRoleRequired": "Выберите роль"
 }

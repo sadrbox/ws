@@ -18,7 +18,7 @@
  * исключается из операции и названа в предпросмотре. Служебные пользователи платформы
  * не удаляются и не отключаются. Ничего не уходит в 1С, пока не нажата команда.
  */
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
@@ -33,6 +33,7 @@ import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
+import type { TCellValidator } from "src/components/SubTable";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
@@ -137,14 +138,32 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 		return [...new Set([...own, ...known])].sort((a, b) => a.localeCompare(b, "ru"));
 	}, [roles.data, occByBase]);
 
-	/** Заполнить строки ролями, которые у человека уже есть в отмеченных базах. */
-	const fillRoles = useCallback(() => {
+	/** Роли, которые у человека уже есть: из отмеченных баз, иначе из всех его баз. */
+	const currentRoles = useMemo(() => {
 		const src = pickedBases.length
 			? pickedBases.flatMap((k) => occByBase.get(k.toLowerCase()) ?? [])
 			: [...occByBase.values()].flat();
-		const uniq = [...new Set(src)].sort((a, b) => a.localeCompare(b, "ru"));
-		setRoleRows(uniq.map((role, i) => ({ id: i + 1, uuid: role, role, act: "keep" as RoleAct })));
+		return [...new Set(src)].sort((a, b) => a.localeCompare(b, "ru"));
 	}, [pickedBases, occByBase]);
+
+	const fillRoles = useCallback(() => {
+		setRoleRows(currentRoles.map((role, i) => ({ id: i + 1, uuid: role, role, act: "keep" as RoleAct })));
+	}, [currentRoles]);
+
+	/**
+	 * Права пользователя показываются СРАЗУ при его выборе, а не по кнопке.
+	 *
+	 * Пустая таблица ролей у человека, у которого они есть, читается как «ролей нет» —
+	 * то есть врёт. Заполняем при смене пользователя; правки, сделанные руками, при этом
+	 * не затираем: пересборка идёт только когда сменился сам пользователь.
+	 */
+	const filledFor = useRef<string>("");
+	useEffect(() => {
+		if (!current || filledFor.current === current) return;
+		if (!occurrences.data) return;
+		filledFor.current = current;
+		fillRoles();
+	}, [current, occurrences.data, fillRoles]);
 
 	/** Сколько отмеченных баз уже имеют эту роль — видно до применения. */
 	const inBasesLabel = useCallback((role: string) => {
@@ -222,6 +241,26 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 			},
 		});
 	}, [batch, form, pickedBases, roleRows]);
+
+	/**
+	 * Роль в таблице не должна повторяться: две строки с одним именем и разными
+	 * действиями («назначить» и «снять») — это команда, которая противоречит сама себе,
+	 * и что победит, зависело бы от порядка строк.
+	 */
+	const roleValidators = useMemo<Record<string, TCellValidator>>(() => ({
+		role: (value, row) => {
+			const v = asText(value).trim();
+			if (!v) return translate("onecRoleRequired");
+			const dup = roleRows.some((r) => asText(r.id) !== asText(row.id) && asText(r.role) === v);
+			return dup ? translate("onecRoleDuplicate") : undefined;
+		},
+	}), [roleRows]);
+
+	/** Новая строка получает первую ЕЩЁ НЕ выбранную роль — иначе она сразу дубль. */
+	const nextFreeRole = useCallback(() => {
+		const used = new Set(roleRows.map((r) => asText(r.role)));
+		return roleOptions.find((r) => !used.has(r)) ?? "";
+	}, [roleRows, roleOptions]);
 
 	const systemPicked = pickedUsers.some(isSystemUser);
 
@@ -302,7 +341,8 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 								selectable
 								hideReload
 								initialPendingRows={roleRows}
-								defaultNewRow={{ role: roleOptions[0] ?? "", act: "grant" }}
+								defaultNewRow={() => ({ role: nextFreeRole(), act: "grant" })}
+								validationRules={roleValidators}
 								onAllItemsChange={setRoleRows}
 								emptyMessage={translate("onecRolesEmptyRows")}
 								extraButtons={
@@ -314,7 +354,10 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 									if (col.identifier === "role") {
 										return (
 											<FieldSelect name={`role_${asText(row.id)}`} value={asText(row.role)} variant="table"
-												options={roleOptions.map((r) => ({ value: r, label: r }))}
+												// Занятые роли из списка убраны: повторить её нельзя, и предлагать нечестно.
+												options={roleOptions
+													.filter((r) => r === asText(row.role) || !roleRows.some((x) => asText(x.role) === r))
+													.map((r) => ({ value: r, label: r }))}
 												onChange={(e) => void ctx.handleInlineChange(row, "role", e.target.value)} />
 										);
 									}

@@ -1725,5 +1725,7 @@
   "onecWhatHappens": "Не болады",
   "onecNoChanges": "өзгеріссіз",
   "act": "Әрекет",
-  "inBases": "Базаларда бар"
+  "inBases": "Базаларда бар",
+  "onecRoleDuplicate": "Бұл рөл кестеде бар",
+  "onecRoleRequired": "Рөлді таңдаңыз"
 }
