@@ -362,6 +362,10 @@
 						padding: 0px 6px;
 						overflow: hidden;
 						white-space: nowrap;
+						// min-width: 0 обязателен: по умолчанию flex-элемент не сжимается
+						// меньше своего содержимого, и текст рядом с шевроном группы
+						// выдавливал бы ячейку вместо многоточия.
+						min-width: 0;
 						text-overflow: ellipsis;
 						// align-items: center;
 						align-content: center;
@@ -981,11 +985,52 @@
 	overflow-anchor: none;
 }
 
+/* Шеврон раскрытия в ячейке группы. Кнопка, а не значок: раскрытие — действие,
+   и оно должно доставаться с клавиатуры и подсказывать состояние (aria-expanded).
+   Свёрнутая группа — стрелка вправо, раскрытая — вниз. */
+.ExpandToggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 16px;
+	height: 16px;
+	margin-right: 3px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: $color51;
+	cursor: pointer;
+	border-radius: $radius3;
+	transform: rotate(-90deg);
+	transition: transform 0.12s ease, background-color 0.12s ease;
+
+	&:hover {
+		background: color-mix(in srgb, #{$color6} 12%, transparent);
+		color: $color6;
+	}
+
+	&:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px color-mix(in srgb, #{$color3} 25%, transparent);
+	}
+
+	svg {
+		display: block;
+	}
+}
+
+.ExpandToggleOpen {
+	transform: rotate(0deg);
+}
+
 /* Первая ячейка вложенной строки: отступ и приглушённый цвет — этого хватает,
    чтобы отличить подчинённую строку от строки-заголовка группы (та с подложкой
    и полужирная, см. tbody tr.GroupRow). */
 .ChildCell {
-	padding-left: 18px;
+	// Ровно ширина шеврона группы (16px + 3px отступ): текст вложенной строки
+	// встаёт под текст своей группы, а не «почти под ним».
+	padding-left: 19px;
 	color: $color51;
 }
 

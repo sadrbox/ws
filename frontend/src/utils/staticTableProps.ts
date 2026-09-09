@@ -47,6 +47,8 @@ interface Params {
 	/** Строки-потомки раскрытой строки — рисуются тем же TableBodyRow, теми же колонками. */
 	childRows?: (row: TDataItem) => TDataItem[];
 	onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
+	/** Раскрыть/свернуть строку по шеврону в ячейке группы. */
+	onToggleExpand?: (row: TDataItem) => void;
 	/** Рабочая сортировка на клиенте — из useStaticTableView. */
 	sorting?: { sort: Record<string, "asc" | "desc">; onSortChange: (s: Record<string, "asc" | "desc">) => void };
 }
@@ -93,6 +95,7 @@ export function buildStaticTableProps(p: Params) {
 		...(p.renderExpandedRow ? { renderExpandedRow: p.renderExpandedRow } : {}),
 		...(p.childRows ? { childRows: p.childRows } : {}),
 		...(p.onChildToggle ? { onChildToggle: p.onChildToggle } : {}),
+		...(p.onToggleExpand ? { onToggleExpand: p.onToggleExpand } : {}),
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),
 		...(p.renderCell ? { renderCell: p.renderCell } : {}),
 		...(p.highlightUuid ? { highlightUuid: p.highlightUuid } : {}),

@@ -420,9 +420,16 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							// промежуточная, если в части. Отдельная база правится своей вложенной
 							// строкой; обе отметки — одна и та же правка, просто разного охвата.
 							selectable: !locked,
-							// Одиночный клик раскрывает роль базами — второй разрез той же картины.
-							onActiveRowChange: (r) => setExpanded(r ? new Set([asText(r.uuid)]) : new Set()),
+							// Раскрывает роль базами шеврон в ячейке группы. На одиночный клик это
+							// не вешаем: переход по строке (в том числе стрелками) не должен
+							// разворачивать группы.
 							expandedRowIds: expanded,
+							onToggleExpand: (r) => setExpanded((prev) => {
+								const key = asText(r.uuid);
+								const next = new Set(prev);
+								if (!next.delete(key)) next.add(key);
+								return next;
+							}),
 							childRows,
 							onChildToggle: (_parent, child, next) => toggleChild(child, next),
 							extraButtons: (

@@ -21,7 +21,7 @@ import type { TColumn, TDataItem } from './types';
 import { useTableContext, useTableVolatile } from './context';
 import { getFormatColumnValue } from './services';
 import { CHECKBOX_COL_ID } from './tableKeyboardNav';
-import { ROW_HEIGHT, OVERSCAN } from './constants';
+import { ROW_HEIGHT, OVERSCAN, EXPANDED_NO_VIRTUAL_LIMIT } from './constants';
 import styles from './Table.module.scss';
 
 export const TableBody = memo(() => {
@@ -30,6 +30,7 @@ export const TableBody = memo(() => {
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
     actions, scrollRef, search,
+    expandedRowIds,
   } = useTableContext();
   // Волатильное состояние читаем ЗДЕСЬ (TableBody перерисуется на навигацию/выделение
   // — это один компонент), а в строки отдаём готовые булевы пропсами. Тогда memo на
@@ -190,7 +191,17 @@ export const TableBody = memo(() => {
   }, [deferredRowsForRender.length, scrollRef]);
 
   // ── Расчёт виртуализации ──
+  //
+  // ОКНО ОТКЛЮЧАЕТСЯ, ПОКА ЕСТЬ РАСКРЫТЫЕ СТРОКИ. Виртуализация считает позицию как
+  // index × ROW_HEIGHT, то есть верит, что все строки одной высоты. Вложенные строки
+  // эту веру ломают: реальная высота становится больше расчётной, отступы-заглушки
+  // перестают совпадать с содержимым, и таблица «разъезжается» — строки прыгают при
+  // прокрутке, а полоса прокрутки врёт. Пока группа раскрыта, рисуем весь загруженный
+  // список: раскрытие применяется на коротких таблицах, и правильная разметка там
+  // важнее экономии на строках. На длинном списке (больше предела) окно сохраняем —
+  // лучше неточный отступ, чем повисший браузер.
   const loadedCount = deferredRowsForRender.length;
+  const unvirtualized = (expandedRowIds?.size ?? 0) > 0 && loadedCount <= EXPANDED_NO_VIRTUAL_LIMIT;
   const effectiveContainerHeight = containerHeight > 0 ? containerHeight : 600;
   const virtualRowsCount = normalizedSearch ? loadedCount : total;
 
@@ -203,17 +214,19 @@ export const TableBody = memo(() => {
   const lastVisibleIndex = Math.ceil((currentScrollTop + effectiveContainerHeight) / ROW_HEIGHT) + OVERSCAN;
 
   // startIndexVirtual и endIndexVirtual — индексы ВНУТРИ загруженного массива
-  const startIndexVirtual = Math.min(firstVisibleIndex, loadedCount);
-  const endIndexVirtual = Math.min(loadedCount, lastVisibleIndex);
+  const startIndexVirtual = unvirtualized ? 0 : Math.min(firstVisibleIndex, loadedCount);
+  const endIndexVirtual = unvirtualized ? loadedCount : Math.min(loadedCount, lastVisibleIndex);
   const renderedRowsCount = endIndexVirtual - startIndexVirtual;
 
   // topPadding = высота строк до первой отрендеренной
-  const topPaddingAll = startIndexVirtual * ROW_HEIGHT;
+  const topPaddingAll = unvirtualized ? 0 : startIndexVirtual * ROW_HEIGHT;
 
   // bottomPadding вычисляется так, чтобы СУММА всегда равнялась total * ROW_HEIGHT.
   // Это гарантирует стабильную высоту таблицы и неподвижный ползунок скролла.
   const totalTableHeight = virtualRowsCount * ROW_HEIGHT;
-  const bottomPaddingAll = Math.max(0, totalTableHeight - topPaddingAll - renderedRowsCount * ROW_HEIGHT);
+  const bottomPaddingAll = unvirtualized
+    ? 0
+    : Math.max(0, totalTableHeight - topPaddingAll - renderedRowsCount * ROW_HEIGHT);
 
   const visibleRows = useMemo(
     () => deferredRowsForRender.slice(startIndexVirtual, endIndexVirtual),
@@ -325,6 +338,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     renderExpandedRow,
     childRows,
     onChildToggle,
+    onToggleExpand,
     canSelect,
     // Только сеттеры — значения выделения/навигации приходят пропсами.
     states: {
@@ -518,6 +532,28 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   const groupAll = isGroup && childSelectedCount === childCount;
   const groupSome = isGroup && childSelectedCount > 0 && childSelectedCount < childCount;
 
+  /**
+   * Шеврон раскрытия — ОТДЕЛЬНАЯ кнопка в ячейке группы.
+   *
+   * Раскрытие не вешается на активную строку: одиночный щелчок в таблице значит
+   * «перейти на строку», и связанные списки уже слушают его. Если тем же жестом
+   * раскрывать вложенные, то простой переход стрелками начинает разворачивать
+   * группы, а свернуть их можно только уйдя со строки.
+   */
+  const chevron = onToggleExpand && isGroup ? (
+    <button
+      type="button"
+      className={[styles.ExpandToggle, isExpanded ? styles.ExpandToggleOpen : null].filter(Boolean).join(' ')}
+      title={isExpanded ? translate('collapseRow') : translate('expandRow')}
+      aria-label={isExpanded ? translate('collapseRow') : translate('expandRow')}
+      aria-expanded={isExpanded}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onToggleExpand(row); }}
+    >
+      <Icon name="caretDown" width={12} height={12} />
+    </button>
+  ) : null;
+
   const toggleGroup = useCallback((next: boolean) => {
     if (!children) return;
     for (const child of children) {
@@ -629,12 +665,15 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
 
           const cellFieldState = cellMeta ? { required: cellMeta.required, error: cellMeta.error, errorMessage: cellMeta.errorMessage } : undefined;
 
+          const isFirstCol = col.identifier === columns[0]?.identifier;
+
           if (currentRenderCell) {
             const customCell = currentRenderCell(row, col);
             if (customCell !== undefined) {
               return (
                 <td key={col.identifier} {...tdProps}>
                   <div className={cellClassName} {...(cellTitle ? { title: cellTitle } : {})}>
+                    {isFirstCol && chevron}
                     <CellFieldStateScope value={cellFieldState ?? {}}>
                       {customCell}
                     </CellFieldStateScope>
@@ -669,6 +708,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
           return (
             <td key={col.identifier} {...tdProps}>
               <div className={fallbackClassName} {...(cellTitle ? { title: cellTitle } : {})}>
+                {isFirstCol && chevron}
                 {cellContent}
                 {cellMeta?.errorTooltip}
               </div>

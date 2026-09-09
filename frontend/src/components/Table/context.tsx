@@ -103,6 +103,8 @@ export interface TableContextProps {
    */
   childRows?: (row: TDataItem) => TDataItem[];
   onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
+  /** Щелчок по шеврону в ячейке группы: раскрыть/свернуть вложенные строки. */
+  onToggleExpand?: (row: TDataItem) => void;
 
   // ТОЛЬКО сеттеры (стабильная идентичность). Сами ЗНАЧЕНИЯ выделения/навигации
   // вынесены в отдельный TableVolatileContext — иначе смена activeCell на КАЖДОЕ

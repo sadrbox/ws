@@ -128,6 +128,8 @@ export interface TableProps {
   /** Строки-потомки раскрытой строки: рисуются тем же TableBodyRow (см. context.tsx). */
   childRows?: (row: TDataItem) => TDataItem[];
   onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
+  /** Раскрыть/свернуть строку — шеврон в ячейке группы (activeRow для этого НЕ используется). */
+  onToggleExpand?: (row: TDataItem) => void;
   /**
    * Активная строка сменилась — ОДИНОЧНЫЙ клик (и стрелки клавиатуры).
    *
@@ -319,6 +321,7 @@ const Table: FC<TableProps> = memo((props) => {
     renderExpandedRow,
     childRows,
     onChildToggle,
+    onToggleExpand,
     onActiveRowChange,
     apiRef,
     highlightUuid,
@@ -565,6 +568,7 @@ const Table: FC<TableProps> = memo((props) => {
       renderExpandedRow,
       childRows,
       onChildToggle,
+      onToggleExpand,
       // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
         setSelectedRows,
@@ -583,7 +587,7 @@ const Table: FC<TableProps> = memo((props) => {
       onInlineAdd, onDelete,
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
-      expandedRowIds, renderExpandedRow, childRows, onChildToggle,
+      expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,
