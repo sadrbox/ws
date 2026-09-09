@@ -150,78 +150,153 @@
 }
 
 // ── Вкладка «Пользователи баз» ────────────────────────────────────────────
-// Слева список, справа карточка. Внутри карточки секции идут ВПЛОТНУЮ: их разделяют
-// заголовок-полоса и линия, а не пустое место. Воздух между ними прибавлял бы к каждой
-// границе третий отступ — при четырёх секциях экран переставал помещаться.
-// Полоса режима просмотра: одна на обе колонки. В тулбаре списка шириной 320 px три
-// кнопки переносились в три строки и обрезались — переключатель там не помещается.
+//
+// КАРКАС ЖЁСТКИЙ. Высоты строк сетки заданы заранее, прокручивается только содержимое.
+// Раньше карточка была одной длинной колонкой: появлялось сообщение или строка в
+// таблице — и всё ниже уезжало, а нажатие попадало не туда, куда целились.
+.UsersScreen {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: 12px;
+	gap: 12px;
+}
+
 .ModeBar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	flex-wrap: wrap;
-	padding: 12px 12px 0;
+	flex-wrap: nowrap;
+	overflow: hidden;
 }
 
-.UsersLayout {
+.ModeSpacer {
+	flex: 1 1 auto;
+}
+
+.UsersBody {
 	display: grid;
 	grid-template-columns: 320px minmax(0, 1fr);
-	// 12 — шаг между смысловыми блоками; он же боковое поле вкладки. Без него список и
-	// карточка упирались в границы пейна, а между собой сходились вплотную.
 	gap: 12px;
-	padding: 12px;
-	flex: 1 1 auto;
 	min-height: 0;
 }
 
-// Список и карточка — рамки, а не соседние области: между ними теперь зазор 12,
-// и разделительная линия стала лишней.
-.UsersList {
+// Навигация: один уровень («по пользователю») или два («по базе»: базы, затем её люди).
+.NavOne,
+.NavTwo {
+	display: grid;
+	gap: 12px;
+	min-height: 0;
+	min-width: 0;
+}
+
+.NavOne {
+	grid-template-rows: minmax(0, 1fr);
+}
+
+.NavTwo {
+	grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.NavPane {
 	display: flex;
 	flex-direction: column;
-	min-width: 0;
 	min-height: 0;
+	overflow: hidden;
+	border: 1px solid $color34;
+	border-radius: var(--radius-3, 3px);
+}
+
+.Card {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	min-height: 0;
+	min-width: 0;
 	border: 1px solid $color34;
 	border-radius: var(--radius-3, 3px);
 	overflow: hidden;
 }
 
-.UsersCard {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	overflow: auto;
-	border: 1px solid $color34;
-	border-radius: var(--radius-3, 3px);
-}
-
-// Заголовок секции: та же высота, что у командной панели таблицы, — секции
-// выстраиваются в один ритм с тулбарами внутри них.
-.SecHead {
+.CardHead {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	height: 26px;
+	height: 32px;
 	padding: 0 12px;
 	background: $silverLightest;
 	border-bottom: 1px solid $color33;
-	font-weight: 700;
-	font-size: $fontsize;
+}
 
-	// Первая секция начинается сразу под верхней рамкой карточки — вторая линия там
-	// читалась бы как пустая полоса.
-	&:not(:first-child) {
-		border-top: 1px solid $color33;
+.CardTitle {
+	font-weight: 700;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.CardBody {
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+// Реквизиты по содержимому, роли фиксированной высоты, базы забирают остаток:
+// добавление строки ролей не двигает таблицу баз.
+.EditGrid {
+	display: grid;
+	grid-template-rows: auto 180px minmax(0, 1fr);
+	min-height: 0;
+	height: 100%;
+}
+
+.RolesPane,
+.BasesPane,
+.MatrixPane {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+	border-top: 1px solid $color33;
+}
+
+// Полоса состояния: существует всегда и одной высоты — сообщение меняет текст,
+// а не раскладку. Цвет несёт важность, но не меняет размеров.
+.StatusBar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 38px;
+	padding: 0 12px;
+	border-top: 1px solid $color34;
+	background: $color30;
+}
+
+.StatusText {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.Status_info .StatusText {
+	color: $color51;
+}
+
+.Status_warning {
+	background: var(--sv-warningBg, #fdf3e1);
+
+	.StatusText {
+		color: var(--sv-warningText, #7a4d12);
 	}
 }
 
-// Кнопки в заголовке секции: прижаты вправо, высота — как у самой полосы.
-.HeadActions {
-	margin-left: auto;
-	display: flex;
-	gap: 6px;
-	align-items: center;
+.Status_attention {
+	background: var(--sv-attentionBg, #fde2e4);
+
+	.StatusText {
+		color: var(--sv-attentionText, #6b1119);
+	}
 }
 
 .SecBody {
@@ -229,14 +304,20 @@
 	flex-direction: column;
 	gap: 6px;
 	padding: 12px;
+	overflow: auto;
+	min-height: 0;
 }
 
-// Строка предпросмотра: база и что с ней станет — в одну строку, чтобы список
-// из десятка баз читался сверху вниз без переносов.
+.HeadActions {
+	margin-left: auto;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
 .PlanRow {
 	display: flex;
 	align-items: baseline;
-	// 6 — между родственными частями одной строки (база и что с ней станет).
 	gap: 6px;
 	flex-wrap: wrap;
 	font-size: $fontsize;
