@@ -180,6 +180,28 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
 			await agents.markBasesSynced(req.agent!.agentId);
 		}
+		/**
+		 * Потеря способностей при обновлении агента — авария, которую иначе не заметить.
+		 *
+		 * Агент — источник истины о том, что он умеет, поэтому список просто перезаписывается.
+		 * Но если новая сборка объявила МЕНЬШЕ прежней, панель начинает молча отказывать
+		 * («агент не умеет ib.admin»), и связь с обновлением агента приходится угадывать.
+		 * Записываем разницу поимённо: вопрос «что сломалось» тогда решается одним взглядом
+		 * в журнал, а не сравнением сборок.
+		 */
+		{
+			const before = (await agents.findById(req.agent!.agentId))?.capabilities ?? [];
+			const after = new Set(p.data.capabilities);
+			const lost = before.filter((c) => !after.has(c));
+			if (lost.length) {
+				log.warn({ agentId: req.agent!.agentId, version: p.data.version, lost },
+					"агент объявил меньше способностей, чем прежде");
+				await audit.write({
+					event: "agent.capabilities.lost", agentId: req.agent!.agentId,
+					details: { lost, before: before.length, after: p.data.capabilities.length, version: p.data.version },
+				});
+			}
+		}
 		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version, req.ip ?? null);
 		log.info({ agentId: req.agent!.agentId, version: p.data.version, role, bases: p.data.bases?.length ?? 0 }, "агент зарегистрирован");
 		await audit.write({ event: "agent.register", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,

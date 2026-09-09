@@ -187,10 +187,14 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
 	if (agents.isLoading || hasCapability(agents.data?.items, capability)) return null;
 
 	const online = (agents.data?.items ?? []).filter((a) => a.role === "admin" && a.online && !a.disabled);
+	// Агент НА СВЯЗИ, но способности нет — почти всегда это его обновление: новая сборка
+	// объявила меньше прежней. Сообщение называет, сколько он объявляет сейчас, иначе
+	// связь с обновлением агента приходится угадывать.
+	const declared = online[0]?.capabilities.length ?? 0;
 	return (
 		<div className={styles.Blocked}>
 			{online.length
-				? `${translate("onecCapabilityMissing")}: ${capability}`
+				? `${translate("onecCapabilityMissing")}: ${capability}. ${translate("onecCapabilityLostHint")} (${declared})`
 				: translate("onecNoAdminAgent")}
 		</div>
 	);
