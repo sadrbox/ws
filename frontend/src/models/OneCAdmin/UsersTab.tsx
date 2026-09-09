@@ -28,6 +28,8 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary,
 } from "src/services/onec/api";
+import { Icon } from "src/components/IconButton/icons";
+import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import styles from "./OneCAdmin.module.scss";
@@ -54,6 +56,17 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 
 	const parallel = useCheckParallel();
 	const openCard = useOpenBaseUser();
+
+	// Ширина таблиц — тем же разделителем, что в списках с предпросмотром и отчётах:
+	// у администратора свои пропорции (сто баз против десятка людей), и они должны
+	// пережить закрытие вкладки.
+	const split = useSplitResize({
+		storageKey: "onec_users_split",
+		side: "left",
+		defaultPercent: 50,
+		min: 25,
+		max: 75,
+	});
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	const summary = useQuery({ queryKey: ["onec", "user-summary"], queryFn: fetchUserSummary });
@@ -137,7 +150,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 					<Button variant="secondary" disabled={!activeBase || checking}
 						title={activeBase ? translate("onecUsersCheck") : translate("onecPickBaseFirst")}
 						onClick={() => void recheck([activeBase])}>
-						{translate("onecUsersCheck")}
+						<Icon name="reload" /> {translate("onecUsersCheck")}
 					</Button>
 					<span className={styles.Hint}>
 						{activeBase || (primary === "bases" ? translate("onecPickBaseFirst") : "")}
@@ -180,20 +193,27 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 
 			<div className={styles.UsersScreen}>
 				<div className={styles.ModeBar}>
-					<span className={styles.Hint}>{translate("onecLayout")}</span>
-					<Button variant="secondary" active={primary === "bases"} onClick={() => setPrimary("bases")}>
-						{translate("onecLayoutBasesLeft")}
-					</Button>
-					<Button variant="secondary" active={primary === "users"} onClick={() => setPrimary("users")}>
-						{translate("onecLayoutUsersLeft")}
+					<span className={styles.Hint}>
+						{primary === "bases" ? translate("onecLayoutBasesLeft") : translate("onecLayoutUsersLeft")}
+					</span>
+					{/* Один переключатель, а не два состояния кнопками: раскладок ровно две,
+					    и «поменять местами» — одно действие, а не выбор из списка. */}
+					<Button variant="secondary" title={translate("onecSwapTables")}
+						onClick={() => setPrimary((p) => (p === "bases" ? "users" : "bases"))}>
+						<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
 					</Button>
 					<span className={styles.ModeSpacer} />
 					<span className={styles.Hint}>{translate("onecOpenCardHint")}</span>
 				</div>
 
-				<div className={styles.PairBody}>
-					<div className={styles.NavPane}>{primary === "bases" ? basesTable : usersTable}</div>
-					<div className={styles.NavPane}>{primary === "bases" ? usersTable : basesTable}</div>
+				<div className={styles.PairBody} ref={split.containerRef}>
+					<div className={styles.NavPane} style={{ flexBasis: `${split.percent}%` }}>
+						{primary === "bases" ? basesTable : usersTable}
+					</div>
+					<VSplitBar onPointerDown={split.startResize} onDoubleClick={split.reset} onNudge={split.nudge} />
+					<div className={styles.NavPane} style={{ flexBasis: `${100 - split.percent}%` }}>
+						{primary === "bases" ? usersTable : basesTable}
+					</div>
 				</div>
 
 				<div className={styles.StatusBar}>
@@ -207,7 +227,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 									: !activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))
 								: (!activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))}
 							onClick={() => openCard(activeUser, activeBase)}>
-							{translate("onecOpenCard")}
+							<Icon name="open" /> {translate("onecOpenCard")}
 						</Button>
 					</span>
 				</div>

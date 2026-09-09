@@ -36,6 +36,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBaseUsersCached, fetchRoles, fetchUserOccurrences, runBatch,
 } from "src/services/onec/api";
+import { Icon } from "src/components/IconButton/icons";
 import { QueryError } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -71,7 +72,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const occurrences = useQuery({
 		queryKey: ["onec", "user-where", userName],
 		queryFn: () => fetchUserOccurrences(userName),
-		enabled: !!userName,
+		enabled: !!userName.trim(),
 	});
 	// Пользователи выбранной базы: из них берём реквизиты именно в этой базе.
 	const baseUsers = useQuery({
@@ -81,7 +82,18 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	});
 	const roles = useQuery({ queryKey: ["onec", "roles", ""], queryFn: () => fetchRoles(), staleTime: 5 * 60_000 });
 
-	const occ = occurrences.data?.items ?? [];
+	/**
+	 * Строки без `baseKey` отбрасываем.
+	 *
+	 * Панель падала на них при отрисовке: запрос с пустым именем попадал в сводку
+	 * пользователей (Express не различает `/users` и `/users/`), а у её строк базы нет.
+	 * Сервис теперь такой запрос отвергает, но верить форме чужого ответа вслепую
+	 * всё равно нельзя — падение из-за одной кривой строки роняло весь пейн.
+	 */
+	const occ = useMemo(
+		() => (occurrences.data?.items ?? []).filter((o) => typeof o?.baseKey === "string" && !!o.baseKey),
+		[occurrences.data],
+	);
 	const here = useMemo(
 		() => (baseUsers.data?.items ?? []).find((u) => u.name.toLowerCase() === userName.toLowerCase()) ?? null,
 		[baseUsers.data, userName],
@@ -286,12 +298,12 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									<Button variant="secondary" disabled={!draft.size}
 										title={draft.size ? translate("onecResetDraft") : translate("onecNoChanges")}
 										onClick={() => setDraft(new Map())}>
-										{translate("onecResetDraft")}
+										<Icon name="restore" /> {translate("onecResetDraft")}
 									</Button>
 									<Button variant="primary" disabled={!changedCount || save.isPending}
 										title={changedCount ? translate("apply") : translate("onecNothingToApply")}
 										onClick={() => save.mutate()}>
-										{translate("apply")}
+										<Icon name="save" /> {translate("apply")}
 									</Button>
 								</>
 							),

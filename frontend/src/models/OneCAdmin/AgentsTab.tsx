@@ -16,6 +16,7 @@ import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import { showToast } from "src/components/UIToast";
 import { getModelColumns } from "src/components/Table/services";
@@ -109,7 +110,7 @@ export const AgentsTab: FC = () => {
 				onRowClick: openAgent,
 				extraButtons: (
 					<Button variant="secondary" onClick={() => { setName(""); setDialog("create"); }}>
-						{translate("onecAgentCreate")}
+						<Icon name="plus" /> {translate("onecAgentCreate")}
 					</Button>
 				),
 			})} />

@@ -33,6 +33,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBaseExtensions, fetchBases, fetchBatch, fetchExtensionSummary, runBatch, type BatchType,
 } from "src/services/onec/api";
+import { Icon } from "src/components/IconButton/icons";
 import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -185,7 +186,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							<Button variant="secondary" disabled={!pickedBases.length}
 								title={translate("onecExtInstall")}
 								onClick={() => { setPickedExt([]); setForm({ name: "", safeMode: true }); setFile(null); setDialog("install"); }}>
-								{translate("create")}
+								<Icon name="plus" /> {translate("create")}
 							</Button>
 						),
 					})} />
@@ -230,16 +231,16 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 									<>
 										<Button variant="secondary" disabled={!pickedBases.length || checking}
 											onClick={() => void recheck(pickedBases)}>
-											{translate("onecExtCheck")}
+											<Icon name="reload" /> {translate("onecExtCheck")}
 										</Button>
 										<Button variant="primary" disabled={!missing.length}
 											title={missing.length ? undefined : translate("onecExtAlreadyEverywhere")}
 											onClick={() => setDialog("install")}>
-											{translate("onecExtInstall")}
+											<Icon name="download" /> {translate("onecExtInstall")}
 										</Button>
 										<Button variant="danger" disabled={!present.length}
 											onClick={() => setDialog("remove")}>
-											{translate("onecExtRemove")}
+											<Icon name="trash" /> {translate("onecExtRemove")}
 										</Button>
 									</>
 								),

@@ -11,6 +11,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -100,10 +101,10 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 							<>
 								{current.failed > 0 && (
 									<Button variant="secondary" disabled={retry.isPending} onClick={() => retry.mutate(current.id)}>
-										{translate("onecBatchRetryFailed")} ({current.failed})
+										<Icon name="restore" /> {translate("onecBatchRetryFailed")} ({current.failed})
 									</Button>
 								)}
-								<Button variant="secondary" onClick={() => setOpened("")}>{translate("onecBackToSummary")}</Button>
+								<Button variant="secondary" onClick={() => setOpened("")}><Icon name="quickselect" /> {translate("onecBackToSummary")}</Button>
 							</>
 						),
 					})} />

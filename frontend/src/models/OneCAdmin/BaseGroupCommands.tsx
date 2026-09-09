@@ -23,6 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { showToast } from "src/components/UIToast";
@@ -185,7 +186,7 @@ export const BaseGroupCommands: FC<{
 	return (
 		<>
 			<Button variant="secondary" disabled={checkPublications.isPending} onClick={() => checkPublications.mutate()}>
-				{translate("onecPublicationsCheck")}
+				<Icon name="reload" /> {translate("onecPublicationsCheck")}
 			</Button>
 			{btn("publish", "onecPublish")}
 			{btn("unpublish", "onecUnpublish")}

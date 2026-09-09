@@ -494,9 +494,18 @@ export function onecRouter(deps: Deps) {
 		res.json({ success: true, data: { items: await registry.userHistory(req.params.name) } });
 	});
 
-	/** Где есть этот пользователь — ответ на «покажи его во всех базах». */
+	/**
+	 * Где есть этот пользователь — ответ на «покажи его во всех базах».
+	 *
+	 * Пустое имя ОТВЕРГАЕМ явно. Express по умолчанию не различает `/users` и `/users/`,
+	 * поэтому запрос с пустым именем молча попадал в сводку и возвращал строки другой
+	 * формы — без `baseKey`. Панель падала на них уже при отрисовке, и место падения
+	 * ничего не говорило о причине.
+	 */
 	r.get("/users/:name", async (req, res) => {
-		res.json({ success: true, data: { items: await registry.findUser(req.params.name) } });
+		const name = req.params.name.trim();
+		if (!name) { send(res, fail(400, "VALIDATION_ERROR", "name: укажите имя пользователя")); return; }
+		res.json({ success: true, data: { items: await registry.findUser(name) } });
 	});
 
 	r.get("/extensions", async (_req, res) => {

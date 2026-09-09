@@ -14,6 +14,7 @@ import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
@@ -87,7 +88,7 @@ export const ConnectionsTab: FC = () => {
 					setPicked(all.filter((r: TDataItem) => sel.has(Number(r.id))).map((r) => asText(r.uuid))),
 				extraButtons: picked.length > 0
 					? <Button variant="danger" onClick={() => setConfirm(true)}>
-						{translate("onecDisconnect")} ({picked.length})
+						<Icon name="close" /> {translate("onecDisconnect")} ({picked.length})
 					</Button>
 					: undefined,
 			})} /></>}

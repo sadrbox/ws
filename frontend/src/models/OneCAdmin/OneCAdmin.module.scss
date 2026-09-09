@@ -177,10 +177,11 @@
 
 // Две связанные таблицы: равные по важности, поэтому равной ширины. Какая слева —
 // решает переключатель, но обе всегда видны целиком: смысл экрана в их связке.
+// Ширину задаёт перетаскиваемый разделитель, поэтому не grid, а flex: доли живут
+// в flex-basis и меняются на лету.
 .PairBody {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	gap: 12px;
+	display: flex;
+	gap: 6px;
 	min-height: 0;
 }
 
@@ -234,6 +235,7 @@
 .NavPane {
 	display: flex;
 	flex-direction: column;
+	flex: 1 1 50%;
 	min-height: 0;
 	overflow: hidden;
 	// border: 1px solid $color34;
