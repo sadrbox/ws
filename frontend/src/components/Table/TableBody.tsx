@@ -581,7 +581,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     // класс нужен, чтобы отличить подчинённые строки от групповой.
     isChild && styles.ExpandedRow,
     // Раскрытая строка — заголовок группы: подложка шапки и полужирное начертание.
-    isGroup && isExpanded && styles.GroupRow,
+    isGroup && isExpanded && styles.GroupHeaderRow,
   ].filter(Boolean).join(' ');
 
   return (
@@ -651,9 +651,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             cellAlignClass(col),
             isCellActive ? styles.activeCell : null,
             isChild && col.identifier === columns[0]?.identifier ? styles.ChildCell : null,
-            // Групповая (раскрытая) строка: её первая ячейка — заголовок группы.
-            !isChild && isExpanded && childRows && col.identifier === columns[0]?.identifier
-              ? styles.GroupCell : null,
           ].filter(Boolean).join(' ');
 
           const cellTitle = cellMeta?.errorMessage;
