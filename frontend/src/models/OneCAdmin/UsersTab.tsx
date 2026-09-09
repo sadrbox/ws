@@ -39,7 +39,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchBatch, fetchRoleHolders, fetchRoles,
-	fetchUserOccurrences, fetchUserSummary, runBatch, type BatchType,
+	fetchUserHistory, fetchUserOccurrences, fetchUserSummary, runBatch, type BatchType,
 } from "src/services/onec/api";
 import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
 import styles from "./OneCAdmin.module.scss";
@@ -100,7 +100,9 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	const [pickedUsers, setPickedUsers] = useState<string[]>([]);
 	const [pickedBases, setPickedBases] = useState<string[]>([]);
 	const [roleRows, setRoleRows] = useState<TDataItem[]>([]);
-	const [dialog, setDialog] = useState<null | "apply" | "delete" | "create">(null);
+	const [dialog, setDialog] = useState<null | "apply" | "delete" | "create" | "align">(null);
+	/** Вкладки карточки: правка, обзор расхождений, история. */
+	const [tab, setTab] = useState<"edit" | "matrix" | "history">("edit");
 
 	// Реквизиты. Пустое поле означает «не трогать» — это же правило у команды изменения.
 	const [form, setForm] = useState({ name: "", fullName: "", password: "", disabled: false, showInList: true });
@@ -384,6 +386,63 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 		return last ? `${translate("onecDataFrom")}: ${getFormatDate(last)} · ${items.length} ${translate("bases").toLowerCase()}` : "";
 	}, [current, occurrences.data]);
 
+	/**
+	 * Матрица «базы × роли»: строки — базы, столбцы — роли, на пересечении отметка.
+	 *
+	 * Отвечает на вопрос, которого не видно ни в одной другой таблице: ГДЕ у человека
+	 * роли расходятся. Колонки строятся по объединению ролей всех его баз — их обычно
+	 * единицы, и матрица остаётся читаемой.
+	 */
+	const matrixRoles = useMemo(
+		() => [...new Set([...occByBase.values()].flat())].sort((a, b) => a.localeCompare(b, "ru")),
+		[occByBase],
+	);
+
+	const matrixColumns = useMemo(() => ([
+		{ identifier: "baseKey", type: "string", width: "220px", minWidth: "130px", alignment: "left", visible: true, inlist: true },
+		...matrixRoles.map((r) => ({
+			identifier: `role:${r}`, type: "string", width: "150px", minWidth: "90px",
+			alignment: "center", visible: true, inlist: true,
+		})),
+	] as unknown as TColumn[]), [matrixRoles]);
+
+	const matrixRows = useMemo(() => (occurrences.data?.items ?? []).map((o, i) => {
+		const row: TDataItem = { id: i + 1, uuid: o.baseKey, baseKey: o.baseKey };
+		for (const r of matrixRoles) row[`role:${r}`] = (o.roles ?? []).includes(r) ? "✓" : "";
+		return row;
+	}), [occurrences.data, matrixRoles]);
+	const matrixView = useStaticTableView(matrixRows, { baseKey: "asc" });
+	const [matrixCols, setMatrixCols] = useState<TColumn[]>([]);
+	useEffect(() => setMatrixCols(matrixColumns), [matrixColumns]);
+
+	/**
+	 * Эталон — база с самым полным набором ролей. По ней выравнивают остальные: это
+	 * ЗАМЕНА набора (roles), а не правка, поэтому команда идёт отдельной кнопкой и с
+	 * подтверждением — «выдать роль» и «сделать как здесь» разные вещи.
+	 */
+	const reference = useMemo(() => {
+		const items = occurrences.data?.items ?? [];
+		return items.reduce<{ baseKey: string; roles: string[] } | null>(
+			(best, o) => (!best || (o.roles ?? []).length > best.roles.length
+				? { baseKey: o.baseKey, roles: o.roles ?? [] } : best), null);
+	}, [occurrences.data]);
+
+	const alignToReference = useCallback(() => {
+		if (!current || !reference || !pickedBases.length) return;
+		batch.mutate({
+			type: "IB_UPDATE_USER",
+			keys: pickedBases.filter((k) => k.toLowerCase() !== reference.baseKey.toLowerCase()),
+			payload: { name: current, roles: reference.roles },
+		});
+	}, [batch, current, reference, pickedBases]);
+
+	/** Что делали с этим пользователем из панели. */
+	const history = useQuery({
+		queryKey: ["onec", "user-history", current],
+		queryFn: () => fetchUserHistory(current),
+		enabled: !!current && tab === "history",
+	});
+
 	/** Пользователь есть в сводке, но его баз ещё не читали — это не «ролей нет». */
 	const neverRead = !!current && !(occurrences.data?.items ?? []).length && !occurrences.isLoading;
 
@@ -501,8 +560,19 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							<div className={styles.SecHead}>
 								{translate("onecUserCard")}: {current}
 								{pickedUsers.length > 1 && ` · ${translate("onecBatchTargets")}: ${pickedUsers.length}`}
+								<span className={styles.HeadActions}>
+									<Button variant="secondary" active={tab === "edit"} onClick={() => setTab("edit")}>
+										{translate("onecTabEdit")}
+									</Button>
+									<Button variant="secondary" active={tab === "matrix"} onClick={() => setTab("matrix")}>
+										{translate("onecTabMatrix")}
+									</Button>
+									<Button variant="secondary" active={tab === "history"} onClick={() => setTab("history")}>
+										{translate("onecTabHistory")}
+									</Button>
+								</span>
 							</div>
-							<div className={styles.SecBody}>
+							{tab === "edit" && <div className={styles.SecBody}>
 								{systemPicked && <Notice items={[{ type: "warning", text: translate("onecSystemUserWarn") }]} />}
 								{neverRead && <Notice items={[{ type: "info", text: translate("onecUserNeverRead") }]} />}
 								{pickedUsers.length > 1 && (
@@ -527,11 +597,11 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 											onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
 									</GroupRow>
 								</GroupCol>
-							</div>
+							</div>}
 
 							{/* ── Роли: правка в строках, команды — в панели SubTable ── */}
-							<div className={styles.SecHead}>{translate("roles")}</div>
-							<SubTable
+							{tab === "edit" && <div className={styles.SecHead}>{translate("roles")}</div>}
+							{tab === "edit" && <SubTable
 								model="onec-user-roles"
 								componentName="OneCAdmin_userRoles"
 								columnsJson={roleColumns()}
@@ -555,13 +625,15 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 								}
 								renderCell={(row, col, ctx) => {
 									if (col.identifier === "role") {
+										// Поле с подсказками, а не список: ролей в типовой конфигурации сотни,
+										// и выпадающий список без поиска среди них бесполезен. Занятые роли
+										// из подсказок убраны — повторить её нельзя, предлагать нечестно.
 										return (
-											<FieldSelect name={`role_${asText(row.id)}`} value={asText(row.role)} variant="table"
-												// Занятые роли из списка убраны: повторить её нельзя, и предлагать нечестно.
-												options={roleOptions
-													.filter((r) => r === asText(row.role) || !roleRows.some((x) => asText(x.role) === r))
-													.map((r) => ({ value: r, label: r }))}
-												onChange={(e) => void ctx.handleInlineChange(row, "role", e.target.value)} />
+											<Field name={`role_${asText(row.id)}`} value={asText(row.role)} variant="table"
+												suggestions={roleOptions.filter((r) => r === asText(row.role)
+													|| !roleRows.some((x) => asText(x.role) === r))}
+												onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+													void ctx.handleInlineChange(row, "role", e.target.value)} />
 										);
 									}
 									if (col.identifier === "act") {
@@ -578,11 +650,66 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 									if (col.identifier === "inBases") return <span>{inBasesLabel(asText(row.role))}</span>;
 									return undefined;
 								}}
-							/>
+							/>}
+
+							{/* ── Матрица: где роли расходятся между базами ─────────── */}
+							{tab === "matrix" && (
+								<>
+									<div className={styles.SecHead}>
+										{translate("onecTabMatrix")}
+										<span className={styles.Hint}>
+											{reference ? `${translate("onecReferenceBase")}: ${reference.baseKey} (${reference.roles.length})` : ""}
+										</span>
+										<span className={styles.HeadActions}>
+											<Button variant="secondary"
+												disabled={!reference || !pickedBases.length}
+												title={reference ? undefined : translate("onecUserNeverRead")}
+												onClick={() => setDialog("align")}>
+												{translate("onecAlignToReference")}
+											</Button>
+										</span>
+									</div>
+									{matrixRows.length ? (
+										<Table {...buildStaticTableProps({
+											componentName: "OneCAdmin_userMatrix", rows: matrixView.rows, columns: matrixCols,
+											setColumns: setMatrixCols, sorting: matrixView.sorting, search: matrixView.search,
+											isLoading: occurrences.isLoading,
+											onReload: () => void occurrences.refetch(),
+										})} />
+									) : (
+										<div className={styles.SecBody}>
+											<Notice items={[{ type: "info", text: translate("onecUserNeverRead") }]} />
+										</div>
+									)}
+								</>
+							)}
+
+							{/* ── История: что делали с этим человеком из панели ───── */}
+							{tab === "history" && (
+								<>
+									<div className={styles.SecHead}>{translate("onecTabHistory")}</div>
+									<div className={styles.SecBody}>
+										<QueryError error={history.error} />
+										{(history.data?.items ?? []).length === 0 && !history.isLoading && (
+											<Notice items={[{ type: "info", text: translate("onecHistoryEmpty") }]} />
+										)}
+										{(history.data?.items ?? []).map((h, i) => (
+											<div key={i} className={styles.PlanRow}>
+												<span className={styles.PlanBase}>{getFormatDate(h.createdAt)}</span>
+												<span>{h.type}</span>
+												<span className={styles.Hint}>{h.baseKey ?? "—"}</span>
+												<span className={h.state === "done" ? styles.PlanAdd : styles.PlanDel}>
+													{h.state === "done" ? translate("onecHistoryDone") : h.error || h.state}
+												</span>
+											</div>
+										))}
+									</div>
+								</>
+							)}
 
 							{/* ── Базы: цель команды. В режиме «по базе» цель уже выбрана слева. ── */}
-							{mode === "byUser" && <div className={styles.SecHead}>{translate("onecTabBases")}</div>}
-							{mode === "byUser" && <Table {...buildStaticTableProps({
+							{tab === "edit" && mode === "byUser" && <div className={styles.SecHead}>{translate("onecTabBases")}</div>}
+							{tab === "edit" && mode === "byUser" && <Table {...buildStaticTableProps({
 								componentName: "OneCAdmin_userBases", rows: baseView.rows, columns: baseCols,
 								setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
 								isLoading: bases.isLoading,
@@ -605,7 +732,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							})} />}
 
 							{/* ── Что произойдёт. Команды режима «по базе» — здесь же. ── */}
-							<div className={styles.SecHead}>{translate("onecWhatHappens")}
+							{tab === "edit" && <div className={styles.SecHead}>{translate("onecWhatHappens")}
 								{mode === "byBase" && (
 									<span className={styles.HeadActions}>
 										<Button variant="primary" disabled={!targets.length} onClick={() => setDialog("apply")}>
@@ -618,8 +745,8 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 										</Button>
 									</span>
 								)}
-							</div>
-							<div className={styles.SecBody}>
+							</div>}
+							{tab === "edit" && <div className={styles.SecBody}>
 								{!pickedBases.length && <Notice items={[{ type: "info", text: translate("onecPickBasesFirst") }]} />}
 								{blocked.length > 0 && (
 									<Notice items={[{ type: "warning",
@@ -633,7 +760,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 										{!p.add.length && !p.del.length && <span className={styles.Hint}>{translate("onecNoChanges")}</span>}
 									</div>
 								))}
-							</div>
+							</div>}
 						</>
 					)}
 				</div>
@@ -642,16 +769,23 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 			{dialog && (
 				<Modal
 					title={dialog === "delete" ? translate("onecUserDelete")
-						: dialog === "create" ? translate("onecUserCreateInBases") : translate("apply")}
+						: dialog === "create" ? translate("onecUserCreateInBases")
+							: dialog === "align" ? translate("onecAlignToReference") : translate("apply")}
 					onClose={() => setDialog(null)}
-					onApply={dialog === "delete" ? removeUser : dialog === "create" ? createUser : apply}
+					onApply={dialog === "delete" ? removeUser
+						: dialog === "create" ? createUser
+							: dialog === "align" ? alignToReference : apply}
 				>
 					<div className={styles.ModalForm}>
 						<div>{translate("onecUserName")}: {dialog === "create" ? form.name : current}</div>
 						<div>{translate("onecBatchTargets")}: {dialog === "apply" ? targets.length : pickedBases.length}</div>
+						{dialog === "align" && reference && (
+							<div>{translate("onecReferenceBase")}: {reference.baseKey} — {reference.roles.join(", ") || "—"}</div>
+						)}
 						<div className={styles.ConfirmWarning}>
 							{dialog === "delete" ? translate("onecUserDeleteWarning")
-								: dialog === "create" ? translate("onecUserCreateWarning") : translate("onecUserUpdateWarning")}
+								: dialog === "create" ? translate("onecUserCreateWarning")
+									: dialog === "align" ? translate("onecAlignWarning") : translate("onecUserUpdateWarning")}
 						</div>
 					</div>
 				</Modal>

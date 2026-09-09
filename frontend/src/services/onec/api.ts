@@ -143,7 +143,12 @@ export const fetchBaseExtensions = (baseKey: string) =>
 
 /** Сводка «кто есть в скольких базах» — из кэша, без обращения к 1С. */
 export const fetchUserSummary = () =>
-	aiFetch<{ items: { name: string; bases: number; disabled: number }[] }>("/v1/onec/users");
+	aiFetch<{ items: { name: string; bases: number; disabled: number; roles: string[] }[] }>("/v1/onec/users");
+
+/** Что делали с пользователем из панели: команды по его имени. */
+export const fetchUserHistory = (name: string) =>
+	aiFetch<{ items: { type: string; baseKey: string | null; state: string; createdAt: string; error: string | null }[] }>(
+		`/v1/onec/users/${encodeURIComponent(name)}/history`);
 
 /** Где встречается пользователь — ответ на «покажи его во всех базах». */
 export type UserOccurrence = {

@@ -56,6 +56,14 @@ interface TypeFieldStringProps {
    * нужно передавать его явно.
    */
   autoComplete?: string;
+  /**
+   * Подсказки ввода (нативный datalist).
+   *
+   * Для списков, где вариантов сотни: `FieldSelect` их показывает целиком и без поиска,
+   * а роль в 1С надо найти среди сотен точных идентификаторов. Поле остаётся обычным —
+   * значение можно и ввести руками, если нужного варианта в списке ещё нет.
+   */
+  suggestions?: string[];
 }
 
 // Пропсы для FieldGroup
@@ -132,6 +140,7 @@ export const Field: FC<TypeFieldStringProps> = ({
   isDirty,
   hint,
   autoComplete = "off",
+  suggestions,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -186,6 +195,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       isDirty={isDirty}
       hint={hint}
       autoComplete={autoComplete}
+      suggestions={suggestions}
     />
   );
 };
@@ -193,6 +203,7 @@ export const Field: FC<TypeFieldStringProps> = ({
 // Компонент FieldGroup
 export const FieldGroup: FC<TypeFieldGroupProps & {
   isDirty?: boolean; maxLength?: number; type?: "text" | "password"; autoComplete?: string;
+  suggestions?: string[];
 }> = ({
   name,
   label,
@@ -214,9 +225,11 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
   hint,
   type = "text",
   autoComplete = "off",
+  suggestions,
 }) => {
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
+  const listId = suggestions?.length ? `${uid}-list` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value, isDirty });
 
   return (
@@ -239,7 +252,13 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
           maxLength={maxLength}
           autoFocus={autoFocus}
           aria-describedby={hintId}
+          list={listId}
         />
+        {listId && (
+          <datalist id={listId}>
+            {suggestions!.map((v) => <option key={v} value={v} />)}
+          </datalist>
+        )}
         {actions && actions.length > 0 && (
           <div className={styles.FieldActions}>
             {actions.map((action, index) => {

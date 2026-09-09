@@ -489,6 +489,11 @@ export function onecRouter(deps: Deps) {
 		res.json({ success: true, data: { items: await registry.roleHolders(req.params.role) } });
 	});
 
+	/** Что делали с пользователем из панели — по журналу команд. */
+	r.get("/users/:name/history", async (req, res) => {
+		res.json({ success: true, data: { items: await registry.userHistory(req.params.name) } });
+	});
+
 	/** Где есть этот пользователь — ответ на «покажи его во всех базах». */
 	r.get("/users/:name", async (req, res) => {
 		res.json({ success: true, data: { items: await registry.findUser(req.params.name) } });

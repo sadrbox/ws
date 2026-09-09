@@ -133,13 +133,55 @@ export class OnecRegistry {
 		return r.rows.map((x) => ({ baseKey: x.key, users: Number(x.users) }));
 	}
 
-	async userSummary(): Promise<{ name: string; bases: number; disabled: number }[]> {
-		const r = await this.db.query<{ name: string; bases: string; disabled: string }>(
+	/**
+	 * Сводка по пользователям. Роли — ОБЪЕДИНЕНИЕ по всем базам, где человек заведён.
+	 *
+	 * Объединение, а не пересечение: список отвечает на вопрос «что этот человек вообще
+	 * может», и роль, выданная хоть в одной базе, для этого ответа существенна. Где
+	 * именно она есть, показывает карточка — но ради простого просмотра списка второй
+	 * запрос на человека делать незачем.
+	 */
+	async userSummary(): Promise<{ name: string; bases: number; disabled: number; roles: string[] }[]> {
+		const r = await this.db.query<{ name: string; bases: string; disabled: string; roles: string[] }>(
 			`SELECT min(name) AS name, count(*)::text AS bases,
-			        count(*) FILTER (WHERE disabled)::text AS disabled
+			        count(*) FILTER (WHERE disabled)::text AS disabled,
+			        COALESCE(
+			          (SELECT array_agg(DISTINCT role ORDER BY role)
+			             FROM base_users u2, jsonb_array_elements_text(u2.roles) role
+			            WHERE lower(u2.name) = lower(min(base_users.name))),
+			          ARRAY[]::text[]) AS roles
 			   FROM base_users GROUP BY lower(name) ORDER BY min(name)`,
 		);
-		return r.rows.map((x) => ({ name: x.name, bases: Number(x.bases), disabled: Number(x.disabled) }));
+		return r.rows.map((x) => ({
+			name: x.name, bases: Number(x.bases), disabled: Number(x.disabled), roles: x.roles ?? [],
+		}));
+	}
+
+	/**
+	 * Что делали с этим пользователем из панели: команды по его имени.
+	 *
+	 * История берётся из очереди команд — единственного места, где записано, кто и что
+	 * менял. Без неё вопрос «кто снял человеку права» остаётся без ответа, а на сотне
+	 * клиентских баз он рано или поздно задаётся.
+	 */
+	async userHistory(name: string, limit = 50): Promise<{
+		type: string; baseKey: string | null; state: string; createdAt: string; error: string | null;
+	}[]> {
+		const r = await this.db.query<{
+			type: string; base_key: string | null; state: string; created_at: Date; error: string | null;
+		}>(
+			`SELECT type, base_key, state, created_at, error->>'message' AS error
+			   FROM commands
+			  WHERE type IN ('IB_CREATE_USER','IB_UPDATE_USER','IB_DELETE_USER')
+			    AND lower(payload->>'name') = lower($1)
+			  ORDER BY created_at DESC
+			  LIMIT $2`,
+			[name, limit],
+		);
+		return r.rows.map((x) => ({
+			type: x.type, baseKey: x.base_key, state: x.state,
+			createdAt: x.created_at.toISOString(), error: x.error,
+		}));
 	}
 
 	/**
