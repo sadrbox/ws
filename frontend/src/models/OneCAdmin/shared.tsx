@@ -227,6 +227,8 @@ export async function checkBases(
 	keys: string[],
 	read: (baseKey: string) => Promise<unknown>,
 	limit = 4,
+	/** Сколько баз уже обработано — для вкладки прогресса: проверка сотни баз идёт минутами. */
+	onProgress?: (done: number, failed: number) => void,
 ): Promise<{ ok: number; failed: { baseKey: string; message: string }[] }> {
 	const queue = [...keys];
 	let ok = 0;
@@ -242,6 +244,7 @@ export async function checkBases(
 			} catch (e) {
 				failed.push({ baseKey: key, message: e instanceof Error ? e.message : String(e) });
 			}
+			onProgress?.(ok + failed.length, failed.length);
 		}
 	};
 	await Promise.all(Array.from({ length: Math.min(limit, keys.length) }, worker));

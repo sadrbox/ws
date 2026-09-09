@@ -57,6 +57,24 @@ export const Group: FC<TypeGroupProps> = ({ style, className, gap = 6, children 
 export const GroupRow: FC<TypeGroupProps> = ({ style, className, gap = 6, children }) =>
   <div style={style} className={[styles.GroupRow, GAP_CLASS[gap], className].filter(Boolean).join(" ")}>{children}</div>;
 
+/**
+ * Область формы: заголовок и рамка вокруг группы полей.
+ *
+ * Форма из десятка полей подряд читается как список без структуры: глазами не видно,
+ * что относится к объекту, а что — к его окружению. Область называет группу и очерчивает
+ * её границу, не добавляя ни отступов сверх шкалы, ни собственных цветов.
+ *
+ * Это НЕ карточка: тень и скругление 6 остаются за самостоятельными объектами (пейн,
+ * модальное окно), иначе каждая группа полей начинает выглядеть отдельным окном.
+ */
+export const FormArea: FC<PropsWithChildren<{ title: string; className?: string; style?: CSSProperties }>> =
+  ({ title, className, style, children }) => (
+    <fieldset style={style} className={[styles.FormArea, className].filter(Boolean).join(" ")}>
+      <legend className={styles.FormAreaTitle}>{title}</legend>
+      {children}
+    </fieldset>
+  );
+
 export const GroupCol: FC<TypeGroupProps> = ({ style, className, gap = 12, children }) =>
   <div style={style} className={[styles.GroupCol, GAP_CLASS[gap], className].filter(Boolean).join(" ")}>{children}</div>;
 

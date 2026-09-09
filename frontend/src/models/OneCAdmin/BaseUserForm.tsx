@@ -23,7 +23,7 @@ import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
@@ -38,12 +38,13 @@ import {
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { QueryError } from "./shared";
+import { attachBatch, finishOp, startOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "hereLabel", type: "string", width: "130px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "inBases", type: "string", width: "140px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "changedLabel", type: "string", width: "130px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 const basesColumns = (): TColumn[] => ([
@@ -139,10 +140,41 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const [rightsCols, setRightsCols] = useState<TColumn[]>(() => getModelColumns(rightsColumns(), "OneCAdmin_bufRights"));
 	const rightsRows = useMemo(() => allRoles.map((role, i) => ({
 		id: i + 1, uuid: role, role,
-		hereLabel: baseKey ? (isOn(baseKey, role) ? translate("yes") : translate("no")) : "—",
 		inBases: `${occ.filter((o) => isOn(o.baseKey, role)).length} / ${occ.length}`,
-	})), [allRoles, baseKey, occ, isOn]);
+		changedLabel: baseKey && draft.has(draftKey(baseKey, role)) ? translate("onecChanged") : "",
+	})), [allRoles, baseKey, occ, isOn, draft]);
 	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
+
+	/**
+	 * Отметки строк = «роль есть в выбранной базе».
+	 *
+	 * Галочка здесь — не выбор строк для команды, а СОСТОЯНИЕ данных, поэтому таблице она
+	 * отдаётся готовой (presetSelectedRows), а снятие/установка возвращаются черновиком.
+	 * Своя колонка с чекбоксом делала то же самое, но мимо клавиатуры и «отметить всё»,
+	 * которые в таблице уже есть.
+	 */
+	const rightsSelected = useMemo(() => {
+		const set = new Set<number>();
+		if (!baseKey) return set;
+		for (const r of rightsRows) if (isOn(baseKey, asText(r.role))) set.add(r.id);
+		return set;
+	}, [rightsRows, baseKey, isOn]);
+
+	const applySelection = useCallback((selected: Set<number>, rows: TDataItem[]) => {
+		if (!baseKey) return;
+		setDraft((prev) => {
+			const next = new Map(prev);
+			const have = rolesByBase.get(baseKey.toLowerCase()) ?? [];
+			for (const r of rows) {
+				const role = asText(r.role);
+				const want = selected.has(Number(r.id));
+				// Совпало с тем, что в базе, — записи в черновике не место.
+				if (want === have.includes(role)) next.delete(draftKey(baseKey, role));
+				else next.set(draftKey(baseKey, role), want);
+			}
+			return next;
+		});
+	}, [baseKey, rolesByBase]);
 
 	const [basesCols, setBasesCols] = useState<TColumn[]>(() => getModelColumns(basesColumns(), "OneCAdmin_bufBases"));
 	const basesRows = useMemo(() => occ.map((o, i) => ({
@@ -168,12 +200,31 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const dirtyProfile = !!form.fullName.trim() || !!form.password
 		|| form.disabled !== (here?.disabled ?? false);
 
+	/**
+	 * Постановка команды сразу попадает в реестр операций: запись прав на десятке баз
+	 * идёт минутами, и человеку нужен не только тост «поставлено», но и место, где видно,
+	 * чем это кончилось. Вкладка «Прогресс запросов и команд» читает тот же реестр.
+	 */
+	const enqueue = useCallback(async (title: string, target: string, bases: string[], payload: Record<string, unknown>) => {
+		const op = startOp({ kind: "update", title, target, total: bases.length });
+		try {
+			const r = await runBatch("IB_UPDATE_USER", bases, payload);
+			attachBatch(op, r.batchId, r.total, r.skipped.length ? `${translate("onecSkipped")}: ${r.skipped.length}` : "");
+			return r;
+		} catch (e) {
+			// Команда даже не встала в очередь: без этого запись осталась бы «выполняется»
+			// навсегда — задания, за которым следить, у неё нет.
+			finishOp(op, { failed: bases.length, note: e instanceof Error ? e.message : String(e) });
+			throw e;
+		}
+	}, []);
+
 	const save = useMutation({
 		mutationFn: async () => {
 			const results = [];
 			// Реквизиты пишутся только в ТЕКУЩУЮ базу: карточка про пару «человек + база».
 			if (dirtyProfile && baseKey) {
-				results.push(await runBatch("IB_UPDATE_USER", [baseKey], {
+				results.push(await enqueue(translate("onecUserUpdate"), `${userName} — ${baseKey}`, [baseKey], {
 					name: userName,
 					...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
 					...(form.password ? { password: form.password } : {}),
@@ -182,7 +233,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 				}));
 			}
 			for (const [base, { add, remove }] of changedByBase) {
-				results.push(await runBatch("IB_UPDATE_USER", [base], {
+				results.push(await enqueue(translate("onecRolesUpdate"), `${userName} — ${base}`, [base], {
 					name: userName,
 					...(add.length ? { addRoles: add } : {}),
 					...(remove.length ? { removeRoles: remove } : {}),
@@ -219,29 +270,47 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 					component: (
 						<GroupCol>
 							<QueryError error={occurrences.error ?? baseUsers.error} />
-							{/* Шапка: база — не реквизит, а ОБЛАСТЬ ДЕЙСТВИЯ карточки. */}
-							<GroupRow>
-								<FieldSelect name="buf_base" label={translate("onecBase")} value={baseKey}
-									onChange={(e) => setBaseKey(e.target.value)}
-									options={occ.map((o) => ({ value: o.baseKey, label: `${o.baseKey} — ${o.baseName || "—"}` }))} />
-								<Field name="buf_user" label={translate("onecUserName")} value={userName} disabled width="220px" onChange={() => {}} />
-								<Field name="buf_seen" label={translate("onecDataFrom")}
-									value={occ.find((o) => o.baseKey === baseKey)?.seenAt
-										? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}
-									disabled width="170px" onChange={() => {}} />
-							</GroupRow>
-							<GroupRow>
-								<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="240px"
-									autoComplete="off" placeholder={here?.fullName || translate("onecKeepAsIs")}
-									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
-								<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
-									width="190px" autoComplete="new-password" placeholder={translate("onecKeepAsIs")}
-									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
-								<FieldToggle name="buf_show" label={translate("onecShowInList")} value={form.showInList}
-									onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
-								<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
-									onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
-							</GroupRow>
+
+							{/*
+							 * ВЛАДЕЛЕЦ — база: не реквизит человека, а область действия карточки.
+							 * Отдельная рамка отделяет «где» от «что»: смена базы меняет всё
+							 * содержимое ниже, и это должно быть видно до щелчка.
+							 */}
+							<FormArea title={translate("onecAreaOwner")}>
+								<GroupRow>
+									<FieldSelect name="buf_base" label={translate("onecBase")} value={baseKey}
+										onChange={(e) => setBaseKey(e.target.value)}
+										options={occ.map((o) => ({ value: o.baseKey, label: `${o.baseKey} — ${o.baseName || "—"}` }))} />
+									<Field name="buf_seen" label={translate("onecDataFrom")}
+										value={occ.find((o) => o.baseKey === baseKey)?.seenAt
+											? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}
+										disabled width="170px" onChange={() => {}} />
+									<Field name="buf_roles" label={translate("roles")}
+										value={String((rolesByBase.get(baseKey.toLowerCase()) ?? []).length)}
+										disabled width="90px" onChange={() => {}} />
+								</GroupRow>
+							</FormArea>
+
+							<FormArea title={translate("onecAreaUserData")}>
+								<GroupCol>
+									<GroupRow>
+										<Field name="buf_user" label={translate("onecUserName")} value={userName} disabled width="220px" onChange={() => {}} />
+										<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="240px"
+											autoComplete="off" placeholder={here?.fullName || translate("onecKeepAsIs")}
+											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
+										<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
+											width="190px" autoComplete="new-password" placeholder={translate("onecKeepAsIs")}
+											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
+									</GroupRow>
+									<GroupRow>
+										<FieldToggle name="buf_show" label={translate("onecShowInList")} value={form.showInList}
+											onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
+										<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
+											onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
+									</GroupRow>
+								</GroupCol>
+							</FormArea>
+
 							{!baseKey && <Notice items={[{ type: "info", text: translate("onecPickBaseInHeader") }]} />}
 							{changedCount > 0 && (
 								<Notice items={[{ type: "info", text: `${translate("onecUnsavedChanges")}: ${changedCount}` }]} />
@@ -257,51 +326,52 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							setColumns: setRightsCols, sorting: rightsView.sorting, search: rightsView.search,
 							isLoading: occurrences.isLoading,
 							onReload: () => void occurrences.refetch(),
+							// Отметка строки = «роль есть в выбранной базе»: штатный чекбокс таблицы,
+							// а не своя колонка — с ним работают клавиатура и «отметить всё».
+							selectable: !!baseKey,
+							presetSelectedRows: rightsSelected,
+							onSelectionChange: applySelection,
 							// Одиночный клик раскрывает роль базами — второй разрез той же картины.
 							onActiveRowChange: (r) => setExpanded(r ? new Set([asText(r.uuid)]) : new Set()),
 							expandedRowIds: expanded,
 							renderExpandedRow: (r) => {
 								const role = asText(r.role);
+								// Вложенные строки повторяют строку таблицы: та же высота, те же границы,
+								// тот же чекбокс слева. Иначе раскрытие читается как врезка из другого
+								// экрана — хотя это те же данные, только в разрезе баз.
 								return (
-									<div className={styles.SubRows}>
+									<div className={styles.NestedRows}>
 										{occ.map((o) => (
-											<label key={o.baseKey} className={styles.SubRow}>
-												<input type="checkbox" checked={isOn(o.baseKey, role)}
-													onChange={() => toggle(o.baseKey, role)} />
-												<span className={styles.SubRowBase}>{o.baseKey}</span>
-												<span className={styles.Hint}>{o.baseName || "—"}</span>
-												{draft.has(draftKey(o.baseKey, role)) && (
-													<span className={styles.PlanAdd}>{translate("onecChanged")}</span>
-												)}
+											<label key={o.baseKey} className={styles.NestedRow}>
+												<span className={styles.NestedCheck}>
+													<input type="checkbox" checked={isOn(o.baseKey, role)}
+														onChange={() => toggle(o.baseKey, role)} />
+												</span>
+												<span className={styles.NestedCell} title={o.baseKey}>{o.baseKey}</span>
+												<span className={styles.NestedCell} title={o.baseName || "—"}>{o.baseName || "—"}</span>
+												<span className={styles.NestedCell}>
+													{draft.has(draftKey(o.baseKey, role)) ? translate("onecChanged") : ""}
+												</span>
 											</label>
 										))}
-										{!occ.length && <span className={styles.Hint}>{translate("onecUserNeverRead")}</span>}
+										{!occ.length && (
+											<div className={styles.NestedRow}>
+												<span className={styles.NestedCheck} />
+												<span className={styles.NestedCell}>{translate("onecUserNeverRead")}</span>
+											</div>
+										)}
 									</div>
 								);
 							},
-							renderCell: (r, col) => {
-								// Отметка «право в текущей базе» — прямо в строке, без раскрытия.
-								if (col.identifier === "hereLabel" && baseKey) {
-									const role = asText(r.role);
-									return (
-										<input type="checkbox" checked={isOn(baseKey, role)}
-											onChange={() => toggle(baseKey, role)} />
-									);
-								}
-								return undefined;
-							},
 							extraButtons: (
 								<>
-									<span className={styles.Hint}>
-										{changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNoChanges")}
-									</span>
 									<Button variant="secondary" disabled={!draft.size}
 										title={draft.size ? translate("onecResetDraft") : translate("onecNoChanges")}
 										onClick={() => setDraft(new Map())}>
 										<Icon name="restore" /> {translate("onecResetDraft")}
 									</Button>
 									<Button variant="primary" disabled={!changedCount || save.isPending}
-										title={changedCount ? translate("apply") : translate("onecNothingToApply")}
+										title={changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNothingToApply")}
 										onClick={() => save.mutate()}>
 										<Icon name="save" /> {translate("apply")}
 									</Button>
@@ -320,7 +390,6 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							onReload: () => void occurrences.refetch(),
 							// Двойной щелчок — карточка того же человека в другой базе.
 							onRowClick: openBase,
-							extraButtons: <span className={styles.Hint}>{translate("onecOpenInOtherBase")}</span>,
 						})} />
 					),
 				},

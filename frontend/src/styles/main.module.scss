@@ -1373,6 +1373,25 @@ body {
 	padding: 24px 0;
 }
 
+// Область формы: рамка + заголовок в разрыве рамки (нативный fieldset/legend).
+// Внутренний отступ 12 — шаг между смысловыми группами; сверху 6, потому что
+// заголовок уже отодвигает содержимое.
+.FormArea {
+	border: 1px solid $color33;
+	border-radius: 3px;
+	padding: 6px 12px 12px;
+	margin: 0;
+	min-width: 0;
+}
+
+.FormAreaTitle {
+	padding: 0 6px;
+	margin-left: 6px;
+	font-size: $fontsize;
+	font-weight: 700;
+	color: $color51;
+}
+
 // Заголовок секции внутри формы (мелкий, приглушённый).
 .FormSectionTitle {
 	margin: 0;

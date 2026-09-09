@@ -32,6 +32,8 @@ interface Params {
 	/** Отметки строк (групповые операции над выбранным). По умолчанию выключены. */
 	selectable?: boolean;
 	onSelectionChange?: (selected: Set<number>, rows: TDataItem[]) => void;
+	/** Начальные отметки: галочка как СОСТОЯНИЕ данных, а не выбор пользователя. */
+	presetSelectedRows?: Set<number>;
 	/**
 	 * Активная строка сменилась — ОДИНОЧНЫЙ клик. Для связанных списков: щёлкнули базу
 	 * слева — справа её пользователи. Двойной клик занят открытием элемента.
@@ -80,6 +82,7 @@ export function buildStaticTableProps(p: Params) {
 		selectable: !!p.selectable,
 		...(p.onSelectionChange ? { onSelectionChange: p.onSelectionChange } : {}),
 		...(p.onActiveRowChange ? { onActiveRowChange: p.onActiveRowChange } : {}),
+		...(p.presetSelectedRows ? { presetSelectedRows: p.presetSelectedRows } : {}),
 		...(p.expandedRowIds ? { expandedRowIds: p.expandedRowIds } : {}),
 		...(p.renderExpandedRow ? { renderExpandedRow: p.renderExpandedRow } : {}),
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),

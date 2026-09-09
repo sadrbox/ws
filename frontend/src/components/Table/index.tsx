@@ -87,6 +87,13 @@ export interface TableProps {
    * (напр. установка расширения в отмеченные базы) нужен сам набор.
    */
   onSelectionChange?: (selectedRows: Set<number>, rows: TDataItem[]) => void;
+  /**
+   * Начальные отметки строк — когда галочка означает СОСТОЯНИЕ данных, а не выбор
+   * пользователя (право включено, база опубликована). Применяются при смене этого
+   * набора, а не на каждый рендер: иначе отметка возвращалась бы обратно сразу после
+   * щелчка, и снять её было бы невозможно.
+   */
+  presetSelectedRows?: Set<number>;
   // ── Inline-редактирование ──────────────────────────────────────────────
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
@@ -280,6 +287,7 @@ const Table: FC<TableProps> = memo((props) => {
     selectable = true,
     onSelectItem,
     onSelectionChange,
+    presetSelectedRows,
     enableDateRange = true,
     componentName, rows, columns, total, totalPages,
     isLoading, error,
@@ -324,6 +332,21 @@ const Table: FC<TableProps> = memo((props) => {
   // Уведомляем владельца об изменении отметок. Через ref, чтобы нестабильный колбэк
   // из родителя не перезапускал эффект на каждый рендер.
   const [excludedRows, setExcludedRows] = useState<Set<number>>(new Set());
+  // Пересев отметок: только когда пришёл ДРУГОЙ набор (сравниваем по составу, а не по
+  // ссылке — родитель пересобирает Set на каждый рендер).
+  //
+  // Пересев делается В РЕНДЕРЕ, а не в эффекте, и это принципиально: уведомление об
+  // отметках (onSelectionChange ниже) — тоже эффект, и в первом же коммите он успевал
+  // сработать с ПУСТЫМ набором, то есть сообщал родителю «снято всё» ещё до того, как
+  // начальные отметки применялись. Там, где галочка означает состояние данных (роли
+  // пользователя в базе), это превращалось в мнимую правку «снять все роли».
+  const presetKey = presetSelectedRows ? [...presetSelectedRows].sort((a, b) => a - b).join(",") : null;
+  const [appliedPresetKey, setAppliedPresetKey] = useState<string | null>(null);
+  if (presetKey !== null && presetKey !== appliedPresetKey) {
+    setAppliedPresetKey(presetKey);
+    setSelectedRows(new Set(presetKey ? presetKey.split(",").map(Number) : []));
+  }
+
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   useEffect(() => {

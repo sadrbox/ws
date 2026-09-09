@@ -14,10 +14,11 @@
  * КАРКАС ЖЁСТКИЙ: полоса режима, тело из двух колонок, полоса состояния. Прокручиваются
  * только таблицы, поэтому появление сообщения ничего не сдвигает.
  */
-import { FC, useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
+import Tabs from "src/components/Tabs";
 import { Button } from "src/components/Button";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
@@ -26,12 +27,14 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary,
+	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchBatches, fetchUserOccurrences, fetchUserSummary,
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
+import ProgressTab from "./ProgressTab";
+import { finishOp, hasRunningBatches, mergeBatch, progressOp, startOp, useOnecOps } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 const baseColumns = (): TColumn[] => ([
@@ -56,6 +59,40 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 
 	const parallel = useCheckParallel();
 	const openCard = useOpenBaseUser();
+	const qc = useQueryClient();
+
+	/**
+	 * Опрос заданий: пока есть незавершённые команды, состояние тянется каждые три секунды
+	 * и переносится в реестр операций. Опрос живёт ЗДЕСЬ, а не во вкладке прогресса: команду
+	 * ставят с этого экрана и из карточки, и прогресс не должен замирать оттого, что человек
+	 * смотрит на таблицы. Как только незавершённых не остаётся, опрос выключается сам —
+	 * держать постоянный трафик ради пустого списка незачем.
+	 */
+	const ops = useOnecOps();
+	const watching = hasRunningBatches(ops);
+	const batches = useQuery({
+		queryKey: ["onec", "batches"],
+		queryFn: fetchBatches,
+		// Запрос включён всегда — иначе кнопка «Обновить» на вкладке прогресса не работала
+		// бы (отключённый запрос перезапрашивать нечем). Периодичность же появляется только
+		// при незавершённых командах.
+		refetchInterval: watching ? 3000 : false,
+		staleTime: 0,
+	});
+	useEffect(() => {
+		for (const b of batches.data?.items ?? []) mergeBatch(b);
+	}, [batches.data]);
+
+	// Команда закончилась — реестр в панели устарел: перечитываем то, что она меняла.
+	const wasWatching = useRef(false);
+	useEffect(() => {
+		if (wasWatching.current && !watching) {
+			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+		}
+		wasWatching.current = watching;
+	}, [watching, qc]);
 
 	// Ширина таблиц — тем же разделителем, что в списках с предпросмотром и отчётах:
 	// у администратора свои пропорции (сто баз против десятка людей), и они должны
@@ -125,7 +162,16 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 	const recheck = useCallback(async (keys: string[]) => {
 		if (!keys.length) return;
 		setChecking(true);
-		const r = await checkBases(keys, fetchBaseUsers, parallel);
+		const op = startOp({
+			kind: "read", title: translate("onecUsersCheck"),
+			target: keys.length === 1 ? keys[0] : `${translate("onecBases")}: ${keys.length}`,
+			total: keys.length,
+		});
+		const r = await checkBases(keys, fetchBaseUsers, parallel, (done, failed) => progressOp(op, done, failed));
+		finishOp(op, {
+			failed: r.failed.length,
+			note: r.failed.length ? `${r.failed[0].baseKey}: ${r.failed[0].message}` : "",
+		});
 		setChecking(false);
 		showToast(
 			r.failed.length
@@ -146,16 +192,11 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
 			onRowClick: (r) => openCard(activeUser || "", asText(r.baseKey)),
 			extraButtons: (
-				<>
-					<Button variant="secondary" disabled={!activeBase || checking}
-						title={activeBase ? translate("onecUsersCheck") : translate("onecPickBaseFirst")}
-						onClick={() => void recheck([activeBase])}>
-						<Icon name="reload" /> {translate("onecUsersCheck")}
-					</Button>
-					<span className={styles.Hint}>
-						{activeBase || (primary === "bases" ? translate("onecPickBaseFirst") : "")}
-					</span>
-				</>
+				<Button variant="secondary" disabled={!activeBase || checking}
+					title={activeBase ? `${translate("onecUsersCheck")}: ${activeBase}` : translate("onecPickBaseFirst")}
+					onClick={() => void recheck([activeBase])}>
+					<Icon name="reload" /> {translate("onecUsersCheck")}
+				</Button>
 			),
 		})} />
 	);
@@ -169,13 +210,6 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
 			// Карточка пары: человек из этой строки, база — активная слева.
 			onRowClick: (r) => openCard(asText(r.name), activeBase),
-			extraButtons: (
-				<span className={styles.Hint}>
-					{primary === "bases"
-						? (activeBase ? `${translate("onecBaseUsers")}: ${activeBase}` : translate("onecPickBaseFirst"))
-						: (activeUser || translate("onecPickUserFirst"))}
-				</span>
-			),
 		})} />
 	);
 
@@ -187,51 +221,69 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			? `${translate("onecUserBases")}: ${activeUser} · ${baseRows.length}`
 			: translate("onecPickUserFirst"));
 
+	const screen = (
+		<div className={styles.UsersScreen}>
+			<div className={styles.ModeBar}>
+				{/* Один переключатель, а не два состояния кнопками: раскладок ровно две,
+				    и «поменять местами» — одно действие, а не выбор из списка. */}
+				<Button variant="secondary" title={translate("onecSwapTables")}
+					onClick={() => setPrimary((p) => (p === "bases" ? "users" : "bases"))}>
+					<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
+				</Button>
+				<span className={styles.ModeSpacer} />
+			</div>
+
+			<div className={styles.PairBody} ref={split.containerRef}>
+				<div className={styles.NavPane} style={{ flexBasis: `${split.percent}%` }}>
+					{primary === "bases" ? basesTable : usersTable}
+				</div>
+				<VSplitBar onPointerDown={split.startResize} onDoubleClick={split.reset} onNudge={split.nudge} />
+				<div className={styles.NavPane} style={{ flexBasis: `${100 - split.percent}%` }}>
+					{primary === "bases" ? usersTable : basesTable}
+				</div>
+			</div>
+
+			<div className={styles.StatusBar}>
+				<span className={styles.StatusText}>{status}</span>
+				<span className={styles.HeadActions}>
+					<QueryError error={bases.error ?? summary.error ?? baseUsers.error ?? occurrences.error} />
+					<Button variant="primary"
+						disabled={primary === "bases" ? !activeBase || !activeUser : !activeUser}
+						title={primary === "bases"
+							? (!activeBase ? translate("onecPickBaseFirst")
+								: !activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))
+							: (!activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))}
+						onClick={() => openCard(activeUser, activeBase)}>
+						<Icon name="open" /> {translate("onecOpenCard")}
+					</Button>
+				</span>
+			</div>
+		</div>
+	);
+
+	// Прогресс — соседняя вкладка, а не окно поверх: длинная проверка не должна закрывать
+	// собой таблицы, а короткая — отвлекать. Обе панели остаются смонтированными, поэтому
+	// переключение не теряет ни выделения, ни прокрутки.
+	const running = ops.filter((o) => o.state === "running").length;
+
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
-
-			<div className={styles.UsersScreen}>
-				<div className={styles.ModeBar}>
-					<span className={styles.Hint}>
-						{primary === "bases" ? translate("onecLayoutBasesLeft") : translate("onecLayoutUsersLeft")}
-					</span>
-					{/* Один переключатель, а не два состояния кнопками: раскладок ровно две,
-					    и «поменять местами» — одно действие, а не выбор из списка. */}
-					<Button variant="secondary" title={translate("onecSwapTables")}
-						onClick={() => setPrimary((p) => (p === "bases" ? "users" : "bases"))}>
-						<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
-					</Button>
-					<span className={styles.ModeSpacer} />
-					<span className={styles.Hint}>{translate("onecOpenCardHint")}</span>
-				</div>
-
-				<div className={styles.PairBody} ref={split.containerRef}>
-					<div className={styles.NavPane} style={{ flexBasis: `${split.percent}%` }}>
-						{primary === "bases" ? basesTable : usersTable}
-					</div>
-					<VSplitBar onPointerDown={split.startResize} onDoubleClick={split.reset} onNudge={split.nudge} />
-					<div className={styles.NavPane} style={{ flexBasis: `${100 - split.percent}%` }}>
-						{primary === "bases" ? usersTable : basesTable}
-					</div>
-				</div>
-
-				<div className={styles.StatusBar}>
-					<span className={styles.StatusText}>{status}</span>
-					<span className={styles.HeadActions}>
-						<QueryError error={bases.error ?? summary.error ?? baseUsers.error ?? occurrences.error} />
-						<Button variant="primary"
-							disabled={primary === "bases" ? !activeBase || !activeUser : !activeUser}
-							title={primary === "bases"
-								? (!activeBase ? translate("onecPickBaseFirst")
-									: !activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))
-								: (!activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))}
-							onClick={() => openCard(activeUser, activeBase)}>
-							<Icon name="open" /> {translate("onecOpenCard")}
-						</Button>
-					</span>
-				</div>
-			</div>
+			<Tabs
+				tabs={[
+					{ id: "screen", label: translate("onecTabUsersList"), component: screen },
+					{
+						id: "progress",
+						label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
+						component: (
+							<ProgressTab
+								isLoading={batches.isFetching}
+								onRefresh={() => void batches.refetch()}
+							/>
+						),
+					},
+				]}
+			/>
 		</>
 	);
 };
