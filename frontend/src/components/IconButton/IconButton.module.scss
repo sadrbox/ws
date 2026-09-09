@@ -23,8 +23,8 @@
   }
 
   &.sm {
-    width: $heightFieldInput - 4px;
-    height: $heightFieldInput - 4px;
+    width: $heightFieldInput - 6px;
+    height: $heightFieldInput - 6px;
   }
 
   &:hover:not(:disabled) {

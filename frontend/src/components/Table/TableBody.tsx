@@ -17,6 +17,7 @@ import { GLOBAL_ADAPTIVE_LIMIT_REF } from 'src/hooks/useInfiniteModelList';
 import { CellFieldStateScope } from 'src/hooks/useDirtyHighlight';
 import { Icon } from 'src/components/IconButton/icons';
 import { translate } from 'src/i18';
+import { cx } from 'src/utils/cx';
 import type { TColumn, TDataItem } from './types';
 import { useTableContext, useTableVolatile } from './context';
 import { getFormatColumnValue } from './services';
@@ -543,7 +544,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   const chevron = onToggleExpand && isGroup ? (
     <button
       type="button"
-      className={[styles.ExpandToggle, isExpanded ? styles.ExpandToggleOpen : null].filter(Boolean).join(' ')}
+      className={cx(styles.ExpandToggle, isExpanded && styles.ExpandToggleOpen)}
       title={isExpanded ? translate('collapseRow') : translate('expandRow')}
       aria-label={isExpanded ? translate('collapseRow') : translate('expandRow')}
       aria-expanded={isExpanded}
@@ -562,27 +563,26 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   }, [children, onChildToggle, row]);
   const visibleColCount = columns.filter(c => c.visible).length + (showCheckbox ? 1 : 0);
 
-  // Класс выравнивания ячейки по типу колонки — вычисляется один раз на колонку
-  const cellAlignClass = (col: TColumn) => {
-    switch (col.type) {
-      case 'number': return styles.JustifyRight;
-      case 'switcher': return styles.JustifyCenter;
-      default: return styles.JustifyLeft;
+  // Класс выравнивания — по типу колонки, значит один раз на НАБОР колонок, а не на
+  // каждую ячейку каждой строки: раньше switch выполнялся на каждую отрисованную ячейку.
+  const alignByColumn = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const col of columns) {
+      m.set(col.identifier, col.type === 'number' ? styles.JustifyRight
+        : col.type === 'switcher' ? styles.JustifyCenter
+          : styles.JustifyLeft);
     }
-  };
+    return m;
+  }, [columns]);
 
-  const trClassName = [
-    // Чередование фона (зебра). Классы, а не :nth-child — см. комментарий у
-    // rowIndex: при виртуализации DOM-позиция не равна номеру строки.
-    rowIndex % 2 === 0 ? styles.even : styles.odd,
-    isActive && styles.activeRow,
-    isLoading && styles.RowLoading,
-    // Вложенная строка раскрытия: разметка и высота те же, что у TableBodyRow,
-    // класс нужен, чтобы отличить подчинённые строки от групповой.
+  // СОСТОЯНИЕ строки — атрибуты (зебра, активность, загрузка): они не участвуют в
+  // гонке имён классов и не заставляют пересобирать className на каждый рендер.
+  // КЛАССЫ остаются за структурой: вложенная строка и заголовок группы — это разные
+  // виды строк, и в разметке их должно быть видно по имени.
+  const trClassName = cx(
     isChild && styles.ExpandedRow,
-    // Раскрытая строка — заголовок группы: подложка шапки и полужирное начертание.
     isGroup && isExpanded && styles.GroupHeaderRow,
-  ].filter(Boolean).join(' ');
+  );
 
   return (
     <Fragment>
@@ -592,7 +592,11 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
         onMouseDown={isChild ? undefined : handleMouseDown}
         onDoubleClick={isChild ? undefined : handleDoubleClick}
         className={trClassName}
+        // Чередование фона. Атрибут, а не :nth-child — см. комментарий у rowIndex:
+        // при виртуализации DOM-позиция не равна номеру строки.
+        data-zebra={rowIndex % 2 === 0 ? 'even' : 'odd'}
         data-active={isActive || undefined}
+        data-loading={isLoading || undefined}
         // data-row-id / data-selected — атрибуты для внешних обработчиков
         // (напр. SubTable.handleContainerKeyDown), чтобы по клавишам можно
         // было определить выбранные/активные строки без доступа к React-state.
@@ -619,7 +623,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             })}
           >
             <div
-              className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
+              className={cx(styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive && styles.activeCell)}
             >
               <input
                 type="checkbox"
@@ -646,12 +650,12 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
 
           const cellMeta = getCellMetaRef?.current?.(row, col) ?? null;
 
-          const cellClassName = [
+          const cellClassName = cx(
             styles.TableBodyCell,
-            cellAlignClass(col),
-            isCellActive ? styles.activeCell : null,
-            isChild && col.identifier === columns[0]?.identifier ? styles.ChildCell : null,
-          ].filter(Boolean).join(' ');
+            alignByColumn.get(col.identifier),
+            isCellActive && styles.activeCell,
+            isChild && col.identifier === columns[0]?.identifier && styles.ChildCell,
+          );
 
           const cellTitle = cellMeta?.errorMessage;
 
@@ -681,17 +685,14 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             }
           }
           // Fallback: plain read-only span. CellRequired applied here since no Field handles it.
-          const fallbackClassName = [
-            cellClassName,
-            cellMeta?.required ? styles.CellRequired : null,
-          ].filter(Boolean).join(' ');
+          const fallbackClassName = cx(cellClassName, cellMeta?.required && styles.CellRequired);
           const value = getFormatColumnValue(row, col);
           // Журнал документа: первая колонка-дата → иконка документа + признак проведения.
           const isDocDate = col.identifier === firstDateColId && typeof row.posted === 'boolean';
           const cellContent = isDocDate ? (
             <span className={styles.DocDateCell}>
               <span
-                className={[styles.DocDateIcon, row.posted ? styles.docPosted : undefined].filter(Boolean).join(' ')}
+                className={cx(styles.DocDateIcon, row.posted === true && styles.docPosted)}
                 title={row.posted ? translate('posted') : translate('draft')}
               >
                 <Icon name="document" width={15} height={15} />

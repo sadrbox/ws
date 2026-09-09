@@ -154,6 +154,48 @@
 // КАРКАС ЖЁСТКИЙ. Высоты строк сетки заданы заранее, прокручивается только содержимое.
 // Раньше карточка была одной длинной колонкой: появлялось сообщение или строка в
 // таблице — и всё ниже уезжало, а нажатие попадало не туда, куда целились.
+// Раскладка «Расширений»: список слева, карточка справа. Классы вернулись —
+// при перестройке «Пользователей баз» они уехали вместе со своим экраном, а
+// «Расширения» продолжали на них ссылаться и остались без раскладки (ошибку
+// теперь ловит css-modules-lint).
+.UsersLayout {
+	display: grid;
+	grid-template-columns: 320px minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.UsersList {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	border-right: 1px solid $color33;
+}
+
+.UsersCard {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+}
+
+// Заголовок секции: та же высота, что у командной панели таблицы, — секции
+// выстраиваются в один ритм с тулбарами внутри них.
+.SecHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 12px;
+	background: $silverLightest;
+	border-top: 1px solid $color33;
+	border-bottom: 1px solid $color33;
+	font-weight: 700;
+	font-size: $fontsize;
+}
+
 .UsersScreen {
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr) auto;

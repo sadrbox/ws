@@ -1,1060 +1,46 @@
-/* Scrollbar */
-* {
-	&::-webkit-scrollbar {
-		width: 10px;
-		height: 10px;
+// Стили разложены по швам компонента — файл на 1100 строк искали только поиском.
+// Порядок подключения = порядок правил в собранном CSS, поэтому он повторяет
+// прежний: каркас → таблица → тулбар → служебные ячейки → исключения.
+@use "./_table.frame.scss" as frame;
+@use "./_table.base.scss" as base;
+@use "./_table.toolbar.scss" as toolbar;
+@use "./_table.cells.scss" as cells;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ПОРЯДОК СЛОЁВ — вместо !important.
+//
+// Раньше «перекрывающие» правила (строка-заполнитель, строки-заглушки виртуализации,
+// основная запись) проигрывали по специфичности глубокому каркасу .TableScrollContainer
+// и брали своё шестнадцатью !important. Теперь каркас лежит в слое table-base,
+// подсветка строки — в table-cell-activeRow (объявлен позже, значит сильнее), а
+// точечные исключения остаются вне слоёв: неслоёный CSS всегда сильнее любого слоя.
+// Порядок получается сам: каркас < строка < ячейка и исключения.
+// ═══════════════════════════════════════════════════════════════════════════
+@layer table-base, table-cell-activeRow;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// СОСТОЯНИЯ СТРОКИ — слой внутри модуля.
+//
+// Раньше эти два правила жили в styles/main.module.scss и цеплялись за ПОДСТРОКУ
+// сгенерированного имени (`tr[class*="activeRow"] [class*="TableBodyCell"]`). Такой
+// селектор ловил заодно и однокоренные классы, молча ломался при переименовании и
+// держал кусок таблицы за пределами её собственного файла.
+//
+// Теперь состояние строки — data-атрибуты (их же читают обработчики клавиатуры), а
+// правила лежат в слое: unlayered-CSS всегда перекрывает @layer, поэтому порядок
+// «строка < ячейка < поле в фокусе» соблюдается сам, без !important.
+// ═══════════════════════════════════════════════════════════════════════════
+@layer table-cell-activeRow {
+	tr[data-active] .TableBodyCell {
+		background: $color2;
 	}
 
-	&::-webkit-scrollbar-track {
-		background: $color30;
-	}
-
-	&::-webkit-scrollbar-thumb {
-		background: $color10;
-		border-radius: $radius2;
-	}
-
-	&::-webkit-scrollbar-thumb:hover {
-		background: $color10;
-	}
-}
-
-/* Индикация «нельзя редактировать» для activeCell.
- * Используется при нажатии Enter на ячейку без редактируемого поля
- * (см. SubTable.handleContainerKeyDown + td[data-pulse="true"]).
- * Палитра соответствует .flashReadOnly из SubTable (красный мигающий
- * фон) — единый визуальный язык для onClick по read-only ячейке
- * и для Enter по нередактируемой колонке. */
-@keyframes activeCellPulse {
-	0% {
-		background-color: transparent;
-		outline-color: transparent;
-	}
-
-	20% {
-		background-color: rgba(229, 57, 53, 0.18);
-		outline-color: rgba(220, 50, 50, 0.6);
-	}
-
-	60% {
-		background-color: rgba(229, 57, 53, 0.18);
-		outline-color: rgba(220, 50, 50, 0.6);
-	}
-
-	100% {
-		background-color: transparent;
-		outline-color: transparent;
+	// Наведение на НЕактивную строку — ориентир курсора.
+	tr:hover:not([data-active]) .TableBodyCell {
+		background: var(--sv-accentBlueHover);
 	}
 }
 
-/* Table layout containers */
-.TableWrapper {
-	container-type: size;
-	display: flex;
-	flex-direction: column;
-	flex: 1;
-	gap: 6px;
-	height: 100%;
-	overflow: hidden;
-	min-height: 296px;
-	min-width: 300px;
-	border-radius: $radius2;
-	transition: all 0.3s ease;
-	position: relative; // нужно для абсолютного позиционирования оверлея
-}
-
-.TableScrollWrapper {
-	outline: none;
-	flex: 1;
-	min-height: 0;
-	margin: 0;
-	background: var(--sv-color60);
-	border: 1px solid $color10;
-	border-radius: $radius2;
-	box-shadow: inset 0 0 4px $color30;
-	overflow: auto;
-	scroll-behavior: smooth;
-
-	// Оптимизация для производительности
-	will-change: scroll-position;
-	transform: translate3d(0, 0, 0);
-
-	// Быстрый скролл на мобильных
-	-webkit-overflow-scrolling: touch;
-
-	// Ускорение переотрисовки
-	contain: layout style paint;
-}
-
-
-
-.TableFilter {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 12px;
-}
-
-.TabHeader {
-	display: flex;
-	gap: 6px;
-	margin: 3px 0;
-}
-
-.TablePanelLeft,
-.TablePanelRight {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	transition: all 0.4s ease;
-}
-
-.TablePanelLeft {
-	justify-content: space-between;
-}
-
-.TablePanelRight {
-	flex: 1 1 100%;
-	justify-content: flex-start;
-
-	@container (max-width: 600px) {
-		flex-wrap: wrap;
-		justify-content: flex-start;
-	}
-
-	@container (max-width: 1000px) {
-		flex: 1 1 100%;
-	}
-}
-
-// Обёртка скролл-области + оверлей — для корректного абсолютного позиционирования
-.TableScrollContainer {
-	position: relative;
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	z-index: 1;
-
-	/* Table itself */
-	table {
-		border-collapse: separate;
-		border-spacing: 0;
-		width: 100%;
-		height: 100%;
-		table-layout: fixed;
-	}
-
-	thead {
-		background: $color31;
-		position: sticky;
-		top: 0;
-		z-index: 2;
-
-		// Нейтральная нижняя тень (была тень ЦВЕТОМ ТЕКСТА $color6 → в тёмной теме
-		// светлый ореол вокруг залипающей шапки). Тень всегда тёмная/полупрозрачная.
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-
-		tr {
-			th {
-				padding: 0;
-				font-weight: 500;
-				user-select: none;
-				position: relative;
-				border: 0;
-				border-right: 1px solid $color34;
-
-				&:first-child {
-					border-left: 0;
-				}
-
-				&:last-child {
-					border-right: 0;
-				}
-			}
-
-			.TableHeaderCell {
-				display: flex;
-				align-items: center;
-				height: $heightFieldInput;
-				padding: 1px;
-				overflow: hidden;
-				white-space: nowrap;
-				text-overflow: ellipsis;
-				cursor: default;
-				justify-content: space-between;
-				border: 1px solid transparent;
-
-				span {
-					padding: 0px 6px;
-					overflow: hidden;
-					white-space: nowrap;
-					text-overflow: ellipsis;
-				}
-			}
-
-			.ResizeHandle {
-				position: absolute;
-				right: -3px;
-				top: 0;
-				bottom: 0;
-				width: 5px;
-				cursor: col-resize;
-				z-index: 3;
-
-				&:hover {
-					background: rgba(#4a90d9, 0.35);
-				}
-			}
-		}
-
-
-	}
-
-	tr:has(+ tr.activeRow) {
-		td {
-			border-bottom: 1px solid $color1 !important;
-		}
-	}
-
-	tr[data-primary="true"] {
-		td .TableBodyCell {
-			font-weight: 700 !important;
-
-			// Применяем bold ко всем потомкам, включая span/input/select
-			// и кастомные рендеры ячеек (LookupField и т.п.)
-			* {
-				font-weight: 700 !important;
-			}
-		}
-	}
-
-	/* Filler row — занимает остаток высоты, чтобы tfoot прижимался
-   к низу TableScrollWrapper. Реальные строки tbody при этом
-   сохраняют свою фиксированную высоту. */
-	.TableFillerRow {
-		height: 100%;
-
-		td {
-			padding: 0 !important;
-			border: 0 !important;
-			background: transparent !important;
-
-			&::after {
-				display: none !important;
-			}
-		}
-	}
-
-	tbody {
-		// Оптимизация для производительности при виртуализации
-		will-change: transform;
-		transform: translate3d(0, 0, 0);
-		contain: layout style paint;
-		// background: $fieldBackground;
-		position: relative;
-
-		tr {
-			// Оптимизация для каждой строки
-			will-change: auto;
-			transform: translate3d(0, 0, 0);
-
-			&:first-child {
-				td {
-					border-top: 1px solid $color34;
-				}
-			}
-
-			// ── Чередование фона строк (зебра) ─────────────────────────────
-			// Классы .odd/.even ставит TableBodyRow по индексу в ПОЛНОМ списке:
-			// таблица виртуализирована, и :nth-child перекрашивал бы строки при
-			// прокрутке (DOM-позиция ≠ номер строки).
-			//
-			// Полоса — доля цвета ТЕКСТА поверх фона, а не фиксированный серый:
-			// $color6 всегда контрастен подложке, поэтому в светлой теме полоса
-			// чуть темнее, в тёмной — чуть светлее, и обе темы работают одним
-			// правилом (никаких инвертирующихся токенов).
-			// Фон ставится на СТРОКУ, поэтому подсветка активной строки/ячейки и
-			// hover (они красят .TableBodyCell) перекрывают зебру.
-			&.even {
-				background-color: transparent;
-			}
-
-			&.odd {
-				background-color: color-mix(in srgb, #{$color6} 4%, transparent);
-			}
-
-			// ── Групповая строка и её вложенные ────────────────────────────
-			// ИМЯ КЛАССА — GroupHeaderRow, а не GroupRow: `.GroupRow` объявлен в
-			// variables.scss (флекс-строка формы), а variables.scss подмешивается
-			// в КАЖДЫЙ scss-модуль. Одноимённый класс здесь получал бы то же
-			// сгенерированное имя, и `display: flex` из хелпера превращал <tr> в
-			// флекс-контейнер: ячейки схлопывались, разметка группы разъезжалась.
-			// Раскрытая строка — ЗАГОЛОВОК ГРУППЫ: та же подложка, что у шапки
-			// таблицы, и полужирное начертание. Так видно, где начинается группа,
-			// даже когда её вложенные строки уехали под прокрутку.
-			// Зебру она перекрывает намеренно: заголовок не может «мигать» через
-			// строку. Подсветка активной строки и hover красят .TableBodyCell,
-			// то есть поверх — выделение группы не теряется.
-			&.GroupHeaderRow {
-				background-color: $color30;
-				font-weight: 700;
-
-				// У каждой ячейки есть СВОЯ внутренняя рамка цветом подложки
-				// ($color60) — на обычной строке она незаметна, а на сером фоне
-				// группы превращается в белую сетку: строка распадается на
-				// «коробочки», и заголовок группы перестаёт читаться полосой.
-				// Гасим её только у группы; серые границы td (сетка таблицы) и
-				// подсветка активной ячейки (box-shadow) не затрагиваются.
-				>td>.TableBodyCell {
-					border-color: transparent;
-				}
-			}
-
-			// Вложенная строка остаётся ОБЫЧНОЙ строкой таблицы: фон, границы и
-			// высота у неё те же. Подчинение показывает только первая ячейка —
-			// отступ и приглушённый цвет (см. .ChildCell).
-			&.ExpandedRow {
-				font-weight: normal;
-			}
-
-			&>td {
-
-
-				padding: 0;
-				border-bottom: 1px solid $color34;
-				border-right: 1px solid $color34;
-
-				.TableBodyCell {
-					display: flex;
-					align-items: center;
-					min-height: $heightFieldInput;
-					height: stretch;
-					padding: 0;
-					white-space: nowrap;
-					text-overflow: ellipsis;
-					overflow: hidden;
-					user-select: none;
-					border: 1px solid var(--sv-color60);
-					place-items: center;
-					// position: relative нужен для абсолютно-позиционированных
-					// потомков (CellErrorTooltip из SubTable, который теперь
-					// рендерится прямо внутри .TableBodyCell, без промежуточного
-					// `.CellWrap`-обёртки).
-					position: relative;
-
-					// Поля ввода без фокуса наследуют pointer от tr;
-					// при получении фокуса — cursor меняется на text мгновенно через :focus
-					&>input[type="checkbox"] {
-						height: $heightFieldInput - 9px;
-						width: $heightFieldInput - 9px;
-						// margin: 0 6px;
-					}
-
-					input:not([type="checkbox"]),
-					textarea,
-					select {
-						cursor: default !important;
-					}
-
-					input:not([type="checkbox"]):focus,
-					textarea:focus,
-					select:focus {
-						cursor: text;
-						user-select: text;
-					}
-
-
-
-
-
-					&>input[type="text"] {
-						width: 100%;
-						border: 0px transparent;
-					}
-
-					&>span,
-					code {
-						padding: 0px 6px;
-						overflow: hidden;
-						white-space: nowrap;
-						// min-width: 0 обязателен: по умолчанию flex-элемент не сжимается
-						// меньше своего содержимого, и текст рядом с шевроном группы
-						// выдавливал бы ячейку вместо многоточия.
-						min-width: 0;
-						text-overflow: ellipsis;
-						// align-items: center;
-						align-content: center;
-					}
-				}
-
-				&:first-child {
-					border-left: 0;
-				}
-
-				&:last-child {
-					border-right: 0;
-				}
-			}
-
-			&.activeRow {
-				z-index: 5;
-				// Оптимизируем активную строку
-				will-change: background-color, box-shadow;
-
-				&:first-child {
-					td {
-						border-top: 1px solid $color1;
-					}
-				}
-
-				td {
-					.TableBodyCell {
-
-						// Фоновая подсветка строки (`background: $color2`) теперь
-						// задаётся в main.module.scss через @layer table-cell-activeRow.
-						// Здесь оставлены только структурные/контентные правила.
-						&>input[type="checkbox"] {
-							height: $heightFieldInput - 9px;
-							width: $heightFieldInput - 9px;
-						}
-
-						&>input[type="text"] {
-							width: 100%;
-							border: 0px transparent;
-						}
-
-						// ── activeCell: выбранная ячейка внутри активной строки ─────
-						&.activeCell {
-							position: relative;
-							z-index: 6;
-							outline: none;
-							font-weight: 500;
-							background: color-mix(in srgb, $color1 20%, transparent);
-							box-shadow: inset 0 0 0 1px color-mix(in srgb, $color1 50%, transparent);
-						}
-
-						// ── focus-within: поле получило фокус (ввод) ─────────────
-						// Приоритет выше .activeCell — желтый фон поверх синего.
-						&:not(:has(input[type="checkbox"], button)):focus-within {
-							background: rgba(#fc0, 0.2);
-							box-shadow: inset 0 0 0 1px rgba(#fc0, 0.6);
-							outline: none;
-						}
-					}
-
-					border-bottom: 1px solid $color1;
-					border-right: 1px solid $color1;
-
-					&:last-child {
-						border-right: 0px;
-					}
-
-				}
-			}
-
-			&:last-child {
-				border: none !important;
-
-				&>td {
-					border: none !important;
-				}
-			}
-		}
-
-	}
-
-	/* ── data-pulse: единая индикация «нельзя редактировать» ──────────────
- * Кратковременная (~300 ms) анимация на любой <td>, у которой стоит
- * data-pulse="true". Атрибут выставляется в двух местах:
- *   1) SubTable.handleContainerKeyDown — Enter на нередактируемую ячейку;
- *   2) ReadOnlyCell.onClick — клик по read-only содержимому ячейки в
- *      режиме inline-editing.
- * Селектор — на любой td в любой строке (вне tr.activeRow), чтобы
- * срабатывало и на неактивной строке. */
-	td[data-pulse="true"] {
-		animation: activeCellPulse 280ms ease-out 1;
-	}
-
-	/* tfoot — итоги колонок, sticky bottom внутри скролла, в стиле thead */
-	tfoot {
-		background: $color31;
-		position: sticky;
-		bottom: 0;
-
-		tr {
-			td {
-				position: relative;
-				padding: 0;
-				font-weight: 500;
-				user-select: none;
-				border-top: 1px solid $color34;
-				border-bottom: 0;
-				border-right: 1px solid $color34;
-
-				&::after {}
-
-				&:first-child {
-					border-left: 0;
-				}
-
-				&:last-child {
-					border-right: 0;
-				}
-
-				.TableFooterCell {
-					display: flex;
-					align-items: center;
-					height: $heightFieldInput;
-					padding: 1px;
-					overflow: hidden;
-					white-space: nowrap;
-					text-overflow: ellipsis;
-					cursor: default;
-					justify-content: flex-end;
-					border: 1px solid transparent;
-
-					span {
-						padding: 0px 6px;
-						overflow: hidden;
-						white-space: nowrap;
-						text-overflow: ellipsis;
-					}
-				}
-			}
-		}
-
-
-	}
-}
-
-/* TableStatusBar — строка состояния, снаружи скролла, всегда внизу TableWrapper */
-.TableStatusBar {
-	background: $color30;
-	flex-shrink: 0;
-	position: relative;
-
-}
-
-.TableStatusCell {
-	display: flex;
-	align-items: center;
-	height: $heightFieldInput - 3px;
-	padding: 1px 8px;
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-	cursor: default;
-	gap: 8px;
-	font-weight: 500;
-	user-select: none;
-
-	span {
-		padding: 0 5px;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-
-	.TableStatusSelected {
-		font-weight: 600;
-		color: var(--c-blue-53);
-	}
-
-	.TableStatusExcluded {
-		font-weight: 600;
-		color: var(--c-red-51);
-	}
-}
-
-/* Active / focused states */
-
-
-
-/* Context menu */
-.contextMenu {
-	position: absolute;
-	z-index: 9999;
-	width: 200px;
-	padding: 0;
-	background: $color60;
-	border: 1px solid $color10;
-	border-radius: $radius2;
-	box-shadow: 0 0 3px $color10;
-	user-select: none;
-
-	.contextMenu_list {
-		display: flex;
-		flex-direction: column;
-		padding: 0;
-		margin: 0;
-		list-style: none;
-
-		li {
-			display: flex;
-			align-items: center;
-			padding: 5px;
-
-			&:not(:last-child) {
-				border-bottom: 1px solid $color30;
-			}
-
-			a {
-				display: grid;
-				grid-template-columns: 22px 1fr;
-				align-items: center;
-				font-size: $fontsize - 1px;
-
-				&:hover {
-					color: $colorTheme;
-				}
-			}
-		}
-	}
-}
-
-/* Headers & wrappers */
-.FormWrapper,
-.ScrollWrapper {
-	flex: 1;
-	padding: 6px;
-	margin: 6px;
-	background: var(--sv-color60);
-	border: 1px solid $color10;
-	border-radius: $radius2;
-	overflow: auto;
-	scroll-behavior: smooth;
-}
-
-/* Drag & drop */
-.dragging {
-	opacity: 0.6;
-}
-
-/* ── Borderless fields inside table cells (legacy, prefer variant="table" on Field*) ── */
-.borderlessCell {
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
-	height: 100% !important;
-
-	// Field wrappers — stretch to fill, remove borders
-	div[class*="FieldWrapper"] {
-		height: 100%;
-		margin: 0;
-	}
-
-	div[class*="FieldInputWrapper"],
-	div[class*="FieldDateWrapper"],
-	div[class*="FieldSelectWrapper"] {
-		border: none !important;
-		box-shadow: none !important;
-		background: transparent;
-		height: 100%;
-		border-radius: 0 !important;
-
-		&:focus-within {
-			border: none !important;
-			box-shadow: none !important;
-		}
-	}
-
-	input[type="text"],
-	input[type="number"],
-	select {
-		border: none !important;
-		box-shadow: none !important;
-		background: transparent;
-		outline: none !important;
-		height: 100%;
-
-		&:focus {
-			border: none !important;
-			box-shadow: none !important;
-		}
-	}
-
-	label[class*="FieldLabel"] {
-		display: none !important;
-	}
-}
-
-/* Checkbox list (drag & drop variant) */
-.CheckboxWrapper {
-	display: flex;
-	align-items: center;
-	flex: 1;
-}
-
-.CheckboxList {
-	padding: 0;
-	margin: 0;
-	list-style: none;
-	display: flex;
-	flex-direction: column;
-}
-
-.ListItem {
-	display: flex;
-	align-items: center;
-	flex: 1;
-	margin: 6px 0;
-	padding: 2px 0;
-	background: $color30;
-	border: 1px solid $color34;
-	border-radius: $radius2;
-	user-select: none;
-
-	.DragAndDrop {
-		cursor: grab;
-		display: flex;
-		align-items: center;
-		padding: 3px;
-		margin-right: 6px;
-		border-radius: $radius2;
-
-		&:hover {
-			background: $color2;
-		}
-	}
-
-	input[type="checkbox"] {
-		height: $heightFieldInput - 9px;
-		width: $heightFieldInput - 9px;
-		margin: 0;
-		accent-color: $colorPrimaryDark;
-	}
-
-	label {
-		margin-left: 6px;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-}
-
-/* Pagination */
-.PaginationPages {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	flex-grow: 1;
-	background: $color60;
-	border: 1px solid $color10;
-	border-radius: $radius2;
-	padding: 0 6px;
-	font-size: $fontsize + 2px;
-
-	input[type="number"] {
-		width: 30px;
-		border: 0;
-		outline: 0;
-		text-align: center;
-	}
-}
-
-/* Infinite scroll sentinel & loader */
-.InfiniteScrollSentinel {
-	// Невидимый элемент в конце tbody — цель для IntersectionObserver
-	display: block;
-	height: 1px;
-	pointer-events: none;
-}
-
-.InfiniteScrollLoader {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	padding: 6px 0;
-	font-size: $fontsize - 1px;
-	color: $color10;
-
-	.spinnerIcon {
-		width: 14px;
-		height: 14px;
-		border: 2px solid $color30;
-		border-top-color: $color10;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-		flex-shrink: 0;
-	}
-}
-
-/* Table loading spinner */
-.table-loading-spinner {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 20px;
-	gap: 10px;
-	background: rgba(255, 255, 255, 0.9);
-	border-top: 1px solid var(--n-88);
-}
-
-.spinner {
-	width: 20px;
-	height: 20px;
-	border: 3px solid var(--sv-gray100);
-	border-top: 3px solid var(--c-cyan-53);
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-	0% {
-		transform: rotate(0deg);
-	}
-
-	100% {
-		transform: rotate(360deg);
-	}
-}
-
-.table-loading-spinner {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 20px;
-	gap: 10px;
-	background: rgba(255, 255, 255, 0.95);
-	border-top: 1px solid var(--n-88);
-	font-size: $fontsize + 1px;
-	color: var(--sv-color51);
-}
-
-/* Filter components */
-.FilterGroup {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex: 1;
-
-	label {
-		font-weight: 500;
-		color: var(--n-20);
-		white-space: nowrap;
-		min-width: 50px;
-	}
-}
-
-.DateRangeContainer {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex: 1;
-	min-width: 250px;
-}
-
-.DateInput {
-	padding: 6px 10px;
-	border: 1px solid var(--sv-color33);
-	border-radius: $radius2;
-	background: var(--sv-color60);
-	transition: border-color 0.2s ease;
-
-	&:focus {
-		outline: none;
-		border-color: var(--c-cyan-53);
-		box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
-	}
-
-	&::placeholder {
-		color: var(--text-muted);
-	}
-}
-
-.DateRangeSeparator {
-	color: var(--text-muted);
-	padding: 0 4px;
-}
-
-.SearchContainer {
-	display: flex;
-	align-items: center;
-	border: 1px solid var(--n-80);
-	border-radius: $radius2;
-	overflow: hidden;
-	background: var(--sv-color60);
-	padding: 0;
-	flex: 1;
-	gap: 3px;
-	padding: 0 3px;
-
-	&:focus-within {
-		border-color: $color3;
-	}
-}
-
-// 	// font-size: 12px;
-// 	// line-height: 1;
-
-
-// ────────────────────────────────────────────────
-// DateRangeBar — строка активного периода между панелью и таблицей
-// ────────────────────────────────────────────────
-
-.DateRangeBar {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 3px;
-	background: color-mix(in srgb, $color3 6%, transparent);
-	width: min-content;
-}
-
-.DateRangeBarLabel {
-	color: var(--sv-color51);
-	font-weight: 500;
-	white-space: nowrap;
-}
-
-.DateRangeLink {
-	color: $color3;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
-	font-size: $fontsize + 1px;
-
-	&:hover {
-		text-decoration: underline;
-	}
-}
-
-// ────────────────────────────────────────────────
-// DateRange Modal — использует FilterGroup / SearchContainer / SearchInput
-// ────────────────────────────────────────────────
-// ────────────────────────────────────────────────
-// Утилитарные классы (вынесены из inline style индекса Table)
-// ────────────────────────────────────────────────
-
-/* Колонка-чекбокс (th и col) — фиксированная ширина 30px, центр */
-.CheckboxCol {
-	width: 30px;
-	min-width: 30px;
-	max-width: 30px;
-}
-
-.HeaderCheckboxCell {
-	width: 30px;
-	text-align: center;
-
-	input[type="checkbox"] {
-		height: $heightFieldInput - 9px;
-		width: $heightFieldInput - 9px;
-	}
-}
-
-.CenterContent {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	height: 100%;
-}
-
-/* Стрелка сортировки (по умолчанию — asc); .desc переворачивает */
-.SortArrow {
-	transform: none;
-
-	&.desc {
-		transform: scaleY(-1);
-	}
-}
-
-/* td с textAlign:center (для checkbox-ячейки в теле таблицы) */
-.CellCenter {
-	text-align: center;
-}
-
-
-.CellJustifyCenter {
-	justify-content: center;
-}
-
-/* Tbody c GPU-оптимизацией (will-change/transform уже в tbody-селекторе);
-   кладём ради явного className, чтобы избавиться от inline style. */
-.TbodyOptimized {
-	// no-op — стили заданы на селекторе tbody выше
-}
-
-/* Виртуализация: пустые spacer-tr; только высоту задаём inline */
-.VirtualPaddingRow {
-	border: 0;
-	background: transparent !important;
-	box-shadow: none !important;
-	pointer-events: none;
-
-	td {
-		height: inherit;
-		padding: 0 !important;
-		border: 0 !important;
-		background: transparent !important;
-		box-shadow: none !important;
-		line-height: 0;
-		font-size: 0;
-		overflow: hidden;
-	}
-}
-
-/* Контейнер скролла: запрет overflow-anchor (для виртуализации) */
-.NoOverflowAnchor {
-	overflow-anchor: none;
-}
-
-/* Шеврон раскрытия в ячейке группы. Кнопка, а не значок: раскрытие — действие,
-   и оно должно доставаться с клавиатуры и подсказывать состояние (aria-expanded).
-   Свёрнутая группа — стрелка вправо, раскрытая — вниз. */
-.ExpandToggle {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex: 0 0 auto;
-	width: $heightFieldInput - 6px;
-	height: $heightFieldInput - 6px;
-	margin: 0px 0px 0px 3px;
-	padding: 0;
-	border: none;
-	background: transparent;
-	color: $color51;
-	cursor: pointer;
-	border-radius: $radius2;
-	transform: rotate(-90deg);
-	transition: transform 0.12s ease, background-color 0.12s ease;
-
-	&:hover {
-		background: color-mix(in srgb, #{$color6} 12%, transparent);
-		color: $color6;
-	}
-
-	// &:focus-visible {
-	// 	outline: none;
-	// 	box-shadow: 0 0 0 2px color-mix(in srgb, #{$color3} 25%, transparent);
-	// }
-
-	svg {
-		display: block;
-	}
-}
-
-.ExpandToggleOpen {
-	transform: rotate(0deg);
-}
-
-/* Первая ячейка вложенной строки: отступ и приглушённый цвет — этого хватает,
-   чтобы отличить подчинённую строку от строки-заголовка группы (та с подложкой
-   и полужирная, см. tbody tr.GroupHeaderRow). */
-.ChildCell {
-	// Ровно ширина шеврона группы (16px + 3px отступ): текст вложенной строки
-	// встаёт под текст своей группы, а не «почти под ним».
-	padding-left: 19px;
-	color: $color51;
-}
-
-/* Ячейка раскрытой (expanded) строки */
-.ExpandedRowCell {
-	padding: 0;
-	background: var(--bg-secondary, var(--sv-gray50));
-	border-bottom: 2px solid var(--border-color, var(--n-88));
-}
 
 /* Обязательная ячейка без значения (read-only): такой же inset-бордер как FieldRequired.tableVariant */
 .CellRequired {
@@ -1062,11 +48,6 @@
 }
 
 /* TableBodyCell с will-change/transform — расширение основного класса */
-.TableBodyCellGpu {
-	will-change: contents;
-	transform: translate3d(0, 0, 0);
-}
-
 /* Модалка "Колонки таблицы" */
 .ColumnsModal {
 	width: 400px;
@@ -1090,8 +71,9 @@
 	justify-content: center;
 }
 
-/* Состояния строки */
-.RowLoading {
+/* Состояние строки: идёт загрузка. Атрибут, а не класс — состояние не должно
+   участвовать в гонке имён классов и не пересобирает className на каждый рендер. */
+tr[data-loading] {
 	opacity: 0.3;
 	pointer-events: none;
 }
@@ -1107,22 +89,71 @@
 	position: relative;
 	display: inline-flex;
 	flex: none;
-	color: var(--text-muted, #898781);
-
-	padding: 0 !important;
-	zoom: 1.2;
+	// Размер задаём масштабом самой иконки, а не `zoom`: zoom нестандартен и меняет
+	// раскладку соседей, а иконке нужно всего лишь быть чуть крупнее текста.
+	width: 18px;
+	height: 18px;
+	align-items: center;
+	justify-content: center;
+	color: $color5;
+	padding: 0;
 }
 
 .DocDateIcon.docPosted {
-	color: var(--text-secondary, #52514e);
+	color: $color51;
 }
 
 .DocPostedBadge {
 	position: absolute;
 	right: 0px;
 	bottom: 0px;
-	color: var(--success, #1a7f37);
-	background: var(--panel, var(--sv-color60));
+	color: $successText;
+	background: $color60;
 	border-radius: 50%;
 	// zoom: ;
+}
+
+
+// ── Исключения ВНЕ слоёв ───────────────────────────────────────────────────
+// Неслоёный CSS сильнее любого слоя, поэтому эти правила перекрывают каркас без
+// !important — раньше каждое из них держалось только на нём.
+
+.TableScrollContainer {
+	// Строка над активной: нижняя граница цветом выделения, чтобы рамка активной
+	// строки была замкнутой.
+tr:has(+ tr[data-active]) {
+	td {
+		border-bottom: 1px solid $color1;
+	}
+}
+
+	// Основная запись во вложенных таблицах — полужирная целиком, включая
+	// содержимое кастомных ячеек (LookupField и т.п.).
+tr[data-primary="true"] {
+	td .TableBodyCell {
+		font-weight: 700;
+
+		// Применяем bold ко всем потомкам, включая span/input/select
+		// и кастомные рендеры ячеек (LookupField и т.п.)
+		* {
+			font-weight: 700;
+		}
+	}
+}
+
+	/* Строка-заполнитель: занимает остаток высоты, чтобы tfoot прижимался к низу
+	   TableScrollWrapper, а обычные строки сохраняли свою высоту. */
+.TableFillerRow {
+	height: 100%;
+
+	td {
+		padding: 0;
+		border: 0;
+		background: transparent;
+
+		&::after {
+			display: none;
+		}
+	}
+}
 }

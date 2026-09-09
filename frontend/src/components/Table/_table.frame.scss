@@ -1,0 +1,92 @@
+@use "../../styles/variables.scss" as *;
+
+// Каркас: полосы прокрутки, обёртки таблицы и области прокрутки.
+// Часть стилей компонента <Table />; подключается из Table.module.scss.
+
+/* Scrollbar */
+* {
+	&::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	&::-webkit-scrollbar-track {
+		background: $color30;
+	}
+
+	&::-webkit-scrollbar-thumb {
+		background: $color10;
+		border-radius: $radius2;
+	}
+
+	&::-webkit-scrollbar-thumb:hover {
+		background: $color10;
+	}
+}
+
+/* Индикация «нельзя редактировать» для activeCell.
+ * Используется при нажатии Enter на ячейку без редактируемого поля
+ * (см. SubTable.handleContainerKeyDown + td[data-pulse="true"]).
+ * Палитра соответствует .flashReadOnly из SubTable (красный мигающий
+ * фон) — единый визуальный язык для onClick по read-only ячейке
+ * и для Enter по нередактируемой колонке. */
+@keyframes activeCellPulse {
+	0% {
+		background-color: transparent;
+		outline-color: transparent;
+	}
+
+	20% {
+		background-color: color-mix(in srgb, #{$attentionText} 18%, transparent);
+		outline-color: color-mix(in srgb, #{$attentionText} 60%, transparent);
+	}
+
+	60% {
+		background-color: color-mix(in srgb, #{$attentionText} 18%, transparent);
+		outline-color: color-mix(in srgb, #{$attentionText} 60%, transparent);
+	}
+
+	100% {
+		background-color: transparent;
+		outline-color: transparent;
+	}
+}
+
+/* Table layout containers */
+.TableWrapper {
+	container-type: size;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	gap: 6px;
+	height: 100%;
+	overflow: hidden;
+	min-height: 296px;
+	min-width: 300px;
+	border-radius: $radius2;
+	transition: all 0.3s ease;
+	position: relative; // нужно для абсолютного позиционирования оверлея
+}
+
+.TableScrollWrapper {
+	outline: none;
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	background: var(--sv-color60);
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	box-shadow: inset 0 0 4px $color30;
+	overflow: auto;
+	scroll-behavior: smooth;
+
+	// Оптимизация для производительности
+	will-change: scroll-position;
+	transform: translate3d(0, 0, 0);
+
+	// Быстрый скролл на мобильных
+	-webkit-overflow-scrolling: touch;
+
+	// Ускорение переотрисовки
+	contain: layout style paint;
+}

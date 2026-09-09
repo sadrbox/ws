@@ -27,10 +27,12 @@ import Toolbar from 'src/components/Toolbar';
 
 
 import {
+  Dispatch,
   FC,
   KeyboardEvent as ReactKeyboardEvent,
   memo,
   Ref,
+  SetStateAction,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -130,6 +132,13 @@ export interface TableProps {
   onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
   /** Раскрыть/свернуть строку — шеврон в ячейке группы (activeRow для этого НЕ используется). */
   onToggleExpand?: (row: TDataItem) => void;
+  /**
+   * Отключить активную строку целиком: щелчок не делает строку активной, подсветки и
+   * перехода по строкам нет. Нужно там, где строка — не «текущая запись», а набор
+   * отметок и раскрытий: активная строка там ничего не значит, но спорит с подсветкой
+   * группы и уводит фокус.
+   */
+  disableActiveRow?: boolean;
   /**
    * Активная строка сменилась — ОДИНОЧНЫЙ клик (и стрелки клавиатуры).
    *
@@ -322,6 +331,7 @@ const Table: FC<TableProps> = memo((props) => {
     childRows,
     onChildToggle,
     onToggleExpand,
+    disableActiveRow = false,
     onActiveRowChange,
     apiRef,
     highlightUuid,
@@ -340,7 +350,13 @@ const Table: FC<TableProps> = memo((props) => {
   const getCellMetaRef = useRef(getCellMeta);
   getCellMetaRef.current = getCellMeta;
 
-  const [activeRow, setActiveRow] = useState<number | null>(null);
+  const [activeRow, setActiveRowState] = useState<number | null>(null);
+  // Единственная точка, через которую строка становится активной: при отключённой
+  // активной строке она просто ничего не делает, и остальному коду об этом знать не нужно.
+  const setActiveRow = useCallback<Dispatch<SetStateAction<number | null>>>(
+    (value) => { if (!disableActiveRow) setActiveRowState(value); },
+    [disableActiveRow],
+  );
   const [activeCell, setActiveCell] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isAllSelectedMode, setIsAllSelectedMode] = useState<boolean>(false);
@@ -569,6 +585,7 @@ const Table: FC<TableProps> = memo((props) => {
       childRows,
       onChildToggle,
       onToggleExpand,
+      disableActiveRow,
       // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
         setSelectedRows,
@@ -588,6 +605,7 @@ const Table: FC<TableProps> = memo((props) => {
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
       expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
+      disableActiveRow,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,

@@ -1,0 +1,137 @@
+@use "../../styles/variables.scss" as *;
+
+// Служебные ячейки и элементы строки: колонка отметок, стрелка сортировки,
+// строки-заглушки виртуализации, шеврон раскрытия, ячейка даты документа.
+
+// ────────────────────────────────────────────────
+// DateRange Modal — использует FilterGroup / SearchContainer / SearchInput
+// ────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// Утилитарные классы (вынесены из inline style индекса Table)
+// ────────────────────────────────────────────────
+
+/* Колонка-чекбокс (th и col) — фиксированная ширина 30px, центр */
+.CheckboxCol {
+	width: 30px;
+	min-width: 30px;
+	max-width: 30px;
+}
+
+.HeaderCheckboxCell {
+	width: 30px;
+	text-align: center;
+
+	input[type="checkbox"] {
+		height: $heightFieldInput - 9px;
+		width: $heightFieldInput - 9px;
+	}
+}
+
+.CenterContent {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+}
+
+/* Стрелка сортировки (по умолчанию — asc); .desc переворачивает */
+.SortArrow {
+	transform: none;
+
+	&.desc {
+		transform: scaleY(-1);
+	}
+}
+
+/* td с textAlign:center (для checkbox-ячейки в теле таблицы) */
+.CellCenter {
+	text-align: center;
+}
+
+
+.CellJustifyCenter {
+	justify-content: center;
+}
+
+/* Tbody c GPU-оптимизацией (will-change/transform уже в tbody-селекторе);
+   кладём ради явного className, чтобы избавиться от inline style. */
+/* Виртуализация: пустые spacer-tr; только высоту задаём inline */
+.VirtualPaddingRow {
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	pointer-events: none;
+
+	td {
+		height: inherit;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+		line-height: 0;
+		font-size: 0;
+		overflow: hidden;
+	}
+}
+
+/* Контейнер скролла: запрет overflow-anchor (для виртуализации) */
+.NoOverflowAnchor {
+	overflow-anchor: none;
+}
+
+/* Шеврон раскрытия в ячейке группы. Кнопка, а не значок: раскрытие — действие,
+   и оно должно доставаться с клавиатуры и подсказывать состояние (aria-expanded).
+   Свёрнутая группа — стрелка вправо, раскрытая — вниз. */
+.ExpandToggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: $heightFieldInput - 6px;
+	height: $heightFieldInput - 6px;
+	margin: 0px 0px 0px 3px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: $color51;
+	cursor: pointer;
+	border-radius: $radius2;
+	transform: rotate(-90deg);
+	transition: transform 0.12s ease, background-color 0.12s ease;
+
+	&:hover {
+		background: color-mix(in srgb, #{$color6} 12%, transparent);
+		color: $color6;
+	}
+
+	// &:focus-visible {
+	// 	outline: none;
+	// 	box-shadow: 0 0 0 2px color-mix(in srgb, #{$color3} 25%, transparent);
+	// }
+
+	svg {
+		display: block;
+	}
+}
+
+.ExpandToggleOpen {
+	transform: rotate(0deg);
+}
+
+/* Первая ячейка вложенной строки: отступ и приглушённый цвет — этого хватает,
+   чтобы отличить подчинённую строку от строки-заголовка группы (та с подложкой
+   и полужирная, см. tbody tr.GroupHeaderRow). */
+.ChildCell {
+	// Ровно ширина шеврона группы (16px + 3px отступ): текст вложенной строки
+	// встаёт под текст своей группы, а не «почти под ним».
+	padding-left: 24px;
+	color: $color51;
+}
+
+/* Ячейка произвольного содержимого раскрытой строки (renderExpandedRow).
+   Строки-потомки (childRows) сюда не попадают — они обычные строки таблицы. */
+.ExpandedRowCell {
+	padding: 0;
+	background: $silverLightest;
+	border-bottom: 2px solid $color34;
+}

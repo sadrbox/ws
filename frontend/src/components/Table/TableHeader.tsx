@@ -160,9 +160,9 @@ export const TableHeader = memo(() => {
             <th
               key={col.identifier}
               title={col.hint || undefined}
-              style={{
-                cursor: `${(isLoading || !isSortable) ? 'default' : 'pointer'}`,
-              }}
+              // Курсор — оформление, а не данные: его место в CSS. Атрибут говорит,
+              // можно ли сортировать по колонке ЗДЕСЬ И СЕЙЧАС (во время загрузки нельзя).
+              data-sortable={(!isLoading && isSortable) || undefined}
               onClick={(!isLoading && isSortable) ? () => handleSort(col.identifier) : undefined}
             >
               <div className={styles.TableHeaderCell}>

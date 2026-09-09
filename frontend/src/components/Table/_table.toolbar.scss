@@ -1,0 +1,119 @@
+@use "../../styles/variables.scss" as *;
+
+// Командная панель и её модальные окна: настройка колонок, список отметок, период.
+
+/* TableStatusBar — строка состояния, снаружи скролла, всегда внизу TableWrapper */
+/* Active / focused states */
+
+
+
+/* Context menu */
+/* Headers & wrappers */
+/* Drag & drop */
+.dragging {
+	opacity: 0.6;
+}
+
+/* ── Borderless fields inside table cells (legacy, prefer variant="table" on Field*) ── */
+/* Checkbox list (drag & drop variant) */
+.CheckboxWrapper {
+	display: flex;
+	align-items: center;
+	flex: 1;
+}
+
+.CheckboxList {
+	padding: 0;
+	margin: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+}
+
+.ListItem {
+	display: flex;
+	align-items: center;
+	flex: 1;
+	margin: 6px 0;
+	padding: 2px 0;
+	background: $color30;
+	border: 1px solid $color34;
+	border-radius: $radius2;
+	user-select: none;
+
+	.DragAndDrop {
+		cursor: grab;
+		display: flex;
+		align-items: center;
+		padding: 3px;
+		margin-right: 6px;
+		border-radius: $radius2;
+
+		&:hover {
+			background: $color2;
+		}
+	}
+
+	input[type="checkbox"] {
+		height: $heightFieldInput - 9px;
+		width: $heightFieldInput - 9px;
+		margin: 0;
+		accent-color: $colorPrimaryDark;
+	}
+
+	label {
+		margin-left: 6px;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+}
+
+/* Pagination */
+/* Infinite scroll sentinel & loader */
+/* Table loading spinner */
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+/* Filter components */
+// 	// font-size: 12px;
+// 	// line-height: 1;
+
+
+// ────────────────────────────────────────────────
+// DateRangeBar — строка активного периода между панелью и таблицей
+// ────────────────────────────────────────────────
+
+.DateRangeBar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px;
+	background: color-mix(in srgb, $color3 6%, transparent);
+	width: min-content;
+}
+
+.DateRangeBarLabel {
+	color: var(--sv-color51);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.DateRangeLink {
+	color: $color3;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	font-size: $fontsize + 1px;
+
+	&:hover {
+		text-decoration: underline;
+	}
+}

@@ -1,0 +1,394 @@
+@use "../../styles/variables.scss" as *;
+
+// Слой table-base: сама таблица — шапка, строки, ячейки, подвал.
+// Самая большая и самая нагруженная часть; всё, что должно её перекрывать,
+// лежит вне слоёв (см. хвост Table.module.scss).
+
+// Обёртка скролл-области + оверлей — для корректного абсолютного позиционирования
+@layer table-base {
+	.TableScrollContainer {
+		position: relative;
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		z-index: 1;
+
+		/* Table itself */
+		table {
+			border-collapse: separate;
+			border-spacing: 0;
+			width: 100%;
+			height: 100%;
+			table-layout: fixed;
+		}
+
+		thead {
+			background: $color31;
+			position: sticky;
+			top: 0;
+
+			z-index: 2;
+
+			// Нейтральная нижняя тень (была тень ЦВЕТОМ ТЕКСТА $color6 → в тёмной теме
+			// светлый ореол вокруг залипающей шапки). Тень всегда тёмная/полупрозрачная.
+			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+
+			// Сортировка мышью возможна только у колонок с data-sortable (см. TableHeader):
+			// курсор — оформление, и его место здесь, а не в инлайн-стиле разметки.
+			th {
+				cursor: default;
+			}
+
+			th[data-sortable] {
+				cursor: pointer;
+			}
+
+			tr {
+				th {
+					padding: 0;
+					font-weight: 500;
+					user-select: none;
+					position: relative;
+					border: 0;
+					border-right: 1px solid $color34;
+
+					&:first-child {
+						border-left: 0;
+					}
+
+					&:last-child {
+						border-right: 0;
+					}
+				}
+
+				.TableHeaderCell {
+					display: flex;
+					align-items: center;
+					height: $heightFieldInput;
+					padding: 1px;
+					overflow: hidden;
+					white-space: nowrap;
+					text-overflow: ellipsis;
+					cursor: default;
+					justify-content: space-between;
+					border: 1px solid transparent;
+
+					span {
+						padding: 0px 6px;
+						overflow: hidden;
+						white-space: nowrap;
+						text-overflow: ellipsis;
+					}
+				}
+
+				.ResizeHandle {
+					position: absolute;
+					right: -3px;
+					top: 0;
+					bottom: 0;
+					width: 5px;
+					cursor: col-resize;
+					z-index: 3;
+
+					&:hover {
+						background: color-mix(in srgb, #{$color1} 35%, transparent);
+					}
+				}
+			}
+
+
+		}
+
+
+
+
+
+		/* Filler row — занимает остаток высоты, чтобы tfoot прижимался
+	   к низу TableScrollWrapper. Реальные строки tbody при этом
+	   сохраняют свою фиксированную высоту. */
+
+
+		tbody {
+			// Оптимизация для производительности при виртуализации
+			will-change: transform;
+			transform: translate3d(0, 0, 0);
+			contain: layout style paint;
+			// background: $fieldBackground;
+			position: relative;
+
+			tr {
+				// Оптимизация для каждой строки
+				will-change: auto;
+				transform: translate3d(0, 0, 0);
+
+				&:first-child {
+					td {
+						border-top: 1px solid $color34;
+					}
+				}
+
+				// ── Чередование фона строк (зебра) ─────────────────────────────
+				// Признак ставит TableBodyRow атрибутом data-zebra по индексу в ПОЛНОМ
+				// списке:
+				// таблица виртуализирована, и :nth-child перекрашивал бы строки при
+				// прокрутке (DOM-позиция ≠ номер строки).
+				//
+				// Полоса — доля цвета ТЕКСТА поверх фона, а не фиксированный серый:
+				// $color6 всегда контрастен подложке, поэтому в светлой теме полоса
+				// чуть темнее, в тёмной — чуть светлее, и обе темы работают одним
+				// правилом (никаких инвертирующихся токенов).
+				// Фон ставится на СТРОКУ, поэтому подсветка активной строки/ячейки и
+				// hover (они красят .TableBodyCell) перекрывают зебру.
+				&[data-zebra="even"] {
+					background-color: transparent;
+				}
+
+				&[data-zebra="odd"] {
+					background-color: color-mix(in srgb, #{$color6} 4%, transparent);
+				}
+
+				// ── Групповая строка и её вложенные ────────────────────────────
+				// ИМЯ КЛАССА — GroupHeaderRow, а не GroupRow: `.GroupRow` объявлен в
+				// variables.scss (флекс-строка формы), а variables.scss подмешивается
+				// в КАЖДЫЙ scss-модуль. Одноимённый класс здесь получал бы то же
+				// сгенерированное имя, и `display: flex` из хелпера превращал <tr> в
+				// флекс-контейнер: ячейки схлопывались, разметка группы разъезжалась.
+				// Раскрытая строка — ЗАГОЛОВОК ГРУППЫ: та же подложка, что у шапки
+				// таблицы, и полужирное начертание. Так видно, где начинается группа,
+				// даже когда её вложенные строки уехали под прокрутку.
+				// Зебру она перекрывает намеренно: заголовок не может «мигать» через
+				// строку. Подсветка активной строки и hover красят .TableBodyCell,
+				// то есть поверх — выделение группы не теряется.
+				&.GroupHeaderRow {
+					background-color: $color30;
+					font-weight: 700;
+
+					// У каждой ячейки есть СВОЯ внутренняя рамка цветом подложки
+					// ($color60) — на обычной строке она незаметна, а на сером фоне
+					// группы превращается в белую сетку: строка распадается на
+					// «коробочки», и заголовок группы перестаёт читаться полосой.
+					// Гасим её только у группы; серые границы td (сетка таблицы) и
+					// подсветка активной ячейки (box-shadow) не затрагиваются.
+					>td>.TableBodyCell {
+						border-color: transparent;
+					}
+				}
+
+				// Вложенная строка остаётся ОБЫЧНОЙ строкой таблицы: фон, границы и
+				// высота у неё те же. Подчинение показывает только первая ячейка —
+				// отступ и приглушённый цвет (см. .ChildCell).
+				&.ExpandedRow {
+					font-weight: normal;
+				}
+
+				&>td {
+
+
+					padding: 0;
+					border-bottom: 1px solid $color34;
+					border-right: 1px solid $color34;
+
+					.TableBodyCell {
+						display: flex;
+						align-items: center;
+						min-height: $heightFieldInput;
+						height: stretch;
+						padding: 0;
+						white-space: nowrap;
+						text-overflow: ellipsis;
+						overflow: hidden;
+						user-select: none;
+						border: 1px solid var(--sv-color60);
+						place-items: center;
+						// position: relative нужен для абсолютно-позиционированных
+						// потомков (CellErrorTooltip из SubTable, который теперь
+						// рендерится прямо внутри .TableBodyCell, без промежуточного
+						// `.CellWrap`-обёртки).
+						position: relative;
+
+						// Поля ввода без фокуса наследуют pointer от tr;
+						// при получении фокуса — cursor меняется на text мгновенно через :focus
+						&>input[type="checkbox"] {
+							height: $heightFieldInput - 9px;
+							width: $heightFieldInput - 9px;
+							// margin: 0 6px;
+						}
+
+						input:not([type="checkbox"]),
+						textarea,
+						select {
+							cursor: default;
+						}
+
+						input:not([type="checkbox"]):focus,
+						textarea:focus,
+						select:focus {
+							cursor: text;
+							user-select: text;
+						}
+
+
+
+
+
+						&>input[type="text"] {
+							width: 100%;
+							border: 0px transparent;
+						}
+
+						&>span,
+						code {
+							padding: 0px 6px;
+							overflow: hidden;
+							white-space: nowrap;
+							// min-width: 0 обязателен: по умолчанию flex-элемент не сжимается
+							// меньше своего содержимого, и текст рядом с шевроном группы
+							// выдавливал бы ячейку вместо многоточия.
+							min-width: 0;
+							text-overflow: ellipsis;
+							// align-items: center;
+							align-content: center;
+						}
+					}
+
+					&:first-child {
+						border-left: 0;
+					}
+
+					&:last-child {
+						border-right: 0;
+					}
+				}
+
+				&[data-active] {
+					z-index: 5;
+					// Оптимизируем активную строку
+					will-change: background-color, box-shadow;
+
+					&:first-child {
+						td {
+							border-top: 1px solid $color1;
+						}
+					}
+
+					td {
+						.TableBodyCell {
+
+							// Фоновая подсветка строки (`background: $color2`) теперь
+							// задаётся слоем table-cell-activeRow в начале этого файла.
+							// Здесь оставлены только структурные/контентные правила.
+							&>input[type="checkbox"] {
+								height: $heightFieldInput - 9px;
+								width: $heightFieldInput - 9px;
+							}
+
+							&>input[type="text"] {
+								width: 100%;
+								border: 0px transparent;
+							}
+
+							// ── activeCell: выбранная ячейка внутри активной строки ─────
+							&.activeCell {
+								position: relative;
+								z-index: 6;
+								outline: none;
+								font-weight: 500;
+								background: color-mix(in srgb, $color1 20%, transparent);
+								box-shadow: inset 0 0 0 1px color-mix(in srgb, $color1 50%, transparent);
+							}
+
+							// ── focus-within: поле получило фокус (ввод) ─────────────
+							// Приоритет выше .activeCell — желтый фон поверх синего.
+							&:not(:has(input[type="checkbox"], button)):focus-within {
+								background: color-mix(in srgb, #{$warningText} 20%, transparent);
+								box-shadow: inset 0 0 0 1px color-mix(in srgb, #{$warningText} 60%, transparent);
+								outline: none;
+							}
+						}
+
+						border-bottom: 1px solid $color1;
+						border-right: 1px solid $color1;
+
+						&:last-child {
+							border-right: 0px;
+						}
+
+					}
+				}
+
+				&:last-child {
+					border: none;
+
+					&>td {
+						border: none;
+					}
+				}
+			}
+
+		}
+
+		/* ── data-pulse: единая индикация «нельзя редактировать» ──────────────
+	 * Кратковременная (~300 ms) анимация на любой <td>, у которой стоит
+	 * data-pulse="true". Атрибут выставляется в двух местах:
+	 *   1) SubTable.handleContainerKeyDown — Enter на нередактируемую ячейку;
+	 *   2) ReadOnlyCell.onClick — клик по read-only содержимому ячейки в
+	 *      режиме inline-editing.
+	 * Селектор — на любой td в любой строке (вне активной), чтобы
+	 * срабатывало и на неактивной строке. */
+		td[data-pulse="true"] {
+			animation: activeCellPulse 280ms ease-out 1;
+		}
+
+		/* tfoot — итоги колонок, sticky bottom внутри скролла, в стиле thead */
+		tfoot {
+			background: $color31;
+			position: sticky;
+			bottom: 0;
+
+			tr {
+				td {
+					position: relative;
+					padding: 0;
+					font-weight: 500;
+					user-select: none;
+					border-top: 1px solid $color34;
+					border-bottom: 0;
+					border-right: 1px solid $color34;
+
+					&::after {}
+
+					&:first-child {
+						border-left: 0;
+					}
+
+					&:last-child {
+						border-right: 0;
+					}
+
+					.TableFooterCell {
+						display: flex;
+						align-items: center;
+						height: $heightFieldInput;
+						padding: 1px;
+						overflow: hidden;
+						white-space: nowrap;
+						text-overflow: ellipsis;
+						cursor: default;
+						justify-content: flex-end;
+						border: 1px solid transparent;
+
+						span {
+							padding: 0px 6px;
+							overflow: hidden;
+							white-space: nowrap;
+							text-overflow: ellipsis;
+						}
+					}
+				}
+			}
+
+
+		}
+	}
+}
