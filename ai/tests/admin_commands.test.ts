@@ -114,6 +114,15 @@ test("IB_UPDATE_USER: незаполненное поле значит «не т
 	assert.equal(buildAdminPayload(spec, { baseKey: "b", fullName: "Х" }).ok, false);
 	// Переименование — отдельным полем, чтобы `name` оставался адресом записи.
 	assert.equal(buildAdminPayload(spec, { baseKey: "b", name: "ivanov", newName: "ivanov2" }).ok, true);
+	// Относительная правка ролей: «добавить одному, снять другое» — не то же самое, что
+	// прислать готовый набор. У баз с разными наборами полный список их бы выровнял.
+	const rel = buildAdminPayload(spec, {
+		baseKey: "b", name: "ivanov", addRoles: ["ЧтениеЭСФ"], removeRoles: ["ПолныеПрава"],
+	});
+	assert.equal(rel.ok, true);
+	assert.deepEqual(rel.ok && rel.payload, {
+		baseKey: "b", name: "ivanov", addRoles: ["ЧтениеЭСФ"], removeRoles: ["ПолныеПрава"],
+	});
 	assert.equal(buildAdminPayload(spec, { baseKey: "b", name: "ivanov", nickname: "x" }).ok, false);
 });
 

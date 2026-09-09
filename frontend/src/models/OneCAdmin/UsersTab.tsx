@@ -32,6 +32,7 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
+import { getFormatDate } from "src/utils/datetime";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TCellValidator } from "src/components/SubTable";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -231,42 +232,53 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	const batch = useMutation({
 		mutationFn: (p: { type: BatchType; keys: string[]; payload: Record<string, unknown> }) =>
 			runBatch(p.type, p.keys, p.payload),
-		onSuccess: (d, p) => {
+		onSuccess: (d) => {
 			setDialog(null);
 			const skipped = d.skipped.length ? ` ${translate("onecBatchSkipped")}: ${d.skipped.length}` : "";
 			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}.${skipped}`, d.skipped.length ? "warning" : "success");
-			void qc.invalidateQueries({ queryKey: ["onec"] });
 			onBatchStarted(d.batchId);
 			// Данные обновятся сами, когда задание закончится: панель не должна показывать
 			// прежние роли после того, как их изменили.
-			void watchBatch(d.batchId, p.keys);
+			void watchBatch(d.batchId);
 		},
 		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
 	});
 
 	const apply = useCallback(() => {
 		if (!current || !targets.length) return;
-		// Роли уходят полным набором «после изменения»: команда заменяет набор, поэтому
-		// считаем его здесь — из того, что есть в базе, плюс назначенное, минус снятое.
 		const keys = targets.map((t) => t.key);
-		const grant = roleRows.filter((r) => r.act === "grant").map((r) => asText(r.role));
-		const revoke = new Set(roleRows.filter((r) => r.act === "revoke").map((r) => asText(r.role)));
-		const first = occByBase.get(keys[0].toLowerCase()) ?? [];
-		const nextRoles = [...new Set([...first.filter((r) => !revoke.has(r)), ...grant])];
+		/**
+		 * Роли уходят ОТНОСИТЕЛЬНО каждой базы: назначить одни, снять другие.
+		 *
+		 * Раньше здесь считался итоговый набор по ПЕРВОЙ базе и слался во все — базы с
+		 * другими наборами молча выравнивались по первой. Разница между «добавить» и
+		 * «заменить» существует ровно для того, чтобы этого не происходило.
+		 */
+		const addRoles = roleRows.filter((r) => r.act === "grant").map((r) => asText(r.role));
+		const removeRoles = roleRows.filter((r) => r.act === "revoke").map((r) => asText(r.role));
 
-		batch.mutate({
-			type: "IB_UPDATE_USER", keys,
-			payload: {
-				name: current,
-				...(form.name.trim() && form.name.trim() !== current ? { newName: form.name.trim() } : {}),
-				...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
-				...(form.password ? { password: form.password } : {}),
-				...(grant.length || revoke.size ? { roles: nextRoles } : {}),
-				disabled: form.disabled,
-				showInList: form.showInList,
-			},
-		});
-	}, [batch, current, targets, roleRows, occByBase, form]);
+		// Отмечено несколько человек — команда уходит по каждому: одно задание на
+		// пользователя, чтобы в отчёте было видно, у кого что не получилось.
+		const people = pickedUsers.length ? pickedUsers : [current];
+		for (const person of people) {
+			batch.mutate({
+				type: "IB_UPDATE_USER", keys,
+				payload: {
+					name: person,
+					// Переименование имеет смысл только для одного человека: одно имя на всех
+					// создало бы дубли. При групповой правке поле не отправляется.
+					...(people.length === 1 && form.name.trim() && form.name.trim() !== current
+						? { newName: form.name.trim() } : {}),
+					...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
+					...(form.password ? { password: form.password } : {}),
+					...(addRoles.length ? { addRoles } : {}),
+					...(removeRoles.length ? { removeRoles } : {}),
+					disabled: form.disabled,
+					showInList: form.showInList,
+				},
+			});
+		}
+	}, [batch, current, pickedUsers, targets, roleRows, form]);
 
 	const removeUser = useCallback(() => {
 		if (!current || !pickedBases.length) return;
@@ -322,7 +334,11 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 		setChecking(true);
 		const r = await checkBases(keys, fetchBaseUsers, parallel);
 		setChecking(false);
-		await qc.invalidateQueries({ queryKey: ["onec"] });
+		// Точечно: чтение обновило кэш пользователей и ролей, остальное не трогаем.
+		await qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+		await qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+		await qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+		await qc.invalidateQueries({ queryKey: ["onec", "role-holders"] });
 		showToast(
 			r.failed.length
 				? `${translate("onecChecked")}: ${r.ok}/${keys.length}. ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
@@ -337,24 +353,60 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 	 * Без этого экран остаётся с картиной «до»: роли назначены, а в таблице прежние —
 	 * и человек назначает их второй раз. Опрос редкий: задание на сотню баз идёт минутами.
 	 */
-	const watchBatch = useCallback(async (batchId: string, keys: string[]) => {
-		for (let i = 0; i < 120; i++) {
-			await new Promise((r) => setTimeout(r, 3000));
+	const watchBatch = useCallback(async (batchId: string) => {
+		// Пауза растёт: задание на сотню баз идёт минутами, и ровный опрос раз в 3 секунды
+		// давал бы под две сотни запросов, каждый из которых говорит одно и то же.
+		let pause = 2000;
+		const until = Date.now() + 15 * 60_000;
+		while (Date.now() < until) {
+			await new Promise((r) => setTimeout(r, pause));
+			pause = Math.min(15_000, Math.round(pause * 1.4));
 			const b = await fetchBatch(batchId).catch(() => null);
 			if (!b) return;
 			if (b.pending === 0) break;
 		}
-		await qc.invalidateQueries({ queryKey: ["onec"] });
-		// Сервис уже поставил чтение по каждой изменённой базе; здесь только забираем
-		// результат в панель, не гоняя 1С повторно.
-		if (keys.length) await qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+		// Сбрасываем ТОЛЬКО то, что могло измениться: сеансы, агенты и задания к ролям
+		// отношения не имеют, а их перезапрос стоит команд в кластер.
+		await qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+		await qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+		await qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+		await qc.invalidateQueries({ queryKey: ["onec", "role-holders"] });
 	}, [qc]);
+
+	/**
+	 * Давность данных: экран, построенный по кэшу недельной давности, выглядит так же
+	 * уверенно, как по свежему. Число баз и дата снимают этот вопрос без нажатий.
+	 */
+	const staleHint = useMemo(() => {
+		const items = occurrences.data?.items ?? [];
+		if (!current || !items.length) return "";
+		const last = items.map((o) => o.seenAt).sort().at(-1);
+		return last ? `${translate("onecDataFrom")}: ${getFormatDate(last)} · ${items.length} ${translate("bases").toLowerCase()}` : "";
+	}, [current, occurrences.data]);
+
+	/** Пользователь есть в сводке, но его баз ещё не читали — это не «ролей нет». */
+	const neverRead = !!current && !(occurrences.data?.items ?? []).length && !occurrences.isLoading;
 
 	const systemPicked = pickedUsers.some(isSystemUser);
 
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
+
+			{/* Режим просмотра — полосой над обеими колонками: в тулбаре узкого списка
+			    три кнопки не помещались и переносились в три строки. */}
+			<div className={styles.ModeBar}>
+				<span className={styles.Hint}>{translate("onecViewBy")}</span>
+				<Button variant="secondary" active={mode === "byUser"}
+					onClick={() => { setMode("byUser"); setOpenedBase(""); }}>
+					{translate("onecByUser")}
+				</Button>
+				<Button variant="secondary" active={mode === "byBase"}
+					onClick={() => { setMode("byBase"); setPickedUsers([]); }}>
+					{translate("onecByBase")}
+				</Button>
+				{staleHint && <span className={styles.Hint}>{staleHint}</span>}
+			</div>
 
 			<div className={styles.UsersLayout}>
 				{/* ── Слева: кого меняем. Команды — в панели таблицы ───────────── */}
@@ -373,19 +425,11 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 								if (names[0]) setForm((f) => ({ ...f, name: names[0], fullName: "", password: "" }));
 							},
 							extraButtons: (
-								<>
-									<Button variant="secondary" active onClick={() => setMode("byUser")}>
-										{translate("onecByUser")}
-									</Button>
-									<Button variant="secondary" onClick={() => { setMode("byBase"); setPickedUsers([]); }}>
-										{translate("onecByBase")}
-									</Button>
-									<Button variant="secondary" disabled={!pickedBases.length}
-										title={pickedBases.length ? undefined : translate("onecPickBasesFirst")}
-										onClick={() => { setForm({ name: "", fullName: "", password: "", disabled: false, showInList: true }); setDialog("create"); }}>
-										{translate("onecUserCreateInBases")}
-									</Button>
-								</>
+								<Button variant="secondary" disabled={!pickedBases.length}
+									title={translate("onecUserCreateInBases")}
+									onClick={() => { setForm({ name: "", fullName: "", password: "", disabled: false, showInList: true }); setDialog("create"); }}>
+									{translate("create")}
+								</Button>
 							),
 						})} />
 					) : (
@@ -403,18 +447,10 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 								setPickedUsers([]);
 							},
 							extraButtons: (
-								<>
-									<Button variant="secondary" onClick={() => { setMode("byUser"); setOpenedBase(""); }}>
-										{translate("onecByUser")}
-									</Button>
-									<Button variant="secondary" active onClick={() => setMode("byBase")}>
-										{translate("onecByBase")}
-									</Button>
-									<Button variant="secondary" disabled={!openedBase || checking}
-										onClick={() => void recheck(pickedBases)}>
-										{translate("onecUsersCheck")}
-									</Button>
-								</>
+								<Button variant="secondary" disabled={!openedBase || checking}
+									onClick={() => void recheck(pickedBases)}>
+									{translate("onecUsersCheck")}
+								</Button>
 							),
 						})} />
 					)}
@@ -468,6 +504,11 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatch
 							</div>
 							<div className={styles.SecBody}>
 								{systemPicked && <Notice items={[{ type: "warning", text: translate("onecSystemUserWarn") }]} />}
+								{neverRead && <Notice items={[{ type: "info", text: translate("onecUserNeverRead") }]} />}
+								{pickedUsers.length > 1 && (
+									<Notice items={[{ type: "info",
+										text: `${translate("onecGroupEditHint")} (${pickedUsers.length})` }]} />
+								)}
 								<GroupCol>
 									<GroupRow>
 										<Field name="ou_name" label={translate("onecUserName")} value={form.name} width="220px"

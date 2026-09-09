@@ -190,6 +190,20 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			newName: ibName.optional(),
 			fullName: z.string().max(200).optional(),
 			password: z.string().max(200).optional(),
+			/**
+			 * ТРИ РАЗНЫХ СПОСОБА тронуть роли — и путать их нельзя.
+			 *
+			 * `addRoles` / `removeRoles` меняют набор ОТНОСИТЕЛЬНО того, что есть в КАЖДОЙ
+			 * базе: добавить одну роль десяти базам, где наборы разные, можно только так.
+			 * `roles` задаёт набор целиком и стирает всё остальное — это отдельная операция
+			 * «привести к эталону», а не «выдать роль».
+			 *
+			 * Панель до этого считала итоговый набор по ПЕРВОЙ базе и слала его во все:
+			 * базы с другими наборами молча выравнивались по первой. Разница между
+			 * «добавить» и «заменить» существует ровно для того, чтобы этого не случалось.
+			 */
+			addRoles: z.array(z.string().max(200)).max(100).optional(),
+			removeRoles: z.array(z.string().max(200)).max(100).optional(),
 			roles: z.array(z.string().max(200)).max(100).optional(),
 			disabled: z.boolean().optional(),
 			showInList: z.boolean().optional(),
