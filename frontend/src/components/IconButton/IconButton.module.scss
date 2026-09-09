@@ -14,17 +14,17 @@
   padding: 0;
   color: var(--text-secondary);
   flex-shrink: 0;
-  border-radius: $radius3;
+  border-radius: $radius2;
   transition: background-color 0.12s ease, color 0.12s ease;
 
   &.md {
-    width: 24px;
-    height: 24px;
+    width: $heightFieldInput - 2px;
+    height: $heightFieldInput - 2px;
   }
 
   &.sm {
-    width: 22px;
-    height: 22px;
+    width: $heightFieldInput - 4px;
+    height: $heightFieldInput - 4px;
   }
 
   &:hover:not(:disabled) {

@@ -550,7 +550,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onToggleExpand(row); }}
     >
-      <Icon name="caretDown" width={12} height={12} />
+      <Icon name="caretDown" width={16} height={16} />
     </button>
   ) : null;
 

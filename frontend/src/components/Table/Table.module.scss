@@ -435,7 +435,7 @@
 
 						// ── focus-within: поле получило фокус (ввод) ─────────────
 						// Приоритет выше .activeCell — желтый фон поверх синего.
-						&:not(:has(input[type="checkbox"])):focus-within {
+						&:not(:has(input[type="checkbox"], button)):focus-within {
 							background: rgba(#fc0, 0.2);
 							box-shadow: inset 0 0 0 1px rgba(#fc0, 0.6);
 							outline: none;
@@ -1008,15 +1008,15 @@
 	align-items: center;
 	justify-content: center;
 	flex: 0 0 auto;
-	width: 16px;
-	height: 16px;
-	margin-right: 3px;
+	width: $heightFieldInput - 6px;
+	height: $heightFieldInput - 6px;
+	margin: 0px 0px 0px 3px;
 	padding: 0;
 	border: none;
 	background: transparent;
 	color: $color51;
 	cursor: pointer;
-	border-radius: $radius3;
+	border-radius: $radius2;
 	transform: rotate(-90deg);
 	transition: transform 0.12s ease, background-color 0.12s ease;
 
@@ -1025,10 +1025,10 @@
 		color: $color6;
 	}
 
-	&:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 2px color-mix(in srgb, #{$color3} 25%, transparent);
-	}
+	// &:focus-visible {
+	// 	outline: none;
+	// 	box-shadow: 0 0 0 2px color-mix(in srgb, #{$color3} 25%, transparent);
+	// }
 
 	svg {
 		display: block;
