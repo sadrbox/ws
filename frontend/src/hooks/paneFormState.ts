@@ -74,3 +74,37 @@ export function usePaneIsEditMode(uniqId: string): boolean {
 		() => false,
 	);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BUSY PANE STORE — по панели идёт длительная операция (запрос/команда).
+// Нужен шапке панели: кнопка ⟳ крутится, пока операция не закончится, и не
+// позволяет запустить второе чтение поверх первого.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const busySet = new Set<string>();
+const busyListeners = new Set<() => void>();
+
+export function setPaneBusy(uniqId: string, isBusy: boolean): void {
+	const was = busySet.has(uniqId);
+	if (isBusy && !was) {
+		busySet.add(uniqId);
+		for (const l of busyListeners) l();
+	} else if (!isBusy && was) {
+		busySet.delete(uniqId);
+		for (const l of busyListeners) l();
+	}
+}
+
+function subscribeBusy(listener: () => void): () => void {
+	busyListeners.add(listener);
+	return () => { busyListeners.delete(listener); };
+}
+
+/** Хук: идёт ли по панели длительная операция (для спиннера на ⟳). */
+export function usePaneIsBusy(uniqId: string): boolean {
+	return useSyncExternalStore(
+		subscribeBusy,
+		() => busySet.has(uniqId),
+		() => false,
+	);
+}

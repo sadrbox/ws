@@ -516,6 +516,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     rowIndex % 2 === 0 ? styles.even : styles.odd,
     isActive && styles.activeRow,
     isLoading && styles.RowLoading,
+    // Вложенная строка раскрытия: разметка и высота те же, что у TableBodyRow,
+    // класс нужен, чтобы отличить подчинённые строки от групповой.
+    isChild && styles.ExpandedRow,
   ].filter(Boolean).join(' ');
 
   return (
@@ -543,11 +546,14 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
           <td
             className={styles.CellCenter}
             data-col-id={CHECKBOX_COL_ID}
-            onClick={e => {
+            // У вложенной строки свой (отрицательный) идентификатор: сделав её
+            // активной, таблица сообщала бы наружу «активной строки нет», и
+            // раскрытие тут же схлопывалось бы от щелчка по собственному чекбоксу.
+            onClick={isChild ? (e) => e.stopPropagation() : (e => {
               e.stopPropagation();
               setActiveRow?.(row.id);
               setActiveCell?.(CHECKBOX_COL_ID);
-            }}
+            })}
           >
             <div
               className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
@@ -575,6 +581,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             cellAlignClass(col),
             isCellActive ? styles.activeCell : null,
             isChild && col.identifier === columns[0]?.identifier ? styles.ChildCell : null,
+            // Групповая (раскрытая) строка: её первая ячейка — заголовок группы.
+            !isChild && isExpanded && childRows && col.identifier === columns[0]?.identifier
+              ? styles.GroupCell : null,
           ].filter(Boolean).join(' ');
 
           const cellTitle = cellMeta?.errorMessage;

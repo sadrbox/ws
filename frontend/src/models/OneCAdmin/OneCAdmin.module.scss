@@ -185,6 +185,54 @@
 	min-height: 0;
 }
 
+// Вложенные строки раскрытой роли: базы с отметкой.
+//
+// Раскрытие показывает ТЕ ЖЕ данные, что и строка, только в разрезе баз, поэтому и
+// выглядеть должно строкой таблицы: та же высота, те же границы, чекбокс в колонке
+// слева. Своя «врезка» другого вида читалась как кусок чужого экрана.
+.NestedRows {
+	display: flex;
+	flex-direction: column;
+	background: $color30;
+}
+
+.NestedRow {
+	display: grid;
+	// 32px — ширина колонки отметок в таблице; строка садится на ту же сетку.
+	grid-template-columns: 32px minmax(120px, 220px) minmax(120px, 1fr) 130px;
+	align-items: stretch;
+	min-height: $heightFieldInput;
+	font-size: $fontsize;
+	cursor: pointer;
+	border-bottom: 1px solid $color34;
+
+	// Зебра здесь по :nth-child — список короткий и не виртуализируется.
+	&:nth-child(odd) {
+		background-color: color-mix(in srgb, #{$color6} 4%, transparent);
+	}
+
+	&:hover {
+		background-color: color-mix(in srgb, #{$color6} 8%, transparent);
+	}
+}
+
+.NestedCheck {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-right: 1px solid $color34;
+}
+
+.NestedCell {
+	display: flex;
+	align-items: center;
+	padding: 0 6px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	border-right: 1px solid $color34;
+}
+
 // Полоса выполнения в строке таблицы прогресса: сама по себе цифра «3 / 57» не
 // показывает движения, а полоса отвечает на «идёт ли ещё» одним взглядом.
 .Progress {
@@ -198,7 +246,7 @@
 .ProgressTrack {
 	position: relative;
 	flex: 1 1 auto;
-	height: 6px;
+	height: 12px;
 	border-radius: $radius3;
 	background: color-mix(in srgb, #{$color6} 12%, transparent);
 	overflow: hidden;

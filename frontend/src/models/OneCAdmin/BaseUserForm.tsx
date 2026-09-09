@@ -37,7 +37,7 @@ import {
 	fetchBaseUsers, fetchBaseUsersCached, fetchRoles, fetchUserOccurrences, runBatch,
 } from "src/services/onec/api";
 import { formStoreAPI } from "src/hooks/useFormStore";
-import { setPaneIsEditMode } from "src/hooks/paneFormState";
+import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
 import { QueryError } from "./shared";
 import { attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps } from "./progress";
@@ -101,6 +101,15 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		[ops, userName, baseKey],
 	);
 	const locked = !!busy;
+
+	// Спиннер на ⟳ в шапке панели: пока идёт операция по объекту карточки, кнопка
+	// крутится и не принимает нажатие — свежих значений всё равно ещё нет.
+	useEffect(() => {
+		const uniqId = paneProps.uniqId;
+		if (!uniqId) return;
+		setPaneBusy(uniqId, locked);
+		return () => setPaneBusy(uniqId, false);
+	}, [paneProps.uniqId, locked]);
 
 	/**
 	 * Строки без `baseKey` отбрасываем.

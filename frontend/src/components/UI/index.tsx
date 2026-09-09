@@ -10,7 +10,7 @@ import { ToolbarSlot } from 'src/components/Toolbar';
 import { copyPaneLink } from "src/utils/paneLink";
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
-import { usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
+import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
 // Статические импорты моделей убраны: иначе они все попадали в основной бандл и
@@ -127,6 +127,9 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
   const hasToolbar = useHasToolbar(p.uniqId);
   const isDirty = usePaneIsDirty(p.uniqId);
   const isEditMode = usePaneIsEditMode(p.uniqId);
+  // Пока по объекту панели идёт запрос или команда — ⟳ крутится и не принимает
+  // повторное нажатие: второе чтение поверх первого ничего не ускорит.
+  const isBusy = usePaneIsBusy(p.uniqId);
   const onReload = usePaneReload(p.uniqId);
   const Component = p.component as FC<Partial<TPane>>;
 
@@ -242,7 +245,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
               onClick={() => void copyPaneLink(p.restore!)}
             />
           )}
-          {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode} />}
+          {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode || isBusy} loading={isBusy} />}
           <CloseButton onClick={onClose} />
         </div>
       </div>
