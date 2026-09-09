@@ -30,6 +30,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchBaseExtensions, fetchBaseUsers, fetchSessions } from "src/services/onec/api";
 import { QueryError, publishLabel } from "src/models/OneCAdmin/shared";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
+import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import columnsJson from "./columns.json";
 
@@ -100,7 +101,9 @@ const useBaseTabs = (row: TDataItem) => {
 	const [loadUsers, setLoadUsers] = useState(false);
 	// Из карточки базы элемент открывается В КОНТЕКСТЕ ЭТОЙ БАЗЫ: она сразу отмечена,
 	// роли и реквизиты взяты из неё.
-	const openUser = useOpenElement("user");
+	// Пользователь базы — своя карточка пары «человек + база»: права у него в каждой
+	// базе свои, и общая карточка элемента показывала бы одни, а меняла другие.
+	const openBaseUser = useOpenBaseUser();
 	const openExt = useOpenElement("extension");
 	const [loadSessions, setLoadSessions] = useState(false);
 
@@ -157,7 +160,7 @@ const useBaseTabs = (row: TDataItem) => {
 				<QueryError error={users.error} />
 				<Table {...buildStaticTableProps({
 					componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
-					onRowClick: (r) => openUser(r, baseKey),
+					onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
 					sorting: userView.sorting, search: userView.search,
 					isLoading: users.isLoading || users.isFetching,
 					onReload: () => (loadUsers ? void users.refetch() : setLoadUsers(true)),

@@ -116,6 +116,14 @@ export interface TableProps {
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
   renderExpandedRow?: (row: TDataItem) => React.ReactNode;
+  /**
+   * Активная строка сменилась — ОДИНОЧНЫЙ клик (и стрелки клавиатуры).
+   *
+   * Двойной клик уже занят открытием элемента (`onSelectItem`/`openModelForm`), и
+   * связанные списки на нём делать нельзя: чтобы увидеть содержимое строки, пришлось бы
+   * открывать форму. Одиночный клик — это «покажи, что с этим связано», без перехода.
+   */
+  onActiveRowChange?: (row: TDataItem | null) => void;
   /** Императивный ref для внешнего управления таблицей (activeRow, focus). */
   apiRef?: Ref<TableApi>;
   /** uuid строки для подсветки + центрирования («Показать в журнале»). */
@@ -291,6 +299,7 @@ const Table: FC<TableProps> = memo((props) => {
     hideToolbar = false,
     expandedRowIds,
     renderExpandedRow,
+    onActiveRowChange,
     apiRef,
     highlightUuid,
     highlightToken,
@@ -349,6 +358,18 @@ const Table: FC<TableProps> = memo((props) => {
   rowsRef.current = rows;
   const onSelectItemRef = useRef(onSelectItem);
   onSelectItemRef.current = onSelectItem;
+
+  // Сообщаем наружу о смене активной строки. Через ref: колбэк меняется на каждый рендер
+  // родителя, а подписка на него не должна перезапускать эффект.
+  const onActiveRowChangeRef = useRef(onActiveRowChange);
+  onActiveRowChangeRef.current = onActiveRowChange;
+  const rowsForActiveRef = useRef(rows);
+  rowsForActiveRef.current = rows;
+  useEffect(() => {
+    const notify = onActiveRowChangeRef.current;
+    if (!notify) return;
+    notify(activeRow === null ? null : (rowsForActiveRef.current.find((r) => r.id === activeRow) ?? null));
+  }, [activeRow]);
 
   // Автоматически активировать первую строку когда есть onSelectItem и загрузились данные
   useEffect(() => {

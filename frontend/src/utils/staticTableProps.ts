@@ -32,6 +32,14 @@ interface Params {
 	/** Отметки строк (групповые операции над выбранным). По умолчанию выключены. */
 	selectable?: boolean;
 	onSelectionChange?: (selected: Set<number>, rows: TDataItem[]) => void;
+	/**
+	 * Активная строка сменилась — ОДИНОЧНЫЙ клик. Для связанных списков: щёлкнули базу
+	 * слева — справа её пользователи. Двойной клик занят открытием элемента.
+	 */
+	onActiveRowChange?: (row: TDataItem | null) => void;
+	/** Раскрытые строки и их содержимое: список ролей раскрывается базами. */
+	expandedRowIds?: Set<string>;
+	renderExpandedRow?: (row: TDataItem) => ReactNode;
 	/** Рабочая сортировка на клиенте — из useStaticTableView. */
 	sorting?: { sort: Record<string, "asc" | "desc">; onSortChange: (s: Record<string, "asc" | "desc">) => void };
 }
@@ -71,6 +79,9 @@ export function buildStaticTableProps(p: Params) {
 		// где над выбранными строками выполняются групповые операции.
 		selectable: !!p.selectable,
 		...(p.onSelectionChange ? { onSelectionChange: p.onSelectionChange } : {}),
+		...(p.onActiveRowChange ? { onActiveRowChange: p.onActiveRowChange } : {}),
+		...(p.expandedRowIds ? { expandedRowIds: p.expandedRowIds } : {}),
+		...(p.renderExpandedRow ? { renderExpandedRow: p.renderExpandedRow } : {}),
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),
 		...(p.renderCell ? { renderCell: p.renderCell } : {}),
 		...(p.highlightUuid ? { highlightUuid: p.highlightUuid } : {}),

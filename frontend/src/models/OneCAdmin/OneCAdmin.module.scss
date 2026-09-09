@@ -156,7 +156,7 @@
 // таблице — и всё ниже уезжало, а нажатие попадало не туда, куда целились.
 .UsersScreen {
 	display: grid;
-	grid-template-rows: auto minmax(0, 1fr);
+	grid-template-rows: auto minmax(0, 1fr) auto;
 	flex: 1 1 auto;
 	min-height: 0;
 	padding: 12px;
@@ -173,6 +173,38 @@
 
 .ModeSpacer {
 	flex: 1 1 auto;
+}
+
+// Две связанные таблицы: равные по важности, поэтому равной ширины. Какая слева —
+// решает переключатель, но обе всегда видны целиком: смысл экрана в их связке.
+.PairBody {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 12px;
+	min-height: 0;
+}
+
+// Вложенные строки раскрытой роли: базы с отметкой. Не таблица — строки короткие,
+// а вложенная таблица внутри строки таблицы читается как ошибка вёрстки.
+.SubRows {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 6px 12px 6px 36px;
+	background: $silverLightest;
+}
+
+.SubRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: $fontsize;
+	cursor: pointer;
+}
+
+.SubRowBase {
+	min-width: 160px;
+	font-weight: 700;
 }
 
 .UsersBody {

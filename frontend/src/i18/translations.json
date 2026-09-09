@@ -1752,5 +1752,17 @@
   "onecNothingToApply": "Изменений нет: задайте роли или реквизиты",
   "onecWillChange": "Изменится баз",
   "onecNoReadData": "Данные о базах ещё не читались",
-  "onecDiffHint": "Столбец «Отличие» — расхождение с эталонной базой"
+  "onecDiffHint": "Столбец «Отличие» — расхождение с эталонной базой",
+  "onecLayout": "Раскладка:",
+  "onecLayoutBasesLeft": "Базы слева",
+  "onecLayoutUsersLeft": "Пользователи слева",
+  "onecOpenCardHint": "Один клик — связанный список, двойной — карточка",
+  "onecBaseUserCard": "Пользователь базы",
+  "onecUserBases": "Базы пользователя",
+  "onecTabRights": "Права",
+  "onecPickBaseInHeader": "Выберите базу в шапке: права и реквизиты у человека в каждой базе свои.",
+  "onecUnsavedChanges": "Не записано изменений",
+  "onecResetDraft": "Отменить правки",
+  "onecChanged": "изменено",
+  "onecOpenInOtherBase": "Двойной щелчок — карточка этого человека в выбранной базе"
 }

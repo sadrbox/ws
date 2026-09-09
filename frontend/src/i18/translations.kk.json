@@ -1752,5 +1752,17 @@
   "onecNothingToApply": "Өзгеріс жоқ: рөлдерді немесе деректемелерді көрсетіңіз",
   "onecWillChange": "Өзгеретін базалар",
   "onecNoReadData": "Базалар туралы дерек оқылмаған",
-  "onecDiffHint": "«Айырма» бағаны — эталон базадан ауытқу"
+  "onecDiffHint": "«Айырма» бағаны — эталон базадан ауытқу",
+  "onecLayout": "Орналасу:",
+  "onecLayoutBasesLeft": "Базалар сол жақта",
+  "onecLayoutUsersLeft": "Пайдаланушылар сол жақта",
+  "onecOpenCardHint": "Бір рет басу — байланысты тізім, екі рет — карточка",
+  "onecBaseUserCard": "База пайдаланушысы",
+  "onecUserBases": "Пайдаланушы базалары",
+  "onecTabRights": "Құқықтар",
+  "onecPickBaseInHeader": "Жоғарыдан базаны таңдаңыз: әр базада құқықтар мен деректемелер бөлек.",
+  "onecUnsavedChanges": "Жазылмаған өзгерістер",
+  "onecResetDraft": "Түзетулерді болдырмау",
+  "onecChanged": "өзгертілді",
+  "onecOpenInOtherBase": "Екі рет басу — осы адамның таңдалған базадағы карточкасы"
 }
