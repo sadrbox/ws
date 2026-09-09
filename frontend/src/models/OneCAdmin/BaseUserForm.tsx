@@ -166,27 +166,17 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	}, [occ, roles.data]);
 
 	const [rightsCols, setRightsCols] = useState<TColumn[]>(() => getModelColumns(rightsColumns(), "OneCAdmin_bufRights"));
-	const rightsRows = useMemo(() => allRoles.map((role, i) => ({
-		id: i + 1, uuid: role, role,
-		inBases: `${occ.filter((o) => isOn(o.baseKey, role)).length} / ${occ.length}`,
-		changedLabel: baseKey && draft.has(draftKey(baseKey, role)) ? translate("onecChanged") : "",
-	})), [allRoles, baseKey, occ, isOn, draft]);
+	const rightsRows = useMemo(() => allRoles.map((role, i) => {
+		// Строка роли — ЗАГОЛОВОК ГРУППЫ: её значения считаются по всем базам человека,
+		// а не по выбранной. Отдельная база видна в своей вложенной строке.
+		const changed = occ.filter((o) => draft.has(draftKey(o.baseKey, role))).length;
+		return {
+			id: i + 1, uuid: role, role,
+			inBases: `${occ.filter((o) => isOn(o.baseKey, role)).length} / ${occ.length}`,
+			changedLabel: changed ? `${translate("onecChanged")}: ${changed}` : "",
+		};
+	}), [allRoles, occ, isOn, draft]);
 	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
-
-	/**
-	 * Отметки строк = «роль есть в выбранной базе».
-	 *
-	 * Галочка здесь — не выбор строк для команды, а СОСТОЯНИЕ данных, поэтому таблице она
-	 * отдаётся готовой (presetSelectedRows), а снятие/установка возвращаются черновиком.
-	 * Своя колонка с чекбоксом делала то же самое, но мимо клавиатуры и «отметить всё»,
-	 * которые в таблице уже есть.
-	 */
-	const rightsSelected = useMemo(() => {
-		const set = new Set<number>();
-		if (!baseKey) return set;
-		for (const r of rightsRows) if (isOn(baseKey, asText(r.role))) set.add(r.id);
-		return set;
-	}, [rightsRows, baseKey, isOn]);
 
 	/**
 	 * Раскрытие роли — СТРОКИ ТАБЛИЦЫ, а не врезка.
@@ -216,22 +206,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		toggle(base, role);
 	}, [isOn, toggle]);
 
-	const applySelection = useCallback((selected: Set<number>, rows: TDataItem[]) => {
-		if (!baseKey) return;
-		setDraft((prev) => {
-			const next = new Map(prev);
-			const have = rolesByBase.get(baseKey.toLowerCase()) ?? [];
-			for (const r of rows) {
-				const role = asText(r.role);
-				const want = selected.has(Number(r.id));
-				// Совпало с тем, что в базе, — записи в черновике не место.
-				if (want === have.includes(role)) next.delete(draftKey(baseKey, role));
-				else next.set(draftKey(baseKey, role), want);
-			}
-			return next;
-		});
-	}, [baseKey, rolesByBase]);
-
+	// ── Базы, где заведён человек ───────────────────────────────────────────
 	const [basesCols, setBasesCols] = useState<TColumn[]>(() => getModelColumns(basesColumns(), "OneCAdmin_bufBases"));
 	const basesRows = useMemo(() => occ.map((o, i) => ({
 		id: i + 1, uuid: o.baseKey, baseKey: o.baseKey, baseName: o.baseName || "—",
@@ -441,11 +416,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							isLoading: occurrences.isLoading,
 							onReload: () => void occurrences.refetch(),
 							reloadTitle: translate("onecReloadCached"),
-							// Отметка строки = «роль есть в выбранной базе»: штатный чекбокс таблицы,
-							// а не своя колонка — с ним работают клавиатура и «отметить всё».
-							selectable: !!baseKey && !locked,
-							presetSelectedRows: rightsSelected,
-							onSelectionChange: applySelection,
+							// Отметка роли — групповая: полная, если роль есть во ВСЕХ базах человека,
+							// промежуточная, если в части. Отдельная база правится своей вложенной
+							// строкой; обе отметки — одна и та же правка, просто разного охвата.
+							selectable: !locked,
 							// Одиночный клик раскрывает роль базами — второй разрез той же картины.
 							onActiveRowChange: (r) => setExpanded(r ? new Set([asText(r.uuid)]) : new Set()),
 							expandedRowIds: expanded,

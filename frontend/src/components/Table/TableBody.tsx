@@ -499,6 +499,31 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
 
   const rowUuid = row.uuid || String(row.id);
   const isExpanded = expandedRowIds?.has(rowUuid) ?? false;
+
+  /**
+   * ГРУППА И ЕЁ ВЛОЖЕННЫЕ СТРОКИ — один чекбокс на всех.
+   *
+   * У раскрытой строки отметка означает не «выбрана строка», а «отмечены все вложенные»:
+   * поставили — отметились все, сняли — снялись все, часть — промежуточное состояние
+   * (indeterminate). Иначе у группы и её строк были бы две независимые правды, и человеку
+   * пришлось бы гадать, что именно уйдёт в команду.
+   */
+  const children = useMemo(
+    () => (isChild || !childRows ? null : childRows(row)),
+    [isChild, childRows, row],
+  );
+  const childCount = children?.length ?? 0;
+  const childSelectedCount = children?.reduce((n, c) => n + (c.__selected === true ? 1 : 0), 0) ?? 0;
+  const isGroup = childCount > 0;
+  const groupAll = isGroup && childSelectedCount === childCount;
+  const groupSome = isGroup && childSelectedCount > 0 && childSelectedCount < childCount;
+
+  const toggleGroup = useCallback((next: boolean) => {
+    if (!children) return;
+    for (const child of children) {
+      if ((child.__selected === true) !== next) onChildToggle?.(row, child, next);
+    }
+  }, [children, onChildToggle, row]);
   const visibleColCount = columns.filter(c => c.visible).length + (showCheckbox ? 1 : 0);
 
   // Класс выравнивания ячейки по типу колонки — вычисляется один раз на колонку
@@ -519,6 +544,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     // Вложенная строка раскрытия: разметка и высота те же, что у TableBodyRow,
     // класс нужен, чтобы отличить подчинённые строки от групповой.
     isChild && styles.ExpandedRow,
+    // Раскрытая строка — заголовок группы: подложка шапки и полужирное начертание.
+    isGroup && isExpanded && styles.GroupRow,
   ].filter(Boolean).join(' ');
 
   return (
@@ -535,7 +562,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
         // было определить выбранные/активные строки без доступа к React-state.
         data-row-id={isChild ? undefined : row.id}
         data-child={isChild || undefined}
-        data-selected={isSelected || undefined}
+        data-selected={(isGroup ? groupAll : isSelected) || undefined}
         // Жирное выделение основной записи (см. tr[data-primary="true"] в Table.module.scss)
         // применяется ТОЛЬКО во вложенных таблицах (SubTable, variant="embedded"),
         // которые используются внутри форм организации/контрагента и форм основных записей.
@@ -560,11 +587,18 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             >
               <input
                 type="checkbox"
-                checked={isSelected}
-                onChange={onToggleSelect
-                  ? (e) => { e.stopPropagation(); onToggleSelect(e.target.checked); }
-                  : toggleSelect}
-                disabled={isLoading || (!canSelect && !onToggleSelect)}
+                // Промежуточное состояние ставится только через DOM: у input нет
+                // атрибута indeterminate, есть лишь свойство.
+                ref={(el) => { if (el) el.indeterminate = groupSome; }}
+                checked={isGroup ? groupAll : isSelected}
+                onChange={
+                  onToggleSelect
+                    ? (e) => { e.stopPropagation(); onToggleSelect(e.target.checked); }
+                    : isGroup
+                      ? (e) => { e.stopPropagation(); toggleGroup(e.target.checked); }
+                      : toggleSelect
+                }
+                disabled={isLoading || (!canSelect && !onToggleSelect && !isGroup)}
               />
             </div>
           </td>
@@ -647,7 +681,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
         * высота, тот же чекбокс. Произвольное содержимое (renderExpandedRow) осталось
         * для случаев, где показать нужно не строки.
         */}
-      {isExpanded && childRows?.(row).map((child, ci) => (
+      {isExpanded && children?.map((child, ci) => (
         <TableBodyRow
           key={`child-${row.id}-${child.id ?? ci}`}
           row={child}
