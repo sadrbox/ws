@@ -17,8 +17,9 @@
  * done/failed/pending. Завершённые записи не исчезают сами — их убирает человек кнопкой,
  * иначе итог операции пропал бы ровно в тот момент, когда его собрались прочитать.
  */
-import { useSyncExternalStore } from "react";
-import type { BatchProgress } from "src/services/onec/api";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchBatches, type BatchProgress } from "src/services/onec/api";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
 export type OpKind = "read" | "create" | "update" | "delete";
@@ -41,6 +42,22 @@ export type Op = {
 	batchId: string | null;
 	/** Короткий итог или причина отказа. */
 	note: string;
+	/**
+	 * НАД ЧЕМ идёт работа. Пока операция выполняется, эти объекты правке не подлежат:
+	 * значения в 1С меняются прямо сейчас, и форма, позволяющая писать поверх, отправила
+	 * бы команду по данным, которых уже нет.
+	 */
+	scope: { user?: string; bases: string[] };
+};
+
+/** Затрагивает ли выполняющаяся операция пару «человек + база». */
+export const opBlocks = (op: Op, user: string, baseKey: string): boolean => {
+	if (op.state !== "running") return false;
+	const u = op.scope.user;
+	if (u && user && u.toLowerCase() !== user.toLowerCase()) return false;
+	if (!op.scope.bases.length) return true;
+	if (!baseKey) return true;
+	return op.scope.bases.some((b) => b.toLowerCase() === baseKey.toLowerCase());
 };
 
 /** Тип команды → вид операции: список ведём один, а читается он по-разному. */
@@ -66,7 +83,8 @@ const replace = (id: string, patch: (op: Op) => Op) => {
 
 /** Начать операцию. Возвращает идентификатор — по нему её потом двигают. */
 export function startOp(init: {
-	kind: OpKind; title: string; target: string; total: number; batchId?: string | null; note?: string;
+	kind: OpKind; title: string; target: string; total: number;
+	batchId?: string | null; note?: string; scope?: { user?: string; bases?: string[] };
 }): string {
 	const id = `op_${++seq}_${Date.now()}`;
 	ops = [{
@@ -74,6 +92,7 @@ export function startOp(init: {
 		total: Math.max(init.total, 0), done: 0, failed: 0,
 		state: "running", startedAt: Date.now(), finishedAt: null,
 		batchId: init.batchId ?? null, note: init.note ?? "",
+		scope: { ...(init.scope?.user ? { user: init.scope.user } : {}), bases: init.scope?.bases ?? [] },
 	}, ...ops];
 	emit();
 	return id;
@@ -143,3 +162,53 @@ const snapshot = () => ops;
 
 /** Подписка на реестр: список меняется целиком, поэтому сравнение по ссылке верно. */
 export const useOnecOps = (): Op[] => useSyncExternalStore(subscribe, snapshot, snapshot);
+
+/**
+ * Слежение за командами: опрос заданий, пока есть незавершённые.
+ *
+ * Живёт в ХУКЕ, а не на одном экране: команду ставят и со списка, и из карточки, а
+ * карточка — отдельный пейн и может остаться единственным открытым. Ключ запроса общий,
+ * поэтому два наблюдателя не удваивают трафик.
+ *
+ * ПОСЛЕ ЗАВЕРШЕНИЯ перечитываем реестр — и делаем это ДВАЖДЫ. Сервис обновляет свой кэш
+ * содержимого базы отдельной командой (IB_LIST_USERS ставится следом за изменяющей), и в
+ * момент, когда наша команда уже «выполнена», свежие данные ещё едут. Один запоздалый
+ * повтор дешевле, чем показывать старое значение как новое.
+ */
+export function useBatchWatch(): { isFetching: boolean; refresh: () => void; running: number } {
+	const ops = useOnecOps();
+	const watching = hasRunningBatches(ops);
+	const qc = useQueryClient();
+
+	const q = useQuery({
+		queryKey: ["onec", "batches"],
+		queryFn: fetchBatches,
+		refetchInterval: watching ? 3000 : false,
+		staleTime: 0,
+	});
+
+	useEffect(() => {
+		for (const b of q.data?.items ?? []) mergeBatch(b);
+	}, [q.data]);
+
+	const was = useRef(false);
+	useEffect(() => {
+		const prev = was.current;
+		was.current = watching;
+		if (!prev || watching) return;
+		const refresh = () => {
+			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+		};
+		refresh();
+		const t = window.setTimeout(refresh, 5000);
+		return () => window.clearTimeout(t);
+	}, [watching, qc]);
+
+	return {
+		isFetching: q.isFetching,
+		refresh: () => void q.refetch(),
+		running: ops.filter((o) => o.state === "running").length,
+	};
+}

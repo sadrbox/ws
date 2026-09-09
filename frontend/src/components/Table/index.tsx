@@ -115,6 +115,8 @@ export interface TableProps {
   hideAdd?: boolean;
   /** Если true — скрыть кнопку «Обновить» в тулбаре (когда перезагрузка с сервера не нужна). */
   hideReload?: boolean;
+  /** Подпись кнопки «Обновить»: откуда именно она перечитывает данные. */
+  reloadTitle?: string;
   /** Если true — НЕ рендерить панель управления (TableControlPanel) вовсе. Для
    *  пейнов, где тулбар вынесен на уровень панели (usePaneToolbar). По умолчанию
    *  false — на все существующие таблицы не влияет (референс pane-toolbar). */
@@ -123,6 +125,9 @@ export interface TableProps {
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
   renderExpandedRow?: (row: TDataItem) => React.ReactNode;
+  /** Строки-потомки раскрытой строки: рисуются тем же TableBodyRow (см. context.tsx). */
+  childRows?: (row: TDataItem) => TDataItem[];
+  onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
   /**
    * Активная строка сменилась — ОДИНОЧНЫЙ клик (и стрелки клавиатуры).
    *
@@ -186,6 +191,8 @@ interface TableControlPanelProps {
   hideAdd?: boolean;
   /** Если true — скрыть кнопку «Обновить». */
   hideReload?: boolean;
+  /** Подпись кнопки «Обновить»: экрану бывает важно сказать, ОТКУДА она перечитывает. */
+  reloadTitle?: string;
   /** Если true — скрыть кнопку «Удалить» (удаление недоступно) */
   canDelete?: boolean;
   componentName?: string;
@@ -211,6 +218,7 @@ const TableControlPanel = memo(({
   hideAddDelete = false,
   hideAdd = false,
   hideReload = false,
+  reloadTitle,
   canDelete = true,
   componentName,
 }: TableControlPanelProps) => {
@@ -248,7 +256,7 @@ const TableControlPanel = memo(({
         </>
       )}
       {!isSelect && <Toolbar.Divider />}
-      {!hideReload && <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} />}
+      {!hideReload && <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} title={reloadTitle} />}
       <Toolbar.SettingsButton onClick={onConfigOpen} />
       <Toolbar.SearchButton onClick={onSearchToggle} active={visibleFastSearch} />
       {/* <Toolbar.Divider /> */}
@@ -271,6 +279,7 @@ const TableControlPanel = memo(({
     prevProps.hideAddDelete === nextProps.hideAddDelete &&
     prevProps.hideAdd === nextProps.hideAdd &&
     prevProps.hideReload === nextProps.hideReload &&
+    prevProps.reloadTitle === nextProps.reloadTitle &&
     prevProps.canDelete === nextProps.canDelete
   );
 });
@@ -304,9 +313,12 @@ const Table: FC<TableProps> = memo((props) => {
     hideAddDelete = false,
     hideAdd = false,
     hideReload = false,
+    reloadTitle,
     hideToolbar = false,
     expandedRowIds,
     renderExpandedRow,
+    childRows,
+    onChildToggle,
     onActiveRowChange,
     apiRef,
     highlightUuid,
@@ -551,6 +563,8 @@ const Table: FC<TableProps> = memo((props) => {
       scrollRef,
       expandedRowIds,
       renderExpandedRow,
+      childRows,
+      onChildToggle,
       // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
         setSelectedRows,
@@ -567,6 +581,9 @@ const Table: FC<TableProps> = memo((props) => {
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
       onInlineAdd, onDelete,
+      // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
+      // обновлялось лишь попутно, когда менялись строки.
+      expandedRowIds, renderExpandedRow, childRows, onChildToggle,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,
@@ -868,6 +885,7 @@ const Table: FC<TableProps> = memo((props) => {
           hideAddDelete={hideAddDelete}
           hideAdd={hideAdd}
           hideReload={hideReload}
+          reloadTitle={reloadTitle}
           canDelete={!!onDelete}
         />}
 

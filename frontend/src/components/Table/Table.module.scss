@@ -338,7 +338,7 @@
 						border: 0px transparent;
 					}
 
-					span,
+					&>span,
 					code {
 						padding: 0px 6px;
 						overflow: hidden;
@@ -960,6 +960,13 @@
 /* Контейнер скролла: запрет overflow-anchor (для виртуализации) */
 .NoOverflowAnchor {
 	overflow-anchor: none;
+}
+
+/* Строка-потомок раскрытой строки: тот же TableBodyRow, отличие ровно одно —
+   отступ первой ячейки, показывающий подчинение. Ни фона, ни границ, ни высоты
+   она не меняет: иначе раскрытие читалось бы как чужой блок внутри таблицы. */
+.ChildCell {
+	padding-left: 18px;
 }
 
 /* Ячейка раскрытой (expanded) строки */

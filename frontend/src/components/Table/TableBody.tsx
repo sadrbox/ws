@@ -301,10 +301,19 @@ interface TableBodyRowProps {
   activeCellId: string | null;
   /** Режим «выбрать все» — нужен в обработчике чекбокса. Меняется редко. */
   isAllSelectedMode: boolean;
+  /**
+   * Строка-потомок раскрытой строки. Рисуется ТЕМ ЖЕ компонентом и в тех же классах —
+   * потомок отличается только отступом первой ячейки. Своей разметки для раскрытия нет
+   * намеренно: любая другая вёрстка внутри строки читается как чужой экран, хотя это те
+   * же данные в другом разрезе.
+   */
+  isChild?: boolean;
+  /** Отметка потомка живёт у владельца таблицы: у детей свои идентификаторы. */
+  onToggleSelect?: (next: boolean) => void;
 }
 
 
-const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isAllSelectedMode }) => {
+const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isAllSelectedMode, isChild, onToggleSelect }) => {
   const {
     variant, selectable,
     onSelectItem,
@@ -314,6 +323,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     getCellMetaRef,
     expandedRowIds,
     renderExpandedRow,
+    childRows,
+    onChildToggle,
     canSelect,
     // Только сеттеры — значения выделения/навигации приходят пропсами.
     states: {
@@ -510,16 +521,17 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   return (
     <Fragment>
       <tr
-        onClick={handleRowClick}
-        onFocus={handleRowFocus}
-        onMouseDown={handleMouseDown}
-        onDoubleClick={handleDoubleClick}
+        onClick={isChild ? undefined : handleRowClick}
+        onFocus={isChild ? undefined : handleRowFocus}
+        onMouseDown={isChild ? undefined : handleMouseDown}
+        onDoubleClick={isChild ? undefined : handleDoubleClick}
         className={trClassName}
         data-active={isActive || undefined}
         // data-row-id / data-selected — атрибуты для внешних обработчиков
         // (напр. SubTable.handleContainerKeyDown), чтобы по клавишам можно
         // было определить выбранные/активные строки без доступа к React-state.
-        data-row-id={row.id}
+        data-row-id={isChild ? undefined : row.id}
+        data-child={isChild || undefined}
         data-selected={isSelected || undefined}
         // Жирное выделение основной записи (см. tr[data-primary="true"] в Table.module.scss)
         // применяется ТОЛЬКО во вложенных таблицах (SubTable, variant="embedded"),
@@ -540,7 +552,14 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             <div
               className={[styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive ? styles.activeCell : undefined].filter(Boolean).join(' ')}
             >
-              <input type="checkbox" checked={isSelected} onChange={toggleSelect} disabled={isLoading || !canSelect} />
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={onToggleSelect
+                  ? (e) => { e.stopPropagation(); onToggleSelect(e.target.checked); }
+                  : toggleSelect}
+                disabled={isLoading || (!canSelect && !onToggleSelect)}
+              />
             </div>
           </td>
         )}
@@ -555,6 +574,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             styles.TableBodyCell,
             cellAlignClass(col),
             isCellActive ? styles.activeCell : null,
+            isChild && col.identifier === columns[0]?.identifier ? styles.ChildCell : null,
           ].filter(Boolean).join(' ');
 
           const cellTitle = cellMeta?.errorMessage;
@@ -613,6 +633,25 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
           );
         })}
       </tr>
+      {/*
+        * Раскрытие строки — это СТРОКИ ТАБЛИЦЫ, а не врезка: те же колонки, та же
+        * высота, тот же чекбокс. Произвольное содержимое (renderExpandedRow) осталось
+        * для случаев, где показать нужно не строки.
+        */}
+      {isExpanded && childRows?.(row).map((child, ci) => (
+        <TableBodyRow
+          key={`child-${row.id}-${child.id ?? ci}`}
+          row={child}
+          columns={columns}
+          isActive={false}
+          isSelected={child.__selected === true}
+          rowIndex={rowIndex + ci + 1}
+          activeCellId={null}
+          isAllSelectedMode={false}
+          isChild
+          onToggleSelect={(next) => onChildToggle?.(row, child, next)}
+        />
+      ))}
       {
         isExpanded && renderExpandedRow && (
           <tr>

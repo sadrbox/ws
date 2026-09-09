@@ -14,8 +14,8 @@
  * КАРКАС ЖЁСТКИЙ: полоса режима, тело из двух колонок, полоса состояния. Прокручиваются
  * только таблицы, поэтому появление сообщения ничего не сдвигает.
  */
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FC, useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Tabs from "src/components/Tabs";
@@ -27,14 +27,14 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchBatches, fetchUserOccurrences, fetchUserSummary,
+	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary,
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import ProgressTab from "./ProgressTab";
-import { finishOp, hasRunningBatches, mergeBatch, progressOp, startOp, useOnecOps } from "./progress";
+import { finishOp, progressOp, startOp, useBatchWatch } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 const baseColumns = (): TColumn[] => ([
@@ -59,40 +59,8 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 
 	const parallel = useCheckParallel();
 	const openCard = useOpenBaseUser();
-	const qc = useQueryClient();
-
-	/**
-	 * Опрос заданий: пока есть незавершённые команды, состояние тянется каждые три секунды
-	 * и переносится в реестр операций. Опрос живёт ЗДЕСЬ, а не во вкладке прогресса: команду
-	 * ставят с этого экрана и из карточки, и прогресс не должен замирать оттого, что человек
-	 * смотрит на таблицы. Как только незавершённых не остаётся, опрос выключается сам —
-	 * держать постоянный трафик ради пустого списка незачем.
-	 */
-	const ops = useOnecOps();
-	const watching = hasRunningBatches(ops);
-	const batches = useQuery({
-		queryKey: ["onec", "batches"],
-		queryFn: fetchBatches,
-		// Запрос включён всегда — иначе кнопка «Обновить» на вкладке прогресса не работала
-		// бы (отключённый запрос перезапрашивать нечем). Периодичность же появляется только
-		// при незавершённых командах.
-		refetchInterval: watching ? 3000 : false,
-		staleTime: 0,
-	});
-	useEffect(() => {
-		for (const b of batches.data?.items ?? []) mergeBatch(b);
-	}, [batches.data]);
-
-	// Команда закончилась — реестр в панели устарел: перечитываем то, что она меняла.
-	const wasWatching = useRef(false);
-	useEffect(() => {
-		if (wasWatching.current && !watching) {
-			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
-		}
-		wasWatching.current = watching;
-	}, [watching, qc]);
+	// Слежение за командами общее для экрана и карточки — см. useBatchWatch.
+	const watch = useBatchWatch();
 
 	// Ширина таблиц — тем же разделителем, что в списках с предпросмотром и отчётах:
 	// у администратора свои пропорции (сто баз против десятка людей), и они должны
@@ -166,6 +134,8 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			kind: "read", title: translate("onecUsersCheck"),
 			target: keys.length === 1 ? keys[0] : `${translate("onecBases")}: ${keys.length}`,
 			total: keys.length,
+			// Читаем содержимое этих баз — карточки их пользователей на это время не правятся.
+			scope: { bases: keys },
 		});
 		const r = await checkBases(keys, fetchBaseUsers, parallel, (done, failed) => progressOp(op, done, failed));
 		finishOp(op, {
@@ -188,6 +158,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
 			isLoading: bases.isLoading || occurrences.isLoading,
 			onReload: () => void bases.refetch(),
+			reloadTitle: translate("onecReloadCached"),
 			// Одиночный щелчок — связанный список справа. Двойной — карточка пары.
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
 			onRowClick: (r) => openCard(activeUser || "", asText(r.baseKey)),
@@ -207,6 +178,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			setColumns: setUserCols, sorting: userView.sorting, search: userView.search,
 			isLoading: summary.isLoading || baseUsers.isLoading,
 			onReload: () => void summary.refetch(),
+			reloadTitle: translate("onecReloadCached"),
 			onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
 			// Карточка пары: человек из этой строки, база — активная слева.
 			onRowClick: (r) => openCard(asText(r.name), activeBase),
@@ -264,7 +236,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 	// Прогресс — соседняя вкладка, а не окно поверх: длинная проверка не должна закрывать
 	// собой таблицы, а короткая — отвлекать. Обе панели остаются смонтированными, поэтому
 	// переключение не теряет ни выделения, ни прокрутки.
-	const running = ops.filter((o) => o.state === "running").length;
+	const running = watch.running;
 
 	return (
 		<>
@@ -276,10 +248,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 						id: "progress",
 						label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
 						component: (
-							<ProgressTab
-								isLoading={batches.isFetching}
-								onRefresh={() => void batches.refetch()}
-							/>
+							<ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} />
 						),
 					},
 				]}

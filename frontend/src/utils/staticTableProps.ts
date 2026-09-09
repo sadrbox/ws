@@ -19,6 +19,8 @@ interface Params {
 	renderCell?: (row: TDataItem, col: TColumn) => ReactNode;
 	onRowClick?: (data: Partial<TDataItem>) => void;
 	onReload?: () => void;
+	/** Подпись кнопки «Обновить»: экрану важно сказать, ОТКУДА она перечитывает данные. */
+	reloadTitle?: string;
 	isLoading?: boolean;
 	/** Быстрый поиск: значение + сеттер (из useStaticTableView — он же и фильтрует). */
 	search?: { value: string; onChange: (v: string) => void };
@@ -42,6 +44,9 @@ interface Params {
 	/** Раскрытые строки и их содержимое: список ролей раскрывается базами. */
 	expandedRowIds?: Set<string>;
 	renderExpandedRow?: (row: TDataItem) => ReactNode;
+	/** Строки-потомки раскрытой строки — рисуются тем же TableBodyRow, теми же колонками. */
+	childRows?: (row: TDataItem) => TDataItem[];
+	onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
 	/** Рабочая сортировка на клиенте — из useStaticTableView. */
 	sorting?: { sort: Record<string, "asc" | "desc">; onSortChange: (s: Record<string, "asc" | "desc">) => void };
 }
@@ -75,6 +80,7 @@ export function buildStaticTableProps(p: Params) {
 		},
 		hideAddDelete: true,
 		hideReload: !p.onReload,
+		...(p.reloadTitle ? { reloadTitle: p.reloadTitle } : {}),
 		hideToolbar: !!p.hideToolbar,
 		readonly: true,
 		// read-only списки без массового выбора → без колонки-чекбокса; включается там,
@@ -85,6 +91,8 @@ export function buildStaticTableProps(p: Params) {
 		...(p.presetSelectedRows ? { presetSelectedRows: p.presetSelectedRows } : {}),
 		...(p.expandedRowIds ? { expandedRowIds: p.expandedRowIds } : {}),
 		...(p.renderExpandedRow ? { renderExpandedRow: p.renderExpandedRow } : {}),
+		...(p.childRows ? { childRows: p.childRows } : {}),
+		...(p.onChildToggle ? { onChildToggle: p.onChildToggle } : {}),
 		...(p.extraButtons ? { extraButtons: p.extraButtons } : {}),
 		...(p.renderCell ? { renderCell: p.renderCell } : {}),
 		...(p.highlightUuid ? { highlightUuid: p.highlightUuid } : {}),

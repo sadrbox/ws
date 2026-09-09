@@ -96,6 +96,13 @@ export interface TableContextProps {
   expandedRowIds?: Set<string>;
   /** Функция для рендера содержимого раскрытой строки */
   renderExpandedRow?: (row: TDataItem) => ReactNode;
+  /**
+   * Строки-потомки раскрытой строки. Рисуются ТЕМ ЖЕ TableBodyRow и в тех же колонках,
+   * поэтому раскрытие неотличимо от обычных строк (кроме отступа первой ячейки).
+   * Отметка потомка — `__selected` в его данных, переключение — onChildToggle.
+   */
+  childRows?: (row: TDataItem) => TDataItem[];
+  onChildToggle?: (parent: TDataItem, child: TDataItem, next: boolean) => void;
 
   // ТОЛЬКО сеттеры (стабильная идентичность). Сами ЗНАЧЕНИЯ выделения/навигации
   // вынесены в отдельный TableVolatileContext — иначе смена activeCell на КАЖДОЕ
