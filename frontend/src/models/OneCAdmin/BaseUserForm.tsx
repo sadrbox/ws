@@ -133,6 +133,22 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		setForm({ fullName: "", password: "", disabled: here?.disabled ?? false, showInList: true });
 	}, [here]);
 
+	/**
+	 * База карточки всегда есть в списке — даже когда реестр про неё ещё не знает.
+	 *
+	 * Карточку открывают из базы, содержимое которой только что прочитали, а сводка
+	 * «в каких базах есть этот человек» наполняется отдельно и может отставать. Поле со
+	 * значением, которого нет среди вариантов, показывается ПУСТЫМ: выглядело это как
+	 * «форма не работает», хотя база выбрана и всё правится.
+	 */
+	const baseOptions = useMemo(() => {
+		const items = occ.map((o) => ({ value: o.baseKey, label: `${o.baseKey} — ${o.baseName || "—"}` }));
+		if (baseKey && !items.some((i) => i.value.toLowerCase() === baseKey.toLowerCase())) {
+			items.unshift({ value: baseKey, label: baseKey });
+		}
+		return items;
+	}, [occ, baseKey]);
+
 	const rolesByBase = useMemo(() => {
 		const m = new Map<string, string[]>();
 		for (const o of occ) m.set(o.baseKey.toLowerCase(), o.roles ?? []);
@@ -361,7 +377,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									<FieldSelect name="buf_base" label={translate("onecBase")} value={baseKey}
 										disabled={locked}
 										onChange={(e) => setBaseKey(e.target.value)}
-										options={occ.map((o) => ({ value: o.baseKey, label: `${o.baseKey} — ${o.baseName || "—"}` }))} />
+										options={baseOptions} />
 									<Field name="buf_seen" label={translate("onecDataFrom")}
 										value={occ.find((o) => o.baseKey === baseKey)?.seenAt
 											? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}

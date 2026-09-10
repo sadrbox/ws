@@ -33,6 +33,7 @@ import { QueryError, publishLabel, useBaseUsersCheck } from "src/models/OneCAdmi
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
+import BaseUserCommands from "src/models/OneCAdmin/BaseUserCommands";
 import BaseCredentialsTab from "./BaseCredentials";
 import columnsJson from "./columns.json";
 
@@ -118,6 +119,9 @@ const useBaseTabs = (row: TDataItem) => {
 	 * кладёт в него прочитанное, а сам он в 1С не ходит никогда.
 	 */
 	const usersCheck = useBaseUsersCheck();
+	// Кого правим: строка, выбранная одиночным щелчком. Двойной по-прежнему открывает
+	// карточку пары — кнопка «Изменить» делает тот же жест явным.
+	const [activeUser, setActiveUser] = useState("");
 
 	// enabled требует ключа базы: без него запрос уходил бы в `/bases//extensions`.
 	const ext = useQuery({ queryKey: ["onec", "base-ext", baseKey], queryFn: () => fetchBaseExtensions(baseKey), enabled: loadExt && !!baseKey, staleTime: 0 });
@@ -181,12 +185,18 @@ const useBaseTabs = (row: TDataItem) => {
 					// «Обновить» здесь — то же чтение у 1С: другого источника у таблицы нет.
 					onReload: () => void usersCheck.run([baseKey]),
 					reloadTitle: translate("onecUsersCheck"),
+					onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
 					extraButtons: (
-						<Button variant="secondary" disabled={!baseKey || usersCheck.checking}
-							title={baseKey ? `${translate("onecUsersCheck")}: ${baseKey}` : translate("onecPickBaseFirst")}
-							onClick={() => void usersCheck.run([baseKey])}>
-							<Icon name="reload" /> {translate("onecUsersCheck")}
-						</Button>
+						<>
+							<Button variant="secondary" disabled={!baseKey || usersCheck.checking}
+								title={baseKey ? `${translate("onecUsersCheck")}: ${baseKey}` : translate("onecPickBaseFirst")}
+								onClick={() => void usersCheck.run([baseKey])}>
+								<Icon name="reload" /> {translate("onecUsersCheck")}
+							</Button>
+							{/* Создать, изменить, удалить — по ЭТОЙ базе; роли читаются из неё же. */}
+							<BaseUserCommands baseKey={baseKey} activeUser={activeUser}
+								onDone={() => void usersCheck.run([baseKey])} />
+						</>
 					),
 				})} />
 			),
