@@ -18,7 +18,7 @@ export async function purgeOldData(db: Db, days: number): Promise<RetentionRepor
 	const cmd = await db.query(`DELETE FROM commands WHERE state NOT IN ('queued', 'dispatched') AND created_at < now() - $1::interval`, [interval]);
 	// Журнал административных действий чистится тем же сроком, что и всё остальное: он
 	// пишется на КАЖДУЮ команду, включая чтения, и растёт быстрее любой другой таблицы.
-	const audit = await db.query(`DELETE FROM audit_log WHERE created_at < now() - $1::interval`, [interval]);
+	const audit = await db.query(`DELETE FROM audit_log WHERE at < now() - $1::interval`, [interval]);
 	return {
 		conversations: conv.rowCount ?? 0, statements: st.rowCount ?? 0,
 		commands: cmd.rowCount ?? 0, audit: audit.rowCount ?? 0,
