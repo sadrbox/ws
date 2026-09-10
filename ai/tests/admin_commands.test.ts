@@ -20,6 +20,9 @@ test("список закрыт: чужой тип команды не нахо�
 test("опасные операции помечены CRITICAL — они идут через подтверждение", () => {
 	const critical = ADMIN_COMMANDS.filter((c) => c.operation === "CRITICAL").map((c) => c.type);
 	assert.deepEqual(critical.sort(), [
+		// Снятие процесса агента останавливает работу на сервере 1С: конфигуратор без
+		// force агент не тронет вовсе, но rac/ibcmd снимет — команда прервётся.
+		"AGENT_KILL_PROCESS",
 		"CLUSTER_DISCONNECT", "CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_TERMINATE_SESSION",
 		// Внутрибазовые изменения так же необратимы: удалённого пользователя ИБ или
 		// снесённое расширение не вернуть, а установка меняет конфигурацию базы.

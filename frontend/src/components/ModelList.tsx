@@ -440,9 +440,16 @@ const ModelList: FC<ModelListProps> = ({
     ? { ...tableProps.actions, refetch: () => { void Promise.resolve(onReload()).finally(() => tableProps.actions.refetch()); } }
     : tableProps.actions;
 
+  /*
+   * Отметки строк показываем, только если им есть чем распорядиться: групповыми
+   * кнопками или удалением. В списке, где удаление скрыто как неприменимое (серийные
+   * номера заводятся документами, базы 1С — кластером), колонка чекбоксов кликалась
+   * вхолостую: выбрал — и ничего с выбранным сделать нельзя.
+   */
   const table = (
     <Table
       {...tableProps}
+      selectable={selectableButtons || !hideAddDelete}
       actions={actions}
       hideAddDelete={hideAddDelete}
       hideAdd={hideAdd}

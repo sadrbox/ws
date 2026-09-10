@@ -118,7 +118,11 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	setInterval(purge, 3_600_000).unref();
 	// Старые диалоги, выписки и команды — при старте и раз в сутки.
 	const retention = () => purgeOldData(db, cfg.CONVERSATION_TTL_DAYS)
-		.then((r) => { if (r.conversations || r.statements || r.commands) log.info(r, "удалены данные старше срока хранения"); })
+		.then((r) => { if (r.conversations || r.statements || r.commands || r.audit) log.info(r, "удалены данные старше срока хранения"); })
+		// Экземпляры агента копятся по строке на каждый перезапуск службы. Раньше их
+		// чистило «когда повезёт» — попутно с чужим запросом; теперь это часть той же
+		// суточной уборки, что и всё остальное.
+		.then(() => agents.pruneInstances())
 		.catch((e) => log.warn({ err: e }, "очистка старых данных"));
 	void retention();
 	setInterval(retention, 86_400_000).unref();

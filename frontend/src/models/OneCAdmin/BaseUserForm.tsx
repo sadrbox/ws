@@ -218,6 +218,14 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 */
 	const childRows = useCallback((r: TDataItem): TDataItem[] => {
 		const role = asText(r.role);
+		// Ни одной базы — значит содержимое ещё не читали: строка об этом честнее пустого
+		// раскрытия, из которого не понять, «нет прав» или «не спрашивали».
+		if (!occ.length) {
+			return [{
+				id: -1, uuid: `${role}|none`, role: translate("onecUserNeverRead"),
+				inBases: "", changedLabel: "", __selected: false,
+			}];
+		}
 		return occ.map((o, i) => ({
 			// Отрицательные идентификаторы: пространство строк у потомков своё, и они не
 			// должны совпасть с идентификаторами ролей (отметки/активная строка — по ним).
@@ -480,6 +488,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							componentName: "OneCAdmin_bufRights", rows: rightsView.rows, columns: rightsCols,
 							setColumns: setRightsCols, sorting: rightsView.sorting, search: rightsView.search,
 							isLoading: occurrences.isLoading,
+							reloading: occurrences.isFetching,
 							onReload: () => void occurrences.refetch(),
 							reloadTitle: translate("onecReloadCached"),
 							// Активной строки здесь нет: в этой таблице строка — не «текущая запись»,
@@ -526,6 +535,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							componentName: "OneCAdmin_bufBases", rows: basesView.rows, columns: basesCols,
 							setColumns: setBasesCols, sorting: basesView.sorting, search: basesView.search,
 							isLoading: occurrences.isLoading,
+							reloading: occurrences.isFetching,
 							onReload: () => void occurrences.refetch(),
 							reloadTitle: translate("onecReloadCached"),
 							// Строка — база: двойной щелчок открывает карточку БАЗЫ, как и везде.

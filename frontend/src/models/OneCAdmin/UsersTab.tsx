@@ -50,13 +50,18 @@ const userColumns = (): TColumn[] => ([
 	{ identifier: "rolesLabel", type: "string", width: "320px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
-export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
+/**
+ * Пропа `onBatchStarted` у экрана нет намеренно: заданий он не запускает. Групповые
+ * команды по многим базам живут в списке «Базы 1С», а правка одного человека идёт
+ * карточкой пары — её прогресс виден на соседней вкладке. Раньше проп был объявлен, панель
+ * передавала обработчик, а экран его даже не принимал: договорённость, которой никто не
+ * исполнял.
+ */
+export const UsersTab: FC = () => {
 	/** Что слева: базы (по умолчанию) или пользователи. Правая таблица — связанная. */
 	const [primary, setPrimary] = useState<"bases" | "users">("bases");
 	const [activeBase, setActiveBase] = useState("");
 	const [activeUser, setActiveUser] = useState("");
-	/** Отмеченные базы — цель группового обновления. */
-	const [pickedBases, setPickedBases] = useState<string[]>([]);
 
 	const openCard = useOpenBaseUser();
 	const openBase = useOpenOnecBase();
@@ -136,23 +141,23 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 		<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ubBases", rows: baseView.rows, columns: baseCols,
 			setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
-			isLoading: bases.isLoading || occurrences.isLoading || check.checking,
+			isLoading: bases.isLoading || occurrences.isLoading,
+			// Таблица не гаснет на время чтения: крутится только кнопка, прежние данные
+			// остаются читаемыми.
+			reloading: check.checking,
 			/*
-			 * «Обновить» = ПРОЧИТАТЬ СОДЕРЖИМОЕ БАЗ у самой 1С. Отмечено несколько —
-			 * читаем группой, ничего не отмечено — активную базу, а если и её нет —
-			 * перечитываем список баз (больше обновлять нечего).
-			 * Отдельной кнопки «Проверить пользователей» после этого не нужно.
+			 * «Обновить» = ПРОЧИТАТЬ СОДЕРЖИМОЕ активной базы у самой 1С; базы не выбрана —
+			 * перечитать список баз (больше обновлять нечего).
+			 *
+			 * ОТМЕТОК СТРОК ЗДЕСЬ НЕТ намеренно: этот экран — про связь «человек ↔ база»,
+			 * а групповые операции по многим базам живут там, где базы и выбирают, — в
+			 * списке «Базы 1С». Две точки выбора баз расходились бы между собой.
 			 */
 			onReload: () => {
-				const keys = pickedBases.length ? pickedBases : (activeBase ? [activeBase] : []);
-				if (keys.length) void check.run(keys);
+				if (activeBase) void check.run([activeBase]);
 				else void bases.refetch();
 			},
-			reloadTitle: translate("onecUsersCheck"),
-			selectable: true,
-			onSelectionChange: (sel, all) => setPickedBases(
-				all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey)).filter(Boolean),
-			),
+			reloadTitle: activeBase ? `${translate("onecUsersCheck")}: ${activeBase}` : translate("onecReloadCached"),
 			// Одиночный щелчок — связанный список справа. Двойной — карточка БАЗЫ:
 			// строка таблицы баз открывает элемент своего типа, а не то, ради чего
 			// таблицу показали рядом.
@@ -165,7 +170,8 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 		<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ubUsers", rows: userView.rows, columns: userCols,
 			setColumns: setUserCols, sorting: userView.sorting, search: userView.search,
-			isLoading: summary.isLoading || baseUsers.isLoading || check.checking,
+			isLoading: summary.isLoading || baseUsers.isLoading,
+			reloading: check.checking,
 			// Показаны пользователи базы — обновляем их у 1С; показана сводка по всем
 			// базам — перечитываем сводку: спрашивать сто баз по одной кнопке нельзя.
 			onReload: () => {

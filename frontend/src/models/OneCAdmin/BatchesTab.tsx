@@ -86,7 +86,8 @@ export const BatchesTab: FC<{ watchId?: string }> = ({ watchId }) => {
 			<div className={styles.Hint}>{translate("onecBatchesHint")}</div>
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_batches", rows, columns: cols, setColumns: setCols,
-				sorting: sorted.sorting, search: sorted.search, isLoading: batches.isLoading,
+				sorting: sorted.sorting, search: sorted.search,
+				isLoading: batches.isLoading, reloading: batches.isFetching,
 				onReload: () => void batches.refetch(),
 				onRowClick: (row: Partial<TDataItem>) => setOpened(asText(row.batchId)),
 			})} />

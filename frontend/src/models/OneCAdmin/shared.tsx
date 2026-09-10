@@ -1,25 +1,18 @@
 /**
- * Общие части вкладок «Администрирования 1С»: таблица баз с отметками и модалка
- * подтверждения групповой операции.
+ * Общее для вкладок «Администрирования 1С»: применимость операции к базе, чтение
+ * содержимого базы, состояние агентов, сообщения об отказах и разделитель половин.
  *
- * Групповые операции идут ПО ВЫБРАННЫМ базам, поэтому таблица баз повторяется на
- * нескольких вкладках — здесь она одна на всех, чтобы колонки и поведение не разошлись.
+ * Таблица баз с отметками отсюда убрана: она осталась от прежнего устройства панели и не
+ * вызывалась ниоткуда — выбор баз давно живёт там, где базы и показывают.
  */
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import Table from "src/components/Table";
 import Notice from "src/components/Notice";
-import { Button } from "src/components/Button";
-import { getModelColumns } from "src/components/Table/services";
-import type { TColumn, TDataItem } from "src/components/Table/types";
-import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
-import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { asText } from "src/utils/asText";
 import { showToast } from "src/components/UIToast";
 import {
-	fetchBaseExtensions, fetchBaseUsers, fetchBases, fetchAgents, hasCapability, type OnecBase,
+	fetchBaseExtensions, fetchBaseUsers, fetchAgents, hasCapability, type OnecBase,
 } from "src/services/onec/api";
 import { finishOp, progressOp, startOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
@@ -62,126 +55,12 @@ export function isApplicable(
 }
 
 /** Колонки списка баз в режиме выбора цели: только то, что помогает выбрать. */
-const targetColumns = (): TColumn[] => ([
-	{ identifier: "baseKey", type: "string", width: "220px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "status", type: "string", width: "110px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "published", type: "string", width: "140px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "extensionsCount", type: "number", width: "140px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
-] as unknown as TColumn[]);
-
 /** Публикация: null — «не проверялась», а не «нет» (см. миграцию 008). */
 export const publishLabel = (v: boolean | null | undefined): string =>
 	v === true ? translate("onecPublished")
 		: v === false ? translate("onecNotPublished")
 			: translate("onecPublishUnknown");
 
-export type BaseTargetsApi = {
-	/** Ключи отмеченных баз — цель групповой операции. */
-	selectedKeys: string[];
-	table: React.ReactNode;
-	bases: OnecBase[];
-	isLoading: boolean;
-};
-
-/**
- * Таблица баз с чекбоксами. Клик по строке (не по чекбоксу) отдаёт ключ базы наружу —
- * так вкладка показывает содержимое одной базы, не теряя набор отмеченных.
- */
-export function useBaseTargets(opts: {
-	componentName: string;
-	onOpenBase?: (baseKey: string) => void;
-	/** Кнопки тулбара — функция от выбора: они почти всегда зависят от числа отмеченных. */
-	extraButtons?: (selectedKeys: string[]) => React.ReactNode;
-	/** Отбор целей (напр. только базы без нужного расширения). */
-	filter?: (base: OnecBase) => boolean;
-	/** Для какой операции выбираются цели: неприменимые базы скрыты (с возможностью показать). */
-	applicableFor?: OnecOperation;
-}): BaseTargetsApi {
-	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
-	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(targetColumns(), opts.componentName));
-	const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-	// Неприменимые базы скрыты по умолчанию, но не спрятаны навсегда: пользователь должен
-	// видеть, что список неполон, и уметь посмотреть на отсеянные базы.
-	const [showAll, setShowAll] = useState(false);
-
-	const filter = opts.filter;
-	const op = opts.applicableFor;
-	const applicable = useMemo(
-		() => (bases.data?.items ?? []).filter((b) => !op || showAll || isApplicable(b, op)),
-		[bases.data, op, showAll],
-	);
-	const hidden = (bases.data?.items ?? []).length - applicable.length;
-
-	const rowsRaw = useMemo(() => applicable.filter((b) => !filter || filter(b)).map((b, i) => ({
-		id: i + 1,
-		uuid: b.id,
-		baseKey: b.key,
-		name: b.name || "",
-		status: b.status,
-		published: b.published,
-		extensionsCount: b.extensionsCount,
-	})), [applicable, filter]);
-
-	const sorted = useStaticTableView(rowsRaw, { baseKey: "asc" });
-	const rows = useMemo(() => sorted.rows.map((r) => ({
-		...r,
-		name: r.name || "—",
-		// Тот же перевод статуса, что и во вкладке «Базы»: фантомные базы должны быть
-		// различимы и там, где выбирают цели групповых операций.
-		status: { ONLINE: translate("onecBaseOnline"), MISSING: translate("onecBaseMissing"),
-			DISABLED: translate("onecBaseDisabled"), UNKNOWN: translate("onecBaseUnknown") }[r.status] ?? r.status,
-		published: publishLabel(r.published),
-		extensionsCount: r.extensionsCount ?? translate("onecExtNotChecked"),
-	})), [sorted.rows]);
-
-	const onSelectionChange = useCallback((selected: Set<number>, all: TDataItem[]) => {
-		setSelectedKeys(all.filter((r) => selected.has(Number(r.id))).map((r) => String(r.baseKey)));
-	}, []);
-
-	const onRowClick = useCallback((row: Partial<TDataItem>) => {
-		if (opts.onOpenBase) opts.onOpenBase(asText(row.baseKey));
-	}, [opts]);
-
-	const table = (
-		<Table
-			{...buildStaticTableProps({
-				componentName: opts.componentName,
-				rows, columns, setColumns,
-				sorting: sorted.sorting,
-				search: sorted.search,
-				isLoading: bases.isLoading,
-				onReload: () => void bases.refetch(),
-				selectable: true,
-				onSelectionChange,
-				...(opts.onOpenBase ? { onRowClick } : {}),
-				extraButtons: (
-					<>
-						{opts.extraButtons ? opts.extraButtons(selectedKeys) : null}
-						{op && (hidden > 0 || showAll) && (
-							<Button variant="secondary" active={showAll} onClick={() => setShowAll((v) => !v)}>
-								{translate("onecShowInapplicable")}{hidden > 0 && !showAll ? ` (${hidden})` : ""}
-							</Button>
-						)}
-					</>
-				),
-			})}
-		/>
-	);
-
-	return { selectedKeys, table, bases: bases.data?.items ?? [], isLoading: bases.isLoading };
-}
-
-/**
- * Предупреждение «этого не может произойти в принципе»: у админ-агента нет способности,
- * без которой команда не будет даже поставлена в очередь. Показывается ДО нажатия кнопки —
- * иначе пользователь узнаёт о препятствии из отчёта «пропущено 110 из 110».
- */
-/**
- * Сколько баз проверять одновременно. Значение приходит от сервиса (ONEC_CHECK_PARALLEL):
- * каждое обращение к базе занимает у 1С сеанс и лицензию, и держать это число в двух
- * местах — верный способ их развести.
- */
 /** Что читаем у базы: её пользователей или её расширения. */
 export type BaseContentKind = "users" | "extensions";
 
@@ -282,9 +161,17 @@ export function useCheckParallel(): number {
 	return agents.data?.limits?.checkParallel ?? 4;
 }
 
+/**
+ * Предупреждение «агент этого не умеет» — В СЛОТЕ ПОСТОЯННОЙ ВЫСОТЫ.
+ *
+ * Раньше оно рендерилось первым элементом экрана и при появлении опускало вниз всё
+ * содержимое: агент терял способность (обновление службы) — и таблица уезжала под
+ * курсором, теряя позицию прокрутки. Слот занимает своё место всегда, пустой он или нет.
+ */
 export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNode }> = ({ capability }) => {
 	const agents = useAgents();
-	if (agents.isLoading || hasCapability(agents.data?.items, capability)) return null;
+	const ok = agents.isLoading || hasCapability(agents.data?.items, capability);
+	if (ok) return <div className={styles.GuardSlot} aria-hidden />;
 
 	const online = (agents.data?.items ?? []).filter((a) => a.role === "admin" && a.online && !a.disabled);
 	// Агент НА СВЯЗИ, но способности нет — почти всегда это его обновление: новая сборка
@@ -294,12 +181,14 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
 	// Агент НА СВЯЗИ, но без способности — предупреждение: часть экрана работает.
 	// Агента нет вовсе — внимание: не выполнится ни одна команда.
 	return (
-		<Notice wide items={[online.length
+		<div className={styles.GuardSlot}>
+			<Notice wide items={[online.length
 			? {
 				type: "warning",
 				text: `${translate("onecCapabilityMissing")}: ${capability}. ${translate("onecCapabilityLostHint")} (${declared})`,
 			}
-			: { type: "attention", text: translate("onecNoAdminAgent") }]} />
+				: { type: "attention", text: translate("onecNoAdminAgent") }]} />
+		</div>
 	);
 };
 

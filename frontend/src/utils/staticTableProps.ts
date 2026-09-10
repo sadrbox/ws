@@ -21,6 +21,11 @@ interface Params {
 	onReload?: () => void;
 	/** Подпись кнопки «Обновить»: экрану важно сказать, ОТКУДА она перечитывает данные. */
 	reloadTitle?: string;
+	/**
+	 * Идёт обновление. Таблица НЕ гаснет: прежние данные читаются, сортируются и ищутся,
+	 * пока идёт запрос; крутится только кнопка «Обновить», а данные заменяются по приходе.
+	 */
+	reloading?: boolean;
 	isLoading?: boolean;
 	/** Быстрый поиск: значение + сеттер (из useStaticTableView — он же и фильтрует). */
 	search?: { value: string; onChange: (v: string) => void };
@@ -85,6 +90,7 @@ export function buildStaticTableProps(p: Params) {
 		hideAddDelete: true,
 		hideReload: !p.onReload,
 		...(p.reloadTitle ? { reloadTitle: p.reloadTitle } : {}),
+		...(p.reloading ? { reloading: true } : {}),
 		hideToolbar: !!p.hideToolbar,
 		readonly: true,
 		// read-only списки без массового выбора → без колонки-чекбокса; включается там,

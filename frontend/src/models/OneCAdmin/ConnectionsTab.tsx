@@ -81,7 +81,8 @@ export const ConnectionsTab: FC = () => {
 				<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_connections", rows: connView.rows, columns: connCols, setColumns: setConnCols,
 				sorting: connView.sorting, search: connView.search,
-				isLoading: connections.isLoading || connections.isFetching,
+				isLoading: connections.isLoading,
+				reloading: connections.isFetching,
 				onReload: () => void connections.refetch(),
 				selectable: true,
 				onSelectionChange: (sel, all) =>
@@ -96,7 +97,8 @@ export const ConnectionsTab: FC = () => {
 				<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_locks", rows: lockView.rows, columns: lockCols, setColumns: setLockCols,
 				sorting: lockView.sorting, search: lockView.search,
-				isLoading: locks.isLoading || locks.isFetching,
+				isLoading: locks.isLoading,
+				reloading: locks.isFetching,
 				onReload: () => void locks.refetch(),
 			})} /></>}
 			/>

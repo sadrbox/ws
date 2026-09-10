@@ -89,6 +89,9 @@ export function onecRouter(deps: Deps) {
 		// реестр баз, опрос готовности команды (он идёт раз в 2 с и один в одиночку съел бы
 		// половину минутной квоты), сводки по кэшу, задания и список агентов.
 		applies: (req) => {
+			// Учётная запись базы — своя таблица сервиса, до кластера не доходит ни одним
+			// методом: ни чтение, ни запись, ни удаление. Лимит защищает rac, а не БД.
+			if (req.path.endsWith("/credentials")) return false;
 			if (req.method !== "GET") return true;
 			return !(
 				req.path === "/bases" ||
@@ -758,6 +761,34 @@ export function onecRouter(deps: Deps) {
 			});
 		}
 		res.json({ success: true, data: { removed } });
+	});
+
+	/**
+	 * ПРОЦЕССЫ, ЗАПУЩЕННЫЕ АГЕНТОМ на сервере 1С.
+	 *
+	 * Читаются из снимка, который агент шлёт с heartbeat: список обновляется сам раз в
+	 * полминуты и не стоит ни одной команды. Живой опрос — отдельным вызовом, для кнопки
+	 * «Обновить сейчас»: когда смотришь на зависший процесс, полминуты слишком долго.
+	 */
+	r.get("/agent-processes", async (req, res) => {
+		if (req.query.live === "1") {
+			send(res, await run(req, "AGENT_LIST_PROCESSES", {}));
+			return;
+		}
+		const items = (await agents.listAll())
+			.filter((a) => a.role === "admin")
+			.flatMap((a) => a.processes.map((p) => ({ ...p, agentId: a.id, agentName: a.name, seenAt: a.processesSeenAt })));
+		res.json({ success: true, data: { items } });
+	});
+
+	r.post("/agent-processes/:pid/kill", async (req, res) => {
+		const pid = Number.parseInt(req.params.pid, 10);
+		if (!Number.isFinite(pid) || pid <= 0) {
+			send(res, fail(400, "BAD_REQUEST", "Некорректный номер процесса"));
+			return;
+		}
+		const force = (req.body as { force?: unknown } | undefined)?.force === true;
+		send(res, await run(req, "AGENT_KILL_PROCESS", { pid, force }));
 	});
 
 	r.post("/bases/:key/lock", async (req, res) => {

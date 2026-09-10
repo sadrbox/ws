@@ -19,7 +19,15 @@ import { z } from "zod";
 import type { OperationClass } from "../tools/registry.ts";
 import type { AgentRole, AgentView } from "../agents/service.ts";
 
-export type AgentCapability = "cluster.admin" | "ib.admin";
+/**
+ * Способности агента, которые проверяет сервис.
+ *
+ * `cluster.admin` — кластер через rac, `ib.admin` — вход внутрь баз (COM/ibcmd),
+ * `agent.procs` — работа со СВОИМИ процессами на сервере 1С (список и снятие). Последняя
+ * не про 1С вовсе: это его собственные rac/ibcmd/конфигуратор, которые он запустил и
+ * которые переживают команду.
+ */
+export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs";
 
 export type AdminCommandSpec = {
 	type: string;
@@ -157,6 +165,39 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			// Аутентификация ОС и признак «показывать в списке выбора».
 			osUser: z.string().max(200).optional(),
 			showInList: z.boolean().optional(),
+		}).strict(),
+	},
+	{
+		type: "AGENT_LIST_PROCESSES",
+		title: "Процессы, запущенные агентом",
+		operation: "READ",
+		capability: "agent.procs",
+		role: "admin",
+		requiresBase: false,
+		// Список приходит и с heartbeat раз в полминуты; эта команда нужна кнопке
+		// «Обновить сейчас» — когда человек смотрит на зависший процесс и ждёт от него
+		// движения, полминуты слишком долго.
+		schema: z.object({}).strict(),
+	},
+	{
+		type: "AGENT_KILL_PROCESS",
+		title: "Снять процесс агента",
+		operation: "CRITICAL",
+		capability: "agent.procs",
+		role: "admin",
+		requiresBase: false,
+		/**
+		 * `force` — согласие снять КОНФИГУРАТОР. Без него агент его не тронет и ответит
+		 * AGENT_PROCESS_UNSAFE: обрыв применения конфигурации оставит базу непригодной, а
+		 * обрыв выгрузки — обрезанный .dt. Решение принимает человек, а не интерфейс.
+		 *
+		 * Снять можно только процесс, который агент запускал сам: номер сверяется с его
+		 * списком (AGENT_PROCESS_NOT_FOUND). Иначе опечатка в номере остановила бы рабочий
+		 * rphost вместе с сеансами пользователей.
+		 */
+		schema: z.object({
+			pid: z.number().int().positive(),
+			force: z.boolean().optional(),
 		}).strict(),
 	},
 	{

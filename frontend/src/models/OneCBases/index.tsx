@@ -175,7 +175,8 @@ const useBaseTabs = (row: TDataItem) => {
 					componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
 					onRowClick: (r) => openExt(r, baseKey),
 					sorting: extView.sorting, search: extView.search,
-					isLoading: extCheck.checking,
+					isLoading: false,
+					reloading: extCheck.checking,
 					// «Обновить» = прочитать расширения этой базы у самой 1С: другого
 					// источника у таблицы нет.
 					onReload: () => void extCheck.run([baseKey]),
@@ -190,7 +191,8 @@ const useBaseTabs = (row: TDataItem) => {
 					componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
 					onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
 					sorting: userView.sorting, search: userView.search,
-					isLoading: usersCheck.checking,
+					isLoading: false,
+						reloading: usersCheck.checking,
 					// «Обновить» здесь — то же чтение у 1С: другого источника у таблицы нет.
 					onReload: () => void usersCheck.run([baseKey]),
 					reloadTitle: translate("onecUsersCheck"),
@@ -226,7 +228,8 @@ const useBaseTabs = (row: TDataItem) => {
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_sessions", rows: sesView.rows, columns: sesCols, setColumns: setSesCols,
 						sorting: sesView.sorting, search: sesView.search,
-						isLoading: own.query.isLoading || own.query.isFetching,
+						isLoading: own.query.isLoading && !own.rows.length,
+						reloading: own.query.isFetching,
 						// Живое состояние кластера: обновление всегда спрашивает его.
 						onReload: () => { setLoadSessions(true); if (loadSessions) void own.query.refetch(); },
 						reloadTitle: translate("onecSessionsShow"),

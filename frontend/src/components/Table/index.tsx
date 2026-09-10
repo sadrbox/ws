@@ -119,6 +119,8 @@ export interface TableProps {
   hideReload?: boolean;
   /** Подпись кнопки «Обновить»: откуда именно она перечитывает данные. */
   reloadTitle?: string;
+  /** Идёт обновление: крутится кнопка, таблица продолжает показывать прежние данные. */
+  reloading?: boolean;
   /** Если true — НЕ рендерить панель управления (TableControlPanel) вовсе. Для
    *  пейнов, где тулбар вынесен на уровень панели (usePaneToolbar). По умолчанию
    *  false — на все существующие таблицы не влияет (референс pane-toolbar). */
@@ -204,6 +206,15 @@ interface TableControlPanelProps {
   hideReload?: boolean;
   /** Подпись кнопки «Обновить»: экрану бывает важно сказать, ОТКУДА она перечитывает. */
   reloadTitle?: string;
+  /**
+   * Идёт обновление: крутим кнопку, но НЕ блокируем таблицу.
+   *
+   * Обновление содержимого базы у 1С занимает десятки секунд. Гасить на это время всю
+   * таблицу неправильно: прежние данные никуда не делись, их можно читать, сортировать и
+   * искать по ним — а человек вместо этого смотрел на пустой прямоугольник. Индикатор —
+   * там, где нажали: на кнопке. Данные заменяются, когда придут.
+   */
+  reloading?: boolean;
   /** Если true — скрыть кнопку «Удалить» (удаление недоступно) */
   canDelete?: boolean;
   componentName?: string;
@@ -230,6 +241,7 @@ const TableControlPanel = memo(({
   hideAdd = false,
   hideReload = false,
   reloadTitle,
+  reloading = false,
   canDelete = true,
   componentName,
 }: TableControlPanelProps) => {
@@ -267,7 +279,14 @@ const TableControlPanel = memo(({
         </>
       )}
       {!isSelect && <Toolbar.Divider />}
-      {!hideReload && <Toolbar.ReloadButton onClick={onRefresh} disabled={isLoading} title={reloadTitle} />}
+      {!hideReload && (
+        <Toolbar.ReloadButton
+          onClick={onRefresh}
+          disabled={isLoading || reloading}
+          loading={reloading}
+          title={reloadTitle}
+        />
+      )}
       <Toolbar.SettingsButton onClick={onConfigOpen} />
       <Toolbar.SearchButton onClick={onSearchToggle} active={visibleFastSearch} />
       {/* <Toolbar.Divider /> */}
@@ -291,6 +310,7 @@ const TableControlPanel = memo(({
     prevProps.hideAdd === nextProps.hideAdd &&
     prevProps.hideReload === nextProps.hideReload &&
     prevProps.reloadTitle === nextProps.reloadTitle &&
+    prevProps.reloading === nextProps.reloading &&
     prevProps.canDelete === nextProps.canDelete
   );
 });
@@ -325,6 +345,7 @@ const Table: FC<TableProps> = memo((props) => {
     hideAdd = false,
     hideReload = false,
     reloadTitle,
+    reloading = false,
     hideToolbar = false,
     expandedRowIds,
     renderExpandedRow,
@@ -731,9 +752,16 @@ const Table: FC<TableProps> = memo((props) => {
       || target instanceof HTMLTextAreaElement
       || target instanceof HTMLSelectElement
       || (target?.isContentEditable === true);
+    // Insert и Delete подчиняются ТЕМ ЖЕ запретам, что и кнопки. Раньше они шли мимо:
+    // в списке, где создание и удаление скрыты как неприменимые (базы 1С заводит
+    // кластер, а не панель), нажатие Delete на строке всё равно удаляло запись —
+    // разрушающее действие без единой кнопки, которая бы о нём говорила.
+    const canCreate = variant !== 'select' && !isReadonly && !hideAddDelete && !hideAdd;
+    const canRemove = variant !== 'select' && !isReadonly && !hideAddDelete && !!onDelete;
     // Insert: создание новой строки/записи. Работает даже из input,
     // т.к. Insert обычно не используется внутри полей ввода.
     if (e.key === 'Insert') {
+      if (!canCreate) return;
       e.preventDefault();
       e.stopPropagation();
       handleCreate();
@@ -742,6 +770,7 @@ const Table: FC<TableProps> = memo((props) => {
     if (isEditable) return;
     // Delete: удалить выбранные/активную
     if (e.key === 'Delete') {
+      if (!canRemove) return;
       e.preventDefault();
       e.stopPropagation();
       void handleDeleteClick();
@@ -941,6 +970,7 @@ const Table: FC<TableProps> = memo((props) => {
           hideAdd={hideAdd}
           hideReload={hideReload}
           reloadTitle={reloadTitle}
+          reloading={reloading}
           canDelete={!!onDelete}
         />}
 

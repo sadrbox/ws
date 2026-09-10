@@ -45,6 +45,19 @@ export type AgentRow = {
 	registered_at: Date | null;
 	disabled_at: Date | null;
 	created_at: Date;
+	/** Снимок процессов агента из heartbeat (см. AgentProcess). */
+	processes: unknown;
+	processes_seen_at: Date | null;
+};
+
+/** Процесс, запущенный агентом на сервере 1С (TASK_SERVICE_PROCESSES). */
+export type AgentProcess = {
+	pid: number;
+	tool: string;
+	what?: string;
+	base?: string | null;
+	ageSecs?: number;
+	orphan?: boolean;
 };
 
 export type AgentView = {
@@ -59,6 +72,9 @@ export type AgentView = {
 	capabilities: string[];
 	status: string;
 	online: boolean;
+	/** Что агент запустил на сервере 1С прямо сейчас (снимок из heartbeat). */
+	processes: AgentProcess[];
+	processesSeenAt: string | null;
 	onec: { reachable: boolean; version: string | null };
 	lastSeenAt: string | null;
 	registeredAt: string | null;
@@ -66,7 +82,8 @@ export type AgentView = {
 };
 
 const COLS = `id, organization_uuid, server_id, role, bases_synced_at, name, version, os, capabilities,
-	status, onec_reachable, onec_version, last_seen_at, registered_at, disabled_at, created_at`;
+	status, onec_reachable, onec_version, last_seen_at, registered_at, disabled_at, created_at,
+	processes, processes_seen_at`;
 
 export class AgentService {
 	private readonly db: Db;
@@ -435,6 +452,14 @@ export class AgentService {
 		return Date.now() - p.closedAt < POLL_GAP_MS ? null : false;
 	}
 
+	/** Снимок процессов агента из heartbeat: последнее известное состояние, без истории. */
+	async setProcesses(id: string, processes: AgentProcess[]): Promise<void> {
+		await this.db.query(
+			`UPDATE agents SET processes = $2::jsonb, processes_seen_at = now() WHERE id = $1`,
+			[id, JSON.stringify(processes)],
+		);
+	}
+
 	async touch(id: string): Promise<void> {
 		await this.db.query(`UPDATE agents SET last_seen_at = now() WHERE id = $1`, [id]);
 	}
@@ -459,6 +484,10 @@ export class AgentService {
 			status: online ? r.status : "OFFLINE",
 			online,
 			onec: { reachable: online && r.onec_reachable, version: r.onec_version },
+			// Процессы показываем, только пока агент на связи: список остановленной службы
+			// — это её прошлое, а не то, что сейчас происходит на сервере.
+			processes: online && Array.isArray(r.processes) ? (r.processes as AgentProcess[]) : [],
+			processesSeenAt: r.processes_seen_at?.toISOString() ?? null,
 			lastSeenAt: r.last_seen_at?.toISOString() ?? null,
 			registeredAt: r.registered_at?.toISOString() ?? null,
 			disabled: !!r.disabled_at,

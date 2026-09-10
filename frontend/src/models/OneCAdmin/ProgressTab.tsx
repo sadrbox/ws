@@ -82,7 +82,8 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 	return (
 		<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ops", rows: view.rows, columns: cols, setColumns: setCols,
-			sorting: view.sorting, search: view.search, isLoading: !!isLoading,
+			sorting: view.sorting, search: view.search, isLoading: false,
+			reloading: !!isLoading,
 			onReload: onRefresh,
 			renderCell: (r, col) => {
 				if (col.identifier !== "opProgress") return undefined;

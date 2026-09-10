@@ -166,11 +166,18 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 						isLoading: summary.isLoading,
 						onReload: () => void summary.refetch(),
 						reloadTitle: translate("onecReloadCached"),
-						selectable: true,
-						onSelectionChange: (sel, all) => {
-							const names = all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.name));
-							setPickedExt(names);
-							if (names[0]) setForm((f) => ({ ...f, name: names[0] }));
+						/*
+						 * ОДНО расширение за раз — и отметок здесь нет.
+						 *
+						 * Команды всё равно уходят по одному расширению: отметить три и получить
+						 * установку первого — обман, а в шапке карточки при этом честно писалось
+						 * «целей: 3». Работаем с активной строкой, а множественность живёт там,
+						 * где она настоящая, — в выборе БАЗ ниже.
+						 */
+						onActiveRowChange: (r) => {
+							const name = r ? asText(r.name) : "";
+							setPickedExt(name ? [name] : []);
+							if (name) setForm((f) => ({ ...f, name }));
 						},
 						extraButtons: (
 							<Button variant="secondary" disabled={!pickedBases.length}
@@ -189,7 +196,6 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 						<>
 							<div className={styles.SecHead}>
 								{translate("onecExtCard")}: {current}
-								{pickedExt.length > 1 && ` · ${translate("onecBatchTargets")}: ${pickedExt.length}`}
 							</div>
 							<div className={styles.SecBody}>
 								<GroupCol>
@@ -212,7 +218,8 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							<Table {...buildStaticTableProps({
 								componentName: "OneCAdmin_extBases", rows: baseView.rows, columns: baseCols,
 								setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
-								isLoading: bases.isLoading || check.checking,
+								isLoading: bases.isLoading,
+								reloading: check.checking,
 								// «Обновить» = прочитать расширения отмеченных баз у самой 1С;
 								// ничего не отмечено — перечитать список баз.
 								onReload: () => {

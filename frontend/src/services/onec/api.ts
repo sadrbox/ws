@@ -259,6 +259,34 @@ export type BatchProgress = {
 export const fetchBatch = (id: string) => aiFetch<BatchProgress>(`/v1/onec/batches/${encodeURIComponent(id)}`);
 export const fetchBatches = () => aiFetch<{ items: BatchProgress[] }>("/v1/onec/batches");
 
+// ── Процессы, запущенные агентом на сервере 1С ──────────────────────────────
+// Агент работает чужими руками (rac, ibcmd, конфигуратор, webinst), и часть этих
+// процессов живёт дольше команды. Список приходит со снимком heartbeat — читать его
+// дёшево; живой опрос нужен только кнопке «Обновить сейчас».
+
+export type AgentProcess = {
+	pid: number;
+	tool: string;
+	what?: string;
+	base?: string | null;
+	ageSecs?: number;
+	/** Остался с прошлого запуска агента: за ним уже никто не следит. */
+	orphan?: boolean;
+	agentId?: string;
+	agentName?: string;
+	seenAt?: string | null;
+};
+
+export const fetchAgentProcesses = (live?: boolean) =>
+	aiFetch<{ items: AgentProcess[] } | Pending>(`/v1/onec/agent-processes${live ? "?live=1" : ""}`)
+		.then((d) => awaitCommand<{ items: AgentProcess[] }>(d));
+
+/** Снять процесс. `force` — согласие снять конфигуратор: он этого не переживёт безболезненно. */
+export const killAgentProcess = (pid: number, force?: boolean) =>
+	aiFetch<{ ok: boolean; note?: string } | Pending>(`/v1/onec/agent-processes/${pid}/kill`, {
+		method: "POST", body: JSON.stringify({ force: !!force }),
+	}).then((d) => awaitCommand<{ ok: boolean; note?: string }>(d));
+
 // ── Агенты, которых видит панель ────────────────────────────────────────────
 // Способности решают, что вообще возможно: без `ib.admin` операции ВНУТРИ баз
 // (пользователи, расширения) не выполнит никто, и знать это нужно заранее.

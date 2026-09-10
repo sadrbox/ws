@@ -67,6 +67,20 @@ const heartbeatSchema = z.object({
 	// v2: состояния баз. basesComplete=true — это полный срез, иначе только изменившиеся.
 	bases: z.array(baseStateSchema).max(500).optional(),
 	basesComplete: z.boolean().optional(),
+	/**
+	 * Процессы, которые агент запустил сам: rac, ibcmd, конфигуратор, webinst, мост.
+	 * Приходят снимком в каждом heartbeat — это состояние, а не журнал. `orphan` значит
+	 * «остался с прошлого запуска агента»: за таким уже никто не следит, и именно он
+	 * обычно и есть «непонятная нагрузка на сервере».
+	 */
+	processes: z.array(z.object({
+		pid: z.number().int(),
+		tool: z.string().max(50),
+		what: z.string().max(200).optional(),
+		base: z.string().max(200).nullable().optional(),
+		ageSecs: z.number().int().nonnegative().optional(),
+		orphan: z.boolean().optional(),
+	})).max(200).optional(),
 });
 
 const resultSchema = z.object({
@@ -226,6 +240,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			onecReachable: p.data.onec?.reachable ?? false,
 			onecVersion: p.data.onec?.version ?? null,
 		});
+		// Список процессов приходит попутно с heartbeat: отдельная команда нужна только
+		// кнопке «Обновить сейчас», а раз в полминуты панель узнаёт о них бесплатно.
+		if (p.data.processes) await agents.setProcesses(req.agent!.agentId, p.data.processes);
 
 		const me = await agents.get(req.agent!.agentId);
 		if (p.data.bases?.length && me?.serverId) {

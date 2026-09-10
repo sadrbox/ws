@@ -65,10 +65,11 @@ import ExtensionsTab from "./ExtensionsTab";
 import UsersTab from "./UsersTab";
 import BatchesTab from "./BatchesTab";
 import AgentsTab from "./AgentsTab";
+import ProcessesTab from "./ProcessesTab";
 import styles from "./OneCAdmin.module.scss";
 import main from "src/styles/main.module.scss";
 
-type Tab = "bases" | "sessions" | "connections" | "server" | "extensions" | "users" | "batches" | "agents";
+type Tab = "bases" | "sessions" | "connections" | "server" | "extensions" | "users" | "batches" | "processes" | "agents";
 
 
 const sessionsColumns = (): TColumn[] => ([
@@ -267,9 +268,13 @@ export const OneCAdminList: FC = () => {
 							search: sessionsSorted.search,
 							columns: sessionColumns,
 							setColumns: setSessionColumns,
-							isLoading: sessions.isLoading || sessions.isFetching || terminate.isPending,
+							isLoading: sessions.isLoading,
+							reloading: sessions.isFetching || terminate.isPending,
 							onReload: () => void sessions.refetch(),
-							onRowClick: askTerminate,
+							// Двойной щелчок НЕ завершает сеанс: этот жест значит «открыть элемент»,
+							// и запускать им разрушающую операцию нельзя — у сеанса и карточки-то
+							// нет. Завершение живёт в командной панели, где его видно.
+
 							selectable: true,
 							// В отметках нужен UUID сеанса (rac адресует им), а не номер.
 							onSelectionChange: (sel, all) =>
@@ -335,14 +340,19 @@ export const OneCAdminList: FC = () => {
 		{
 			id: "users",
 			label: translate("onecTabUsers"),
-			component: tab === "users"
-				? <UsersTab onBatchStarted={(id) => { setWatchBatch(id); setTab("batches"); }} />
-				: null,
+			component: tab === "users" ? <UsersTab /> : null,
 		},
 		{
 			id: "batches",
 			label: translate("onecTabBatches"),
 			component: tab === "batches" ? <BatchesTab watchId={watchBatch} /> : null,
+		},
+		{
+			// Процессы агента — не 1С: это его собственные rac/ibcmd/конфигуратор на
+			// сервере. Рядом с «Агентами», потому что чинят их там же.
+			id: "processes",
+			label: translate("onecTabProcesses"),
+			component: tab === "processes" ? <ProcessesTab /> : null,
 		},
 		{
 			id: "agents",
