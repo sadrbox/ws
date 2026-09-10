@@ -25,12 +25,19 @@ import { showToast } from "src/components/UIToast";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
 import { QueryError } from "src/models/OneCAdmin/shared";
-import { clearBaseCredentials, fetchBaseCredentials, saveBaseCredentials } from "src/services/onec/api";
+import {
+	clearBaseCredentials, fetchAgents, fetchBaseCredentials, hasCapability, saveBaseCredentials,
+} from "src/services/onec/api";
 
 export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const qc = useQueryClient();
 	const key = ["onec", "base-credentials", baseKey];
 	const creds = useQuery({ queryKey: key, queryFn: () => fetchBaseCredentials(baseKey), enabled: !!baseKey });
+	// Учётная запись базы работает только с агентом, который умеет её применять: он
+	// объявляет это способностью «ib.auth». Сказать об этом надо ДО того, как человек
+	// заполнит поля и удивится отказу «проверьте служебного администратора».
+	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agentReady = hasCapability(agents.data?.items, "ib.auth");
 
 	const [user, setUser] = useState("");
 	const [password, setPassword] = useState("");
@@ -99,12 +106,18 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 				</GroupCol>
 			</FormArea>
 
-			<Notice items={[{
-				type: "info",
-				text: isSet
-					? `${translate("onecCredsHint")} ${stored?.hasPassword ? "" : translate("onecCredsNoPassword")}`.trim()
-					: `${translate("onecCredsNotSet")}. ${translate("onecCredsHint")}`,
-			}]} />
+			<Notice items={[
+				...(agents.isLoading || agentReady ? [] : [{
+					type: "warning" as const,
+					text: translate("onecCredsAgentUnsupported"),
+				}]),
+				{
+					type: "info" as const,
+					text: isSet
+						? `${translate("onecCredsHint")} ${stored?.hasPassword ? "" : translate("onecCredsNoPassword")}`.trim()
+						: `${translate("onecCredsNotSet")}. ${translate("onecCredsHint")}`,
+				},
+			]} />
 		</GroupCol>
 	);
 };

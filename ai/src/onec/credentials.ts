@@ -115,6 +115,24 @@ export class CredentialsStore {
 	}
 
 	/**
+	 * Есть ли у баз своя учётная запись: ключ базы → имя пользователя.
+	 *
+	 * Только имя, без пароля: это нужно диагностике («учётная запись задана, а вход всё
+	 * равно не выполнен»), а не входу в базу.
+	 */
+	async usersByBaseKeys(baseKeys: string[]): Promise<Map<string, string>> {
+		const out = new Map<string, string>();
+		if (!baseKeys.length) return out;
+		const r = await this.db.query<{ key: string; user_name: string }>(
+			`SELECT b.key, c.user_name FROM base_credentials c JOIN bases b ON b.id = c.base_id
+			  WHERE b.key = ANY($1::text[])`,
+			[baseKeys],
+		);
+		for (const row of r.rows) if (row.user_name) out.set(row.key, row.user_name);
+		return out;
+	}
+
+	/**
 	 * Учётные данные для выдаваемых команд: ключ базы → пара.
 	 *
 	 * Ищем по ПАРЕ (сервер, ключ базы): ключ уникален внутри сервера, а не глобально, и

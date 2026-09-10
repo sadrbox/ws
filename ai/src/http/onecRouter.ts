@@ -50,9 +50,31 @@ type Outcome = { status: number; body: Record<string, unknown>; data?: unknown }
 const fail = (status: number, code: string, message: string): Outcome =>
 	({ status, body: { success: false, error: { code, message } } });
 
+/** Способность агента: умеет входить в базу учётной записью из payload.auth. */
+const CAP_BASE_AUTH = "ib.auth";
+
 export function onecRouter(deps: Deps) {
 	const { erp, cfg, log, agents, bases, queue, audit, batches, registry, credentials } = deps;
 	const r = Router();
+
+	/**
+	 * Контекст для разбора отказа на входе в базу.
+	 *
+	 * Отвечает на вопрос человека, который задал базе учётную запись и всё равно получил
+	 * «проверьте служебного администратора»: её не применили или она не подошла. Первое —
+	 * когда агент не объявляет способность `ib.auth`, то есть его сборка ещё не читает
+	 * payload.auth.
+	 */
+	const authContext = async (
+		baseKey: string | null | undefined,
+		agent: { capabilities?: string[] } | null,
+	): Promise<{ baseAuthUser?: string | null; agentSupportsBaseAuth?: boolean }> => {
+		if (!baseKey) return {};
+		const users = await credentials.usersByBaseKeys([baseKey]);
+		const user = users.get(baseKey);
+		if (!user) return {};
+		return { baseAuthUser: user, agentSupportsBaseAuth: !!agent?.capabilities?.includes(CAP_BASE_AUTH) };
+	};
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
 
 	// Предел частоты — на КЛАСТЕР: он один на всю установку, и защищать нужно именно его.
@@ -166,7 +188,8 @@ export function onecRouter(deps: Deps) {
 			return { status: 202, body: { success: true, data: { pending: true, commandId: cmd.id } } };
 		}
 		if (done.state !== "done") {
-			const e = humanizeAgentError(done.error) ?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
+			const e = humanizeAgentError(done.error, await authContext(built.baseKey, agent))
+				?? { code: "COMMAND_FAILED", message: "Команда не выполнена" };
 			// 422, а НЕ 502. Агент отработал и вернул отказ — это ошибка предметной области,
 			// а не сбой шлюза. Cloudflare трактует 5xx от источника буквально: подменяет наш
 			// ответ своей HTML-страницей, у которой нет заголовков CORS, и браузер показывает
@@ -617,7 +640,7 @@ export function onecRouter(deps: Deps) {
 			return;
 		}
 		if (row.state !== "done") {
-			const e = humanizeAgentError(row.error)
+			const e = humanizeAgentError(row.error, await authContext(row.base_key, await agents.findById(row.agent_id)))
 				?? (row.state === "expired"
 					? { code: "COMMAND_EXPIRED", message: "Агент не забрал команду до истечения срока — служба 1С-агента не на связи." }
 					: { code: "COMMAND_FAILED", message: "Команда не выполнена" });

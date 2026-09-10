@@ -85,8 +85,31 @@ export class BatchService {
 		);
 		// Ошибку 1С/COM дополняем подсказкой «что чинить»: сырой HRESULT в отчёте задания
 		// не говорит пользователю ничего, а искать его в логах на Windows-машине дорого.
+		// Контекст входа в базу: у каких баз задана своя учётная запись и умеет ли её
+		// применять хоть один админ-агент. Без этого отказ «проверьте служебного
+		// администратора» выглядит одинаково и когда учётная запись неверна, и когда её
+		// просто не применили — а это разные дела: во втором случае чинят агента.
+		const keys = [...new Set(c.rows.map((r) => r.base_key).filter((k): k is string => !!k))];
+		const authUsers = keys.length
+			? (await this.db.query<{ key: string; user_name: string }>(
+				`SELECT b.key, c.user_name FROM base_credentials c JOIN bases b ON b.id = c.base_id
+				  WHERE b.key = ANY($1::text[])`, [keys],
+			)).rows
+			: [];
+		const authByKey = new Map(authUsers.filter((x) => x.user_name).map((x) => [x.key, x.user_name]));
+		const supports = authByKey.size > 0 && (await this.db.query<{ ok: boolean }>(
+			`SELECT EXISTS (
+			   SELECT 1 FROM agents WHERE role = 'admin' AND capabilities ? 'ib.auth'
+			 ) AS ok`,
+		)).rows[0]?.ok === true;
+
 		const items = c.rows.map((r) => ({
-			baseKey: r.base_key, state: r.state, error: humanizeAgentError(r.error), outcome: r.outcome,
+			baseKey: r.base_key,
+			state: r.state,
+			error: humanizeAgentError(r.error, r.base_key
+				? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
+				: {}),
+			outcome: r.outcome,
 		}));
 		// Команд может НЕ ХВАТАТЬ: они живут час и вычищаются, а задание остаётся. Без этого
 		// такое задание вечно показывало «выполняется 1 из 1» — хотя ждать уже некого.
