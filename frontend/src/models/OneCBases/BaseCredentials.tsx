@@ -74,10 +74,10 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 				<GroupCol>
 					<GroupRow>
 						<Field name="bc_user" label={translate("onecUserName")} value={user} width="220px"
-							autoComplete="off" disabled={busy}
+							noAutofill disabled={busy}
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
 						<Field name="bc_pwd" label={translate("onecUserPassword")} type="password" value={password}
-							width="220px" autoComplete="new-password" disabled={busy}
+							width="220px" disabled={busy}
 							placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 						<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}

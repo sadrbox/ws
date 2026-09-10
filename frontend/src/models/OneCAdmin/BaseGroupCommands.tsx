@@ -215,6 +215,7 @@ export const BaseGroupCommands: FC<{
 						{spec.needsName && (
 							<Field
 								name="onec_group_name"
+								noAutofill
 								label={translate(spec.needsName === "user" ? "onecUserName" : "onecExtName")}
 								value={name}
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
@@ -222,16 +223,16 @@ export const BaseGroupCommands: FC<{
 						)}
 						{spec.type === "IB_CREATE_USER" && (
 							<>
-								<Field name="onec_group_full" autoComplete="off" label={translate("onecUserFullName")} value={fullName}
+								<Field name="onec_group_full" noAutofill label={translate("onecUserFullName")} value={fullName}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
-								<Field name="onec_group_pwd" autoComplete="new-password" label={translate("onecUserPassword")} type="password" value={password}
+								<Field name="onec_group_pwd" label={translate("onecUserPassword")} type="password" value={password}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 							</>
 						)}
 						{spec.needsDir && (
 							// Каталог необязателен: раскладку дисков сервера 1С знает агент,
 							// панель лишь позволяет отправить выгрузку в другое место.
-							<Field name="onec_group_dir" label={translate("onecBackupDir")} value={dir}
+							<Field name="onec_group_dir" label={translate("onecBackupDir")} value={dir} noAutofill
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDir(e.target.value)} />
 						)}
 						{spec.needsFile && (

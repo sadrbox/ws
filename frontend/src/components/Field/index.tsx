@@ -47,15 +47,31 @@ interface TypeFieldStringProps {
   /** Видимая подсказка-help ПОД полем (не путать с `title`). Связывается через aria-describedby. */
   hint?: React.ReactNode;
   /**
-   * Значение атрибута autocomplete. По умолчанию "off".
+   * Значение атрибута autocomplete. По умолчанию "off", а для `type="password"` —
+   * "new-password".
    *
    * Для паролей "off" браузеру не указ: рядом с полем пароля Chrome и Firefox предлагают
    * СОХРАНЁННЫЕ учётные данные сайта и подставляют их в соседние поля. Единственное, что
    * они слушают, — "new-password": оно означает «это новый пароль, а не вход», и подстановка
-   * не срабатывает. Поэтому там, где заводят пароль чужой системы (пользователь базы 1С),
-   * нужно передавать его явно.
+   * не срабатывает. Поле пароля в этом приложении никогда не является входом в САМО
+   * приложение (вход — отдельная форма со своим <input>), поэтому такое умолчание верно
+   * для всех: пароль здесь всегда чужой системы — пользователя базы 1С, внешнего сервиса.
    */
   autoComplete?: string;
+  /**
+   * Не подставлять сюда ничего сохранённого — ни браузером, ни менеджером паролей.
+   *
+   * ЗАЧЕМ ОТДЕЛЬНЫЙ ПРОП. `autocomplete` слушает только браузер. Менеджеры паролей
+   * (LastPass, 1Password, Bitwarden, Dashlane) его игнорируют и лезут по своим признакам:
+   * текстовое поле рядом с паролем они считают логином и подставляют туда учётку от САЙТА.
+   * В администрировании 1С это всегда ошибка: в поле «Имя пользователя» вводят имя
+   * пользователя ЧУЖОЙ базы, а не того, кто сидит за экраном. Признаки у каждого
+   * менеджера свои, поэтому ставим все — лишний data-атрибут ничего не стоит.
+   *
+   * Для `type="password"` включается само: пароль без этого получает и подстановку, и
+   * предложение «сохранить пароль от сайта».
+   */
+  noAutofill?: boolean;
   /**
    * Подсказки ввода (нативный datalist).
    *
@@ -139,7 +155,8 @@ export const Field: FC<TypeFieldStringProps> = ({
   maxLength,
   isDirty,
   hint,
-  autoComplete = "off",
+  autoComplete,
+  noAutofill,
   suggestions,
 }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -195,6 +212,7 @@ export const Field: FC<TypeFieldStringProps> = ({
       isDirty={isDirty}
       hint={hint}
       autoComplete={autoComplete}
+      noAutofill={noAutofill}
       suggestions={suggestions}
     />
   );
@@ -203,6 +221,7 @@ export const Field: FC<TypeFieldStringProps> = ({
 // Компонент FieldGroup
 export const FieldGroup: FC<TypeFieldGroupProps & {
   isDirty?: boolean; maxLength?: number; type?: "text" | "password"; autoComplete?: string;
+  noAutofill?: boolean;
   suggestions?: string[];
 }> = ({
   name,
@@ -224,12 +243,21 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
   isDirty,
   hint,
   type = "text",
-  autoComplete = "off",
+  autoComplete,
+  noAutofill,
   suggestions,
 }) => {
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
   const listId = suggestions?.length ? `${uid}-list` : undefined;
+  const isPassword = type === "password";
+  // "off" браузеры для паролей игнорируют, "new-password" — слушают (см. проп autoComplete).
+  const autoCompleteValue = autoComplete ?? (isPassword ? "new-password" : "off");
+  // Менеджеры паролей `autocomplete` не читают: у каждого свой признак «не трогай поле».
+  const suppress = noAutofill || isPassword;
+  const noFillAttrs = suppress
+    ? { "data-lpignore": "true", "data-1p-ignore": "true", "data-bwignore": "true", "data-form-type": "other" }
+    : {};
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value, isDirty });
 
   return (
@@ -245,7 +273,8 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
           onChange={onChange}
           onBlur={onBlur}
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
-          autoComplete={autoComplete}
+          autoComplete={autoCompleteValue}
+          {...noFillAttrs}
           disabled={disabled}
           placeholder={placeholder}
           title={title}

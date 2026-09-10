@@ -142,6 +142,8 @@ export const FieldFastSearchInternal = memo(({ value, onChange }: {
     // поля до края родителя. Подсказка про шаблоны идёт прямо на инпут через title.
     <Field
       name="fastSearch"
+      // Поиск по таблице: подставлять сюда сохранённое браузером нечего и незачем.
+      noAutofill
       value={inputValue}
       onChange={(e) => handleChange(e.target.value)}
       placeholder={translate("fastSearch")}

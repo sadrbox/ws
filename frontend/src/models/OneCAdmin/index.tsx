@@ -424,6 +424,7 @@ export const OneCAdminList: FC = () => {
 							<>
 								<Field
 									name="onec_lock_message"
+									noAutofill
 									value={lockMessage}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLockMessage(e.target.value)}
 									placeholder={translate("onecLockMessagePlaceholder")}

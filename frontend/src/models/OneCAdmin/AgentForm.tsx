@@ -121,7 +121,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 								<QueryError error={agents.error} />
 								<GroupRow>
 									{/* Имя — единственный правимый реквизит: остальное присылает агент. */}
-									<Field name="ag_name" label={translate("name")}
+									<Field name="ag_name" label={translate("name")} noAutofill
 										value={name || agent?.name || ""}
 										onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 									<Button disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}

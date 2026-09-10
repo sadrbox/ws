@@ -119,7 +119,7 @@ export const AgentsTab: FC = () => {
 
 				<Modal title={translate("onecAgentCreate")} onClose={() => setDialog(null)} onApply={() => create.mutate()}>
 					<div className={styles.ModalForm}>
-						<Field name="onec_agent_name" label={translate("name")} value={name}
+						<Field name="onec_agent_name" label={translate("name")} value={name} noAutofill
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 						<div className={styles.Hint}>{translate("onecAgentCreateHint")}</div>
 					</div>

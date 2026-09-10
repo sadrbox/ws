@@ -377,10 +377,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									<GroupRow>
 										<Field name="buf_user" label={translate("onecUserName")} value={userName} disabled width="220px" onChange={() => {}} />
 										<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="240px"
-											autoComplete="off" disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
+											noAutofill disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
 											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
 										<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
-											width="190px" autoComplete="new-password" disabled={locked} placeholder={translate("onecKeepAsIs")}
+											width="190px" disabled={locked} placeholder={translate("onecKeepAsIs")}
 											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
 									</GroupRow>
 									<GroupRow>

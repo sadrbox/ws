@@ -192,11 +192,10 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 								<QueryError error={bases.error ?? occurrences.error} />
 								<GroupRow>
 									<Field name="el_name" label={isUser ? translate("onecUserName") : translate("onecExtName")}
-										value={name} width="260px"
+										value={name} width="260px" noAutofill
 										onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 									{isUser ? (
-										<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width="260px"
-											autoComplete="off"
+										<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width="260px" noAutofill
 											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
 									) : (
 										<Field name="el_syn" label={translate("onecExtSynonym")} value={asText(row.synonym) || "—"}
@@ -209,7 +208,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 								{isUser ? (
 									<GroupRow>
 										<Field name="el_pwd" label={translate("onecUserPassword")} type="password" value={password}
-											width="240px" autoComplete="new-password"
+											width="240px"
 											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 										<FieldToggle name="el_disabled" label={translate("onecUserDisabled")}
 											value={disabled} onChange={setDisabled} />

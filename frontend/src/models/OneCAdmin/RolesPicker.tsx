@@ -61,7 +61,7 @@ export const RolesPicker: FC<{
 	return (
 		<div className={styles.Roles}>
 			<div className={styles.RolesHead}>
-				<Field name="roles_search" value={needle} placeholder={translate("search")} width="220px"
+				<Field name="roles_search" value={needle} placeholder={translate("search")} width="220px" noAutofill
 					disabled={disabled}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNeedle(e.target.value)} />
 				<span className={styles.Hint}>{translate("onecRolesSelected")}: {value.length}</span>
@@ -89,7 +89,7 @@ export const RolesPicker: FC<{
 			<div className={styles.RolesHead}>
 				{/* Ручной ввод — для роли, которой ещё нет в списке: идентификатор должен
 				    совпадать с тем, что в конфигурации, посимвольно. */}
-				<Field name="roles_custom" value={custom} placeholder={translate("onecRolesCustom")} width="260px"
+				<Field name="roles_custom" value={custom} placeholder={translate("onecRolesCustom")} width="260px" noAutofill
 					disabled={disabled}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustom(e.target.value)} />
 				<Button disabled={disabled || !custom.trim()} onClick={addCustom}>{translate("add")}</Button>

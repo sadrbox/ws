@@ -280,7 +280,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 				>
 					<div className={styles.ModalForm}>
 						{!current && dialog === "install" && (
-							<Field name="ex_new" label={translate("onecExtName")} value={form.name}
+							<Field name="ex_new" label={translate("onecExtName")} value={form.name} noAutofill
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
 						)}
 						<div>{translate("onecExtName")}: {current || form.name}</div>
