@@ -9,6 +9,7 @@ import { FC, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
+import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -257,12 +258,15 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
 	// объявила меньше прежней. Сообщение называет, сколько он объявляет сейчас, иначе
 	// связь с обновлением агента приходится угадывать.
 	const declared = online[0]?.capabilities.length ?? 0;
+	// Агент НА СВЯЗИ, но без способности — предупреждение: часть экрана работает.
+	// Агента нет вовсе — внимание: не выполнится ни одна команда.
 	return (
-		<div className={styles.Blocked}>
-			{online.length
-				? `${translate("onecCapabilityMissing")}: ${capability}. ${translate("onecCapabilityLostHint")} (${declared})`
-				: translate("onecNoAdminAgent")}
-		</div>
+		<Notice wide items={[online.length
+			? {
+				type: "warning",
+				text: `${translate("onecCapabilityMissing")}: ${capability}. ${translate("onecCapabilityLostHint")} (${declared})`,
+			}
+			: { type: "attention", text: translate("onecNoAdminAgent") }]} />
 	);
 };
 
@@ -276,7 +280,9 @@ export const QueryError: FC<{ error: unknown }> = ({ error }) => {
 	// Только Error даёт осмысленный текст; всё прочее — неизвестная ошибка, а не
 	// «[object Object]» в лицо пользователю.
 	const text = error instanceof Error ? error.message : translate("unknownError");
-	return <div className={styles.Blocked}>{text}</div>;
+	// Ошибка предметной области (1С ответила отказом, сервис отверг запрос) — «error»:
+	// системные сбои сюда не попадают, для них <UIToast />.
+	return <Notice wide items={[{ type: "error", text }]} />;
 };
 
 /**

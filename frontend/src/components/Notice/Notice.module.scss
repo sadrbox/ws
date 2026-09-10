@@ -8,6 +8,11 @@
 	width: 300px;
 }
 
+// Во всю ширину: сообщение о состоянии ЭКРАНА, а не заметка у поля (см. проп wide).
+.wide {
+	width: 100%;
+}
+
 .Item {
 	display: flex;
 	align-items: flex-start;

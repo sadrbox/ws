@@ -14,6 +14,7 @@ import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
+import Notice from "src/components/Notice";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
@@ -93,12 +94,15 @@ export const AgentsTab: FC = () => {
 				// «убить лишний процесс», а отдельным агентом со своим токеном.
 				const live = a.instances.filter((i) => i.live);
 				const addrs = [...new Set(live.map((i) => i.remoteAddr).filter(Boolean))];
+				// Два процесса под одним токеном разбирают одну очередь: команды начинают
+				// отказывать через раз — это не предупреждение «на будущее», а поломка сейчас.
 				return (
-					<div key={a.id} className={styles.Blocked}>
-						{translate("onecAgentDoubled")}: {a.name || a.id.slice(0, 8)} — {live.length}
-						{addrs.length > 1 ? ` (${translate("onecAgentFromHosts")}: ${addrs.join(", ")})` : ""}.{" "}
-						{addrs.length > 1 ? translate("onecAgentTokenShared") : translate("onecAgentDoubledHint")}
-					</div>
+					<Notice key={a.id} wide items={[{
+						type: "attention",
+						text: `${translate("onecAgentDoubled")}: ${a.name || a.id.slice(0, 8)} — ${live.length}`
+							+ (addrs.length > 1 ? ` (${translate("onecAgentFromHosts")}: ${addrs.join(", ")})` : "")
+							+ ". " + (addrs.length > 1 ? translate("onecAgentTokenShared") : translate("onecAgentDoubledHint")),
+					}]} />
 				);
 			})}
 			<QueryError error={agents.error} />

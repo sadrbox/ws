@@ -477,18 +477,6 @@
 	color: var(--sv-attentionText, #6b1119);
 }
 
-// Предупреждение о том, что операция невозможна в принципе (агент не умеет).
-// Не Notice: это не ошибка формы, а состояние среды — постоянное, пока не настроят агента.
-.Blocked {
-	margin: 6px;
-	padding: 6px 12px;
-	border: 1px solid $warnAccent;
-	border-left-width: 3px;
-	border-radius: var(--radius-3, 3px);
-	color: $color6;
-	font-size: $fontsize;
-}
-
 // ── Карточка базы ──
 .Form {
 	display: flex;

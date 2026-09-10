@@ -20,6 +20,15 @@ export interface NoticeItem {
 interface NoticeProps {
   items?: NoticeItem[];
   className?: string;
+  /**
+   * Во всю ширину родителя вместо колонки 300px.
+   *
+   * Обычный Notice — заметка РЯДОМ С ПОЛЯМИ формы, и узкая колонка там уместна. Но тем же
+   * компонентом показывают состояние целого экрана: «агент не умеет эту операцию», «1С
+   * ответила отказом». Такое сообщение относится ко всему, что под ним, и обрезанное до
+   * трети ширины читается как заметка о соседнем поле.
+   */
+  wide?: boolean;
 }
 
 const ICON: Record<NoticeType, string> = {
@@ -30,10 +39,14 @@ const ICON: Record<NoticeType, string> = {
   error: "✕",
 };
 
-export const Notice: FC<NoticeProps> = ({ items, className }) => {
+export const Notice: FC<NoticeProps> = ({ items, className, wide }) => {
   if (!items || items.length === 0) return null;
   return (
-    <div className={[styles.Notice, className].filter(Boolean).join(" ")} role="status" aria-live="polite">
+    <div
+      className={[styles.Notice, wide ? styles.wide : null, className].filter(Boolean).join(" ")}
+      role="status"
+      aria-live="polite"
+    >
       {items.map((it, i) => (
         <div key={i} className={[styles.Item, styles[it.type]].filter(Boolean).join(" ")}>
           <span className={styles.Icon} aria-hidden>{ICON[it.type]}</span>
