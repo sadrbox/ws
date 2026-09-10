@@ -140,7 +140,12 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 			res.setHeader("Access-Control-Allow-Origin", origin);
 			res.setHeader("Vary", "Origin");
 			res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+			// Методы перечисляем ВСЕ, которые есть у браузерного API. Пропущенный метод
+			// браузер не показывает как ошибку метода: предварительный запрос отвечает 204,
+			// но без нужного метода в списке — и запрос отменяется с «CORS error», без
+			// статуса и тела. Так молча не работали переименование и удаление агента
+			// (PATCH/DELETE), пока то же самое не повторилось на учётной записи базы.
+			res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
 			res.setHeader("Access-Control-Max-Age", "600");
 		}
 		if (req.method === "OPTIONS") {
