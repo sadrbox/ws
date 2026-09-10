@@ -227,36 +227,15 @@ a {
 	padding: 12px;
 }
 
-.primary {
-	// CTA-градиент через токены: светлая = яркое золото (без изменений),
-	// тёмная = приглушённый янтарь (--btn-gold-* в index.html), чтобы кнопка
-	// не «кричала» на тёмном фоне.
-	background: linear-gradient(180deg, var(--btn-gold-from, #ffe240), var(--btn-gold-to, #caac00)) !important;
-}
-
-.primary:hover {}
-
-.secondary {
-	background: linear-gradient(180deg, #fff, #aaa);
-}
-
-.secondary:hover {}
-
-.danger {
-	background-color: var(--sv-attention, #dc3545) !important;
-	color: white !important;
-}
-
-.danger:hover {
-	background-color: var(--sv-attentionBorder, #b02a37) !important;
-}
-
-.outline {
-	background-color: transparent !important;
-	border: 2px solid #007bff !important;
-	color: #007bff !important;
-}
-
-.outline:hover {
-	background-color: rgba(0, 123, 255, 0.1) !important;
-}
+// ── Классы .primary/.secondary/.danger/.outline УДАЛЕНЫ ──────────────────────
+//
+// Они лежали здесь с самого начала и красили кнопки через !important. Беда в том, что
+// variables.scss подмешивается в КАЖДЫЙ scss-модуль: класс с таким же именем в модуле
+// получает то же сгенерированное имя и молча забирает эти правила себе.
+//
+// Так и вышло у кнопок: `.danger` компонента Button задавал красный ТЕКСТ на обычной
+// подложке, а отсюда прилетало `color: white !important` — белые буквы на светлой кнопке,
+// то есть «Удалить» читать было нечем. `.primary` тем же способом подменял фирменный
+// градиент кнопки золотым.
+//
+// Ссылок на них не было ни одной: кнопки задают свой вид сами (components/Button).
