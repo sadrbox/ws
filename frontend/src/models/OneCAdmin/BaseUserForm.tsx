@@ -24,6 +24,7 @@ import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
@@ -405,71 +406,67 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			tabs={[
 				{
 					id: "main", label: translate("general"),
+					// Каркас — общий для всех форм приложения (см. SalesForm): колонка полей
+					// под чтение и колонка сообщений справа снизу, а не сообщения враспор
+					// между областями.
 					component: (
-						<GroupCol>
-							<QueryError error={occurrences.error ?? baseUsers.error} />
+						<div className={main.FormContainer}>
+							<div className={main.FormWrapper}>
+								<GroupCol className={main.Form}>
+									<FormArea title={translate("onecAreaOwner")}>
+										<GroupRow>
+											<FieldSelect name="buf_base" label={translate("onecBase")} value={baseKey}
+												disabled={locked}
+												onChange={(e) => setBaseKey(e.target.value)}
+												options={baseOptions} />
+											<Field name="buf_seen" label={translate("onecDataFrom")}
+												value={occ.find((o) => o.baseKey === baseKey)?.seenAt
+													? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}
+												disabled width="170px" onChange={() => {}} />
+											<Field name="buf_roles" label={translate("roles")}
+												value={String((rolesByBase.get(baseKey.toLowerCase()) ?? []).length)}
+												disabled width="90px" onChange={() => {}} />
+										</GroupRow>
+									</FormArea>
 
-							{/*
-							 * ВЛАДЕЛЕЦ — база: не реквизит человека, а область действия карточки.
-							 * Отдельная рамка отделяет «где» от «что»: смена базы меняет всё
-							 * содержимое ниже, и это должно быть видно до щелчка.
-							 */}
-							<FormArea title={translate("onecAreaOwner")}>
-								<GroupRow>
-									<FieldSelect name="buf_base" label={translate("onecBase")} value={baseKey}
-										disabled={locked}
-										onChange={(e) => setBaseKey(e.target.value)}
-										options={baseOptions} />
-									<Field name="buf_seen" label={translate("onecDataFrom")}
-										value={occ.find((o) => o.baseKey === baseKey)?.seenAt
-											? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}
-										disabled width="170px" onChange={() => {}} />
-									<Field name="buf_roles" label={translate("roles")}
-										value={String((rolesByBase.get(baseKey.toLowerCase()) ?? []).length)}
-										disabled width="90px" onChange={() => {}} />
-								</GroupRow>
-							</FormArea>
-
-							<FormArea title={translate("onecAreaUserData")}>
-								<GroupCol>
-									<GroupRow>
-										{/* Имя входа правится, как и прочее: в 1С это смена свойства
-										    «Имя» у того же пользователя, а не новый пользователь. */}
-										<Field name="buf_user" label={translate("onecUserName")} value={form.name} width="220px"
-											noAutofill disabled={locked}
-											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
-										<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="240px"
-											noAutofill disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
-											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
-										<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
-											width="190px" disabled={locked} placeholder={translate("onecKeepAsIs")}
-											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
-									</GroupRow>
-									<GroupRow>
-										<FieldToggle name="buf_show" label={translate("onecShowInList")} value={form.showInList}
-											disabled={locked}
-											onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
-										<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
-											disabled={locked}
-											onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
-									</GroupRow>
+									<FormArea title={translate("onecAreaUserData")}>
+										<GroupCol>
+											<GroupRow>
+												{/* Имя входа правится, как и прочее: в 1С это смена свойства
+												    «Имя» у того же пользователя, а не новый пользователь. */}
+												<Field name="buf_user" label={translate("onecUserName")} value={form.name} width="200px"
+													noAutofill disabled={locked}
+													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
+												<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="200px"
+													noAutofill disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
+													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
+												<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
+													width="190px" disabled={locked} placeholder={translate("onecKeepAsIs")}
+													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
+											</GroupRow>
+											<GroupRow>
+												<FieldToggle name="buf_show" label={translate("onecShowInList")} value={form.showInList}
+													disabled={locked}
+													onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
+												<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
+													disabled={locked}
+													onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
+											</GroupRow>
+										</GroupCol>
+									</FormArea>
 								</GroupCol>
-							</FormArea>
 
-							{renameTo && (
-								<Notice items={[{ type: "warning", text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }]} />
-							)}
-							{busy && (
-								<Notice items={[{
-									type: "info",
-									text: `${translate("onecObjectBusy")}: ${busy.title} — ${busy.target}`,
-								}]} />
-							)}
-							{!baseKey && <Notice items={[{ type: "info", text: translate("onecPickBaseInHeader") }]} />}
-							{changedCount > 0 && (
-								<Notice items={[{ type: "info", text: `${translate("onecUnsavedChanges")}: ${changedCount}` }]} />
-							)}
-						</GroupCol>
+								<GroupCol className={main.FormNotice}>
+									<QueryError error={occurrences.error ?? baseUsers.error} />
+									<Notice items={[
+										...(renameTo ? [{ type: "warning" as const, text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }] : []),
+										...(busy ? [{ type: "info" as const, text: `${translate("onecObjectBusy")}: ${busy.title} — ${busy.target}` }] : []),
+										...(!baseKey ? [{ type: "info" as const, text: translate("onecPickBaseInHeader") }] : []),
+										...(changedCount > 0 ? [{ type: "info" as const, text: `${translate("onecUnsavedChanges")}: ${changedCount}` }] : []),
+									]} />
+								</GroupCol>
+							</div>
+						</div>
 					),
 				},
 				{

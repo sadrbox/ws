@@ -39,6 +39,7 @@ import {
 } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { QueryError, isApplicable, publishLabel } from "./shared";
+import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
 export type ElementKind = "user" | "extension";
@@ -187,45 +188,51 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 				tabs={[
 					{
 						id: "main", label: translate("general"),
+						// Каркас — общий для форм приложения (см. SalesForm).
 						component: (
-							<GroupCol>
-								<QueryError error={bases.error ?? occurrences.error} />
-								<GroupRow>
-									<Field name="el_name" label={isUser ? translate("onecUserName") : translate("onecExtName")}
-										value={name} width="260px" noAutofill
-										onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
-									{isUser ? (
-										<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width="260px" noAutofill
-											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
-									) : (
-										<Field name="el_syn" label={translate("onecExtSynonym")} value={asText(row.synonym) || "—"}
-											disabled width="260px" onChange={() => {}} />
-									)}
-									<Field name="el_bases" label={translate("bases")} value={String(present.size)} disabled
-										width="110px" onChange={() => {}} />
-								</GroupRow>
+							<div className={main.FormContainer}>
+								<div className={main.FormWrapper}>
+									<GroupCol className={main.Form}>
+										<GroupRow>
+											<Field name="el_name" label={isUser ? translate("onecUserName") : translate("onecExtName")}
+												value={name} width="260px" noAutofill
+												onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+											{isUser ? (
+												<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width="260px" noAutofill
+													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
+											) : (
+												<Field name="el_syn" label={translate("onecExtSynonym")} value={asText(row.synonym) || "—"}
+													disabled width="260px" onChange={() => {}} />
+											)}
+											<Field name="el_bases" label={translate("bases")} value={String(present.size)} disabled
+												width="110px" onChange={() => {}} />
+										</GroupRow>
 
-								{isUser ? (
-									<GroupRow>
-										<Field name="el_pwd" label={translate("onecUserPassword")} type="password" value={password}
-											width="240px"
-											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
-										<FieldToggle name="el_disabled" label={translate("onecUserDisabled")}
-											value={disabled} onChange={setDisabled} />
-									</GroupRow>
-								) : (
-									<GroupRow>
-										<Field name="el_version" label={translate("version")} value={asText(row.version) || "—"}
-											disabled width="150px" onChange={() => {}} />
-										<Field name="el_purpose" label={translate("purpose")} value={asText(row.purpose) || "—"}
-											disabled width="180px" onChange={() => {}} />
-										<input type="file" accept=".cfe" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-										<FieldToggle name="el_safe" label={translate("onecExtSafeMode")} value={safeMode} onChange={setSafeMode} />
-									</GroupRow>
-								)}
+										{isUser ? (
+											<GroupRow>
+												<Field name="el_pwd" label={translate("onecUserPassword")} type="password" value={password}
+													width="240px"
+													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
+												<FieldToggle name="el_disabled" label={translate("onecUserDisabled")}
+													value={disabled} onChange={setDisabled} />
+											</GroupRow>
+										) : (
+											<GroupRow>
+												<Field name="el_version" label={translate("version")} value={asText(row.version) || "—"}
+													disabled width="150px" onChange={() => {}} />
+												<Field name="el_purpose" label={translate("purpose")} value={asText(row.purpose) || "—"}
+													disabled width="180px" onChange={() => {}} />
+												<input type="file" accept=".cfe" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+												<FieldToggle name="el_safe" label={translate("onecExtSafeMode")} value={safeMode} onChange={setSafeMode} />
+											</GroupRow>
+										)}
+									</GroupCol>
 
-
-							</GroupCol>
+									<GroupCol className={main.FormNotice}>
+										<QueryError error={bases.error ?? occurrences.error} />
+									</GroupCol>
+								</div>
+							</div>
 						),
 					},
 					...(isUser ? [{

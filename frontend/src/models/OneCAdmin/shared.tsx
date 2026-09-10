@@ -18,7 +18,9 @@ import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { showToast } from "src/components/UIToast";
-import { fetchBaseUsers, fetchBases, fetchAgents, hasCapability, type OnecBase } from "src/services/onec/api";
+import {
+	fetchBaseExtensions, fetchBaseUsers, fetchBases, fetchAgents, hasCapability, type OnecBase,
+} from "src/services/onec/api";
 import { finishOp, progressOp, startOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
@@ -180,8 +182,11 @@ export function useBaseTargets(opts: {
  * каждое обращение к базе занимает у 1С сеанс и лицензию, и держать это число в двух
  * местах — верный способ их развести.
  */
+/** Что читаем у базы: её пользователей или её расширения. */
+export type BaseContentKind = "users" | "extensions";
+
 /**
- * «Проверить пользователей» — ОДИН механизм на все экраны.
+ * «Обновить содержимое базы» — ОДИН механизм на все экраны.
  *
  * Кнопка есть и на вкладке «Пользователи баз», и в карточке базы, и раньше они делали
  * разное: панель заводила операцию в реестре прогресса, показывала итог и перечитывала
@@ -193,20 +198,21 @@ export function useBaseTargets(opts: {
  * запроса карточки — чтобы прочитанное показалось без второго обращения, — и обновляет
  * сводки реестра, которые от этих данных считаются.
  */
-export function useBaseUsersCheck(): {
+export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 	run: (keys: string[]) => Promise<void>;
 	checking: boolean;
 } {
 	const qc = useQueryClient();
 	const parallel = useCheckParallel();
 	const [checking, setChecking] = useState(false);
+	const isUsers = kind === "users";
 
 	const run = useCallback(async (keys: string[]) => {
 		const targets = keys.filter(Boolean);
 		if (!targets.length || checking) return;
 		setChecking(true);
 		const op = startOp({
-			kind: "read", title: translate("onecUsersCheck"),
+			kind: "read", title: translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
 			target: targets.length === 1 ? targets[0] : `${translate("onecBases")}: ${targets.length}`,
 			total: targets.length,
 			// Читаем содержимое этих баз — карточки их пользователей на это время не правятся.
@@ -215,10 +221,10 @@ export function useBaseUsersCheck(): {
 		const r = await checkBases(
 			targets,
 			async (baseKey) => {
-				const data = await fetchBaseUsers(baseKey);
+				const data = isUsers ? await fetchBaseUsers(baseKey) : await fetchBaseExtensions(baseKey);
 				// Прочитанное сразу становится данными карточки базы: иначе она сделала бы
 				// второй такой же вход в базу, чтобы показать то же самое.
-				qc.setQueryData(["onec", "base-users", baseKey], data);
+				qc.setQueryData(["onec", isUsers ? "base-users" : "base-ext", baseKey], data);
 				return data;
 			},
 			parallel,
@@ -236,13 +242,21 @@ export function useBaseUsersCheck(): {
 			r.failed.length ? "warning" : "success",
 		);
 		// Сводки считаются из того же кэша реестра, что наполняет чтение.
-		void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
-		void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
-		void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
-	}, [qc, parallel, checking]);
+		if (isUsers) {
+			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+		} else {
+			void qc.invalidateQueries({ queryKey: ["onec", "ext-summary"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+		}
+	}, [qc, parallel, checking, isUsers]);
 
 	return { run, checking };
 }
+
+/** Частный случай для читаемости на месте вызова. */
+export const useBaseUsersCheck = () => useBaseContentCheck("users");
 
 export function useCheckParallel(): number {
 	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });

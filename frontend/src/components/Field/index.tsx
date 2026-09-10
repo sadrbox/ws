@@ -249,8 +249,11 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
 }) => {
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
-  const listId = suggestions?.length ? `${uid}-list` : undefined;
   const isPassword = type === "password";
+  // У поля пароля подсказок нет ВООБЩЕ: ни списка значений (datalist), ни проверки
+  // орфографии с автозаменой. Список показал бы чужой пароль соседям по экрану, а
+  // автозамена тихо портит введённое — заглавная первая буква классика этого жанра.
+  const listId = !isPassword && suggestions?.length ? `${uid}-list` : undefined;
   // "off" браузеры для паролей игнорируют, "new-password" — слушают (см. проп autoComplete).
   const autoCompleteValue = autoComplete ?? (isPassword ? "new-password" : "off");
   // Менеджеры паролей `autocomplete` не читают: у каждого свой признак «не трогай поле».
@@ -275,6 +278,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
           className={`${styles.FieldString} ${disabled ? styles.FieldDisabled : ''}`}
           autoComplete={autoCompleteValue}
           {...noFillAttrs}
+          {...(isPassword ? { spellCheck: false, autoCapitalize: "off", autoCorrect: "off" } : {})}
           disabled={disabled}
           placeholder={placeholder}
           title={title}

@@ -6,15 +6,15 @@
  * в базу. Всё это идёт через AI Service (`/v1/onec/*`) к админ-агенту, который работает с
  * кластером утилитой `rac` — из браузера в кластер никто не ходит.
  *
- * ОТКУДА ДАННЫЕ У КНОПКИ «ОБНОВИТЬ». Она перечитывает ТОТ ЖЕ источник, из которого таблица
- * читала при открытии, и никогда не меняет его на другой:
- *   «Базы» — реестр сервиса (через прокси ERP), в кластер не ходит вовсе;
- *   «Расширения»/«Пользователи», левые таблицы — кэш реестра, тоже без 1С;
- *   «Сеансы», «Соединения», «Сервер» — команда агенту, живое состояние кластера;
- *   правые таблицы содержимого базы — команда агенту по ОДНОЙ базе;
- *   «Задания», «Агенты» — база сервиса.
- * Единственная кнопка, которая спрашивает кластер о базах, называется «Обновить из кластера»
- * и стоит отдельно: перепутать её с обычным обновлением списка нельзя.
+ * ЧТО ДЕЛАЕТ КНОПКА «ОБНОВИТЬ». Она даёт АКТУАЛЬНЫЕ данные — по природе того, что показывает
+ * таблица, а не «перечитывает тот же кэш»:
+ *   «Базы» — спрашивает кластер (их состав заводит он) и перечитывает список;
+ *   содержимое базы (пользователи, расширения) — читает саму базу; если отмечено несколько
+ *     баз, читает их группой, по одной команде на базу;
+ *   «Сеансы», «Соединения», «Сервер» — команда в кластер, живое состояние;
+ *   «Задания», «Агенты» — база сервиса, она и есть источник.
+ * Поэтому отдельных кнопок «Проверить пользователей»/«Проверить расширения» больше нет: у
+ * обновления один смысл, и он один на всю панель.
  *
  * ЧТО ОТКУДА (правило одно на всю панель). В кластер 1С ходит ТОЛЬКО агент, и только по
  * явной команде сервиса; браузер не знает про 1С ничего и разговаривает с `/v1/onec/*`.
@@ -39,7 +39,7 @@
  * работает в базе, поэтому обе операции проходят через модальное окно с явным «Да».
  */
 import React, { FC, useCallback, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
 import Table from "src/components/Table";
@@ -54,7 +54,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
 import {
-	fetchBases, refreshBases, fetchSessions, terminateSession, setSessionsLock,
+	fetchBases, fetchSessions, terminateSession, setSessionsLock,
 	type ClusterRow, type OnecBase,
 } from "src/services/onec/api";
 import { QueryError } from "./shared";
@@ -96,7 +96,6 @@ const onecDate = (v: string | undefined | null): string => {
 const toastError = (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error");
 
 export const OneCAdminList: FC = () => {
-	const qc = useQueryClient();
 	const [tab, setTab] = useState<Tab>("bases");
 	// Запущенное задание открываем сразу: иначе групповая операция уходит «в никуда».
 	const [watchBatch, setWatchBatch] = useState<string>("");
@@ -115,15 +114,6 @@ export const OneCAdminList: FC = () => {
 		enabled: tab === "sessions",
 		// Сеансы живут секундами: закэшированный список вводит в заблуждение.
 		staleTime: 0,
-	});
-
-	const refresh = useMutation({
-		mutationFn: refreshBases,
-		onSuccess: (data) => {
-			qc.setQueryData(["onec", "bases"], data);
-			showToast(translate("onecBasesRefreshed"), "success");
-		},
-		onError: toastError,
 	});
 
 	const terminate = useMutation({
@@ -360,7 +350,7 @@ export const OneCAdminList: FC = () => {
 			component: tab === "agents" ? <AgentsTab /> : null,
 		},
 	], [tab, watchBatch, sessionRowsView, sessionsSorted.sorting, sessionColumns,
-		baseFilter, selectedBase, bases, sessions, refresh, terminate.isPending, askTerminate]);
+		baseFilter, selectedBase, bases, sessions, terminate.isPending, askTerminate]);
 
 	return (
 		<div className={main.PaneFill}>

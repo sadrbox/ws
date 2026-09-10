@@ -54,6 +54,8 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 	const [primary, setPrimary] = useState<"bases" | "users">("bases");
 	const [activeBase, setActiveBase] = useState("");
 	const [activeUser, setActiveUser] = useState("");
+	/** Отмеченные базы — цель группового обновления. */
+	const [pickedBases, setPickedBases] = useState<string[]>([]);
 
 	const openCard = useOpenBaseUser();
 	// Слежение за командами общее для экрана и карточки — см. useBatchWatch.
@@ -132,19 +134,26 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 		<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ubBases", rows: baseView.rows, columns: baseCols,
 			setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
-			isLoading: bases.isLoading || occurrences.isLoading,
-			onReload: () => void bases.refetch(),
-			reloadTitle: translate("onecReloadCached"),
+			isLoading: bases.isLoading || occurrences.isLoading || check.checking,
+			/*
+			 * «Обновить» = ПРОЧИТАТЬ СОДЕРЖИМОЕ БАЗ у самой 1С. Отмечено несколько —
+			 * читаем группой, ничего не отмечено — активную базу, а если и её нет —
+			 * перечитываем список баз (больше обновлять нечего).
+			 * Отдельной кнопки «Проверить пользователей» после этого не нужно.
+			 */
+			onReload: () => {
+				const keys = pickedBases.length ? pickedBases : (activeBase ? [activeBase] : []);
+				if (keys.length) void check.run(keys);
+				else void bases.refetch();
+			},
+			reloadTitle: translate("onecUsersCheck"),
+			selectable: true,
+			onSelectionChange: (sel, all) => setPickedBases(
+				all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey)).filter(Boolean),
+			),
 			// Одиночный щелчок — связанный список справа. Двойной — карточка пары.
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
 			onRowClick: (r) => openCard(activeUser || "", asText(r.baseKey)),
-			extraButtons: (
-				<Button variant="secondary" disabled={!activeBase || check.checking}
-					title={activeBase ? `${translate("onecUsersCheck")}: ${activeBase}` : translate("onecPickBaseFirst")}
-					onClick={() => void check.run([activeBase])}>
-					<Icon name="reload" /> {translate("onecUsersCheck")}
-				</Button>
-			),
 		})} />
 	);
 
@@ -152,9 +161,16 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 		<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ubUsers", rows: userView.rows, columns: userCols,
 			setColumns: setUserCols, sorting: userView.sorting, search: userView.search,
-			isLoading: summary.isLoading || baseUsers.isLoading,
-			onReload: () => void summary.refetch(),
-			reloadTitle: translate("onecReloadCached"),
+			isLoading: summary.isLoading || baseUsers.isLoading || check.checking,
+			// Показаны пользователи базы — обновляем их у 1С; показана сводка по всем
+			// базам — перечитываем сводку: спрашивать сто баз по одной кнопке нельзя.
+			onReload: () => {
+				if (primary === "bases" && activeBase) void check.run([activeBase]);
+				else void summary.refetch();
+			},
+			reloadTitle: primary === "bases" && activeBase
+				? `${translate("onecUsersCheck")}: ${activeBase}`
+				: translate("onecReloadCached"),
 			onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
 			// Карточка пары: человек из этой строки, база — активная слева.
 			onRowClick: (r) => openCard(asText(r.name), activeBase),

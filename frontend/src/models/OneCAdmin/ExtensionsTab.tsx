@@ -31,10 +31,10 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseExtensions, fetchBases, fetchBatch, fetchExtensionSummary, runBatch, type BatchType,
+	fetchBases, fetchBatch, fetchExtensionSummary, runBatch, type BatchType,
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
-import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
+import { CapabilityGuard, QueryError, isApplicable, useBaseContentCheck } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const summaryColumns = (): TColumn[] => ([
@@ -60,12 +60,10 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 
 export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatchStarted }) => {
 	const qc = useQueryClient();
-	const parallel = useCheckParallel();
 
 	const [pickedExt, setPickedExt] = useState<string[]>([]);
 	const [pickedBases, setPickedBases] = useState<string[]>([]);
 	const [dialog, setDialog] = useState<null | "install" | "remove">(null);
-	const [checking, setChecking] = useState(false);
 	const [form, setForm] = useState({ name: "", safeMode: true });
 	const [file, setFile] = useState<File | null>(null);
 
@@ -134,21 +132,10 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 		await qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 	}, [qc]);
 
-	/** Чтение списка расширений по отмеченным базам — прямыми запросами, без задания. */
-	const recheck = useCallback(async (keys: string[]) => {
-		if (!keys.length) return;
-		setChecking(true);
-		const r = await checkBases(keys, fetchBaseExtensions, parallel);
-		setChecking(false);
-		await qc.invalidateQueries({ queryKey: ["onec", "ext-summary"] });
-		await qc.invalidateQueries({ queryKey: ["onec", "bases"] });
-		showToast(
-			r.failed.length
-				? `${translate("onecChecked")}: ${r.ok}/${keys.length}. ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
-				: `${translate("onecChecked")}: ${r.ok}`,
-			r.failed.length ? "warning" : "success",
-		);
-	}, [parallel, qc]);
+	// Чтение расширений баз — тем же механизмом, что и пользователей (см.
+	// useBaseContentCheck): операция видна в «Прогрессе запросов и команд», её итог
+	// приходит сообщением, сводки после неё перечитываются.
+	const check = useBaseContentCheck("extensions");
 
 	const apply = useCallback(async () => {
 		const name = (current || form.name).trim();
@@ -176,6 +163,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 						setColumns: setSumCols, sorting: sumView.sorting, search: sumView.search,
 						isLoading: summary.isLoading,
 						onReload: () => void summary.refetch(),
+						reloadTitle: translate("onecReloadCached"),
 						selectable: true,
 						onSelectionChange: (sel, all) => {
 							const names = all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.name));
@@ -222,17 +210,19 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							<Table {...buildStaticTableProps({
 								componentName: "OneCAdmin_extBases", rows: baseView.rows, columns: baseCols,
 								setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
-								isLoading: bases.isLoading,
-								onReload: () => void bases.refetch(),
+								isLoading: bases.isLoading || check.checking,
+								// «Обновить» = прочитать расширения отмеченных баз у самой 1С;
+								// ничего не отмечено — перечитать список баз.
+								onReload: () => {
+									if (pickedBases.length) void check.run(pickedBases);
+									else void bases.refetch();
+								},
+								reloadTitle: translate("onecExtCheck"),
 								selectable: true,
 								onSelectionChange: (sel, all) =>
 									setPickedBases(all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey))),
 								extraButtons: (
 									<>
-										<Button variant="secondary" disabled={!pickedBases.length || checking}
-											onClick={() => void recheck(pickedBases)}>
-											<Icon name="reload" /> {translate("onecExtCheck")}
-										</Button>
 										<Button variant="primary" disabled={!missing.length}
 											title={missing.length ? undefined : translate("onecExtAlreadyEverywhere")}
 											onClick={() => setDialog("install")}>

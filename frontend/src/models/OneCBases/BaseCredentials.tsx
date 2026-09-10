@@ -21,6 +21,7 @@ import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
@@ -74,51 +75,58 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const isSet = !!stored?.user;
 
 	return (
-		<GroupCol>
-			<QueryError error={creds.error} />
-
-			<FormArea title={translate("onecCredsTitle")}>
-				<GroupCol>
-					<GroupRow>
-						<Field name="bc_user" label={translate("onecUserName")} value={user} width="220px"
-							noAutofill disabled={busy}
-							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
-						<Field name="bc_pwd" label={translate("onecUserPassword")} type="password" value={password}
-							width="220px" disabled={busy}
-							placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
-							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
-						<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}
-							value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
-							disabled width="190px" onChange={() => {}} />
-					</GroupRow>
-					<GroupRow>
-						<Button variant="primary" disabled={busy || !user.trim()}
-							title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
-							onClick={() => save.mutate()}>
-							<Icon name="save" /> {translate("save")}
-						</Button>
-						<Button variant="secondary" disabled={busy || !isSet}
-							title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
-							onClick={() => drop.mutate()}>
-							<Icon name="clear" /> {translate("onecCredsClear")}
-						</Button>
-					</GroupRow>
+		// Каркас — общий для форм приложения (см. SalesForm): поля слева, сообщения
+		// справа снизу.
+		<div className={main.FormContainer}>
+			<div className={main.FormWrapper}>
+				<GroupCol className={main.Form}>
+					<FormArea title={translate("onecCredsTitle")}>
+						<GroupCol>
+							<GroupRow>
+								<Field name="bc_user" label={translate("onecUserName")} value={user} width="200px"
+									noAutofill disabled={busy}
+									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
+								<Field name="bc_pwd" label={translate("onecUserPassword")} type="password" value={password}
+									width="200px" disabled={busy}
+									placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
+									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
+								<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}
+									value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
+									disabled width="170px" onChange={() => {}} />
+							</GroupRow>
+							<GroupRow>
+								<Button variant="primary" disabled={busy || !user.trim()}
+									title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
+									onClick={() => save.mutate()}>
+									<Icon name="save" /> {translate("save")}
+								</Button>
+								<Button variant="secondary" disabled={busy || !isSet}
+									title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
+									onClick={() => drop.mutate()}>
+									<Icon name="clear" /> {translate("onecCredsClear")}
+								</Button>
+							</GroupRow>
+						</GroupCol>
+					</FormArea>
 				</GroupCol>
-			</FormArea>
 
-			<Notice items={[
-				...(agents.isLoading || agentReady ? [] : [{
-					type: "warning" as const,
-					text: translate("onecCredsAgentUnsupported"),
-				}]),
-				{
-					type: "info" as const,
-					text: isSet
-						? `${translate("onecCredsHint")} ${stored?.hasPassword ? "" : translate("onecCredsNoPassword")}`.trim()
-						: `${translate("onecCredsNotSet")}. ${translate("onecCredsHint")}`,
-				},
-			]} />
-		</GroupCol>
+				<GroupCol className={main.FormNotice}>
+					<QueryError error={creds.error} />
+					<Notice items={[
+						...(agents.isLoading || agentReady ? [] : [{
+							type: "warning" as const,
+							text: translate("onecCredsAgentUnsupported"),
+						}]),
+						{
+							type: "info" as const,
+							text: isSet
+								? `${translate("onecCredsHint")} ${stored?.hasPassword ? "" : translate("onecCredsNoPassword")}`.trim()
+								: `${translate("onecCredsNotSet")}. ${translate("onecCredsHint")}`,
+						},
+					]} />
+				</GroupCol>
+			</div>
+		</div>
 	);
 };
 

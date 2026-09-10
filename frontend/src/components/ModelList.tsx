@@ -120,6 +120,15 @@ interface ModelListProps {
    * команды не нужны, не должен обрастать колонкой чекбоксов.
    */
   extraButtons?: ReactNode | ((selected: TDataItem[]) => ReactNode);
+  /**
+   * Что делать по кнопке «Обновить» ДО перечитывания списка.
+   *
+   * Обычный список хранит данные сам, и обновить его — значит перечитать таблицу. Но
+   * бывает список-КЭШ: базы 1С заводит кластер, а мы держим их снимок. Для него «свежие
+   * данные» — это спросить источник, и только потом перечитать себя; иначе кнопка
+   * честно показывает вчерашний снимок и называет это обновлением.
+   */
+  onReload?: () => Promise<unknown> | void;
 }
 
 // ─── Вспомогательный компонент состояния ошибки ───────────────────────────────
@@ -248,6 +257,7 @@ const ModelList: FC<ModelListProps> = ({
   hideAddDelete = false,
   hideAdd = false,
   extraButtons,
+  onReload,
 }) => {
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
@@ -414,17 +424,26 @@ const ModelList: FC<ModelListProps> = ({
 
   // В split-режиме двойной клик по строке показывает предпросмотр (через
   // onSelectItem), а не открывает вкладку; в обычном — прежнее поведение.
+  const tableProps = buildTableProps({
+    variant,
+    onSelectItem: splitActive ? (row: TDataItem) => setPreviewRow(row) : onSelectItem,
+    openModelForm,
+    enableDateRange,
+    renderCell,
+    highlightUuid: highlight.uuid,
+    highlightToken: highlight.token,
+  });
+
+  // «Обновить» списка-кэша сначала спрашивает источник (см. проп onReload), и только
+  // потом перечитывает таблицу: иначе кнопка перерисовывает вчерашний снимок.
+  const actions = onReload
+    ? { ...tableProps.actions, refetch: () => { void Promise.resolve(onReload()).finally(() => tableProps.actions.refetch()); } }
+    : tableProps.actions;
+
   const table = (
     <Table
-      {...buildTableProps({
-        variant,
-        onSelectItem: splitActive ? (row: TDataItem) => setPreviewRow(row) : onSelectItem,
-        openModelForm,
-        enableDateRange,
-        renderCell,
-        highlightUuid: highlight.uuid,
-        highlightToken: highlight.token,
-      })}
+      {...tableProps}
+      actions={actions}
       hideAddDelete={hideAddDelete}
       hideAdd={hideAdd}
       {...(selectableButtons ? { onSelectionChange } : {})}

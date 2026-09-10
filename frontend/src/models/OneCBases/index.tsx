@@ -18,7 +18,9 @@ import Table from "src/components/Table";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { Group, GroupCol, GroupRow } from "src/components/UI";
+import Notice from "src/components/Notice";
+import main from "src/styles/main.module.scss";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
@@ -28,8 +30,8 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { fetchBaseExtensions, fetchSessions, type IbUser } from "src/services/onec/api";
-import { QueryError, publishLabel, useBaseUsersCheck } from "src/models/OneCAdmin/shared";
+import { fetchSessions, refreshBases, type IbExtension, type IbUser } from "src/services/onec/api";
+import { QueryError, publishLabel, useBaseContentCheck } from "src/models/OneCAdmin/shared";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
@@ -100,7 +102,6 @@ function useBaseSessions(infobaseId: string, enabled: boolean) {
  */
 const useBaseTabs = (row: TDataItem) => {
 	const baseKey = asText(row.baseKey);
-	const [loadExt, setLoadExt] = useState(false);
 	// Из карточки базы элемент открывается В КОНТЕКСТЕ ЭТОЙ БАЗЫ: она сразу отмечена,
 	// роли и реквизиты взяты из неё.
 	// Пользователь базы — своя карточка пары «человек + база»: права у него в каждой
@@ -118,13 +119,21 @@ const useBaseTabs = (row: TDataItem) => {
 	 * Запрос НЕ включён (`enabled: false`): он существует только ради кэша — проверка
 	 * кладёт в него прочитанное, а сам он в 1С не ходит никогда.
 	 */
-	const usersCheck = useBaseUsersCheck();
+	const usersCheck = useBaseContentCheck("users");
+	const extCheck = useBaseContentCheck("extensions");
 	// Кого правим: строка, выбранная одиночным щелчком. Двойной по-прежнему открывает
 	// карточку пары — кнопка «Изменить» делает тот же жест явным.
 	const [activeUser, setActiveUser] = useState("");
 
 	// enabled требует ключа базы: без него запрос уходил бы в `/bases//extensions`.
-	const ext = useQuery({ queryKey: ["onec", "base-ext", baseKey], queryFn: () => fetchBaseExtensions(baseKey), enabled: loadExt && !!baseKey, staleTime: 0 });
+	// Запрос существует ради кэша: наполняет его проверка (см. useBaseContentCheck),
+	// сам он в 1С не ходит никогда.
+	const ext = useQuery({
+		queryKey: ["onec", "base-ext", baseKey],
+		queryFn: (): Promise<{ items: IbExtension[] }> => Promise.resolve({ items: [] }),
+		enabled: false,
+		staleTime: Infinity,
+	});
 	const users = useQuery({
 		queryKey: ["onec", "base-users", baseKey],
 		queryFn: (): Promise<{ items: IbUser[] }> => Promise.resolve({ items: [] }),
@@ -161,17 +170,16 @@ const useBaseTabs = (row: TDataItem) => {
 		{
 			id: "ext", label: translate("onecTabExtensions"),
 			component: (
-				<>
-				<QueryError error={ext.error} />
 				<Table {...buildStaticTableProps({
 					componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
 					onRowClick: (r) => openExt(r, baseKey),
 					sorting: extView.sorting, search: extView.search,
-					isLoading: ext.isLoading || ext.isFetching,
-					onReload: () => (loadExt ? void ext.refetch() : setLoadExt(true)),
-					extraButtons: loadExt ? undefined : <Button variant="secondary" onClick={() => setLoadExt(true)}>{translate("onecExtCheck")}</Button>,
+					isLoading: extCheck.checking,
+					// «Обновить» = прочитать расширения этой базы у самой 1С: другого
+					// источника у таблицы нет.
+					onReload: () => void extCheck.run([baseKey]),
+					reloadTitle: translate("onecExtCheck"),
 				})} />
-				</>
 			),
 		},
 		{
@@ -218,9 +226,9 @@ const useBaseTabs = (row: TDataItem) => {
 						componentName: "OneCBases_sessions", rows: sesView.rows, columns: sesCols, setColumns: setSesCols,
 						sorting: sesView.sorting, search: sesView.search,
 						isLoading: own.query.isLoading || own.query.isFetching,
-						onReload: () => (loadSessions ? void own.query.refetch() : setLoadSessions(true)),
-						extraButtons: loadSessions ? undefined
-							: <Button variant="secondary" onClick={() => setLoadSessions(true)}>{translate("onecSessionsShow")}</Button>,
+						// Живое состояние кластера: обновление всегда спрашивает его.
+						onReload: () => { setLoadSessions(true); if (loadSessions) void own.query.refetch(); },
+						reloadTitle: translate("onecSessionsShow"),
 					})} />
 				</>
 			),
@@ -250,25 +258,49 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 			tabs={[
 				{
 					id: "main", label: translate("general"),
+					/*
+					 * Каркас формы — общий для всего приложения (см. SalesForm): контейнер,
+					 * колонка полей шириной под чтение и колонка сообщений справа снизу.
+					 * Раньше карточка базы рисовала поля голым GroupCol во всю ширину —
+					 * ряды растягивались на весь экран, и форма не была похожа ни на одну
+					 * другую в системе.
+					 */
 					component: (
-						<GroupCol>
-							<GroupRow>
-								<Field name="ob_key" label={translate("baseKey")} value={asText(row.baseKey)} disabled onChange={() => {}} width="220px" />
-								<Field name="ob_name" label={translate("name")} value={asText(row.name) || "—"} disabled onChange={() => {}} />
-								<Field name="ob_status" label={translate("status")} value={statusLabel(asText(row.status))} disabled onChange={() => {}} width="170px" />
-							</GroupRow>
-							<GroupRow>
-								<Field name="ob_server" label={translate("onecServer")} value={asText(row.serverName) || "—"} disabled onChange={() => {}} width="220px" />
-								<Field name="ob_platform" label={translate("onecVersion")} value={asText(row.onecVersion) || "—"} disabled onChange={() => {}} width="170px" />
-								<Field name="ob_ext" label={translate("extensionsCount")}
-									value={row.extensionsCount == null ? translate("onecExtNotChecked") : asText(row.extensionsCount)}
-									disabled onChange={() => {}} width="170px" />
-								<Field name="ob_published" label={translate("onecPublication")}
-									value={publishLabel(row.published as boolean | null)} disabled onChange={() => {}} width="170px" />
-								<Field name="ob_seen" label={translate("lastSeenAt")}
-									value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} disabled onChange={() => {}} width="190px" />
-							</GroupRow>
-						</GroupCol>
+						<div className={main.FormContainer}>
+							<div className={main.FormWrapper}>
+								<GroupCol className={main.Form}>
+									<Group>
+										<GroupRow>
+											<Field name="ob_key" label={translate("baseKey")} value={asText(row.baseKey)} disabled onChange={() => {}} width="220px" />
+											<Field name="ob_status" label={translate("status")} value={statusLabel(asText(row.status))} disabled onChange={() => {}} width="170px" />
+										</GroupRow>
+										<Field name="ob_name" label={translate("name")} value={asText(row.name) || "—"} disabled onChange={() => {}} />
+									</Group>
+
+									<Group>
+										<GroupRow>
+											<Field name="ob_server" label={translate("onecServer")} value={asText(row.serverName) || "—"} disabled onChange={() => {}} width="220px" />
+											<Field name="ob_platform" label={translate("onecVersion")} value={asText(row.onecVersion) || "—"} disabled onChange={() => {}} width="170px" />
+										</GroupRow>
+										<GroupRow>
+											<Field name="ob_ext" label={translate("extensionsCount")}
+												value={row.extensionsCount == null ? translate("onecExtNotChecked") : asText(row.extensionsCount)}
+												disabled onChange={() => {}} width="170px" />
+											<Field name="ob_published" label={translate("onecPublication")}
+												value={publishLabel(row.published as boolean | null)} disabled onChange={() => {}} width="170px" />
+											<Field name="ob_seen" label={translate("lastSeenAt")}
+												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} disabled onChange={() => {}} width="190px" />
+										</GroupRow>
+									</Group>
+								</GroupCol>
+
+								<GroupCol className={main.FormNotice}>
+									{/* Реестр наполняют кластер и агент: править здесь нечего, и это
+									    должно быть сказано, а не додумано по серым полям. */}
+									<Notice items={[{ type: "info", text: translate("onecBaseCardReadonly") }]} />
+								</GroupCol>
+							</div>
+						</div>
 					),
 				},
 				...tabs,
@@ -289,6 +321,13 @@ export const OneCBasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: 
 		FormComponent={OneCBasesForm as never}
 		getLabel={(d) => asText(d?.baseKey)}
 		defaultSort={{ baseKey: "asc" }}
+		/*
+		 * «Обновить» спрашивает КЛАСТЕР, а не перерисовывает снимок. Список баз — кэш:
+		 * базы заводит и удаляет кластер, и обновление, которое читает только наш кэш,
+		 * честно показывает вчерашний состав, называя это обновлением. Отдельная кнопка
+		 * «Обновить из кластера» после этого не нужна: у обновления один смысл.
+		 */
+		onReload={refreshBases}
 		// Создание и удаление неприменимы: базы приходят из кластера 1С.
 		hideAddDelete
 		variant={variant}
