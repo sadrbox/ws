@@ -296,34 +296,69 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		}
 	}, [userName]);
 
+	/**
+	 * ЗАПИСЬ — ОДНА КОМАНДА НА БАЗУ, И ЭТО ПРИНЦИПИАЛЬНО.
+	 *
+	 * Раньше правки уходили порознь: реквизиты — одной командой, роли — второй, и обе по
+	 * одной и той же базе. Команды выполняются агентом независимо и в любом порядке, а
+	 * переименование меняет то самое имя, которым адресована вторая: если она успевала
+	 * первой — роли ложились на старого пользователя, если второй — приходило «в базе нет
+	 * пользователя», и человек оставался с половиной применённых изменений.
+	 *
+	 * Теперь по каждой базе собирается ОДНА команда со всеми изменениями сразу: и
+	 * переименование, и реквизиты, и роли. Порядок внутри одной команды — забота агента,
+	 * а не гонка между командами.
+	 *
+	 * ПЕРЕИМЕНОВАНИЕ КАСАЕТСЯ ТОЛЬКО СВОЕЙ БАЗЫ. В других базах это отдельные пользователи
+	 * с прежним именем: адресовать их новым именем значит потерять их — ровно та ошибка,
+	 * из-за которой появился этот комментарий.
+	 *
+	 * В БАЗУ, ГДЕ ЧЕЛОВЕКА НЕТ, команда не уходит вовсе: реестр знает, где он заведён, и
+	 * посылать изменение туда, где менять некого, — гарантированный отказ.
+	 */
 	const save = useMutation({
 		mutationFn: async () => {
-			const results = [];
-			// Реквизиты пишутся только в ТЕКУЩУЮ базу: карточка про пару «человек + база».
+			const known = new Set(occ.map((o) => o.baseKey.toLowerCase()));
+			/** База → что в ней изменить. Одна запись — одна команда. */
+			const plan = new Map<string, Record<string, unknown>>();
+
 			if (dirtyProfile && baseKey) {
-				const r = await enqueue(translate("onecUserUpdate"), `${userName} — ${baseKey}`, [baseKey], {
+				plan.set(baseKey, {
 					name: userName,
-					// Имя входа меняется ТОЛЬКО явно: пустое или прежнее значение поля не
-					// шлём вовсе, иначе любая правка полного имени выглядела бы как
-					// переименование.
+					// Имя входа меняется ТОЛЬКО явно: прежнее значение поля не шлём вовсе,
+					// иначе правка полного имени выглядела бы как переименование.
 					...(renameTo ? { newName: renameTo } : {}),
 					...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
 					...(form.password ? { password: form.password } : {}),
 					disabled: form.disabled,
 					showInList: form.showInList,
 				});
+			}
+			for (const [base, { add, remove }] of changedByBase) {
+				const entry = plan.get(base) ?? { name: userName };
+				if (add.length) entry.addRoles = add;
+				if (remove.length) entry.removeRoles = remove;
+				plan.set(base, entry);
+			}
+
+			const skipped = [...plan.keys()].filter((b) => !known.has(b.toLowerCase()));
+			for (const b of skipped) plan.delete(b);
+			if (skipped.length) {
+				showToast(`${translate("onecUserNotInBases")}: ${skipped.join(", ")}`, "warning");
+			}
+
+			const results = [];
+			for (const [base, payload] of plan) {
+				const isHere = base.toLowerCase() === baseKey.toLowerCase();
+				const r = await enqueue(
+					isHere && renameTo ? translate("onecUserRename") : translate("onecUserUpdate"),
+					`${userName} — ${base}`, [base], payload,
+				);
 				// Переезд карточки на новое имя — только после того, как база подтвердит
 				// переименование: команда может и не пройти (имя занято, база недоступна),
 				// а карточка на несуществующем имени показывала бы пустоту.
-				if (renameTo) setRenaming({ opId: r.opId, to: renameTo });
+				if (isHere && renameTo) setRenaming({ opId: r.opId, to: renameTo });
 				results.push(r);
-			}
-			for (const [base, { add, remove }] of changedByBase) {
-				results.push(await enqueue(translate("onecRolesUpdate"), `${userName} — ${base}`, [base], {
-					name: userName,
-					...(add.length ? { addRoles: add } : {}),
-					...(remove.length ? { removeRoles: remove } : {}),
-				}));
 			}
 			return results;
 		},

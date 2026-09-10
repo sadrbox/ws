@@ -177,9 +177,35 @@ export class CommandQueue {
 			  WHERE agent_id = $1 AND state = 'queued' AND expires_at < now()`,
 			[agentId],
 		);
+		/*
+		 * ПО ОДНОЙ КОМАНДЕ НА БАЗУ ЗА РАЗ.
+		 *
+		 * Команды одной базы не независимы: переименовать пользователя и тут же выдать ему
+		 * роли — это две операции над ОДНИМ объектом, и порядок здесь не деталь. Агент
+		 * выполняет полученное параллельно (max_parallel), поэтому выданные вместе команды
+		 * шли гонкой: роли ложились на старое имя или приходило «в базе нет пользователя».
+		 * Вдобавок два COM-соединения к одной базе занимают два сеанса и две лицензии там,
+		 * где хватает одного.
+		 *
+		 * Поэтому выдаём по одной команде на базу и не выдаём следующую, пока предыдущая по
+		 * этой базе не завершилась. Команды кластера (base_key IS NULL) друг другу не
+		 * мешают — у каждой своя «партиция», и они по-прежнему уходят пачкой.
+		 */
 		const r = await this.db.query<CommandRow>(
 			`UPDATE commands SET state = 'dispatched', dispatched_at = now()
-			  WHERE id IN (SELECT id FROM commands WHERE agent_id = $1 AND state = 'queued' ORDER BY created_at LIMIT 20)
+			  WHERE id IN (
+			    SELECT id FROM (
+			      SELECT c.id,
+			             row_number() OVER (PARTITION BY COALESCE(c.base_key, c.id) ORDER BY c.created_at) AS rn
+			        FROM commands c
+			       WHERE c.agent_id = $1 AND c.state = 'queued'
+			         AND (c.base_key IS NULL OR NOT EXISTS (
+			               SELECT 1 FROM commands d
+			                WHERE d.agent_id = c.agent_id AND d.state = 'dispatched'
+			                  AND d.base_key = c.base_key))
+			    ) t WHERE t.rn = 1
+			    LIMIT 20
+			  )
 			  RETURNING *`,
 			[agentId],
 		);
@@ -236,7 +262,12 @@ export class CommandQueue {
 				res.onecHttpStatus ?? null],
 		);
 		const row = r.rows[0] ?? null;
-		if (row) this.bell.emit("result:" + row.id);
+		if (row) {
+			this.bell.emit("result:" + row.id);
+			// База освободилась — будим опрос агента, чтобы следующая команда по ней ушла
+			// сразу, а не через цикл long-poll: последовательность не должна стоить времени.
+			if (row.base_key) this.bell.emit(agentId);
+		}
 		return row;
 	}
 
