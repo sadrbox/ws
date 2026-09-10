@@ -17,7 +17,7 @@ export const TableHeader = memo(() => {
     columns, rows, componentName,
     sorting: { sort, onSortChange },
     states: { setSelectedRows, setIsAllSelectedMode, setExcludedRows },
-    isLoading, canSelect,
+    isLoading, canSelect, groupSelection,
   } = useTableContext();
   // Значения выделения — из волатильного контекста (чекбокс «выбрать все»).
   const { selectedRows, isAllSelectedMode, excludedRows } = useTableVolatile();
@@ -38,6 +38,12 @@ export const TableHeader = memo(() => {
     if (isAllSelectedMode) return excludedRows.size > 0;
     return selectedRows.size > 0 && !isAllSelected;
   }, [isAllSelectedMode, excludedRows, isAllSelected, selectedRows]);
+
+  // В групповой таблице «отметить всё» — это «выдать/снять всё во всех вложенных
+  // строках»: своих отметок у неё нет (см. groupSelection).
+  const groupToggleAll = useCallback(() => {
+    groupSelection?.toggleAll(!groupSelection.all);
+  }, [groupSelection]);
 
   const toggleAll = useCallback(() => {
     if (isAllSelected || isIndeterminate) {
@@ -65,9 +71,9 @@ export const TableHeader = memo(() => {
   const checkboxRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (checkboxRef.current) {
-      checkboxRef.current.indeterminate = isIndeterminate;
+      checkboxRef.current.indeterminate = groupSelection ? groupSelection.some : isIndeterminate;
     }
-  }, [isIndeterminate]);
+  }, [isIndeterminate, groupSelection]);
 
   // ── Column Resize ──────────────────────────────────────────────────────
   const { actions } = useTableContext();
@@ -144,8 +150,8 @@ export const TableHeader = memo(() => {
               <input
                 ref={checkboxRef}
                 type="checkbox"
-                checked={isAllSelected}
-                onChange={toggleAll}
+                checked={groupSelection ? groupSelection.all : isAllSelected}
+                onChange={groupSelection ? groupToggleAll : toggleAll}
                 disabled={isLoading || rows.length === 0 || !canSelect}
               />
             </div>

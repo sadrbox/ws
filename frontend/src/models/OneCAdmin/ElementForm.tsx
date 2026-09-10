@@ -38,6 +38,7 @@ import {
 	fetchBases, fetchUserOccurrences, runBatch, type BatchType, type OnecBase,
 } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
+import { useOpenOnecBase } from "src/models/OneCBases";
 import { QueryError, isApplicable, publishLabel } from "./shared";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
@@ -68,6 +69,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 	const elementName = asText(row.name);
 
 	const qc = useQueryClient();
+	const openBase = useOpenOnecBase();
 	const [dialog, setDialog] = useState<Op | null>(null);
 	const [picked, setPicked] = useState<string[]>(() => {
 		const scope = asText((paneProps.data as TDataItem | undefined)?.scopeBase);
@@ -289,6 +291,8 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 									selectable: true,
 									onSelectionChange: (sel: Set<number>, all: TDataItem[]) =>
 										setPicked(all.filter((r) => sel.has(Number(r.id))).map((r) => String(r.baseKey))),
+									// Строка — база: двойной щелчок открывает её карточку.
+									onRowClick: (r) => openBase(asText(r.baseKey)),
 									extraButtons: (
 										<>
 											<Button variant="secondary" disabled={!picked.length} onClick={() => setDialog("create")}>

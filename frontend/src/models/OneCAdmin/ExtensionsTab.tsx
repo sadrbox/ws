@@ -35,6 +35,7 @@ import {
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { CapabilityGuard, QueryError, isApplicable, useBaseContentCheck } from "./shared";
+import { useOpenOnecBase } from "src/models/OneCBases";
 import styles from "./OneCAdmin.module.scss";
 
 const summaryColumns = (): TColumn[] => ([
@@ -60,6 +61,7 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 
 export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatchStarted }) => {
 	const qc = useQueryClient();
+	const openBase = useOpenOnecBase();
 
 	const [pickedExt, setPickedExt] = useState<string[]>([]);
 	const [pickedBases, setPickedBases] = useState<string[]>([]);
@@ -221,6 +223,8 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 								selectable: true,
 								onSelectionChange: (sel, all) =>
 									setPickedBases(all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey))),
+								// Строка — база: двойной щелчок открывает её карточку.
+								onRowClick: (r) => openBase(asText(r.baseKey)),
 								extraButtons: (
 									<>
 										<Button variant="primary" disabled={!missing.length}

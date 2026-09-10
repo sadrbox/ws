@@ -11,7 +11,8 @@
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
 import { FC, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
@@ -30,7 +31,7 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { fetchSessions, refreshBases, type IbExtension, type IbUser } from "src/services/onec/api";
+import { fetchSessions, refreshBases, type IbExtension, type IbUser, type OnecBase } from "src/services/onec/api";
 import { QueryError, publishLabel, useBaseContentCheck } from "src/models/OneCAdmin/shared";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
@@ -309,6 +310,33 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	);
 };
 OneCBasesForm.displayName = "OneCBasesForm";
+
+/**
+ * Открыть карточку «База 1С» отдельным пейном.
+ *
+ * ЗАЧЕМ ХУК. Строка таблицы баз встречается на пяти экранах, и по двойному щелчку из неё
+ * должна открываться карточка ЕЁ типа — базы, а не того, ради чего таблицу показали.
+ * Реквизиты берём из уже загруженного реестра: карточка ждёт строку целиком, а на руках
+ * у вызывающего часто только ключ.
+ */
+export function useOpenOnecBase() {
+	const { addPane } = useAppContext().windows;
+	const qc = useQueryClient();
+	return (base: string | TDataItem) => {
+		const key = typeof base === "string" ? base : asText(base.baseKey);
+		if (!key) return;
+		const cached = qc.getQueryData<{ items?: OnecBase[] }>(["onec", "bases"])?.items ?? [];
+		const found = cached.find((b) => b.key.toLowerCase() === key.toLowerCase());
+		const row: TDataItem = found
+			? ({
+				baseKey: found.key, name: found.name, status: found.status, serverName: found.serverName,
+				onecVersion: found.onecVersion, extensionsCount: found.extensionsCount,
+				published: found.published, lastSeenAt: found.lastSeenAt, infobaseId: found.infobaseId,
+			} as unknown as TDataItem)
+			: (typeof base === "string" ? ({ baseKey: key } as unknown as TDataItem) : base);
+		addPane({ label: `${translate("onecBase")}: ${key}`, component: OneCBasesForm as never, data: row });
+	};
+}
 
 /** Вкладки предпросмотра в split-виде — те же, что и в форме. */
 const PreviewTabs: FC<{ row: TDataItem }> = ({ row }) => <>{useBaseTabs(row)[0].component}</>;

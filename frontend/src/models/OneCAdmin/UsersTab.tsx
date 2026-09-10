@@ -32,6 +32,7 @@ import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
+import { useOpenOnecBase } from "src/models/OneCBases";
 import ProgressTab from "./ProgressTab";
 import { useBatchWatch } from "./progress";
 import styles from "./OneCAdmin.module.scss";
@@ -58,6 +59,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 	const [pickedBases, setPickedBases] = useState<string[]>([]);
 
 	const openCard = useOpenBaseUser();
+	const openBase = useOpenOnecBase();
 	// Слежение за командами общее для экрана и карточки — см. useBatchWatch.
 	const watch = useBatchWatch();
 
@@ -151,9 +153,11 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			onSelectionChange: (sel, all) => setPickedBases(
 				all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey)).filter(Boolean),
 			),
-			// Одиночный щелчок — связанный список справа. Двойной — карточка пары.
+			// Одиночный щелчок — связанный список справа. Двойной — карточка БАЗЫ:
+			// строка таблицы баз открывает элемент своего типа, а не то, ради чего
+			// таблицу показали рядом.
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
-			onRowClick: (r) => openCard(activeUser || "", asText(r.baseKey)),
+			onRowClick: (r) => openBase(asText(r.baseKey)),
 		})} />
 	);
 

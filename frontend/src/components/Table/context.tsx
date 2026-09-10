@@ -107,6 +107,12 @@ export interface TableContextProps {
   onToggleExpand?: (row: TDataItem) => void;
   /** Активной строки в этой таблице нет: щелчок не выделяет строку, подсветки нет. */
   disableActiveRow?: boolean;
+  /**
+   * Отметки ГРУППОВОЙ таблицы (childRows): их состояние живёт в данных, а не в
+   * selectedRows таблицы, поэтому и заголовочный чекбокс считается отдельно.
+   * `null` — таблица не групповая, работает обычный «отметить всё».
+   */
+  groupSelection?: { all: boolean; some: boolean; toggleAll: (next: boolean) => void } | null;
 
   // ТОЛЬКО сеттеры (стабильная идентичность). Сами ЗНАЧЕНИЯ выделения/навигации
   // вынесены в отдельный TableVolatileContext — иначе смена activeCell на КАЖДОЕ

@@ -41,6 +41,7 @@ import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
 import { QueryError } from "./shared";
+import { useOpenOnecBase } from "src/models/OneCBases";
 import { attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps } from "./progress";
 
 const rightsColumns = (): TColumn[] => ([
@@ -73,10 +74,13 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const [userName, setUserName] = useState(asText(row.userName) || asText(row.name));
 	const qc = useQueryClient();
 	const { addPane, requestClose, updatePaneLabel } = useAppContext().windows;
+	const openOnecBase = useOpenOnecBase();
 
 	const [baseKey, setBaseKey] = useState(asText(row.baseKey));
 	const [draft, setDraft] = useState<Draft>(new Map());
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
+	/** Строка вкладки «Базы», выбранная одиночным щелчком: цель «Открыть в другой базе». */
+	const [activeOccurrence, setActiveOccurrence] = useState("");
 	const [form, setForm] = useState({ name: "", fullName: "", password: "", disabled: false, showInList: true });
 	/** Переименование, поставленное в очередь: ждём его результата, чтобы переехать. */
 	const [renaming, setRenaming] = useState<{ opId: string; to: string } | null>(null);
@@ -524,8 +528,20 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							isLoading: occurrences.isLoading,
 							onReload: () => void occurrences.refetch(),
 							reloadTitle: translate("onecReloadCached"),
-							// Двойной щелчок — карточка того же человека в другой базе.
-							onRowClick: openBase,
+							// Строка — база: двойной щелчок открывает карточку БАЗЫ, как и везде.
+							// Тот же человек в другой базе открывается кнопкой: это другой жест
+							// и другой объект.
+							onRowClick: (r) => openOnecBase(asText(r.baseKey)),
+							onActiveRowChange: (r) => setActiveOccurrence(r ? asText(r.baseKey) : ""),
+							extraButtons: (
+								<Button variant="secondary" disabled={!activeOccurrence}
+									title={activeOccurrence
+										? `${translate("onecBaseUserCard")}: ${userName} — ${activeOccurrence}`
+										: translate("onecPickBaseFirst")}
+									onClick={() => openBase({ baseKey: activeOccurrence })}>
+									<Icon name="open" /> {translate("onecOpenInOtherBase")}
+								</Button>
+							),
 						})} />
 					),
 				},

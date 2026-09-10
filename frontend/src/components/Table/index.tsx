@@ -567,6 +567,37 @@ const Table: FC<TableProps> = memo((props) => {
     [actions]
   );
 
+  /**
+   * Отметки групповой таблицы — по её ДАННЫМ, а не по selectedRows.
+   *
+   * У группы отметка означает «отмечены все вложенные» (см. TableBodyRow), поэтому и
+   * заголовочный чекбокс обязан считать так же — иначе он навсегда остаётся неактивным:
+   * выбирать в обычном смысле в такой таблице нечего.
+   */
+  const groupSelection = useMemo(() => {
+    if (!childRows || !onChildToggle) return null;
+    let total = 0;
+    let selected = 0;
+    for (const row of rows) {
+      for (const child of childRows(row)) {
+        total += 1;
+        if (child.__selected === true) selected += 1;
+      }
+    }
+    if (!total) return null;
+    return {
+      all: selected === total,
+      some: selected > 0 && selected < total,
+      toggleAll: (next: boolean) => {
+        for (const row of rows) {
+          for (const child of childRows(row)) {
+            if ((child.__selected === true) !== next) onChildToggle(row, child, next);
+          }
+        }
+      },
+    };
+  }, [childRows, onChildToggle, rows]);
+
   const contextValue = useMemo<TableContextProps>(
     () => ({
       variant, selectable, onSelectItem,
@@ -577,7 +608,9 @@ const Table: FC<TableProps> = memo((props) => {
       hasNextPage, isFetchingNextPage,
       inlineEditing, renderCell, onInlineAdd,
       canDelete: !!onDelete,
-      canSelect: !!onDelete || !!onSelectionChange,
+      // Групповая таблица тоже «умеет выбирать» — своими отметками (см. groupSelection).
+      canSelect: !!onDelete || !!onSelectionChange || !!groupSelection,
+      groupSelection,
       renderCellRef, inlineEditingRef, getCellMetaRef,
       scrollRef,
       expandedRowIds,
@@ -605,7 +638,7 @@ const Table: FC<TableProps> = memo((props) => {
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
       expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
-      disableActiveRow,
+      disableActiveRow, groupSelection,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,

@@ -122,6 +122,33 @@ describe("Table: групповая строка и вложенные", () => {
   });
 });
 
+describe("Table: чекбокс в шапке групповой таблицы", () => {
+  const headerBox = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>('thead input[type="checkbox"]')!;
+
+  it("активен и показывает промежуточное состояние, когда отмечена часть вложенных", () => {
+    // Управление отметками должно быть настоящим: без обработчика чекбоксы группы
+    // декоративны, и заголовочный правильно остаётся заблокированным.
+    const { container } = renderTable({ onChildToggle: () => {} });
+    const box = headerBox(container);
+    // Раньше он был навсегда заблокирован: выбирать «строки» в такой таблице нечего,
+    // и таблица считала, что выбор ей не нужен вовсе.
+    expect(box.disabled).toBe(false);
+    expect(box.checked).toBe(false);
+    expect(box.indeterminate).toBe(true);
+  });
+
+  it("щелчок доводит до общего состояния все вложенные строки всех групп", () => {
+    const onChildToggle = vi.fn<(parent: TDataItem, child: TDataItem, next: boolean) => void>();
+    const { container } = renderTable({ onChildToggle });
+    fireEvent.click(headerBox(container));
+    // Трогаем только те строки, состояние которых отличается от нового.
+    expect(onChildToggle).toHaveBeenCalledTimes(1);
+    expect(onChildToggle.mock.calls[0][1].uuid).toBe("role-a|BASE2");
+    expect(onChildToggle.mock.calls[0][2]).toBe(true);
+  });
+});
+
 describe("Table: строка-заголовок группы не занимает чужое имя класса", () => {
   it("класс группы не совпадает с общим хелпером GroupRow", () => {
     const { container } = renderTable();
