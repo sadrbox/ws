@@ -16,6 +16,7 @@ import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { translate } from "src/i18";
@@ -27,11 +28,12 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { fetchBaseExtensions, fetchBaseUsers, fetchSessions } from "src/services/onec/api";
-import { QueryError, publishLabel } from "src/models/OneCAdmin/shared";
+import { fetchBaseExtensions, fetchSessions, type IbUser } from "src/services/onec/api";
+import { QueryError, publishLabel, useBaseUsersCheck } from "src/models/OneCAdmin/shared";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
+import BaseCredentialsTab from "./BaseCredentials";
 import columnsJson from "./columns.json";
 
 const ENDPOINT = "onec-bases";
@@ -98,7 +100,6 @@ function useBaseSessions(infobaseId: string, enabled: boolean) {
 const useBaseTabs = (row: TDataItem) => {
 	const baseKey = asText(row.baseKey);
 	const [loadExt, setLoadExt] = useState(false);
-	const [loadUsers, setLoadUsers] = useState(false);
 	// Из карточки базы элемент открывается В КОНТЕКСТЕ ЭТОЙ БАЗЫ: она сразу отмечена,
 	// роли и реквизиты взяты из неё.
 	// Пользователь базы — своя карточка пары «человек + база»: права у него в каждой
@@ -107,9 +108,25 @@ const useBaseTabs = (row: TDataItem) => {
 	const openExt = useOpenElement("extension");
 	const [loadSessions, setLoadSessions] = useState(false);
 
+	/**
+	 * Пользователи базы читаются ТЕМ ЖЕ механизмом, что и на вкладке «Пользователи баз»
+	 * (см. useBaseUsersCheck): операция видна в «Прогрессе запросов и команд», её итог
+	 * приходит сообщением, а сводки реестра после неё перечитываются. Раньше здесь был
+	 * свой запрос, и одна и та же кнопка на двух экранах делала разное.
+	 *
+	 * Запрос НЕ включён (`enabled: false`): он существует только ради кэша — проверка
+	 * кладёт в него прочитанное, а сам он в 1С не ходит никогда.
+	 */
+	const usersCheck = useBaseUsersCheck();
+
 	// enabled требует ключа базы: без него запрос уходил бы в `/bases//extensions`.
 	const ext = useQuery({ queryKey: ["onec", "base-ext", baseKey], queryFn: () => fetchBaseExtensions(baseKey), enabled: loadExt && !!baseKey, staleTime: 0 });
-	const users = useQuery({ queryKey: ["onec", "base-users", baseKey], queryFn: () => fetchBaseUsers(baseKey), enabled: loadUsers && !!baseKey, staleTime: 0 });
+	const users = useQuery({
+		queryKey: ["onec", "base-users", baseKey],
+		queryFn: (): Promise<{ items: IbUser[] }> => Promise.resolve({ items: [] }),
+		enabled: false,
+		staleTime: Infinity,
+	});
 
 	const [extCols, setExtCols] = useState<TColumn[]>(() => getModelColumns(extColumns(), "OneCBases_ext"));
 	const [userCols, setUserCols] = useState<TColumn[]>(() => getModelColumns(userColumns(), "OneCBases_users"));
@@ -156,18 +173,29 @@ const useBaseTabs = (row: TDataItem) => {
 		{
 			id: "users", label: translate("onecTabUsers"),
 			component: (
-				<>
-				<QueryError error={users.error} />
 				<Table {...buildStaticTableProps({
 					componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
 					onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
 					sorting: userView.sorting, search: userView.search,
-					isLoading: users.isLoading || users.isFetching,
-					onReload: () => (loadUsers ? void users.refetch() : setLoadUsers(true)),
-					extraButtons: loadUsers ? undefined : <Button variant="secondary" onClick={() => setLoadUsers(true)}>{translate("onecUsersCheck")}</Button>,
+					isLoading: usersCheck.checking,
+					// «Обновить» здесь — то же чтение у 1С: другого источника у таблицы нет.
+					onReload: () => void usersCheck.run([baseKey]),
+					reloadTitle: translate("onecUsersCheck"),
+					extraButtons: (
+						<Button variant="secondary" disabled={!baseKey || usersCheck.checking}
+							title={baseKey ? `${translate("onecUsersCheck")}: ${baseKey}` : translate("onecPickBaseFirst")}
+							onClick={() => void usersCheck.run([baseKey])}>
+							<Icon name="reload" /> {translate("onecUsersCheck")}
+						</Button>
+					),
 				})} />
-				</>
 			),
+		},
+		{
+			// Доступ — отдельной вкладкой: это НАСТРОЙКА базы, а не её состояние, и
+			// смешивать её со списками пользователей и расширений нельзя.
+			id: "access", label: translate("onecTabAccess"),
+			component: <BaseCredentialsTab baseKey={baseKey} />,
 		},
 		{
 			id: "sessions", label: translate("onecTabSessions"),

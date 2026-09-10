@@ -14,27 +14,26 @@
  * КАРКАС ЖЁСТКИЙ: полоса режима, тело из двух колонок, полоса состояния. Прокручиваются
  * только таблицы, поэтому появление сообщения ничего не сдвигает.
  */
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Tabs from "src/components/Tabs";
 import { Button } from "src/components/Button";
-import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseUsers, fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary,
+	fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary,
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
-import { CapabilityGuard, QueryError, checkBases, isApplicable, useCheckParallel } from "./shared";
+import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import ProgressTab from "./ProgressTab";
-import { finishOp, progressOp, startOp, useBatchWatch } from "./progress";
+import { useBatchWatch } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 const baseColumns = (): TColumn[] => ([
@@ -55,9 +54,7 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 	const [primary, setPrimary] = useState<"bases" | "users">("bases");
 	const [activeBase, setActiveBase] = useState("");
 	const [activeUser, setActiveUser] = useState("");
-	const [checking, setChecking] = useState(false);
 
-	const parallel = useCheckParallel();
 	const openCard = useOpenBaseUser();
 	// Слежение за командами общее для экрана и карточки — см. useBatchWatch.
 	const watch = useBatchWatch();
@@ -126,30 +123,9 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 	}, [primary, summary.data, baseUsers.data]);
 	const userView = useStaticTableView(userRows, { name: "asc" });
 
-	/** Прочитать содержимое базы у самой 1С: единственная команда этого экрана. */
-	const recheck = useCallback(async (keys: string[]) => {
-		if (!keys.length) return;
-		setChecking(true);
-		const op = startOp({
-			kind: "read", title: translate("onecUsersCheck"),
-			target: keys.length === 1 ? keys[0] : `${translate("onecBases")}: ${keys.length}`,
-			total: keys.length,
-			// Читаем содержимое этих баз — карточки их пользователей на это время не правятся.
-			scope: { bases: keys },
-		});
-		const r = await checkBases(keys, fetchBaseUsers, parallel, (done, failed) => progressOp(op, done, failed));
-		finishOp(op, {
-			failed: r.failed.length,
-			note: r.failed.length ? `${r.failed[0].baseKey}: ${r.failed[0].message}` : "",
-		});
-		setChecking(false);
-		showToast(
-			r.failed.length
-				? `${translate("onecChecked")}: ${r.ok}/${keys.length}. ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
-				: `${translate("onecChecked")}: ${r.ok}`,
-			r.failed.length ? "warning" : "success",
-		);
-	}, [parallel]);
+	// Проверка содержимого базы — общий механизм (см. useBaseUsersCheck): та же кнопка
+	// в карточке базы обязана делать ровно то же самое.
+	const check = useBaseUsersCheck();
 
 	// ── Таблицы ─────────────────────────────────────────────────────────────
 	const basesTable = (
@@ -163,9 +139,9 @@ export const UsersTab: FC<{ onBatchStarted: (id: string) => void }> = () => {
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
 			onRowClick: (r) => openCard(activeUser || "", asText(r.baseKey)),
 			extraButtons: (
-				<Button variant="secondary" disabled={!activeBase || checking}
+				<Button variant="secondary" disabled={!activeBase || check.checking}
 					title={activeBase ? `${translate("onecUsersCheck")}: ${activeBase}` : translate("onecPickBaseFirst")}
-					onClick={() => void recheck([activeBase])}>
+					onClick={() => void check.run([activeBase])}>
 					<Icon name="reload" /> {translate("onecUsersCheck")}
 				</Button>
 			),

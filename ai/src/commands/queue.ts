@@ -64,14 +64,36 @@ export type WireResult = {
 	onecHttpStatus?: number;
 };
 
+/**
+ * Подстановка учётных данных базы в момент ВЫДАЧИ команды.
+ *
+ * Возвращает пары «ключ базы → учётная запись» для указанных баз одного агента.
+ * Зависимость передаётся снаружи: очередь не должна знать, что такое база и откуда
+ * берутся пароли, — ей достаточно уметь спросить.
+ */
+export type AuthResolver = (agentId: string, baseKeys: string[]) =>
+	Promise<Map<string, { user: string; password: string }>>;
+
 export class CommandQueue {
 	private readonly bell = new EventEmitter();
 	private readonly db: Db;
 	private closed = false;
+	private authResolver: AuthResolver | null = null;
 
 	constructor(db: Db) {
 		this.db = db;
 		this.bell.setMaxListeners(1000);
+	}
+
+	/**
+	 * Кто отвечает на вопрос «есть ли у этой базы своя учётная запись».
+	 *
+	 * Подставлять её при ПОСТАНОВКЕ команды нельзя: пароль осел бы в таблице команд, в
+	 * журнале и в панели, где показывается payload. При выдаче он живёт ровно один HTTP-ответ
+	 * агенту — тому, кто и так имеет доступ к базам.
+	 */
+	setAuthResolver(resolver: AuthResolver | null): void {
+		this.authResolver = resolver;
 	}
 
 	/**
@@ -161,13 +183,30 @@ export class CommandQueue {
 			  RETURNING *`,
 			[agentId],
 		);
-		return r.rows.map((c) => ({
+		const wire = r.rows.map((c) => ({
 			id: c.id,
 			...(c.request_id ? { requestId: c.request_id } : {}),
 			...(c.base_key ? { baseKey: c.base_key } : {}),
 			type: c.type,
 			payload: c.payload ?? {},
 		}));
+
+		// Учётные данные баз — только в выдаче, по одному запросу на пачку команд.
+		if (this.authResolver) {
+			const keys = [...new Set(wire.map((c) => c.baseKey).filter((k): k is string => !!k))];
+			if (keys.length) {
+				const auth = await this.authResolver(agentId, keys);
+				if (auth.size) {
+					for (const c of wire) {
+						const a = c.baseKey ? auth.get(c.baseKey) : undefined;
+						// `auth` в payload = «если свой администратор не прошёл, войди этим».
+						// Порядок попыток задаёт агент, см. контракт.
+						if (a) c.payload = { ...c.payload, auth: a };
+					}
+				}
+			}
+		}
+		return wire;
 	}
 
 	private waitForBell(agentId: string, ms: number): Promise<void> {

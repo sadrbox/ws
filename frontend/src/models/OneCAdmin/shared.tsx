@@ -6,7 +6,7 @@
  * нескольких вкладках — здесь она одна на всех, чтобы колонки и поведение не разошлись.
  */
 import { FC, useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
@@ -16,7 +16,9 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
-import { fetchBases, fetchAgents, hasCapability, type OnecBase } from "src/services/onec/api";
+import { showToast } from "src/components/UIToast";
+import { fetchBaseUsers, fetchBases, fetchAgents, hasCapability, type OnecBase } from "src/services/onec/api";
+import { finishOp, progressOp, startOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -177,6 +179,70 @@ export function useBaseTargets(opts: {
  * каждое обращение к базе занимает у 1С сеанс и лицензию, и держать это число в двух
  * местах — верный способ их развести.
  */
+/**
+ * «Проверить пользователей» — ОДИН механизм на все экраны.
+ *
+ * Кнопка есть и на вкладке «Пользователи баз», и в карточке базы, и раньше они делали
+ * разное: панель заводила операцию в реестре прогресса, показывала итог и перечитывала
+ * кэш реестра, а карточка просто включала свой запрос — без следа в «Прогрессе запросов
+ * и команд», без обновления сводок и без сообщения о том, чем всё кончилось. Одна и та же
+ * подпись обязана означать одно и то же действие, поэтому обе кнопки зовут этот хук.
+ *
+ * ЧТО ОН ДЕЛАЕТ. Читает содержимое базы у самой 1С (команда агенту), кладёт ответ в кэш
+ * запроса карточки — чтобы прочитанное показалось без второго обращения, — и обновляет
+ * сводки реестра, которые от этих данных считаются.
+ */
+export function useBaseUsersCheck(): {
+	run: (keys: string[]) => Promise<void>;
+	checking: boolean;
+} {
+	const qc = useQueryClient();
+	const parallel = useCheckParallel();
+	const [checking, setChecking] = useState(false);
+
+	const run = useCallback(async (keys: string[]) => {
+		const targets = keys.filter(Boolean);
+		if (!targets.length || checking) return;
+		setChecking(true);
+		const op = startOp({
+			kind: "read", title: translate("onecUsersCheck"),
+			target: targets.length === 1 ? targets[0] : `${translate("onecBases")}: ${targets.length}`,
+			total: targets.length,
+			// Читаем содержимое этих баз — карточки их пользователей на это время не правятся.
+			scope: { bases: targets },
+		});
+		const r = await checkBases(
+			targets,
+			async (baseKey) => {
+				const data = await fetchBaseUsers(baseKey);
+				// Прочитанное сразу становится данными карточки базы: иначе она сделала бы
+				// второй такой же вход в базу, чтобы показать то же самое.
+				qc.setQueryData(["onec", "base-users", baseKey], data);
+				return data;
+			},
+			parallel,
+			(done, failed) => progressOp(op, done, failed),
+		);
+		finishOp(op, {
+			failed: r.failed.length,
+			note: r.failed.length ? `${r.failed[0].baseKey}: ${r.failed[0].message}` : "",
+		});
+		setChecking(false);
+		showToast(
+			r.failed.length
+				? `${translate("onecChecked")}: ${r.ok}/${targets.length}. ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
+				: `${translate("onecChecked")}: ${r.ok}`,
+			r.failed.length ? "warning" : "success",
+		);
+		// Сводки считаются из того же кэша реестра, что наполняет чтение.
+		void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+		void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+		void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+	}, [qc, parallel, checking]);
+
+	return { run, checking };
+}
+
 export function useCheckParallel(): number {
 	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
 	return agents.data?.limits?.checkParallel ?? 4;

@@ -28,6 +28,7 @@ import type { CommandQueue, CommandRow } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { BatchService } from "../onec/batches.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
+import type { CredentialsStore } from "../onec/credentials.ts";
 import { type AdminCommandSpec, agentCanRun, buildAdminPayload, findAdminCommand } from "../commands/admin.ts";
 
 type Deps = {
@@ -40,6 +41,7 @@ type Deps = {
 	audit: Audit;
 	batches: BatchService;
 	registry: OnecRegistry;
+	credentials: CredentialsStore;
 };
 
 /** Итог админ-команды: HTTP-статус и тело в общем конверте {success, data|error}. */
@@ -49,7 +51,7 @@ const fail = (status: number, code: string, message: string): Outcome =>
 	({ status, body: { success: false, error: { code, message } } });
 
 export function onecRouter(deps: Deps) {
-	const { erp, cfg, log, agents, bases, queue, audit, batches, registry } = deps;
+	const { erp, cfg, log, agents, bases, queue, audit, batches, registry, credentials } = deps;
 	const r = Router();
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
 
@@ -681,6 +683,58 @@ export function onecRouter(deps: Deps) {
 		const p = await batches.progress(req.params.id);
 		if (!p) { send(res, fail(404, "NOT_FOUND", "Задание не найдено")); return; }
 		res.json({ success: true, data: p });
+	});
+
+	/**
+	 * УЧЁТНАЯ ЗАПИСЬ ОТДЕЛЬНОЙ БАЗЫ.
+	 *
+	 * Агент знает одного администратора баз на всех; там, где он не подходит, база получает
+	 * свою пару «пользователь + пароль». Пароль наружу не возвращается НИКОГДА — только
+	 * признак «задан»: показывать его в панели незачем, а хранить в истории браузера вредно.
+	 */
+	r.get("/bases/:key/credentials", async (req, res) => {
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		const view = await credentials.describe(base.id, base.key);
+		res.json({ success: true, data: view ?? { baseKey: base.key, user: "", hasPassword: false, updatedAt: null, updatedBy: null } });
+	});
+
+	r.put("/bases/:key/credentials", async (req, res) => {
+		const body = (req.body ?? {}) as { user?: unknown; password?: unknown };
+		const user = typeof body.user === "string" ? body.user.trim() : "";
+		if (!user) { send(res, fail(400, "BAD_REQUEST", "Имя пользователя обязательно")); return; }
+		if (user.length > 200) { send(res, fail(400, "BAD_REQUEST", "Имя пользователя слишком длинное")); return; }
+		// Пароль не прислали — оставляем прежний: имя правят чаще, и требовать пароль заново
+		// ради опечатки в имени значит однажды получить пустой пароль там, где он был.
+		const password = body.password === undefined ? undefined
+			: typeof body.password === "string" ? body.password : "";
+		if (password !== undefined && password.length > 200) {
+			send(res, fail(400, "BAD_REQUEST", "Пароль слишком длинный")); return;
+		}
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		const u = req.erpUser!;
+		await credentials.set(base.id, user, password, u.uuid);
+		// В журнал — факт и имя пользователя. Пароль в журнал не попадает никогда.
+		await audit.write({
+			event: "onec.base.credentials.set", agentId: null, userUuid: u.uuid,
+			details: { baseKey: base.key, user, passwordChanged: password !== undefined },
+		});
+		res.json({ success: true, data: await credentials.describe(base.id, base.key) });
+	});
+
+	r.delete("/bases/:key/credentials", async (req, res) => {
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		const u = req.erpUser!;
+		const removed = await credentials.clear(base.id);
+		if (removed) {
+			await audit.write({
+				event: "onec.base.credentials.clear", agentId: null, userUuid: u.uuid,
+				details: { baseKey: base.key },
+			});
+		}
+		res.json({ success: true, data: { removed } });
 	});
 
 	r.post("/bases/:key/lock", async (req, res) => {

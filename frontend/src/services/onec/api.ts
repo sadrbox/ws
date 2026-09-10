@@ -141,6 +141,30 @@ export const fetchBaseExtensions = (baseKey: string) =>
 	aiFetch<{ items: IbExtension[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`)
 		.then((d) => awaitCommand<{ items: IbExtension[] }>(d));
 
+// ── Учётная запись администратора отдельной базы ───────────────────────────
+// Агент знает одного администратора баз на всех; там, где он не подходит, база получает
+// свою пару. Пароль сервис наружу не отдаёт — только признак «задан».
+
+export type BaseCredentials = {
+	baseKey: string;
+	user: string;
+	hasPassword: boolean;
+	updatedAt: string | null;
+	updatedBy: string | null;
+};
+
+export const fetchBaseCredentials = (baseKey: string) =>
+	aiFetch<BaseCredentials>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/credentials`);
+
+/** Пароль без изменения — не передавать поле вовсе: пустая строка значит «стереть». */
+export const saveBaseCredentials = (baseKey: string, body: { user: string; password?: string }) =>
+	aiFetch<BaseCredentials>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/credentials`, {
+		method: "PUT", body: JSON.stringify(body),
+	});
+
+export const clearBaseCredentials = (baseKey: string) =>
+	aiFetch<{ removed: boolean }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/credentials`, { method: "DELETE" });
+
 /** Сводка «кто есть в скольких базах» — из кэша, без обращения к 1С. */
 export const fetchUserSummary = () =>
 	aiFetch<{ items: { name: string; bases: number; disabled: number; roles: string[] }[] }>("/v1/onec/users");

@@ -121,39 +121,60 @@ tr[data-loading] {
 .TableScrollContainer {
 	// Строка над активной: нижняя граница цветом выделения, чтобы рамка активной
 	// строки была замкнутой.
-tr:has(+ tr[data-active]) {
-	td {
-		border-bottom: 1px solid $color1;
+	tr:has(+ tr[data-active]) {
+		td {
+			border-bottom: 1px solid $color1;
+		}
 	}
-}
 
 	// Основная запись во вложенных таблицах — полужирная целиком, включая
 	// содержимое кастомных ячеек (LookupField и т.п.).
-tr[data-primary="true"] {
-	td .TableBodyCell {
-		font-weight: 700;
-
-		// Применяем bold ко всем потомкам, включая span/input/select
-		// и кастомные рендеры ячеек (LookupField и т.п.)
-		* {
+	tr[data-primary="true"] {
+		td .TableBodyCell {
 			font-weight: 700;
+
+			// Применяем bold ко всем потомкам, включая span/input/select
+			// и кастомные рендеры ячеек (LookupField и т.п.)
+			* {
+				font-weight: 700;
+			}
 		}
 	}
-}
 
 	/* Строка-заполнитель: занимает остаток высоты, чтобы tfoot прижимался к низу
-	   TableScrollWrapper, а обычные строки сохраняли свою высоту. */
-.TableFillerRow {
-	height: 100%;
+	TableScrollWrapper, а обычные строки сохраняли свою высоту. */
+	.TableFillerRow {
+		height: 100%;
 
-	td {
-		padding: 0;
-		border: 0;
-		background: transparent;
+		td {
+			padding: 0;
+			border: 0;
+			background: transparent;
 
-		&::after {
-			display: none;
+			&::after {
+				display: none;
+			}
 		}
 	}
-}
+
+	// ── Ячейка активной строки ────────────────────────────────────────────
+	// Оба правила намеренно вне слоёв: подсветка СТРОКИ лежит в слое
+	// table-cell-activeRow, а ячейка обязана быть видна поверх строки.
+	// Порядок здесь же: активная ячейка < поле в фокусе (жёлтый поверх синего).
+	tbody tr[data-active] td .TableBodyCell {
+		&.activeCell {
+			position: relative;
+			z-index: 6;
+			outline: none;
+			font-weight: 500;
+			background: color-mix(in srgb, #{$color1} 20%, transparent);
+			box-shadow: inset 0 0 0 1px color-mix(in srgb, #{$color1} 50%, transparent);
+		}
+
+		&:not(:has(input[type="checkbox"], button)):focus-within {
+			background: color-mix(in srgb, #{$warningText} 20%, transparent);
+			box-shadow: inset 0 0 0 1px color-mix(in srgb, #{$warningText} 60%, transparent);
+			outline: none;
+		}
+	}
 }

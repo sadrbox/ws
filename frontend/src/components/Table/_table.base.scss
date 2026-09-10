@@ -288,23 +288,9 @@
 								border: 0px transparent;
 							}
 
-							// ── activeCell: выбранная ячейка внутри активной строки ─────
-							&.activeCell {
-								position: relative;
-								z-index: 6;
-								outline: none;
-								font-weight: 500;
-								background: color-mix(in srgb, $color1 20%, transparent);
-								box-shadow: inset 0 0 0 1px color-mix(in srgb, $color1 50%, transparent);
-							}
-
-							// ── focus-within: поле получило фокус (ввод) ─────────────
-							// Приоритет выше .activeCell — желтый фон поверх синего.
-							&:not(:has(input[type="checkbox"], button)):focus-within {
-								background: color-mix(in srgb, #{$warningText} 20%, transparent);
-								box-shadow: inset 0 0 0 1px color-mix(in srgb, #{$warningText} 60%, transparent);
-								outline: none;
-							}
+							// activeCell и :focus-within живут ВНЕ слоёв (хвост Table.module.scss):
+							// подсветка активной строки лежит в слое table-cell-activeRow, который
+							// объявлен после table-base, и отсюда бы её не перебила.
 						}
 
 						border-bottom: 1px solid $color1;

@@ -22,6 +22,7 @@ import { onecRouter } from "./http/onecRouter.ts";
 import { BatchService } from "./onec/batches.ts";
 import { OnecRegistry } from "./onec/registry.ts";
 import { CommandQueue } from "./commands/queue.ts";
+import { CredentialsStore } from "./onec/credentials.ts";
 import { Audit } from "./audit/index.ts";
 import { agentRouter } from "./http/agentRouter.ts";
 import { adminRouter } from "./http/adminRouter.ts";
@@ -91,6 +92,15 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const onecRegistry = new OnecRegistry(db);
 	const baseRegistry = new BaseService(db);
 	const queue = new CommandQueue(db);
+	// Учётные записи отдельных баз: ключ шифрования выводится из секрета сервиса, своей
+	// переменной окружения не заводим — лишний секрет в .env это лишний способ потерять доступ.
+	const credentials = new CredentialsStore(db, cfg.JWT_SECRET);
+	// Пароль базы подставляется в команду ровно в момент выдачи агенту (см. queue.setAuthResolver).
+	queue.setAuthResolver(async (agentId, baseKeys) => {
+		const agent = await agents.findById(agentId);
+		if (!agent?.serverId) return new Map();
+		return credentials.forDispatch([agent.serverId], baseKeys);
+	});
 	const audit = new Audit(db, log);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;
 	// Чтение PDF выписок — прямой вызов модели с документом на входе (Claude или OpenAI по
@@ -147,7 +157,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
-		batches: new BatchService(db), registry: onecRegistry,
+		batches: new BatchService(db), registry: onecRegistry, credentials,
 	}));
 	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit, registry: onecRegistry }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));
