@@ -258,13 +258,32 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 /** Частный случай для читаемости на месте вызова. */
 export const useBaseUsersCheck = () => useBaseContentCheck("users");
 
+/**
+ * Состояние агентов — ОДИН запрос на всю панель, и он опрашивается.
+ *
+ * Состояние агента меняется без нашего участия: службу на сервере 1С останавливают,
+ * перезапускают, обновляют. Пока панель спрашивала о нём только при открытии вкладки,
+ * остановленный агент оставался «на связи» до перезагрузки страницы: человек жал команду
+ * и ждал ответа от того, кого уже нет. Раз в 15 секунд — достаточно, чтобы заметить, и
+ * дёшево: ответ идёт из базы сервиса, кластер он не трогает.
+ */
+export function useAgents() {
+	return useQuery({
+		queryKey: ["onec", "agents"],
+		queryFn: fetchAgents,
+		refetchInterval: 15_000,
+		refetchIntervalInBackground: false,
+		staleTime: 0,
+	});
+}
+
 export function useCheckParallel(): number {
-	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agents = useAgents();
 	return agents.data?.limits?.checkParallel ?? 4;
 }
 
 export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNode }> = ({ capability }) => {
-	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agents = useAgents();
 	if (agents.isLoading || hasCapability(agents.data?.items, capability)) return null;
 
 	const online = (agents.data?.items ?? []).filter((a) => a.role === "admin" && a.online && !a.disabled);

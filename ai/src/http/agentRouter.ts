@@ -252,14 +252,22 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// dispatched у агента, который их не получил.
 		let closed = false;
 		req.on("close", () => { closed = true; });
-		const commands = await queue.take(req.agent!.agentId, wait);
-		if (closed && commands.length) {
-			await db.query(`UPDATE commands SET state = 'queued', dispatched_at = NULL WHERE id = ANY($1) AND state = 'dispatched'`,
-				[commands.map((c) => c.id)]);
-			return;
+		// Пока опрос открыт, агент точно жив; закрылся и не переоткрылся — служба
+		// остановлена, и панель узнаёт об этом за секунды, а не через полторы минуты
+		// молчания heartbeat.
+		agents.notePollOpen(req.agent!.agentId);
+		try {
+			const commands = await queue.take(req.agent!.agentId, wait);
+			if (closed && commands.length) {
+				await db.query(`UPDATE commands SET state = 'queued', dispatched_at = NULL WHERE id = ANY($1) AND state = 'dispatched'`,
+					[commands.map((c) => c.id)]);
+				return;
+			}
+			if (commands.length) log.info({ agentId: req.agent!.agentId, count: commands.length }, "команды выданы агенту");
+			res.json({ commands });
+		} finally {
+			agents.notePollClosed(req.agent!.agentId);
 		}
-		if (commands.length) log.info({ agentId: req.agent!.agentId, count: commands.length }, "команды выданы агенту");
-		res.json({ commands });
 	});
 
 	r.post("/commands/:id/result", async (req, res) => {

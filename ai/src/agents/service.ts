@@ -5,9 +5,18 @@
 // (register) и шлёт heartbeat — по ним сервис знает состояние и доступность 1С.
 
 import { randomUUID } from "node:crypto";
+
 import type { Db } from "../db/pool.ts";
 import { newToken, sha256 } from "../auth/index.ts";
 import { DEFAULT_BASE_KEY } from "../bases/service.ts";
+
+/**
+ * Сколько ждать новый long-poll после закрытия прежнего, прежде чем считать агента
+ * остановленным. Живой агент переоткрывает опрос сразу же; пауза больше этого — либо
+ * остановленная служба, либо оборванная сеть, и в обоих случаях команду выполнить некому.
+ */
+const POLL_GAP_MS = 10_000;
+
 
 /**
  * Роль агента (E15 §3.1). Это НЕ уровень доступа внутри одной службы, а две разные службы на
@@ -62,6 +71,18 @@ const COLS = `id, organization_uuid, server_id, role, bases_synced_at, name, ver
 export class AgentService {
 	private readonly db: Db;
 	private readonly offlineAfterSecs: number;
+	/**
+	 * Открытые long-poll'ы агентов — самый быстрый признак «служба жива».
+	 *
+	 * Heartbeat приходит раз в десятки секунд, поэтому остановленная служба ещё полторы
+	 * минуты выглядит работающей: панель показывает «на связи», человек жмёт команду и
+	 * ждёт ответа от того, кого уже нет. А long-poll рвётся В ТОТ ЖЕ МИГ, когда служба
+	 * останавливается: сокет закрывается, и мы об этом узнаём сразу.
+	 *
+	 * Держим в памяти: это состояние живёт ровно столько, сколько живёт процесс сервиса,
+	 * и переживать перезапуск ему незачем — после него всё равно ждём первого обращения.
+	 */
+	private readonly polls = new Map<string, { open: number; closedAt: number }>();
 
 	private readonly orgBinding: "strict" | "any";
 	constructor(db: Db, offlineAfterSecs: number, orgBinding: "strict" | "any" = "strict") {
@@ -382,13 +403,48 @@ export class AgentService {
 		);
 	}
 
+	/** Агент открыл long-poll: пока он открыт, агент точно жив. */
+	notePollOpen(agentId: string): void {
+		const p = this.polls.get(agentId) ?? { open: 0, closedAt: 0 };
+		p.open += 1;
+		this.polls.set(agentId, p);
+	}
+
+	/** Long-poll закрылся — сам собой по таймауту или потому, что служба остановлена. */
+	notePollClosed(agentId: string): void {
+		const p = this.polls.get(agentId) ?? { open: 0, closedAt: 0 };
+		p.open = Math.max(0, p.open - 1);
+		p.closedAt = Date.now();
+		this.polls.set(agentId, p);
+	}
+
+	/**
+	 * Живой ли агент ПО ОПРОСУ КОМАНД.
+	 *
+	 * `true`  — опрос открыт прямо сейчас;
+	 * `false` — опрос закрылся и новый не пришёл дольше срока: работающий агент
+	 *           переоткрывает его немедленно, так что пауза означает остановку;
+	 * `null`  — про опрос ничего не известно (сервис перезапускали, агент только
+	 *           зарегистрировался) — тогда решает heartbeat, как раньше.
+	 */
+	private pollAlive(agentId: string): boolean | null {
+		const p = this.polls.get(agentId);
+		if (!p) return null;
+		if (p.open > 0) return true;
+		if (!p.closedAt) return null;
+		return Date.now() - p.closedAt < POLL_GAP_MS ? null : false;
+	}
+
 	async touch(id: string): Promise<void> {
 		await this.db.query(`UPDATE agents SET last_seen_at = now() WHERE id = $1`, [id]);
 	}
 
 	private view(r: AgentRow): AgentView {
 		const seen = r.last_seen_at ? r.last_seen_at.getTime() : 0;
-		const online = seen > 0 && Date.now() - seen < this.offlineAfterSecs * 1000 && !r.disabled_at;
+		const byHeartbeat = seen > 0 && Date.now() - seen < this.offlineAfterSecs * 1000;
+		// Опрос команд знает об остановке службы раньше heartbeat — и его ответ сильнее.
+		const byPoll = this.pollAlive(r.id);
+		const online = (byPoll ?? byHeartbeat) && !r.disabled_at;
 		return {
 			id: r.id,
 			organizationUuid: r.organization_uuid,

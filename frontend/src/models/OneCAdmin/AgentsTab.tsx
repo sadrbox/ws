@@ -11,7 +11,7 @@
  * а не «посмотреть ещё раз».
  */
 import { FC, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
@@ -25,9 +25,9 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
-import { createAgent, fetchAgents } from "src/services/onec/api";
+import { createAgent } from "src/services/onec/api";
 import { useOpenAgent } from "./AgentForm";
-import { QueryError } from "./shared";
+import { QueryError, useAgents } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
@@ -43,7 +43,7 @@ const columns = (): TColumn[] => ([
 
 export const AgentsTab: FC = () => {
 	const qc = useQueryClient();
-	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agents = useAgents();
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_agents"));
 	const [dialog, setDialog] = useState<null | "create">(null);
 	const [name, setName] = useState("");

@@ -11,7 +11,7 @@
  * не назначает. Здесь — состояние, способности, экземпляры и команды над ними.
  */
 import { FC, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
@@ -26,10 +26,10 @@ import { getFormatDate } from "src/utils/datetime";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import {
-	deleteAgent, fetchAgents, releaseAgentInstance, renameAgent, rotateAgentToken,
+	deleteAgent, releaseAgentInstance, renameAgent, rotateAgentToken,
 	setAgentDisabled, setAgentOwner,
 } from "src/services/onec/api";
-import { QueryError } from "./shared";
+import { QueryError, useAgents } from "./shared";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
@@ -49,7 +49,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<string>("");
 
-	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agents = useAgents();
 	const agent = useMemo(
 		() => (agents.data?.items ?? []).find((a) => a.id === agentId) ?? null,
 		[agents.data, agentId],

@@ -25,9 +25,9 @@ import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
-import { QueryError } from "src/models/OneCAdmin/shared";
+import { QueryError, useAgents } from "src/models/OneCAdmin/shared";
 import {
-	clearBaseCredentials, fetchAgents, fetchBaseCredentials, hasCapability, saveBaseCredentials,
+	clearBaseCredentials, fetchBaseCredentials, hasCapability, saveBaseCredentials,
 } from "src/services/onec/api";
 
 export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
@@ -37,7 +37,7 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 	// Учётная запись базы работает только с агентом, который умеет её применять: он
 	// объявляет это способностью «ib.auth». Сказать об этом надо ДО того, как человек
 	// заполнит поля и удивится отказу «проверьте служебного администратора».
-	const agents = useQuery({ queryKey: ["onec", "agents"], queryFn: fetchAgents });
+	const agents = useAgents();
 	const agentReady = hasCapability(agents.data?.items, "ib.auth");
 
 	const [user, setUser] = useState("");
