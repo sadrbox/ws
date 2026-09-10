@@ -61,14 +61,24 @@ const draftKey = (baseKey: string, role: string) => `${baseKey.toLowerCase()}|${
 
 export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const row = (paneProps.data ?? {}) as TDataItem;
-	const userName = asText(row.userName) || asText(row.name);
+	/**
+	 * ИМЯ ВХОДА — ИДЕНТИЧНОСТЬ КАРТОЧКИ, и она может смениться.
+	 *
+	 * Все запросы адресуются пользователю по имени, поэтому «текущее имя» и «имя,
+	 * введённое в поле» — разные вещи. Пока переименование не выполнено в базе, карточка
+	 * продолжает жить под прежним именем: команда может и не пройти (имя занято, база
+	 * недоступна), а карточка, переехавшая на несуществующее имя, показывала бы пустоту.
+	 */
+	const [userName, setUserName] = useState(asText(row.userName) || asText(row.name));
 	const qc = useQueryClient();
-	const { addPane, requestClose } = useAppContext().windows;
+	const { addPane, requestClose, updatePaneLabel } = useAppContext().windows;
 
 	const [baseKey, setBaseKey] = useState(asText(row.baseKey));
 	const [draft, setDraft] = useState<Draft>(new Map());
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
-	const [form, setForm] = useState({ fullName: "", password: "", disabled: false, showInList: true });
+	const [form, setForm] = useState({ name: "", fullName: "", password: "", disabled: false, showInList: true });
+	/** Переименование, поставленное в очередь: ждём его результата, чтобы переехать. */
+	const [renaming, setRenaming] = useState<{ opId: string; to: string } | null>(null);
 
 	// Где заведён и с какими ролями — из кэша реестра, без обращения к 1С.
 	const occurrences = useQuery({
@@ -130,8 +140,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 
 	// Реквизиты следуют за выбранной базой: в другой базе у человека своё полное имя.
 	useEffect(() => {
-		setForm({ fullName: "", password: "", disabled: here?.disabled ?? false, showInList: true });
-	}, [here]);
+		setForm({ name: userName, fullName: "", password: "", disabled: here?.disabled ?? false, showInList: true });
+	}, [here, userName]);
 
 	/**
 	 * База карточки всегда есть в списке — даже когда реестр про неё ещё не знает.
@@ -244,7 +254,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		return m;
 	}, [draft, occ]);
 
-	const dirtyProfile = !!form.fullName.trim() || !!form.password
+	/** Введённое имя отличается от текущего — значит, просят переименовать. */
+	const renameTo = form.name.trim() && form.name.trim() !== userName ? form.name.trim() : "";
+
+	const dirtyProfile = !!renameTo || !!form.fullName.trim() || !!form.password
 		|| form.disabled !== (here?.disabled ?? false);
 
 	/**
@@ -261,7 +274,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		try {
 			const r = await runBatch("IB_UPDATE_USER", bases, payload);
 			attachBatch(op, r.batchId, r.total, r.skipped.length ? `${translate("onecSkipped")}: ${r.skipped.length}` : "");
-			return r;
+			return { ...r, opId: op };
 		} catch (e) {
 			// Команда даже не встала в очередь: без этого запись осталась бы «выполняется»
 			// навсегда — задания, за которым следить, у неё нет.
@@ -275,13 +288,22 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			const results = [];
 			// Реквизиты пишутся только в ТЕКУЩУЮ базу: карточка про пару «человек + база».
 			if (dirtyProfile && baseKey) {
-				results.push(await enqueue(translate("onecUserUpdate"), `${userName} — ${baseKey}`, [baseKey], {
+				const r = await enqueue(translate("onecUserUpdate"), `${userName} — ${baseKey}`, [baseKey], {
 					name: userName,
+					// Имя входа меняется ТОЛЬКО явно: пустое или прежнее значение поля не
+					// шлём вовсе, иначе любая правка полного имени выглядела бы как
+					// переименование.
+					...(renameTo ? { newName: renameTo } : {}),
 					...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
 					...(form.password ? { password: form.password } : {}),
 					disabled: form.disabled,
 					showInList: form.showInList,
-				}));
+				});
+				// Переезд карточки на новое имя — только после того, как база подтвердит
+				// переименование: команда может и не пройти (имя занято, база недоступна),
+				// а карточка на несуществующем имени показывала бы пустоту.
+				if (renameTo) setRenaming({ opId: r.opId, to: renameTo });
+				results.push(r);
 			}
 			for (const [base, { add, remove }] of changedByBase) {
 				results.push(await enqueue(translate("onecRolesUpdate"), `${userName} — ${base}`, [base], {
@@ -339,6 +361,26 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		};
 	}, [paneProps.uniqId, refreshLive]);
 
+	/**
+	 * Итог переименования: команда прошла — карточка живёт под новым именем, не прошла —
+	 * остаётся под прежним, а причина видна во вкладке «Прогресс запросов и команд».
+	 */
+	useEffect(() => {
+		if (!renaming) return;
+		const op = ops.find((o) => o.id === renaming.opId);
+		if (!op || op.state === "running") return;
+		if (op.state === "done") {
+			setUserName(renaming.to);
+			if (paneProps.uniqId) {
+				updatePaneLabel(paneProps.uniqId, `${translate("onecBaseUserCard")}: ${renaming.to} — ${baseKey}`);
+			}
+			showToast(`${translate("onecUserRenamed")}: ${renaming.to}`, "success");
+			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
+		}
+		setRenaming(null);
+	}, [ops, renaming, paneProps.uniqId, updatePaneLabel, baseKey, qc]);
+
 	const openBase = useCallback((r: Partial<TDataItem>) => addPane({
 		label: `${translate("onecBaseUserCard")}: ${userName} — ${asText(r.baseKey)}`,
 		component: BaseUserForm as never,
@@ -391,7 +433,11 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							<FormArea title={translate("onecAreaUserData")}>
 								<GroupCol>
 									<GroupRow>
-										<Field name="buf_user" label={translate("onecUserName")} value={userName} disabled width="220px" onChange={() => {}} />
+										{/* Имя входа правится, как и прочее: в 1С это смена свойства
+										    «Имя» у того же пользователя, а не новый пользователь. */}
+										<Field name="buf_user" label={translate("onecUserName")} value={form.name} width="220px"
+											noAutofill disabled={locked}
+											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
 										<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="240px"
 											noAutofill disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
 											onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
@@ -410,6 +456,9 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 								</GroupCol>
 							</FormArea>
 
+							{renameTo && (
+								<Notice items={[{ type: "warning", text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }]} />
+							)}
 							{busy && (
 								<Notice items={[{
 									type: "info",
