@@ -31,7 +31,7 @@ import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
 import { refreshPublications, runBatch, type BatchType } from "src/services/onec/api";
 import { isApplicable, type OnecOperation } from "./shared";
-import { noteNotice } from "./notices";
+import { noteNotice } from "src/components/TechMessages/store";
 import { attachBatch, startOp, withOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 

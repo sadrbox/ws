@@ -283,7 +283,11 @@ export function onecRouter(deps: Deps) {
 			items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
 		} | null;
 		const items = Array.isArray(data?.items) ? data.items : [];
-		const report = publicationReport(items, data?.complete === true);
+		const evidence = {
+			source: typeof data?.source === "string" ? data.source : null,
+			lookedIn: Array.isArray(data?.lookedIn) ? data.lookedIn.length : 0,
+		};
+		const report = publicationReport(items, data?.complete === true, evidence);
 
 		// Отвечаем реестром, как и обновление баз: панели нужен готовый список, а не сырой
 		// ответ агента, у которого другая форма.
@@ -291,13 +295,9 @@ export function onecRouter(deps: Deps) {
 			success: true,
 			data: {
 				items: await bases.listAll(),
-				report: {
-					...report,
-					// Где искали — единственный способ отличить «не опубликовано» от
-					// «смотрели не в том каталоге», не заходя на сервер.
-					source: typeof data?.source === "string" ? data.source : null,
-					lookedIn: Array.isArray(data?.lookedIn) ? data.lookedIn.length : 0,
-				},
+				// Где искали — единственный способ отличить «не опубликовано» от
+				// «смотрели не в том каталоге», не заходя на сервер.
+				report: { ...report, ...evidence },
 			},
 		});
 	});

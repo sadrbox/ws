@@ -143,13 +143,32 @@ test("опубликована: явное true, либо адрес при ум
 	assert.equal(isPublished({ key: "d" }), false);
 });
 
-test("разбор среза: пустой по публикациям срез не принимается", () => {
+test("разбор среза: «не нашёл» без доказательств просмотра не принимается", () => {
 	const all = [{ key: "a", published: false }, { key: "b", published: false }];
+	// Ни source, ни lookedIn — ровно та сборка агента, которая однажды объявила полным
+	// просмотр пустого каталога и «сняла» публикацию у ста десяти работающих баз.
 	const r = publicationReport(all, true);
 	assert.equal(r.total, 2);
 	assert.equal(r.published, 0);
 	assert.equal(r.complete, true);
-	// Полнота не спасает: нечего подтверждать полнотой.
+	assert.equal(r.evidence, false);
+	assert.equal(r.accepted, false);
+});
+
+test("разбор среза: «посмотрел везде и не нашёл» — это ответ, и он принимается", () => {
+	// Сервер, где действительно ничего не опубликовано, обязан иметь возможность это
+	// сказать. Отличает его от поломки одно: агент называет, ГДЕ смотрел.
+	const r = publicationReport(
+		[{ key: "a", published: false }], true,
+		{ source: "iis", lookedIn: 105 },
+	);
+	assert.equal(r.published, 0);
+	assert.equal(r.evidence, true);
+	assert.equal(r.accepted, true);
+});
+
+test("разбор среза: доказательства без обещания полноты не делают срез достоверным", () => {
+	const r = publicationReport([{ key: "a", published: false }], false, { source: "iis", lookedIn: 105 });
 	assert.equal(r.accepted, false);
 });
 

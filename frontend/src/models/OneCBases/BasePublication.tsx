@@ -28,7 +28,7 @@ import { getFormatDate } from "src/utils/datetime";
 import { runBatch, type BatchType } from "src/services/onec/api";
 import { publishLabel } from "src/models/OneCAdmin/shared";
 import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
-import { noteNotice, useNoticeScope } from "src/models/OneCAdmin/notices";
+import { noteNotice, useNoticeScope } from "src/components/TechMessages/store";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
 
 type Job = "publish" | "unpublish";
@@ -107,7 +107,7 @@ export const BasePublication: FC<{
 					onApply={() => run.mutate(confirm)}>
 					<div className={styles.ConfirmText}>
 						<div className={styles.ConfirmDetails}>{translate("onecBase")}: {baseKey}</div>
-						<Notice items={[{ type: "attention", text: translate(SPEC[confirm].warning) }]} />
+						<Notice inline items={[{ type: "attention", text: translate(SPEC[confirm].warning) }]} />
 					</div>
 				</Modal>
 			)}

@@ -211,7 +211,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 					<div className={styles.ConfirmText}>
 						<div className={styles.ConfirmDetails}>{translate("onecBase")}: {baseKey}</div>
 						{/* Текст плана — от агента: он точнее нашего пересказа. */}
-						<Notice items={[{ type: "attention", text: confirm.plan }]} />
+						<Notice inline items={[{ type: "attention", text: confirm.plan }]} />
 					</div>
 				</Modal>
 			)}

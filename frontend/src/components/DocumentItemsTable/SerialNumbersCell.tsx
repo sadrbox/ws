@@ -260,7 +260,7 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
     <Modal title={`${translate("serialNumbers")} — ${translate("quantity")}: ${quantity}`} onClose={onClose} onApply={saving || over ? undefined : () => void save()}>
       <div className={styles.ModalBody}>
         {/* Ошибки/подсказки — это состояние ФОРМЫ, поэтому Notice, а не тост. */}
-        <Notice items={notices} />
+        <Notice inline items={notices} />
 
         <div className={currentCount === quantity ? styles.CounterOk : styles.CounterBad}>
           {translate("serialSelected")}: {currentCount} / {quantity}

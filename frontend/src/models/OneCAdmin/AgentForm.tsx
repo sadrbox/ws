@@ -13,8 +13,6 @@
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
-import { NoticeScope } from "./notices";
-import NoticeBoard from "./NoticeBoard";
 import { withOp } from "./progress";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
@@ -120,15 +118,12 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
 	const { requestClose } = useAppContext().windows;
-	// Своя область сообщений: карточка открыта отдельным пейном и может быть единственным,
-	// что человек видит, — её сообщения обязаны быть видны в ней самой.
-	const scope = paneProps.uniqId ?? "agent-card";
 	const closeCard = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
 
 	return (
-		<NoticeScope.Provider value={scope}>
+		<>
 			<ModelForm
 				paneId={paneProps.uniqId}
 				// endpoint не передаём: у агентов нет эндпойнта ERP, а он нужен ModelForm
@@ -308,9 +303,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 					</div>
 				</Modal>
 			)}
-			{/* Полоса сообщений внизу пейна: место занято всегда — форма не дёргается. */}
-			<NoticeBoard compact scope={scope} />
-		</NoticeScope.Provider>
+		</>
 	);
 };
 AgentForm.displayName = "AgentForm";

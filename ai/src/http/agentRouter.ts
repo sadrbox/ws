@@ -349,8 +349,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			} | null;
 			const me = await agents.findById(req.agent!.agentId);
 			if (me?.serverId && Array.isArray(data?.items) && data.items.length) {
-				const report = publicationReport(data.items, data.complete === true);
-				const r = await bases.applyPublications(me.serverId, data.items, data.complete === true);
+				const evidence = { source: data.source ?? null, lookedIn: data.lookedIn?.length ?? 0 };
+				const report = publicationReport(data.items, data.complete === true, evidence);
+				const r = await bases.applyPublications(me.serverId, data.items, data.complete === true, evidence);
 				// Ответ, из которого не узнана ни одна база, — не «ничего не опубликовано», а
 				// разговор на разных языках. Молча проглатывать такое нельзя: реестр
 				// останется с прежним, а в логе будет видно, с чем разбираться.
@@ -358,7 +359,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 					log.warn({
 						agentId: req.agent!.agentId, items: report.total, matched: r.matched,
 						published: report.published, complete: report.complete,
-						source: data.source ?? null, lookedIn: data.lookedIn?.length ?? 0,
+						source: evidence.source, lookedIn: evidence.lookedIn,
 						sample: data.items[0]?.key,
 					}, !report.accepted
 						? "в срезе публикаций нет ни одной опубликованной базы — принимаем это за незнание, а не за факт"

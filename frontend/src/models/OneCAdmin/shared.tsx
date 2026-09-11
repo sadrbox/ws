@@ -15,7 +15,7 @@ import {
 	fetchBaseExtensions, fetchBaseUsers, fetchAgents, hasCapability, type OnecBase,
 } from "src/services/onec/api";
 import { finishOp, progressOp, startOp } from "./progress";
-import { useNoticeReport, useNoticeScope } from "./notices";
+import { useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import styles from "./OneCAdmin.module.scss";
 
 /**

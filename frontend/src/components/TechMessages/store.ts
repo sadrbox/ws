@@ -1,14 +1,16 @@
 /**
- * Доска сообщений панели: все `<Notice />` «Администрирования 1С» в одном месте.
+ * «Технические сообщения» — ВСЕ `<Notice />` приложения в одном месте.
  *
- * ЗАЧЕМ. Сообщение экрана — это `<Notice />`, и раньше каждая вкладка вставляла его НАД
- * своей таблицей. Появилось сообщение — таблица уехала вниз под курсором, потеряв
- * прокрутку; исчезло — уехала обратно. Там, где таблица занимает почти всю площадь, любое
- * такое сообщение ломает разметку ровно в тот момент, когда человек работает.
+ * ЗАЧЕМ. Сообщение формы — это `<Notice />`, и раньше каждая форма вставляла его прямо в
+ * свою разметку. Появилось сообщение — содержимое уехало вниз под курсором, потеряв
+ * прокрутку; исчезло — уехало обратно. Там, где основную площадь занимает таблица, любое
+ * такое сообщение ломает разметку ровно в тот момент, когда человек работает. А ещё его
+ * приходилось искать: в одной форме оно справа внизу, в другой над таблицей, в третьей
+ * между областями.
  *
- * РЕШЕНИЕ. Сообщения не рисуются на месте, а СООБЩАЮТСЯ сюда, и панель показывает их в
- * своей правой области — в слоте, который занимает место всегда. Разметка не двигается,
- * а сообщения не теряются: у доски есть история.
+ * РЕШЕНИЕ. Сообщения не рисуются на месте, а СООБЩАЮТСЯ сюда, и приложение показывает их
+ * в одной области — правой, сворачиваемой. Разметка форм не двигается никогда, место для
+ * сообщений всегда одно и то же, а сами они не теряются: у области есть история.
  *
  * АКТУАЛЬНОЕ И НАКОПЛЕННОЕ. У сообщения есть `key` — тот, кто его шлёт (запрос, экран,
  * операция). Пока источник сообщает одно и то же, запись одна: сто повторов одной ошибки
@@ -19,16 +21,15 @@
  * ПОЧЕМУ МОДУЛЬ, А НЕ КОНТЕКСТ — по той же причине, что и у реестра операций
  * (progress.ts): сообщения переживают размонтирование экрана, который их послал.
  */
-import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useSyncExternalStore } from "react";
 import type { NoticeItem, NoticeType } from "src/components/Notice";
 
-export type PanelNotice = {
+export type TechMessage = {
 	id: string;
 	/**
-	 * ОБЛАСТЬ, которой принадлежит сообщение: "panel" — сама панель, иначе идентификатор
-	 * пейна карточки. Карточка открывается отдельным пейном и может быть единственным,
-	 * что человек видит, — её сообщения обязаны быть видны в ней самой, а не только на
-	 * доске панели, до которой ещё надо добраться.
+	 * ОБЛАСТЬ, которой принадлежит сообщение, — идентификатор пейна. Нужна, чтобы
+	 * показывать сообщения ТЕКУЩЕЙ формы отдельно от чужих: у человека открыто до десятка
+	 * пейнов, и «не заполнено обязательное поле» из соседнего документа сбивает с толку.
 	 */
 	scope: string;
 	/** Источник: повторы с тем же ключом обновляют запись, а не плодят новые. */
@@ -47,25 +48,32 @@ export type PanelNotice = {
 /** Сколько записей держим: доска — не журнал; журнал команд живёт в «Заданиях». */
 const LIMIT = 50;
 
-/** Область самой панели: её доска видит всё, включая сообщения открытых карточек. */
-export const PANEL_SCOPE = "panel";
+/**
+ * Область «всё приложение»: сама область сообщений видит всё, что ей сообщили, а
+ * сообщения без пейна (общие, не привязанные к форме) живут под этим ключом.
+ */
+export const APP_SCOPE = "app";
 
 /**
- * Чья это область — знает окружение, а не каждый экран по отдельности.
+ * Кто сообщает — знает окружение, а не каждая форма по отдельности.
  *
- * Панель ничего не оборачивает (значение по умолчанию), карточка оборачивает себя своим
- * идентификатором пейна. Иначе `QueryError` в общем компоненте пришлось бы каждый раз
- * снабжать областью вручную — и однажды забыть.
+ * Пейн оборачивает своё содержимое собой: идентификатором (область) и заголовком
+ * (источник — «Реализация № 12», «Базы 1С»). Поэтому любой `<Notice />` внутри любой формы
+ * попадает в список подписанным, и не нужно ни одной правки на месте вызова: иначе
+ * подпись пришлось бы проставлять руками в полусотне форм — и однажды забыть.
  */
-export const NoticeScope = createContext<string>(PANEL_SCOPE);
-export const useNoticeScope = (): string => useContext(NoticeScope);
+export type NoticeOrigin = { scope: string; source: string };
+export const NoticeScope = createContext<NoticeOrigin>({ scope: APP_SCOPE, source: "" });
+export const useNoticeOrigin = (): NoticeOrigin => useContext(NoticeScope);
+/** Только область — там, где источник подставляют сами (общие компоненты). */
+export const useNoticeScope = (): string => useContext(NoticeScope).scope;
 
-let notices: PanelNotice[] = [];
+let notices: TechMessage[] = [];
 let seq = 0;
 const listeners = new Set<() => void>();
 const emit = () => { for (const l of listeners) l(); };
 
-const sameItems = (a: PanelNotice[], b: NoticeItem[]): boolean =>
+const sameItems = (a: TechMessage[], b: NoticeItem[]): boolean =>
 	a.length === b.length && a.every((n, i) => n.type === b[i].type && n.text === b[i].text);
 
 /**
@@ -97,7 +105,7 @@ export function reportNotices(scope: string, rawKey: string, source: string, ite
 
 	// Изменилось: прежние активные записи этого ключа — в историю, новые — активные.
 	const aged = notices.map((n) => (n.key === key && n.active ? { ...n, active: false } : n));
-	const fresh: PanelNotice[] = items.map((it) => ({
+	const fresh: TechMessage[] = items.map((it) => ({
 		id: `n${++seq}`, scope, key, type: it.type, text: it.text, source,
 		firstAt: now, lastAt: now, active: true,
 	}));
@@ -109,7 +117,7 @@ export function reportNotices(scope: string, rawKey: string, source: string, ite
  * Разовое сообщение: итог операции, отказ команды, результат проверки.
  * Активным не становится — это уже случившийся факт, ему место сразу в истории.
  */
-export function noteNotice(source: string, item: NoticeItem, scope = PANEL_SCOPE): void {
+export function noteNotice(source: string, item: NoticeItem, scope = APP_SCOPE): void {
 	const now = Date.now();
 	notices = [{
 		id: `n${++seq}`, scope, key: `once_${seq}`, type: item.type, text: item.text,
@@ -119,8 +127,8 @@ export function noteNotice(source: string, item: NoticeItem, scope = PANEL_SCOPE
 }
 
 /** Убрать историю. Актуальные записи остаются: они описывают то, что не так СЕЙЧАС. */
-export function clearNoticeHistory(scope = PANEL_SCOPE): void {
-	const next = notices.filter((n) => n.active || (scope !== PANEL_SCOPE && n.scope !== scope));
+export function clearNoticeHistory(scope = APP_SCOPE): void {
+	const next = notices.filter((n) => n.active || (scope !== APP_SCOPE && n.scope !== scope));
 	if (next.length === notices.length) return;
 	notices = next;
 	emit();
@@ -129,7 +137,7 @@ export function clearNoticeHistory(scope = PANEL_SCOPE): void {
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const snapshot = () => notices;
 
-const useAllNotices = (): PanelNotice[] => useSyncExternalStore(subscribe, snapshot, snapshot);
+const useAllNotices = (): TechMessage[] => useSyncExternalStore(subscribe, snapshot, snapshot);
 
 /**
  * Сообщения одной области.
@@ -138,10 +146,14 @@ const useAllNotices = (): PanelNotice[] => useSyncExternalStore(subscribe, snaps
  * идёт по тем же базам, и прятать её отказ от общего обзора значило бы делить правду на
  * части. Доска КАРТОЧКИ — только свои: чужие ошибки в чужой форме сбивают с толку.
  */
-export const useScopedNotices = (scope: string): PanelNotice[] => {
+export const useScopedNotices = (scope: string): TechMessage[] => {
 	const all = useAllNotices();
-	return scope === PANEL_SCOPE ? all : all.filter((n) => n.scope === scope);
+	return scope === APP_SCOPE ? all : all.filter((n) => n.scope === scope);
 };
+
+/** Сколько сообщений сейчас актуальны — для счётчика на свёрнутой области. */
+export const useActiveNoticeCount = (): number =>
+	useAllNotices().filter((n) => n.active).length;
 
 /**
  * Сообщать доске состояние экрана — вместо того чтобы рисовать `<Notice />` над таблицей.
@@ -168,3 +180,17 @@ export function useNoticeReport(scope: string, key: string, source: string, item
  */
 export const errorNotice = (error: unknown, unknownText = "?"): NoticeItem[] =>
 	error ? [{ type: "error", text: error instanceof Error ? error.message : unknownText }] : [];
+
+/**
+ * Сообщить содержимое одного `<Notice />` — с автоматическим ключом и подписью.
+ *
+ * Ключ берётся из `useId()`: он уникален для экземпляра компонента и переживает
+ * перерисовки, поэтому один и тот же `<Notice />` обновляет свою запись, а не плодит
+ * новые. Область и источник — из окружения (пейн подставляет себя), поэтому ни одному из
+ * полусотни мест вызова не пришлось ничего дописывать.
+ */
+export function useReportNotice(items: NoticeItem[] | undefined, sourceOverride?: string): void {
+	const id = useId();
+	const { scope, source } = useNoticeOrigin();
+	useNoticeReport(scope, id, sourceOverride || source || APP_SCOPE, items ?? []);
+}

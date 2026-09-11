@@ -563,16 +563,26 @@ body {
 	}
 }
 
+// Рабочее пространство — ряд из двух областей: пейны и «Технические сообщения».
+// Область сообщений сворачивается ШИРИНОЙ и остаётся в этом же ряду: накладка
+// (position: absolute) закрывала бы содержимое формы ровно там, где с ним работают.
+.Workspace {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
 .Panes {
 	position: relative;
 	z-index: 3;
 	border: 0px solid $color10;
 	// background-color: $color30;
 	overflow: hidden;
-	position: relative;
-	height: inherit;
-
-
+	// Пейны занимают всё, что осталось от области сообщений, и сжимаются, а не
+	// уезжают под неё: min-width: 0 обязателен, иначе флекс не даст им сузиться.
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 .PaneItem {

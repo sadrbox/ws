@@ -131,7 +131,7 @@ const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; inva
   return (
     <Modal title={translate("notes")} onClose={onClose} style={{ minWidth: 460, maxWidth: 620 }}>
       <div className={styles.Body}>
-        <Notice items={notices} />
+        <Notice inline items={notices} />
         {/* Ввод заметки — общими компонентами формы (FieldTextarea + Button),
             как во всех формах, а не сырыми textarea/button. */}
         <div className={styles.AddRow}>

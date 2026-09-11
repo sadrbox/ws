@@ -124,7 +124,7 @@ export const BaseUserCommands: FC<{
 						<FieldToggle name="buc_show" label={translate("onecShowInList")} value={showInList} onChange={setShowInList} />
 						{/* Роли — из ЭТОЙ базы: набор задаёт её конфигурация. */}
 						<RolesPicker value={roles} onChange={setRoles} baseKey={baseKey} disabled={busy} />
-						<Notice items={[{
+						<Notice inline items={[{
 							type: roles.length ? "info" : "warning",
 							text: roles.length ? translate("onecUserCreateHere") : translate("onecUserNoRolesWarning"),
 						}]} />
@@ -140,7 +140,7 @@ export const BaseUserCommands: FC<{
 							{translate("onecBase")}: {baseKey}<br />
 							{translate("onecUserName")}: {activeUser}
 						</div>
-						<Notice items={[{ type: "attention", text: translate("onecUserDeleteHere") }]} />
+						<Notice inline items={[{ type: "attention", text: translate("onecUserDeleteHere") }]} />
 					</div>
 				</Modal>
 			)}

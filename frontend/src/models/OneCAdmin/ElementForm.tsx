@@ -19,8 +19,6 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
-import { NoticeScope } from "./notices";
-import NoticeBoard from "./NoticeBoard";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
 import Table from "src/components/Table";
@@ -185,15 +183,12 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
 	const { requestClose } = useAppContext().windows;
-	// Своя область сообщений: карточка открыта отдельным пейном и может быть единственным,
-	// что человек видит, — её сообщения обязаны быть видны в ней самой.
-	const scope = paneProps.uniqId ?? "element-card";
 	const closeCard = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
 
 	return (
-		<NoticeScope.Provider value={scope}>
+		<>
 			<ModelForm
 				paneId={paneProps.uniqId}
 				readonly
@@ -390,9 +385,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 					</div>
 				</Modal>
 			)}
-			{/* Полоса сообщений внизу пейна: место занято всегда — форма не дёргается. */}
-			<NoticeBoard compact scope={scope} />
-		</NoticeScope.Provider>
+		</>
 	);
 };
 ElementForm.displayName = "ElementForm";

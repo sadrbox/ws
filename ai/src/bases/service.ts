@@ -119,12 +119,38 @@ export type PublicationReport = {
 	total: number;
 	published: number;
 	complete: boolean;
+	/** Агент сказал, ГДЕ смотрел: имя источника и число просмотренных каталогов. */
+	evidence: boolean;
 	accepted: boolean;
 };
 
-export const publicationReport = (items: PublicationItem[], complete: boolean): PublicationReport => {
+/**
+ * `evidence` — чем агент подтверждает, что читал веб-сервер: поля `source` («iis» | «scan»)
+ * и `lookedIn` (просмотренные каталоги). Именно они отличают «посмотрел и не нашёл» от
+ * «не сумел посмотреть»: сборка агента, которая однажды объявила полным пустой просмотр,
+ * этих полей не присылала вовсе.
+ */
+export const publicationReport = (
+	items: PublicationItem[],
+	complete: boolean,
+	evidence?: { source?: string | null; lookedIn?: number },
+): PublicationReport => {
 	const published = items.filter(isPublished).length;
-	return { total: items.length, published, complete, accepted: published > 0 };
+	const hasEvidence = !!evidence?.source || (evidence?.lookedIn ?? 0) > 0;
+	return {
+		total: items.length,
+		published,
+		complete,
+		evidence: hasEvidence,
+		/*
+		 * Срезу верим, если он что-то НАШЁЛ — либо если агент обещает полноту И говорит,
+		 * где смотрел. Второе условие появилось не сразу: сервер, где действительно ничего
+		 * не опубликовано, обязан иметь возможность сказать это, но «ничего не нашёл»
+		 * без единого доказательства просмотра — та самая поломка, из-за которой сто
+		 * десять работающих баз однажды стали «не опубликованными».
+		 */
+		accepted: published > 0 || (complete && hasEvidence),
+	};
 };
 
 const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b.ext_version,
@@ -225,24 +251,32 @@ export class BaseService {
 				        sessions_count = COALESCE(EXCLUDED.sessions_count, bases.sessions_count),
 				        infobase_id    = COALESCE(EXCLUDED.infobase_id, bases.infobase_id),
 				        published      = COALESCE(EXCLUDED.published, bases.published),
-				        publish_url    = COALESCE(EXCLUDED.publish_url, bases.publish_url),
+				        -- «Не опубликована» СТИРАЕТ адрес: ссылка на страницу, которой нет,
+				        -- хуже её отсутствия (та же логика, что в setPublication).
+				        publish_url    = CASE WHEN EXCLUDED.published IS FALSE THEN NULL
+				                              ELSE COALESCE(EXCLUDED.publish_url, bases.publish_url) END,
 				        publish_seen_at = COALESCE(EXCLUDED.publish_seen_at, bases.publish_seen_at),
 				        last_seen_at   = now()`,
 				[randomUUID(), serverId, key, s.name ?? null, s.status ?? null,
 					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled, s.id ?? null,
-					// ПУБЛИКАЦИЯ ИЗ СРЕЗА БАЗ ПРИНИМАЕТСЯ ТОЛЬКО ПОЛОЖИТЕЛЬНАЯ.
+					// ПУБЛИКАЦИЯ ИЗ СРЕЗА БАЗ — ТРЁХЗНАЧНАЯ, и различать состояния обязан агент.
 					//
-					// Срез базы приходит от rac, который про веб-публикации не знает вовсе.
-					// Если агент всё же кладёт туда признак, «нашёл публикацию» — это факт
-					// (иначе откуда), а «не нашёл» — не факт, а незнание: у него мог быть
-					// виден один веб-сервер из двух или сломан разбор конфигурации. Раньше
-					// принималось и то, и другое, и очередной срез затирал `true`,
-					// поставленный нашей же командой IB_PUBLISH: база оставалась
-					// опубликованной, а панель показывала «нет».
+					// Контракт: нашёл — `true` с адресом; не нашёл ПРИ ПОЛНОМ просмотре
+					// веб-сервера — `false`; не нашёл при неполном — поля нет вовсе, и
+					// прежнее значение сохраняется (COALESCE выше).
 					//
-					// Отрицательный ответ имеет право дать только специальный срез
-					// публикаций с обещанием полноты (см. applyPublications).
-					s.published === true ? true : null, s.publishUrl ?? null],
+					// Раньше здесь принималось только положительное: сборка агента присылала
+					// `false` там, где на самом деле не сумела прочитать веб-сервер, и
+					// очередной срез затирал `true`, поставленный нашей же командой
+					// IB_PUBLISH. Защита была верной для ТОГО агента, но у неё была цена:
+					// базу, опубликованную мимо панели и потом снятую мимо панели, реестр
+					// считал бы опубликованной вечно — отрицательный ответ отбрасывался.
+					//
+					// Проверено на живом сервере перед снятием защиты: сборка, которая ещё
+					// не умеет различать три состояния, признака в срезе баз НЕ ШЛЁТ вовсе
+					// (0 записей из 110) — то есть попадает в ветку «не знаю» и ничего не
+					// затирает. Различать берёмся только там, где агент сам взялся отвечать.
+					s.published ?? null, s.publishUrl ?? null],
 			);
 		}
 
@@ -359,6 +393,7 @@ export class BaseService {
 		serverId: string,
 		items: PublicationItem[],
 		complete: boolean,
+		evidence?: { source?: string | null; lookedIn?: number },
 	): Promise<{ marked: number; cleared: number; matched: number }> {
 		/*
 		 * «СПИСОК, В КОТОРОМ НЕТ НИ ОДНОЙ ПУБЛИКАЦИИ» — НЕ ФАКТ, А МОЛЧАНИЕ.
@@ -373,7 +408,7 @@ export class BaseService {
 		 * отметок, ни снятия. Появится хоть одна — значит читатель работает, и его «нет»
 		 * чего-то стоит.
 		 */
-		if (!publicationReport(items, complete).accepted) return { marked: 0, cleared: 0, matched: 0 };
+		if (!publicationReport(items, complete, evidence).accepted) return { marked: 0, cleared: 0, matched: 0 };
 
 		let marked = 0;
 		let matched = 0;

@@ -39,8 +39,6 @@ import {
 	fetchBaseUsers, fetchBaseUsersCached, fetchRoles, fetchUserOccurrences, runBatch,
 } from "src/services/onec/api";
 import { formStoreAPI } from "src/hooks/useFormStore";
-import { NoticeScope } from "./notices";
-import NoticeBoard from "./NoticeBoard";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
 import { QueryError } from "./shared";
@@ -445,12 +443,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
 
-	// Своя область сообщений: карточка открыта отдельным пейном и может быть единственным,
-	// что человек видит, — её сообщения обязаны быть видны в ней самой.
-	const scope = paneProps.uniqId ?? "base-user-card";
-
 	return (
-		<NoticeScope.Provider value={scope}>
 		<ModelForm
 			paneId={paneProps.uniqId}
 			// Пока по паре идёт операция, кнопки формы заблокированы вместе с полями.
@@ -600,9 +593,6 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 				},
 			]}
 		/>
-		{/* Полоса сообщений внизу пейна: место занято всегда — форма не дёргается. */}
-		<NoticeBoard compact scope={scope} />
-		</NoticeScope.Provider>
 	);
 };
 BaseUserForm.displayName = "BaseUserForm";

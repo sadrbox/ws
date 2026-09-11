@@ -205,7 +205,9 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 
 				<div className={styles.UsersCard}>
 					{!current ? (
-						<Notice items={[{ type: "info", text: translate("onecPickExtFirst") }]} />
+						// inline: это ВСЁ содержимое карточки, пока расширение не выбрано.
+						// Отправить подсказку в боковую область значило бы показать пустой блок.
+						<Notice inline items={[{ type: "info", text: translate("onecPickExtFirst") }]} />
 					) : (
 						<>
 							<div className={styles.SecHead}>
@@ -263,7 +265,8 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 
 							<div className={styles.SecHead}>{translate("onecWhatHappens")}</div>
 							<div className={styles.SecBody}>
-								{!pickedBases.length && <Notice items={[{ type: "info", text: translate("onecPickBasesFirst") }]} />}
+								{/* inline: единственное содержимое блока «Что произойдёт» до выбора баз. */}
+								{!pickedBases.length && <Notice inline items={[{ type: "info", text: translate("onecPickBasesFirst") }]} />}
 								{pickedBases.length > 0 && (
 									<>
 										<div className={styles.PlanRow}>

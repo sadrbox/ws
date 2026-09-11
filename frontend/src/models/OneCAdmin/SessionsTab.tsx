@@ -31,7 +31,7 @@ import {
 	fetchBases, fetchSessions, setSessionsLock, terminateSession,
 	type ClusterRow, type OnecBase,
 } from "src/services/onec/api";
-import { errorNotice, noteNotice, useNoticeReport, useNoticeScope } from "./notices";
+import { errorNotice, noteNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { finishOp, startOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 

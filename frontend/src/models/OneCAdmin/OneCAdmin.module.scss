@@ -198,7 +198,7 @@
 
 // .GuardSlot удалён: предупреждение о способностях агента больше не рисуется над
 // таблицей и не резервирует под себя строку на каждом экране — оно уходит сообщением
-// на доску (см. notices.ts, NoticeBoard).
+// в общую область «Технические сообщения» (components/TechMessages).
 
 .UsersScreen {
 	display: grid;
@@ -586,68 +586,9 @@
 	flex-direction: column;
 }
 
-// ── Доска сообщений ──────────────────────────────────────────────────────────
-.NoticeBoard {
-	flex: 0 0 auto;
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-	// Доля высоты СВОЕЙ колонки, а не экрана: содержимое прокручивается внутри, и внешняя
-	// разметка от появления сообщений не меняется ни на пиксель.
-	flex: 0 0 30%;
-	min-height: 132px;
-	max-height: 45%;
-	border-top: 1px solid $color34;
-	padding-top: 6px;
-}
-
-.NoticeBoardHead {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.NoticeBoardTitle {
-	font-weight: 600;
-	color: $color6;
-	margin-right: auto;
-}
-
-.NoticeBoardBody {
-	flex: 1 1 auto;
-	min-height: 0;
-	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-}
-
-.NoticeBoardEmpty {
-	color: $color51;
-	opacity: 0.75;
-	padding: 6px;
-}
-
-.NoticeRow {
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-}
-
-// Кто сообщил: без источника сообщение на общей доске не отвечает на вопрос «где это».
-.NoticeSource {
-	color: $color51;
-	font-size: $fontsize - 1px;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-}
-
-// Раскрытая история: та же стрелка, перевёрнутая.
-.CaretOpen {
-	display: inline-flex;
-	transform: rotate(180deg);
-}
+// Доски сообщений здесь БОЛЬШЕ НЕТ: все <Notice /> приложения выводит одна область —
+// «Технические сообщения» справа от пейнов (components/TechMessages). Два места вывода
+// одного и того же — это два места, которые обязаны совпадать, а они расходятся.
 
 // Доска в карточке: та же доска, но полосой внизу пейна и ниже — форме нужно место.
 .NoticeBoardCompact {

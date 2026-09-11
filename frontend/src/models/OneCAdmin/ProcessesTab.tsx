@@ -135,7 +135,7 @@ export const ProcessesTab: FC = () => {
 					onApply={() => kill.mutate({ pid: confirm.pid, force: confirm.force })}>
 					<div className={styles.ConfirmText}>
 						<div>{translate("onecProcKillQuestion")}: {confirm.pid}</div>
-						<Notice items={[{
+						<Notice inline items={[{
 							type: confirm.force ? "attention" : "warning",
 							text: confirm.note || translate("onecProcKillWarning"),
 						}]} />

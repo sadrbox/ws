@@ -35,8 +35,7 @@ import {
 	type IbExtension, type IbUser, type OnecBase,
 } from "src/services/onec/api";
 import { QueryError, publishLabel, useAgents, useBaseContentCheck } from "src/models/OneCAdmin/shared";
-import { NoticeScope, useNoticeReport, useNoticeScope } from "src/models/OneCAdmin/notices";
-import NoticeBoard from "src/models/OneCAdmin/NoticeBoard";
+import { useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
@@ -319,10 +318,6 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
 
-	// Своя область сообщений: карточка открыта отдельным пейном и может быть единственным,
-	// что человек видит, — её сообщения обязаны быть видны в ней самой.
-	const scope = paneProps.uniqId ?? "base-card";
-
 	/*
 	 * ПЛАТФОРМА. Поле `onecVersion` у базы заполняет агент в срезе баз — и не заполняет:
 	 * во всех 111 записях реестра оно пустое. Поэтому спрашиваем агента САМОГО СЕРВЕРА:
@@ -336,7 +331,6 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		|| translate("onecPlatformUnknown");
 
 	return (
-		<NoticeScope.Provider value={scope}>
 		<ModelForm
 			paneId={paneProps.uniqId}
 			endpoint={ENDPOINT}
@@ -400,9 +394,6 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 				...tabs,
 			]}
 		/>
-		{/* Полоса сообщений внизу пейна: место занято всегда — форма не дёргается. */}
-		<NoticeBoard compact scope={scope} />
-		</NoticeScope.Provider>
 	);
 };
 OneCBasesForm.displayName = "OneCBasesForm";

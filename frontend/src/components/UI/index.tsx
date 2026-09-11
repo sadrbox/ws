@@ -1,4 +1,4 @@
-import React, { CSSProperties, FC, PropsWithChildren, useEffect, useLayoutEffect, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useEffect, useLayoutEffect, useMemo, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
 import styles from "../../styles/main.module.scss"
 import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
@@ -11,6 +11,8 @@ import { copyPaneLink } from "src/utils/paneLink";
 import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
+import TechMessages from 'src/components/TechMessages/TechMessages';
+import { NoticeScope } from 'src/components/TechMessages/store';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
 // Статические импорты моделей убраны: иначе они все попадали в основной бандл и
@@ -99,9 +101,22 @@ export const Container: FC = () => {
   const context = useAppContext();
   const isPaneShow = context.windows.panes.length > 0;
 
+  /*
+   * Рабочее пространство — ряд из двух областей: слева пейны, справа «Технические
+   * сообщения». Область сворачивается ШИРИНОЙ, оставаясь в том же ряду: накладка
+   * (position: absolute) закрывала бы содержимое формы ровно там, где с ним работают.
+   */
   return (
     <>
-      {isPaneShow && <><Panes /><PanesTabs /></>}
+      {isPaneShow && (
+        <>
+          <div className={styles.Workspace}>
+            <Panes />
+            <TechMessages />
+          </div>
+          <PanesTabs />
+        </>
+      )}
     </>
   );
 }
@@ -212,7 +227,16 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
     };
   }, [isActive, p.uniqId]);
 
+  /*
+   * Все сообщения ВНУТРИ этого пейна подписываются им самим: область — его идентификатор,
+   * источник — заголовок («Реализация № 12», «Базы 1С»). Поэтому ни одной форме не
+   * пришлось дописывать подпись у своего <Notice />: иначе её проставляли бы руками в
+   * полусотне мест — и однажды забыли.
+   */
+  const origin = useMemo(() => ({ scope: p.uniqId, source: p.label }), [p.uniqId, p.label]);
+
   return (
+    <NoticeScope.Provider value={origin}>
     <div
       ref={paneRootRef}
       className={[
@@ -256,6 +280,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
         <Component {...p} />
       </React.Suspense>
     </div>
+    </NoticeScope.Provider>
   );
 }
 
