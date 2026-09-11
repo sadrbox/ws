@@ -16,7 +16,7 @@ import { requireAgent } from "../auth/index.ts";
 import { decideInstance, instanceConflictMessage } from "../agents/instances.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
-import { findAdminCommand } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand } from "../commands/admin.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import {
@@ -290,6 +290,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// остановлена, и панель узнаёт об этом за секунды, а не через полторы минуты
 		// молчания heartbeat.
 		agents.notePollOpen(req.agent!.agentId);
+		let handedBusyMs = 0;
 		try {
 			const commands = await queue.take(req.agent!.agentId, wait);
 			if (closed && commands.length) {
@@ -298,9 +299,16 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				return;
 			}
 			if (commands.length) log.info({ agentId: req.agent!.agentId, count: commands.length }, "команды выданы агенту");
+			// Сколько агент вправе молчать после этого опроса: он ушёл выполнять то, что
+			// забрал, и срок ему отведён самой командой. Без команд — ноль: работающий
+			// агент переоткрывает опрос немедленно, и пауза означает остановку службы.
+			handedBusyMs = commands.reduce((max, c) => {
+				const ttl = findAdminCommand(c.type)?.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS;
+				return Math.max(max, ttl * 1000);
+			}, 0);
 			res.json({ commands });
 		} finally {
-			agents.notePollClosed(req.agent!.agentId);
+			agents.notePollClosed(req.agent!.agentId, handedBusyMs ? Date.now() + handedBusyMs : 0);
 		}
 	});
 

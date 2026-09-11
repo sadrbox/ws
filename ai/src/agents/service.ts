@@ -99,7 +99,7 @@ export class AgentService {
 	 * Держим в памяти: это состояние живёт ровно столько, сколько живёт процесс сервиса,
 	 * и переживать перезапуск ему незачем — после него всё равно ждём первого обращения.
 	 */
-	private readonly polls = new Map<string, { open: number; closedAt: number }>();
+	private readonly polls = new Map<string, { open: number; closedAt: number; busyUntil?: number }>();
 
 	private readonly orgBinding: "strict" | "any";
 	constructor(db: Db, offlineAfterSecs: number, orgBinding: "strict" | "any" = "strict") {
@@ -427,11 +427,25 @@ export class AgentService {
 		this.polls.set(agentId, p);
 	}
 
-	/** Long-poll закрылся — сам собой по таймауту или потому, что служба остановлена. */
-	notePollClosed(agentId: string): void {
-		const p = this.polls.get(agentId) ?? { open: 0, closedAt: 0 };
+	/**
+	 * Long-poll закрылся. Три разные причины — и только одна из них означает беду:
+	 *   • истёк срок ожидания (команд не было) — агент немедленно откроет новый опрос;
+	 *   • АГЕНТ ЗАБРАЛ КОМАНДУ и ушёл её выполнять — молчание ожидаемо и длится столько,
+	 *     сколько отведено самой команде;
+	 *   • службу остановили — опрос не откроется никогда.
+	 *
+	 * `busyUntilMs` отличает второе от третьего. Без него агент, выполняющий чтение базы
+	 * (минуты), объявлялся «не на связи» через десять секунд, и панель отказывала в новых
+	 * командах: «Админ-агент 1С не на связи» — в тот момент, когда он делал ровно то, что
+	 * ему поручили. Измерено: два чтения расширений подряд, отклика нет три минуты, третья
+	 * команда отвергнута.
+	 */
+	notePollClosed(agentId: string, busyUntilMs = 0): void {
+		const p = this.polls.get(agentId) ?? { open: 0, closedAt: 0, busyUntil: 0 };
 		p.open = Math.max(0, p.open - 1);
 		p.closedAt = Date.now();
+		// Берём максимум: агент мог забрать несколько команд, и работает он до самой долгой.
+		p.busyUntil = Math.max(p.busyUntil ?? 0, busyUntilMs);
 		this.polls.set(agentId, p);
 	}
 
@@ -448,6 +462,9 @@ export class AgentService {
 		const p = this.polls.get(agentId);
 		if (!p) return null;
 		if (p.open > 0) return true;
+		// Забрал нашу команду и ещё не отчитался — это не молчание, это работа. Сильнее
+		// любого косвенного признака: мы сами вручили ему дело и знаем, сколько оно длится.
+		if ((p.busyUntil ?? 0) > Date.now()) return true;
 		if (!p.closedAt) return null;
 		return Date.now() - p.closedAt < POLL_GAP_MS ? null : false;
 	}

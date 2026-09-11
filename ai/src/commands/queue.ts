@@ -86,8 +86,15 @@ export class CommandQueue {
 	private closed = false;
 	private authResolver: AuthResolver | null = null;
 
-	constructor(db: Db) {
+	/**
+	 * Сколько команд внутрь баз агент получает одновременно. См. AGENT_IB_PARALLEL:
+	 * значение по умолчанию — единица, и это защита, а не политика.
+	 */
+	private readonly ibParallel: number;
+
+	constructor(db: Db, ibParallel = 1) {
 		this.db = db;
+		this.ibParallel = Math.max(1, ibParallel);
 		this.bell.setMaxListeners(1000);
 	}
 
@@ -217,11 +224,29 @@ export class CommandQueue {
 		 * этой базе не завершилась. Команды кластера (base_key IS NULL) друг другу не
 		 * мешают — у каждой своя «партиция», и они по-прежнему уходят пачкой.
 		 */
+		/*
+		 * И НЕ БОЛЬШЕ N КОМАНД ВНУТРЬ БАЗ ОДНОВРЕМЕННО — на всего агента.
+		 *
+		 * Прежнее правило разводило по одной команде на базу, но между базами не
+		 * ограничивало ничего. Измерено 2026-09-11: две параллельные команды
+		 * `IB_LIST_EXTENSIONS` по разным базам заклинили агента больше чем на двенадцать
+		 * минут — ни ответа, ни heartbeat; та же команда в одиночку честно отвечала через
+		 * 186 с. Внутри агента у них общий ресурс, и выдавать ему больше, чем он способен
+		 * выполнить, значит менять «медленно» на «никак».
+		 *
+		 * Команды КЛАСТЕРА (base_key IS NULL) под ограничение не попадают: они идут через
+		 * rac, в базы не заходят и друг другу не мешают.
+		 */
+		const busy = await this.db.query<{ n: string }>(
+			`SELECT count(*) AS n FROM commands
+			  WHERE agent_id = $1 AND state = 'dispatched' AND base_key IS NOT NULL`,
+			[agentId],
+		);
+		const slots = Math.max(0, this.ibParallel - Number(busy.rows[0]?.n ?? 0));
+
 		const r = await this.db.query<CommandRow>(
-			`UPDATE commands SET state = 'dispatched', dispatched_at = now()
-			  WHERE id IN (
-			    SELECT id FROM (
-			      SELECT c.id, c.priority, c.created_at,
+			`WITH candidates AS (
+			      SELECT c.id, c.priority, c.created_at, c.base_key,
 			             row_number() OVER (
 			               PARTITION BY COALESCE(c.base_key, c.id)
 			               -- Внутри базы порядок ТОЛЬКО по времени: приоритет не должен
@@ -234,14 +259,23 @@ export class CommandQueue {
 			               SELECT 1 FROM commands d
 			                WHERE d.agent_id = c.agent_id AND d.state = 'dispatched'
 			                  AND d.base_key = c.base_key))
-			    ) t WHERE t.rn = 1
-			    -- А вот МЕЖДУ базами приоритет решает: одиночный запрос человека уходит
-			    -- раньше пачки, которую запустили и ушли.
-			    ORDER BY t.priority, t.created_at
-			    LIMIT 20
+			 ), ranked AS (
+			      SELECT id, priority, created_at, base_key,
+			             -- Очередь ВНУТРИБАЗОВЫХ между собой: приоритет, затем время.
+			             row_number() OVER (ORDER BY priority, created_at) AS ib_rank
+			        FROM candidates
+			       WHERE rn = 1 AND base_key IS NOT NULL
+			 )
+			 UPDATE commands SET state = 'dispatched', dispatched_at = now()
+			  WHERE id IN (
+			    -- Кластерные — все, они дешёвые и независимые.
+			    SELECT id FROM candidates WHERE rn = 1 AND base_key IS NULL
+			    UNION ALL
+			    -- Внутрибазовые — только сколько осталось свободных мест у агента.
+			    SELECT id FROM ranked WHERE ib_rank <= $2
 			  )
 			  RETURNING *`,
-			[agentId],
+			[agentId, slots],
 		);
 		const wire = r.rows.map((c) => ({
 			id: c.id,

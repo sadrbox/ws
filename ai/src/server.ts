@@ -91,7 +91,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Один реестр на оба роутера: списки из базы кладёт агентский путь, читает панель.
 	const onecRegistry = new OnecRegistry(db);
 	const baseRegistry = new BaseService(db);
-	const queue = new CommandQueue(db);
+	const queue = new CommandQueue(db, cfg.AGENT_IB_PARALLEL);
 	// Учётные записи отдельных баз: ключ шифрования выводится из секрета сервиса, своей
 	// переменной окружения не заводим — лишний секрет в .env это лишний способ потерять доступ.
 	const credentials = new CredentialsStore(db, cfg.JWT_SECRET);
