@@ -98,6 +98,7 @@ export function onecRouter(deps: Deps) {
 			return !(
 				req.path === "/bases" ||
 				req.path === "/agents" ||
+				req.path === "/servers" ||
 				req.path === "/extensions" ||
 				req.path === "/users" ||
 				// Роли из кэша (без ?live=1) в 1С не ходят — лимит кластера к ним не относится.
@@ -431,6 +432,28 @@ export function onecRouter(deps: Deps) {
 	 * ни одна операция внутри баз невозможна, и пользователь должен узнать это ДО того,
 	 * как нажмёт кнопку и получит «пропущено 110 из 110».
 	 */
+	/**
+	 * Серверы 1С и их публичные имена — экран «Настройки».
+	 *
+	 * Публичное имя нужно ровно для одного: собрать рабочую ссылку на опубликованную базу.
+	 * Агент отдаёт адрес из привязки сайта IIS, и при привязке без имени узла это
+	 * `http://localhost/<база>` — честно, но снаружи бесполезно. Подменять ответ агента в
+	 * данных нельзя (иначе ошибку в самой привязке нечем заметить), поэтому имя живёт
+	 * отдельно и применяется только к показу.
+	 */
+	r.get("/servers", async (_req, res) => {
+		res.json({ success: true, data: { items: await bases.listServers() } });
+	});
+
+	r.patch("/servers/:id", async (req, res) => {
+		const host = typeof (req.body as { publicHost?: unknown })?.publicHost === "string"
+			? (req.body as { publicHost: string }).publicHost
+			: "";
+		const ok = await bases.setPublicHost(req.params.id, host);
+		if (!ok) { send(res, fail(404, "NOT_FOUND", "Сервер не найден")); return; }
+		res.json({ success: true, data: { items: await bases.listServers() } });
+	});
+
 	r.get("/agents", async (_req, res) => {
 		const all = await agents.listAll();
 		// Экземпляры (процессы) агента: два процесса под одним токеном разбирают одну

@@ -35,6 +35,7 @@ export type BaseRow = {
 	publish_url: string | null;
 	publish_seen_at: Date | null;
 	ib_unreachable_at: Date | null;
+	public_host?: string | null;
 	extensions_count: number | null;
 	extensions_seen_at: Date | null;
 	extension_names: string[] | null;
@@ -66,6 +67,12 @@ export type BaseView = {
 	/** Публикация на веб-сервере: null — не проверялась, false — точно нет. */
 	published: boolean | null;
 	publishUrl: string | null;
+	/**
+	 * Адрес публикации ДЛЯ ПОКАЗА: тот же путь, но под публичным именем сервера, если оно
+	 * задано в настройках. Отдельно от `publishUrl`, потому что тот — ответ агента, и
+	 * подменять его догадкой значит лишиться возможности заметить ошибку в привязке сайта.
+	 */
+	publishUrlPublic: string | null;
 	/** Когда состояние публикации проверяли в последний раз; null — не проверяли никогда. */
 	publishSeenAt: string | null;
 	/**
@@ -90,6 +97,35 @@ export type ServerRow = {
 	ras_port: number | null;
 	created_at: Date;
 };
+
+/**
+ * Адрес публикации ПОД ПУБЛИЧНЫМ ИМЕНЕМ сервера.
+ *
+ * Агент собирает адрес из привязки сайта IIS и отдаёт то, что там написано: при привязке
+ * без имени узла это `http://localhost/<база>` — с самого сервера ссылка рабочая, снаружи
+ * по ней не попасть. Публичное имя задают в настройках сервера, и здесь оно подставляется
+ * ТОЛЬКО ДЛЯ ПОКАЗА: исходный ответ агента остаётся нетронутым (см. BaseView.publishUrl),
+ * иначе ошибку в самой привязке было бы нечем заметить.
+ *
+ * Заменяется ровно узел. Схема и порт — из настройки, если она их задаёт («https://1c.x.kz»,
+ * «1c.x.kz:8080»), иначе остаются агентские: адрес публикации знает агент, а не мы.
+ */
+export function publicUrl(url: string | null, publicHost: string | null): string | null {
+	if (!url) return null;
+	const host = (publicHost ?? "").trim();
+	if (!host) return url;
+	try {
+		const src = new URL(url);
+		// Настройку принимаем и голым именем, и с протоколом: человек напишет как привык.
+		const cfg = new URL(/^[a-z]+:\/\//i.test(host) ? host : `${src.protocol}//${host}`);
+		src.protocol = cfg.protocol;
+		src.host = cfg.host;
+		return src.toString();
+	} catch {
+		// Неразбираемая настройка не должна ломать показ: отдаём то, что сказал агент.
+		return url;
+	}
+}
 
 /** Одна строка среза публикаций, как её присылает агент (CLUSTER_LIST_PUBLICATIONS). */
 export type PublicationItem = { key: string; name?: string; published?: boolean; url?: string | null };
@@ -211,6 +247,32 @@ export class BaseService {
 		return r.rows[0] ?? null;
 	}
 
+	/** Серверы 1С с их публичными именами — для экрана настроек. */
+	async listServers(): Promise<{ id: string; name: string; publicHost: string | null; bases: number }[]> {
+		const r = await this.db.query<{ id: string; name: string; public_host: string | null; bases: string }>(
+			`SELECT s.id, s.name, s.public_host, count(b.id) AS bases
+			   FROM servers s LEFT JOIN bases b ON b.server_id = s.id
+			  GROUP BY s.id ORDER BY s.name`,
+		);
+		return r.rows.map((x) => ({
+			id: x.id, name: x.name, publicHost: x.public_host, bases: Number(x.bases),
+		}));
+	}
+
+	/**
+	 * Публичное имя сервера — под каким он виден снаружи.
+	 *
+	 * Пустая строка СТИРАЕТ настройку (а не «не меняет»): отказ от подмены — такое же
+	 * решение, как и сама подмена, и выразить его человек должен уметь.
+	 */
+	async setPublicHost(serverId: string, host: string): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE servers SET public_host = NULLIF($2, '') WHERE id = $1`,
+			[serverId, host.trim()],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	async ensureServer(organizationUuid: string, name: string, ras?: { host?: string | null; port?: number | null }): Promise<ServerRow> {
 		const r = await this.db.query<ServerRow>(
 			`INSERT INTO servers (id, organization_uuid, name, ras_host, ras_port)
@@ -300,7 +362,7 @@ export class BaseService {
 
 	async listByOrganization(organizationUuid: string): Promise<BaseView[]> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
-			`SELECT ${BASE_COLS}, s.name AS server_name
+			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE s.organization_uuid = $1
 			  ORDER BY s.name, b.key`,
@@ -312,7 +374,7 @@ export class BaseService {
 	/** Все базы всех серверов — реестр администрирования 1С (вне организаций ERP). */
 	async listAll(): Promise<BaseView[]> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
-			`SELECT ${BASE_COLS}, s.name AS server_name
+			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  ORDER BY s.name, b.key`,
 		);
@@ -321,7 +383,7 @@ export class BaseService {
 
 	async listByServer(serverId: string): Promise<BaseView[]> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
-			`SELECT ${BASE_COLS}, s.name AS server_name
+			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE b.server_id = $1 ORDER BY b.key`,
 			[serverId],
@@ -337,7 +399,7 @@ export class BaseService {
 	 */
 	async findByKeyGlobal(key: string): Promise<BaseView | null> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
-			`SELECT ${BASE_COLS}, s.name AS server_name
+			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE b.key = $1 AND b.disabled_at IS NULL
 			  ORDER BY s.name LIMIT 1`,
@@ -349,7 +411,7 @@ export class BaseService {
 	/** База организации по ключу — точка входа маршрутизации «база → сервер → агент». */
 	async findByKey(organizationUuid: string, key: string): Promise<BaseView | null> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
-			`SELECT ${BASE_COLS}, s.name AS server_name
+			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
 			  WHERE s.organization_uuid = $1 AND b.key = $2`,
 			[organizationUuid, key],
@@ -499,6 +561,7 @@ export class BaseService {
 			infobaseId: r.infobase_id,
 			published: r.published,
 			publishUrl: r.publish_url,
+			publishUrlPublic: publicUrl(r.publish_url, r.public_host ?? null),
 			publishSeenAt: r.publish_seen_at?.toISOString() ?? null,
 			ibUnreachableAt: r.ib_unreachable_at?.toISOString() ?? null,
 			extensionsCount: r.extensions_count,

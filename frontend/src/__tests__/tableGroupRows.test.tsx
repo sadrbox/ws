@@ -161,3 +161,65 @@ describe("Table: строка-заголовок группы не занима�
 
 // screen импортирован ради типов утилит testing-library; явное использование не нужно.
 void screen;
+
+// ── Раскрытие ПОЯСНЯЮЩЕЕ: отмечают саму группу, а не вложенные ──────────────
+//
+// Так устроены «Задания»: строка задания выбирается для отмены или повтора, а её базы
+// лишь показывают, чем кончилось у каждой. Пока это не различалось, чекбокс такой группы
+// считался по отметкам детей — которых нет, — и строка не отмечалась вовсе.
+//
+// Признак различения — наличие `__selected` в данных потомка, а не его значение:
+// `__selected: false` у всех значит «отмечаемы, но не отмечены», и это ровно группа.
+
+describe("Table: вложенные строки поясняют группу, а выбирают саму группу", () => {
+  /** У потомков НЕТ `__selected`: они только рассказывают о строке-задании. */
+  const explain = (r: TDataItem): TDataItem[] => (
+    r.uuid === "role-a"
+      ? [
+        { id: -1, uuid: "role-a|BASE1", name: "BASE1", note: "Выполнено" },
+        { id: -2, uuid: "role-a|BASE2", name: "BASE2", note: "В очереди" },
+      ]
+      : []
+  );
+
+  it("чекбокс группы отмечает саму строку", () => {
+    const { container } = render(
+      <TestWrapper>
+        <Table {...buildStaticTableProps({
+          componentName: "TestExplainTable",
+          rows, columns: columns(), setColumns: () => { },
+          selectable: true,
+          childRows: explain,
+          expandedRowIds: new Set(["role-a"]),
+          disableActiveRow: true,
+        })} />
+      </TestWrapper>,
+    );
+    const first = bodyRows(container)[0];
+    const box = first.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    // Отметилась СТРОКА, а не её потомки: у них отмечать нечего.
+    expect(first.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
+  });
+
+  it("у поясняющего потомка чекбокса нет, но клетка под него остаётся", () => {
+    const { container } = render(
+      <TestWrapper>
+        <Table {...buildStaticTableProps({
+          componentName: "TestExplainTable2",
+          rows, columns: columns(), setColumns: () => { },
+          selectable: true,
+          childRows: explain,
+          expandedRowIds: new Set(["role-a"]),
+          disableActiveRow: true,
+        })} />
+      </TestWrapper>,
+    );
+    const all = bodyRows(container);
+    const child = all.find((tr) => tr.textContent?.includes("BASE1"))!;
+    expect(child.querySelector('input[type="checkbox"]')).toBeNull();
+    // Ячеек столько же, сколько у обычной строки: иначе колонки разъедутся.
+    expect(child.querySelectorAll("td").length).toBe(all[0].querySelectorAll("td").length);
+  });
+});

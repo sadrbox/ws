@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Db } from "../src/db/pool.ts";
 import { AgentService, type AgentRole } from "../src/agents/service.ts";
-import { isPublished, needsFullBases, publicationReport } from "../src/bases/service.ts";
+import { isPublished, needsFullBases, publicUrl, publicationReport } from "../src/bases/service.ts";
 
 type FakeAgent = {
 	id: string;
@@ -210,4 +210,31 @@ test("тот же молчащий агент без взятой работы �
 	const [view] = await svc.listAll();
 	// Решает heartbeat — он молчит дольше отведённого, значит службы нет.
 	assert.equal(view.online, false);
+});
+
+// ── Публичный адрес публикации ─────────────────────────────────────────────
+//
+// Агент отдаёт адрес из привязки сайта IIS: при привязке без имени узла это
+// `http://localhost/<база>` — честно и рабочее с самого сервера, но снаружи бесполезно.
+// Публичное имя сервера задают настройкой, и оно подставляется ТОЛЬКО ДЛЯ ПОКАЗА.
+
+test("публичный адрес: подменяется узел, путь остаётся агентским", () => {
+	assert.equal(
+		publicUrl("http://localhost/adinurip", "1c.buhprof.kz"),
+		"http://1c.buhprof.kz/adinurip",
+	);
+});
+
+test("публичный адрес: настройка вправе задать протокол и порт", () => {
+	assert.equal(publicUrl("http://localhost/buh", "https://1c.buhprof.kz"), "https://1c.buhprof.kz/buh");
+	assert.equal(publicUrl("http://localhost/buh", "1c.buhprof.kz:8080"), "http://1c.buhprof.kz:8080/buh");
+});
+
+test("публичный адрес: без настройки и при мусоре в ней отдаём ответ агента", () => {
+	assert.equal(publicUrl("http://localhost/buh", null), "http://localhost/buh");
+	assert.equal(publicUrl("http://localhost/buh", "   "), "http://localhost/buh");
+	// Неразбираемая настройка не должна ломать показ.
+	assert.equal(publicUrl("http://localhost/buh", "://"), "http://localhost/buh");
+	// Нет адреса — нечего и подменять: база не опубликована.
+	assert.equal(publicUrl(null, "1c.buhprof.kz"), null);
 });

@@ -33,6 +33,12 @@ export type OnecBase = {
 	 */
 	published: boolean | null;
 	publishUrl: string | null;
+	/**
+	 * Адрес публикации ДЛЯ ПОКАЗА: тот же путь под публичным именем сервера, если оно
+	 * задано в «Настройках». Отдельно от `publishUrl` — там ответ агента, и подменять его
+	 * догадкой значит лишиться возможности заметить ошибку в привязке сайта.
+	 */
+	publishUrlPublic: string | null;
 	/** Когда состояние публикации проверяли; null — не проверяли никогда. */
 	publishSeenAt: string | null;
 	/**
@@ -445,6 +451,17 @@ export type OnecAgent = {
  * обращений к кластеру ещё осталось в текущей минуте. Квота общая на всю установку, поэтому
  * её остаток — это состояние среды, а не свойство нажавшего.
  */
+/** Серверы 1С и их публичные имена — экран «Настройки». */
+export type OnecServer = { id: string; name: string; publicHost: string | null; bases: number };
+
+export const fetchServers = () => aiFetch<{ items: OnecServer[] }>("/v1/onec/servers");
+
+/** Пустая строка СТИРАЕТ настройку: отказ от подмены — такое же решение, как и подмена. */
+export const setServerPublicHost = (id: string, publicHost: string) =>
+	aiFetch<{ items: OnecServer[] }>(`/v1/onec/servers/${encodeURIComponent(id)}`, {
+		method: "PATCH", body: JSON.stringify({ publicHost }),
+	});
+
 export const fetchAgents = () =>
 	aiFetch<{
 		items: OnecAgent[];

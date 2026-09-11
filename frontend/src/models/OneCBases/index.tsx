@@ -379,6 +379,7 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									<BasePublication baseKey={asText(row.baseKey)}
 										published={row.published as boolean | null}
 										publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
+										publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
 										seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
 								</GroupCol>
 
@@ -418,7 +419,8 @@ export function useOpenOnecBase() {
 			? ({
 				baseKey: found.key, name: found.name, status: found.status, serverName: found.serverName,
 				onecVersion: found.onecVersion, extensionsCount: found.extensionsCount,
-				published: found.published, publishUrl: found.publishUrl, publishSeenAt: found.publishSeenAt,
+				published: found.published, publishUrl: found.publishUrl,
+				publishUrlPublic: found.publishUrlPublic, publishSeenAt: found.publishSeenAt,
 				lastSeenAt: found.lastSeenAt, infobaseId: found.infobaseId,
 			} as unknown as TDataItem)
 			: (typeof base === "string" ? ({ baseKey: key } as unknown as TDataItem) : base);
@@ -491,10 +493,18 @@ export const OneCBasesList: FC<{
 			if (col.identifier === "publishSeenAt") {
 				return <span>{row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "—"}</span>;
 			}
-			// Адрес публикации — тоже скрыт по умолчанию: он длинный, а нужен точечно.
-			// «—» у неопубликованной базы — не пропуск, а отсутствие адреса как такового.
+			/*
+			 * Адрес публикации — тоже скрыт по умолчанию: он длинный, а нужен точечно.
+			 * «—» у неопубликованной базы — не пропуск, а отсутствие адреса как такового.
+			 *
+			 * Показываем адрес ПОД ПУБЛИЧНЫМ ИМЕНЕМ сервера, если оно задано в «Настройках»;
+			 * подсказка хранит то, что сказал агент, — расхождение между ними и есть повод
+			 * проверить привязку сайта.
+			 */
 			if (col.identifier === "publishUrl") {
-				return <span>{asText(row.publishUrl) || "—"}</span>;
+				const shown = asText(row.publishUrlPublic) || asText(row.publishUrl);
+				const raw = asText(row.publishUrl);
+				return <span title={shown && raw && shown !== raw ? raw : undefined}>{shown || "—"}</span>;
 			}
 			return undefined;
 		}}

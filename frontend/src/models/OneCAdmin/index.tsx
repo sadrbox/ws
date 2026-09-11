@@ -16,8 +16,8 @@
  *   «Кластер» — сеансы, соединения, процессы и лицензии: всё это одно живое состояние
  *      сервера, читается одной утилитой `rac` и отвечает за секунды. Тремя вкладками
  *      верхнего уровня это заставляло помнить, в какой из них какая половина ответа.
- *   «Агенты» — сами агенты и их процессы на сервере: чинят их в одном месте, и разносить
- *      «кто на связи» и «что он сейчас выполняет» по разным вкладкам незачем.
+ *   «Прогресс» — операции панели, задания сервиса и процессы агента: три таблицы об одном
+ *      и том же вопросе — «что сейчас происходит». Спрашивают их всегда вместе.
  *
  * ЧТО ДЕЛАЕТ КНОПКА «ОБНОВИТЬ». Она даёт АКТУАЛЬНЫЕ данные — по природе того, что
  * показывает таблица, а не «перечитывает тот же кэш»:
@@ -57,10 +57,11 @@ import BatchesTab from "./BatchesTab";
 import AgentsTab from "./AgentsTab";
 import ProcessesTab from "./ProcessesTab";
 import ProgressTab from "./ProgressTab";
+import SettingsTab from "./SettingsTab";
 import { useBatchWatch } from "./progress";
 import main from "src/styles/main.module.scss";
 
-type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "progress" | "batches";
+type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "progress" | "settings";
 
 /**
  * «Кластер» — живое состояние сервера 1С одним разделом.
@@ -84,15 +85,33 @@ const ClusterSection: FC = () => {
 	);
 };
 
-/** «Агенты» — кто на связи и что он сейчас выполняет: один предмет, один раздел. */
-const AgentsSection: FC = () => {
-	const [inner, setInner] = useState<"agents" | "processes">("agents");
+/**
+ * «Прогресс» — ВСЁ, что отвечает на вопрос «что сейчас происходит и что происходило».
+ *
+ * Три таблицы об одном: операции панели (запросы и команды, которые она затеяла), задания
+ * (групповые операции на стороне сервиса) и процессы агента (что он запустил на сервере
+ * 1С прямо сейчас). Пока они стояли тремя вкладками в разных концах панели, ответ на один
+ * вопрос приходилось собирать из трёх мест — а спрашивают их всегда вместе: «команда не
+ * отвечает — она вообще дошла? задание живо? агент что-то делает?».
+ *
+ * Внутренние вкладки монтируются по одной: «Процессы агента» — команда в 1С, и открывать
+ * её вместе с остальными значило бы спрашивать сервер всякий раз, когда человек заглянул
+ * посмотреть на очередь.
+ */
+const ProgressSection: FC<{ watch: ReturnType<typeof useBatchWatch> }> = ({ watch }) => {
+	const [inner, setInner] = useState<"ops" | "batches" | "processes">("ops");
 	return (
 		<Tabs
 			activeTab={inner}
 			onTabChange={(id) => setInner(id as typeof inner)}
 			tabs={[
-				{ id: "agents", label: translate("onecTabAgents"), component: inner === "agents" ? <AgentsTab /> : null },
+				{
+					id: "ops", label: translate("onecTabProgress"),
+					component: inner === "ops"
+						? <ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} />
+						: null,
+				},
+				{ id: "batches", label: translate("onecTabBatches"), component: inner === "batches" ? <BatchesTab /> : null },
 				{ id: "processes", label: translate("onecTabProcesses"), component: inner === "processes" ? <ProcessesTab /> : null },
 			]}
 		/>
@@ -140,28 +159,24 @@ export const OneCAdminList: FC = () => {
 		{
 			id: "agents",
 			label: translate("onecTabAgents"),
-			component: tab === "agents" ? <AgentsSection /> : null,
+			component: tab === "agents" ? <AgentsTab /> : null,
 		},
 		{
-			// Наблюдение — В ОБЩЕМ РЯДУ ВКЛАДОК, после «Агентов».
-			//
-			// Раньше экран делился на две области: работа слева, наблюдение справа. Деление
-			// съедало треть ширины постоянно, а нужна она там не всегда — таблицы баз и
-			// сеансов широкие. Счётчик у вкладки говорит, идёт ли что-то, и этого довольно,
-			// чтобы решить, заглядывать ли: само наблюдение от переключения не прерывается
-			// (см. useBatchWatch выше).
+			// Наблюдение — В ОБЩЕМ РЯДУ ВКЛАДОК, после «Агентов». Счётчик говорит, идёт ли
+			// что-то, и этого довольно, чтобы решить, заглядывать ли: само наблюдение от
+			// переключения вкладок не прерывается (см. useBatchWatch выше).
 			id: "progress",
 			label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
-			component: tab === "progress"
-				? <ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} />
-				: null,
+			component: tab === "progress" ? <ProgressSection watch={watch} /> : null,
 		},
 		{
-			id: "batches",
-			label: translate("onecTabBatches"),
-			component: tab === "batches" ? <BatchesTab /> : null,
+			// Настройки — то, что панель знает о среде, а узнать сама не может: под каким
+			// именем сервер виден снаружи. Агент этого не знает и знать не обязан.
+			id: "settings",
+			label: translate("onecTabSettings"),
+			component: tab === "settings" ? <SettingsTab /> : null,
 		},
-	], [tab, running, watch.isFetching, watch.refresh]);
+	], [tab, running, watch]);
 
 	return (
 		<div className={main.PaneFill}>

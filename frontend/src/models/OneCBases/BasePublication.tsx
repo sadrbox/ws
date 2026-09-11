@@ -42,9 +42,15 @@ export const BasePublication: FC<{
 	baseKey: string;
 	published: boolean | null;
 	publishUrl: string | null;
+	/**
+	 * Адрес под публичным именем сервера («Настройки»): агент отдаёт то, что записано в
+	 * привязке сайта IIS, и это обычно localhost — рабочий адрес с самого сервера и
+	 * бесполезный снаружи.
+	 */
+	publishUrlPublic: string | null;
 	/** Когда состояние проверяли: без даты «нет» и «не знаем» выглядят одинаково. */
 	seenAt: string | null;
-}> = ({ baseKey, published, publishUrl, seenAt }) => {
+}> = ({ baseKey, published, publishUrl, publishUrlPublic, seenAt }) => {
 	const qc = useQueryClient();
 	const scope = useNoticeScope();
 	const [confirm, setConfirm] = useState<Job | null>(null);
@@ -84,10 +90,18 @@ export const BasePublication: FC<{
 					<Field name="ob_published" label={translate("onecPublication")}
 						value={publishLabel(published)} disabled onChange={() => {}} width={FIELD_WIDTH.md} />
 					<Field name="ob_url" label={translate("onecPublishUrl")}
-						value={publishUrl || "—"} disabled onChange={() => {}} width={FIELD_WIDTH.lg} />
+						value={publishUrlPublic || publishUrl || "—"} disabled onChange={() => {}} width={FIELD_WIDTH.lg} />
 					<Field name="ob_pub_seen" label={translate("publishSeenAt")}
 						value={seenAt ? getFormatDate(seenAt) : "—"} disabled onChange={() => {}} width={FIELD_WIDTH.date} />
 				</GroupRow>
+				{/* Ответ агента — рядом, и только когда он отличается от показанного:
+				    расхождение и есть повод проверить привязку сайта на сервере. */}
+				{publishUrlPublic && publishUrl && publishUrlPublic !== publishUrl && (
+					<GroupRow>
+						<Field name="ob_url_raw" label={translate("onecPublishUrlAgent")}
+							value={publishUrl} disabled onChange={() => {}} width={FIELD_WIDTH.lg} />
+					</GroupRow>
+				)}
 				<GroupRow>
 					<Button variant="secondary" disabled={run.isPending}
 						title={`${translate("onecPublish")}: ${baseKey}`}

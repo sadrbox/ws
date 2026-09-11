@@ -355,6 +355,13 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   } = useTableContext();
 
   const showCheckbox = variant !== 'select' && selectable;
+  /*
+   * У ПОЯСНЯЮЩЕГО потомка отмечать нечего, но КЛЕТКА под чекбокс остаётся: убрать её
+   * значило бы сделать в строке на одну ячейку меньше, чем у соседей, — колонки
+   * разъедутся ровно так же, как разъезжались, когда групповая строка рисовалась своей
+   * разметкой. Пусто внутри, место занято.
+   */
+  const checkboxIsInert = isChild && row.__selected === undefined;
 
   // Первая колонка-дата: в журналах ДОКУМЕНТОВ (у строки есть булев `posted`) её
   // значение показываем с иконкой документа и признаком проведения. У справочников и
@@ -529,7 +536,19 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   );
   const childCount = children?.length ?? 0;
   const childSelectedCount = children?.reduce((n, c) => n + (c.__selected === true ? 1 : 0), 0) ?? 0;
-  const isGroup = childCount > 0;
+  /*
+   * ОТМЕТКА ГРУППЫ ЗНАЧИТ «ОТМЕЧЕНЫ ВСЕ ВЛОЖЕННЫЕ» — но только там, где вложенные ВООБЩЕ
+   * НЕСУТ ОТМЕТКУ, то есть где в их данных есть `__selected`.
+   *
+   * Бывает и другое раскрытие: вложенные строки ПОЯСНЯЮТ группу, а отмечают саму группу —
+   * так устроены «Задания», где строка задания выбирается для отмены или повтора, а её
+   * базы лишь показывают, чем кончилось у каждой. Пока это не различалось, чекбокс такой
+   * группы считался по отметкам детей — которых нет, — и строка не отмечалась вовсе.
+   *
+   * Признак — наличие поля, а не его значение: `__selected: false` у всех детей значит
+   * «отмечаемы, но не отмечены», и это ровно группа, а не пояснение.
+   */
+  const isGroup = !!children?.some((c) => c.__selected !== undefined);
   const groupAll = isGroup && childSelectedCount === childCount;
   const groupSome = isGroup && childSelectedCount > 0 && childSelectedCount < childCount;
 
@@ -541,7 +560,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
    * раскрывать вложенные, то простой переход стрелками начинает разворачивать
    * группы, а свернуть их можно только уйдя со строки.
    */
-  const chevron = onToggleExpand && isGroup ? (
+  const chevron = onToggleExpand && childCount > 0 ? (
     <button
       type="button"
       className={cx(styles.ExpandToggle, isExpanded && styles.ExpandToggleOpen)}
@@ -625,7 +644,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
             <div
               className={cx(styles.TableBodyCell, styles.CellJustifyCenter, isCheckboxCellActive && styles.activeCell)}
             >
-              <input
+              {!checkboxIsInert && <input
                 type="checkbox"
                 // Промежуточное состояние ставится только через DOM: у input нет
                 // атрибута indeterminate, есть лишь свойство.
@@ -639,7 +658,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
                       : toggleSelect
                 }
                 disabled={isLoading || (!canSelect && !onToggleSelect && !isGroup)}
-              />
+              />}
             </div>
           </td>
         )}
