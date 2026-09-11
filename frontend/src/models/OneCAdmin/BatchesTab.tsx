@@ -11,10 +11,16 @@
  * приходилось щёлкать по заданию и терять из виду остальные; сравнить два задания было
  * нельзя вовсе. Теперь задание раскрывается своими базами на месте.
  *
- * ОТМЕНА — ТОЛЬКО ДО НАЧАЛА ВЫПОЛНЕНИЯ, и это видно построчно. Команду, которую агент уже
- * забрал, останавливает он сам на сервере 1С; назвать отменой прекращение ожидания значило
- * бы соврать о состоянии чужой системы. Поэтому в строке базы отмена доступна, пока команда
- * `queued`, а у задания кнопка называет, сколько команд ещё можно отменить.
+ * ОТМЕЧАЮТ БАЗЫ, А НЕ ЗАДАНИЯ. Отменить нужно бывает и всю операцию, и несколько баз
+ * внутри неё — а команда в очереди у каждой базы своя, и отменяются именно они. Поэтому
+ * отметка живёт на строке базы, а отметка задания означает «все его базы»: поставили —
+ * отметились все, часть — промежуточное состояние. Иначе у задания и его баз было бы две
+ * независимые правды, и человеку пришлось бы гадать, что именно отменится.
+ *
+ * ОТМЕНА — ТОЛЬКО ДО НАЧАЛА ВЫПОЛНЕНИЯ. Команду, которую агент уже забрал, останавливает
+ * он сам на сервере 1С; назвать отменой прекращение ожидания значило бы соврать о
+ * состоянии чужой системы. Поэтому кнопка называет, сколько из отмеченного ещё можно
+ * отменить, и гаснет, когда таких нет.
  */
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,9 +34,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
-import {
-	cancelBatch, cancelCommands, fetchBatches, retryBatch, type BatchProgress,
-} from "src/services/onec/api";
+import { cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
 import { showToast } from "src/components/UIToast";
 import styles from "./OneCAdmin.module.scss";
 
@@ -59,8 +63,11 @@ const stateLabel = (state: string): string => translate(
 export const BatchesTab: FC = () => {
 	const qc = useQueryClient();
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
-	/** Отмеченные задания — цель групповых действий панели («Отменить», «Повторить»). */
-	const [picked, setPicked] = useState<BatchProgress[]>([]);
+	/**
+	 * Отмеченные КОМАНДЫ (по идентификатору): цель отмены. Отмечают базы, а не задания —
+	 * отменяется команда конкретной базы, и выбор обязан быть такой же точности.
+	 */
+	const [picked, setPicked] = useState<Set<string>>(new Set());
 
 	// Пока есть незавершённые — опрашиваем; когда всё стихло, опрос прекращается сам.
 	const batches = useQuery({
@@ -89,26 +96,22 @@ export const BatchesTab: FC = () => {
 		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
 	});
 
+	/**
+	 * Отмена отмеченного — ОДНИМ запросом по списку команд.
+	 *
+	 * И для всей операции, и для нескольких баз внутри неё это одно и то же действие:
+	 * отменить перечисленные команды. Отдельного пути «отменить задание целиком» больше
+	 * нет — отметка задания и так означает все его базы, а два пути к одному результату
+	 * рано или поздно начинают различаться.
+	 */
 	const cancel = useMutation({
-		mutationFn: async (batchIds: string[]) => {
-			let canceled = 0;
-			for (const id of batchIds) canceled += (await cancelBatch(id)).canceled;
-			return canceled;
-		},
-		onSuccess: (n) => {
-			void after();
-			showToast(n ? `${translate("onecOpCanceled")}: ${n}` : translate("onecOpCancelTooLate"),
-				n ? "success" : "warning");
-		},
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
-	});
-
-	/** Отмена ОДНОЙ базы задания: её команда ещё не начата. */
-	const cancelOne = useMutation({
-		mutationFn: (commandId: string) => cancelCommands([commandId]),
+		mutationFn: (commandIds: string[]) => cancelCommands(commandIds),
 		onSuccess: (r) => {
 			void after();
-			showToast(r.canceled ? `${translate("onecOpCanceled")}: ${r.canceled}` : translate("onecOpCancelTooLate"),
+			setPicked(new Set());
+			showToast(r.canceled
+				? `${translate("onecOpCanceled")}: ${r.canceled} / ${r.asked}`
+				: translate("onecOpCancelTooLate"),
 				r.canceled ? "success" : "warning");
 		},
 		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
@@ -149,16 +152,38 @@ export const BatchesTab: FC = () => {
 			__commandId: it.commandId ?? "",
 			// Отменить можно только не начатое: агент ещё не забирал эту команду.
 			__cancelable: it.state === "queued" ? 1 : 0,
+			// Отметка живёт в данных потомка — по ней же считается отметка задания
+			// (см. TableBodyRow: группа = «отмечены все вложенные»).
+			__selected: !!it.commandId && picked.has(it.commandId),
+			__batchId: b.id,
 		}));
-	}, [items]);
+	}, [items, picked]);
 
-	/** Активная строка: по ней работают кнопки, действующие на одну запись. */
-	const [active, setActive] = useState<TDataItem | null>(null);
-	const activeCancelable = Number(active?.__cancelable ?? 0) > 0;
-	const activeCommand = asText(active?.__commandId);
+	const toggleChild = useCallback((child: TDataItem, next: boolean) => {
+		const id = asText(child.__commandId);
+		if (!id) return;
+		setPicked((prev) => {
+			const nextSet = new Set(prev);
+			if (next) nextSet.add(id); else nextSet.delete(id);
+			return nextSet;
+		});
+	}, []);
 
-	const pickedCancelable = picked.reduce((n, b) => n + (b.cancelable ?? 0), 0);
-	const pickedFailed = picked.reduce((n, b) => n + b.failed, 0);
+	/** Что из отмеченного реально отменится: команды, которых агент ещё не забрал. */
+	const cancelable = useMemo(() => {
+		const ids: string[] = [];
+		for (const b of items) {
+			for (const it of b.items) {
+				if (it.commandId && picked.has(it.commandId) && it.state === "queued") ids.push(it.commandId);
+			}
+		}
+		return ids;
+	}, [items, picked]);
+
+	/** Задания, которых коснулась отметка, — цель повтора неуспешных. */
+	const touchedBatches = useMemo(() => items.filter(
+		(b) => b.items.some((it) => it.commandId && picked.has(it.commandId)),
+	), [items, picked]);
 
 	return (
 		<>
@@ -168,16 +193,14 @@ export const BatchesTab: FC = () => {
 				sorting: view.sorting, search: view.search,
 				isLoading: batches.isLoading, reloading: batches.isFetching,
 				onReload: () => void batches.refetch(),
-				// Отметки — для действий сразу над несколькими заданиями.
+				/*
+				 * Отмечают БАЗЫ. Отметка задания означает «все его базы» — так устроена
+				 * групповая отметка в <Table />, и это ровно то, что нужно: отменить можно и
+				 * всю операцию, и несколько баз внутри неё, а отменяются в обоих случаях
+				 * команды конкретных баз.
+				 */
 				selectable: true,
-				onSelectionChange: (sel, all) => setPicked(
-					all.filter((r) => sel.has(Number(r.id)))
-						.map((r) => items.find((b) => b.id === asText(r.batchId)))
-						.filter((b): b is BatchProgress => !!b),
-				),
-				onActiveRowChange: (r) => setActive(r ?? null),
-				// Раскрывает задание базами шеврон в ячейке группы: одиночный клик по строке
-				// не должен разворачивать группы — им ходят по списку, в том числе стрелками.
+				disableActiveRow: true,
 				expandedRowIds: expanded,
 				onToggleExpand: (r) => setExpanded((prev) => {
 					const key = asText(r.uuid);
@@ -186,33 +209,26 @@ export const BatchesTab: FC = () => {
 					return next;
 				}),
 				childRows,
+				onChildToggle: (_parent, child, next) => toggleChild(child, next),
 				extraButtons: (
 					<>
-						{/* Отмена ОДНОЙ базы — когда выбрана вложенная строка. */}
-						{activeCommand && (
-							<Button variant="danger" disabled={!activeCancelable || cancelOne.isPending}
-								title={activeCancelable
-									? `${translate("onecOpCancel")}: ${asText(active?.title)}`
-									: translate("onecOpCancelTooLate")}
-								onClick={() => cancelOne.mutate(activeCommand)}>
-								<Icon name="close" /> {translate("onecOpCancel")}: {asText(active?.title)}
-							</Button>
-						)}
-						<Button variant="danger" disabled={!pickedCancelable || cancel.isPending}
-							title={picked.length
-								? (pickedCancelable ? `${translate("onecOpCancel")}: ${pickedCancelable}` : translate("onecOpCancelTooLate"))
+						<Button variant="danger" disabled={!cancelable.length || cancel.isPending}
+							title={picked.size
+								? (cancelable.length
+									? `${translate("onecOpCancel")}: ${cancelable.length} / ${picked.size}`
+									: translate("onecOpCancelTooLate"))
 								: translate("onecBatchPickFirst")}
-							onClick={() => cancel.mutate(picked.map((b) => b.id))}>
+							onClick={() => cancel.mutate(cancelable)}>
 							<Icon name="close" /> {translate("onecBatchCancelQueued")}
-							{pickedCancelable ? ` (${pickedCancelable})` : ""}
+							{cancelable.length ? ` (${cancelable.length})` : ""}
 						</Button>
-						<Button variant="secondary" disabled={!pickedFailed || retry.isPending}
-							title={pickedFailed
-								? `${translate("onecBatchRetryFailed")}: ${pickedFailed}`
+						<Button variant="secondary"
+							disabled={!touchedBatches.some((b) => b.failed > 0) || retry.isPending}
+							title={touchedBatches.some((b) => b.failed > 0)
+								? translate("onecBatchRetryFailed")
 								: translate("onecBatchNothingToRetry")}
-							onClick={() => picked.forEach((b) => retry.mutate(b.id))}>
+							onClick={() => touchedBatches.filter((b) => b.failed > 0).forEach((b) => retry.mutate(b.id))}>
 							<Icon name="restore" /> {translate("onecBatchRetryFailed")}
-							{pickedFailed ? ` (${pickedFailed})` : ""}
 						</Button>
 					</>
 				),

@@ -229,10 +229,19 @@ export type PublicationReport = {
  * в кэш списка баз, и СПИСОК БАЗ СТАНОВИЛСЯ ПУСТЫМ, а в сообщении появлялось «Проверено
  * публикаций: undefined».
  */
+/**
+ * `report` ПОМЕЧЕН НЕОБЯЗАТЕЛЬНЫМ НАМЕРЕННО.
+ *
+ * Панель и сервис обновляются по отдельности: фронт подхватывает правки сразу, сервис —
+ * только после перезапуска. Пока он старый, ответ приходит в прежней форме (без разбора
+ * среза), и обращение к `report.accepted` роняло обработчик прямо в лицо пользователю:
+ * «Cannot read properties of undefined». Отсутствие поля — не ошибка, а известное
+ * состояние: мы не знаем, что нашлось, и говорим именно это.
+ */
 export const refreshPublications = () =>
-	aiFetch<{ items: OnecBase[]; report: PublicationReport } | Pending>(
+	aiFetch<{ items: OnecBase[]; report?: PublicationReport } | Pending>(
 		"/v1/onec/publications/refresh", { method: "POST" },
-	).then((d) => awaitCommand<{ items: OnecBase[]; report: PublicationReport }>(d));
+	).then((d) => awaitCommand<{ items: OnecBase[]; report?: PublicationReport }>(d));
 
 /**
  * Роли для выбора при создании и изменении пользователя.
@@ -451,15 +460,33 @@ export type OnecAgent = {
  * обращений к кластеру ещё осталось в текущей минуте. Квота общая на всю установку, поэтому
  * её остаток — это состояние среды, а не свойство нажавшего.
  */
-/** Серверы 1С и их публичные имена — экран «Настройки». */
-export type OnecServer = { id: string; name: string; publicHost: string | null; bases: number };
+/**
+ * Настраиваемые параметры сервера 1С — «Настройки» и вкладка «Параметры» карточки агента.
+ * Всё это человек задаёт сам: агент публичного имени не знает и знать не обязан, а адрес
+ * RAS знает не всегда.
+ */
+export type OnecServer = {
+	id: string;
+	name: string;
+	/** Под каким именем сервер виден снаружи — для ссылок на опубликованные базы. */
+	publicHost: string | null;
+	/** Адрес службы RAS, через которую агент ходит в кластер. */
+	rasHost: string | null;
+	rasPort: number | null;
+	bases: number;
+};
 
 export const fetchServers = () => aiFetch<{ items: OnecServer[] }>("/v1/onec/servers");
 
-/** Пустая строка СТИРАЕТ настройку: отказ от подмены — такое же решение, как и подмена. */
-export const setServerPublicHost = (id: string, publicHost: string) =>
+/**
+ * Поле, которого НЕТ в запросе, не меняется; присланное пустым — СТИРАЕТСЯ. «Оставить как
+ * было» и «убрать» — разные намерения, и различать их обязательно.
+ */
+export const updateServer = (id: string, patch: {
+	name?: string; publicHost?: string; rasHost?: string; rasPort?: number | null;
+}) =>
 	aiFetch<{ items: OnecServer[] }>(`/v1/onec/servers/${encodeURIComponent(id)}`, {
-		method: "PATCH", body: JSON.stringify({ publicHost }),
+		method: "PATCH", body: JSON.stringify(patch),
 	});
 
 export const fetchAgents = () =>

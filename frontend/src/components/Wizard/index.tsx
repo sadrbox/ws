@@ -13,10 +13,12 @@
  * Шаг НЕ ОТКЛЮЧАЕТ кнопку «Далее» молча: `blockedReason` объясняет, чего не хватает, —
  * серая кнопка без объяснения заставляет угадывать.
  */
-import { FC, ReactNode, useMemo, useState } from "react";
+import { FC, PropsWithChildren, ReactNode, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
+import { GroupCol } from "src/components/UI";
+import main from "src/styles/main.module.scss";
 import styles from "./Wizard.module.scss";
 
 export type WizardStep = {
@@ -28,6 +30,27 @@ export type WizardStep = {
 	/** Чего не хватает, чтобы уйти дальше. Пусто — можно. */
 	blockedReason?: string;
 };
+
+/**
+ * Тело шага-ФОРМЫ — общий каркас на все помощники.
+ *
+ * Шаги бывают двух видов: таблица (её тело заполняет область целиком) и форма — поля,
+ * переключатели, план операции. Пока каждый помощник размечал форму по-своему, шаги
+ * различались отступами и шириной колонок внутри одного экрана: первый шаг выглядел как
+ * список приложения, второй — как записка. Здесь каркас тот же, что у форм элементов
+ * (FormContainer → FormWrapper → колонка полей + колонка сообщений), поэтому шаг помощника
+ * не отличить от обычной формы — и правильно, это она и есть.
+ */
+export const WizardForm: FC<PropsWithChildren<{ aside?: ReactNode }>> = ({ children, aside }) => (
+	<div className={main.FormContainer}>
+		<div className={main.FormWrapper}>
+			<GroupCol className={main.Form}>{children}</GroupCol>
+			{/* Колонка сообщений шага: занимает своё место всегда — появление пояснения не
+			    двигает поля под курсором, тот же довод, что и в формах элементов. */}
+			<GroupCol className={main.FormNotice}>{aside}</GroupCol>
+		</div>
+	</div>
+);
 
 export const Wizard: FC<{
 	steps: WizardStep[];

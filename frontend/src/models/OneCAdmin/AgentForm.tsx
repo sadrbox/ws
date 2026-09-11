@@ -11,9 +11,10 @@
  * не назначает. Здесь — состояние, способности, экземпляры и команды над ними.
  */
 import { FC, useCallback, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import { withOp } from "./progress";
+import ServerParams from "./ServerParams";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
@@ -29,7 +30,7 @@ import { getFormatDate } from "src/utils/datetime";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import {
-	deleteAgent, releaseAgentInstance, renameAgent, rotateAgentToken,
+	deleteAgent, fetchServers, releaseAgentInstance, renameAgent, rotateAgentToken,
 	setAgentDisabled, setAgentOwner,
 } from "src/services/onec/api";
 import { QueryError, useAgents } from "./shared";
@@ -74,6 +75,10 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 
 	/** Над кем операция — в реестре прогресса это единственный ориентир. */
 	const agentName = agent?.name || agentId.slice(0, 8);
+
+	// Сервер этого агента — из того же списка, что показывают «Настройки»: один источник.
+	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers });
+	const server = (servers.data?.items ?? []).find((s) => s.id === agent?.serverId) ?? null;
 
 	const rotate = useMutation({
 		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRotate"), target: agentName },
@@ -231,6 +236,43 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											type: "info",
 											text: `${translate("onecAgentCapabilities")}: ${agent?.capabilities.join(", ") || "—"}`,
 										}]} />
+									</GroupCol>
+								</div>
+							</div>
+						),
+					},
+					{
+						/*
+						 * ПАРАМЕТРЫ — не агента, а СЕРВЕРА, за которым он закреплён.
+						 *
+						 * У самого агента настраивать нечего: имя правится на «Основном», роль
+						 * задаётся при регистрации и менять её в панели нельзя (это разные
+						 * службы под разными учётками ОС), способности он объявляет сам —
+						 * спорить с ними бессмысленно, а токен и включение — действия, а не
+						 * параметры. Настраивается то, чего агент не знает (под каким именем
+						 * сервер виден снаружи) или знает не всегда (адрес службы RAS).
+						 *
+						 * Редактор ОДИН с экраном «Настройки»: два редактора одних и тех же
+						 * полей рано или поздно начинают расходиться.
+						 */
+						id: "params", label: translate("onecTabParams"),
+						component: (
+							<div className={main.FormContainer}>
+								<div className={main.FormWrapper}>
+									<GroupCol className={main.Form}>
+										{server
+											? <ServerParams server={server} />
+											: (
+												<Notice inline items={[{
+													type: "info",
+													text: translate(servers.error
+														? "onecSettingsUnavailable"
+														: "onecAgentNoServer"),
+												}]} />
+											)}
+									</GroupCol>
+									<GroupCol className={main.FormNotice}>
+										<Notice items={[{ type: "info", text: translate("onecSettingsPublicHostHint") }]} />
 									</GroupCol>
 								</div>
 							</div>

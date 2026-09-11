@@ -127,6 +127,21 @@ export function publicUrl(url: string | null, publicHost: string | null): string
 	}
 }
 
+/**
+ * Настраиваемые параметры сервера 1С. Всё, что здесь есть, человек задаёт сам: агент этого
+ * не знает и знать не обязан (публичное имя) либо знает не всегда (адрес RAS).
+ */
+export type ServerParams = {
+	id: string;
+	name: string;
+	/** Под каким именем сервер виден снаружи — для ссылок на опубликованные базы. */
+	publicHost: string | null;
+	/** Адрес службы RAS, через которую агент ходит в кластер. */
+	rasHost: string | null;
+	rasPort: number | null;
+	bases: number;
+};
+
 /** Одна строка среза публикаций, как её присылает агент (CLUSTER_LIST_PUBLICATIONS). */
 export type PublicationItem = { key: string; name?: string; published?: boolean; url?: string | null };
 
@@ -247,29 +262,41 @@ export class BaseService {
 		return r.rows[0] ?? null;
 	}
 
-	/** Серверы 1С с их публичными именами — для экрана настроек. */
-	async listServers(): Promise<{ id: string; name: string; publicHost: string | null; bases: number }[]> {
-		const r = await this.db.query<{ id: string; name: string; public_host: string | null; bases: string }>(
-			`SELECT s.id, s.name, s.public_host, count(b.id) AS bases
+	/** Серверы 1С и их настраиваемые параметры — для экрана настроек и карточки агента. */
+	async listServers(): Promise<ServerParams[]> {
+		const r = await this.db.query<{
+			id: string; name: string; public_host: string | null;
+			ras_host: string | null; ras_port: number | null; bases: string;
+		}>(
+			`SELECT s.id, s.name, s.public_host, s.ras_host, s.ras_port, count(b.id) AS bases
 			   FROM servers s LEFT JOIN bases b ON b.server_id = s.id
 			  GROUP BY s.id ORDER BY s.name`,
 		);
 		return r.rows.map((x) => ({
-			id: x.id, name: x.name, publicHost: x.public_host, bases: Number(x.bases),
+			id: x.id, name: x.name, publicHost: x.public_host,
+			rasHost: x.ras_host, rasPort: x.ras_port, bases: Number(x.bases),
 		}));
 	}
 
 	/**
-	 * Публичное имя сервера — под каким он виден снаружи.
+	 * Параметры сервера, которые задаёт человек.
 	 *
-	 * Пустая строка СТИРАЕТ настройку (а не «не меняет»): отказ от подмены — такое же
-	 * решение, как и сама подмена, и выразить его человек должен уметь.
+	 * ПУСТАЯ СТРОКА СТИРАЕТ значение, а НЕ «не меняет»: отказ от подмены адреса или от
+	 * своего RAS — такое же решение, как и сама настройка, и выразить его надо уметь.
+	 * Отсюда NULLIF, а не COALESCE: «не трогать» выражается тем, что поле не прислали
+	 * вовсе (`undefined`), и такие поля до SQL не доходят.
 	 */
-	async setPublicHost(serverId: string, host: string): Promise<boolean> {
-		const r = await this.db.query(
-			`UPDATE servers SET public_host = NULLIF($2, '') WHERE id = $1`,
-			[serverId, host.trim()],
-		);
+	async updateServer(serverId: string, p: {
+		name?: string; publicHost?: string; rasHost?: string; rasPort?: number | null;
+	}): Promise<boolean> {
+		const sets: string[] = [];
+		const vals: unknown[] = [serverId];
+		if (p.name !== undefined && p.name.trim()) { vals.push(p.name.trim()); sets.push(`name = $${vals.length}`); }
+		if (p.publicHost !== undefined) { vals.push(p.publicHost.trim()); sets.push(`public_host = NULLIF($${vals.length}, '')`); }
+		if (p.rasHost !== undefined) { vals.push(p.rasHost.trim()); sets.push(`ras_host = NULLIF($${vals.length}, '')`); }
+		if (p.rasPort !== undefined) { vals.push(p.rasPort); sets.push(`ras_port = $${vals.length}`); }
+		if (!sets.length) return true;
+		const r = await this.db.query(`UPDATE servers SET ${sets.join(", ")} WHERE id = $1`, vals);
 		return (r.rowCount ?? 0) > 0;
 	}
 

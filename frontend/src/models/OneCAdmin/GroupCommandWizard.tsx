@@ -25,11 +25,11 @@ import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
-import Wizard, { type WizardStep } from "src/components/Wizard";
+import Wizard, { WizardForm, type WizardStep } from "src/components/Wizard";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { FormArea, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -228,9 +228,8 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 			hint: translate("onecWizStepParamsHint"),
 			blockedReason: paramsMissing ? `${translate("onecWizNeed")}: ${paramsMissing}` : "",
 			body: (
-				<div className={main.FormContainer}>
-					<div className={main.FormWrapper}>
-						<GroupCol className={main.Form}>
+				<WizardForm aside={<Notice inline items={[{ type: "info", text: translate(spec.warning) }]} />}>
+					<>
 							{spec.needsName && (
 								<GroupRow>
 									<Field name="gcw_name" noAutofill width={FIELD_WIDTH.wide}
@@ -267,31 +266,40 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 							{!spec.needsName && !spec.needsFile && !spec.needsDir && (
 								<Notice inline items={[{ type: "info", text: translate("onecWizNoParams") }]} />
 							)}
-						</GroupCol>
-					</div>
-				</div>
+					</>
+				</WizardForm>
 			),
 		},
 		{
 			id: "plan",
 			title: translate("onecWhatHappens"),
+			// Тот же каркас, что и у шага параметров: шаги одного помощника не должны
+			// выглядеть как страницы из разных программ.
 			body: (
-				<div className={styles.SecBody}>
-					<Notice inline items={[
-						{ type: "attention", text: translate(spec.warning) },
-						{ type: "info", text: `${translate("onecBatchTargets")}: ${targets.length}` },
-						...(skipped.length
-							? [{
-								type: "warning" as const,
-								text: `${translate("onecSkippedBases")}: ${skipped.map((s) => `${s.key} (${s.reason})`).join(", ")}`,
-							}]
-							: []),
-					]} />
-					<div className={styles.PlanRow}>
-						<span className={styles.PlanBase}>{translate(spec.title)}</span>
-						<span className={styles.PlanAdd}>{targets.join(", ") || translate("onecNoChanges")}</span>
-					</div>
-				</div>
+				<WizardForm aside={<Notice inline items={[{ type: "attention", text: translate(spec.warning) }]} />}>
+					<>
+						<GroupRow>
+							<Field name="gcw_plan_op" label={translate("onecWhatHappens")}
+								value={translate(spec.title)} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
+							<Field name="gcw_plan_count" label={translate("onecBatchTargets")}
+								value={String(targets.length)} disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
+						</GroupRow>
+						<FormArea title={translate("onecTabBases")}>
+							<div className={styles.PlanRow}>
+								<span className={styles.PlanAdd}>{targets.join(", ") || translate("onecNoChanges")}</span>
+							</div>
+						</FormArea>
+						{skipped.length > 0 && (
+							<FormArea title={translate("onecSkippedBases")}>
+								<div className={styles.PlanRow}>
+									<span className={styles.PlanDel}>
+										{skipped.map((x) => `${x.key} (${x.reason})`).join(", ")}
+									</span>
+								</div>
+							</FormArea>
+						)}
+					</>
+				</WizardForm>
 			),
 		},
 	];

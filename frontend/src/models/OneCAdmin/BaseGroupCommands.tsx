@@ -56,15 +56,27 @@ export const BaseGroupCommands: FC<{
 			refreshPublications,
 		),
 		onSuccess: (d) => {
-			qc.setQueryData(["onec", "bases"], { items: d.items });
+			// Список баз приходит и в старой форме ответа — его показываем в любом случае.
+			if (Array.isArray(d.items)) qc.setQueryData(["onec", "bases"], { items: d.items });
 			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
 
 			/*
 			 * ГОВОРИМ ТО, ЧТО ПРОИЗОШЛО НА САМОМ ДЕЛЕ. Раньше здесь было «Проверено
 			 * публикаций: 110» — по длине списка. На деле опубликованной не нашлось ни
 			 * одной, срез был отвергнут как недостоверный, и состояние баз не изменилось.
+			 *
+			 * РАЗБОРА МОЖЕТ НЕ БЫТЬ: панель и сервис обновляются по отдельности, и пока
+			 * сервис старый, он отвечает в прежней форме. Это не ошибка, а известное
+			 * состояние — «не знаем, что нашлось», и сказать надо именно это, а не уронить
+			 * обработчик обращением к несуществующему полю.
 			 */
 			const r = d.report;
+			if (!r) {
+				noteNotice(translate("onecPublication"),
+					{ type: "warning", text: translate("onecPublicationsNoReport") });
+				showToast(translate("onecPublicationsNoReport"), "warning");
+				return;
+			}
 			if (r.accepted) {
 				showToast(`${translate("onecPublicationsChecked")}: ${r.published} / ${r.total}`, "success");
 				return;

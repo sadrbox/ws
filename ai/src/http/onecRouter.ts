@@ -445,11 +445,21 @@ export function onecRouter(deps: Deps) {
 		res.json({ success: true, data: { items: await bases.listServers() } });
 	});
 
+	/**
+	 * Поле, которого НЕТ в запросе, не меняется; присланное пустым — СТИРАЕТСЯ. Это разные
+	 * намерения, и различать их обязательно: «оставить как было» и «убрать» — не одно и то
+	 * же, а одинаково выглядят, если принимать всё подряд за новое значение.
+	 */
 	r.patch("/servers/:id", async (req, res) => {
-		const host = typeof (req.body as { publicHost?: unknown })?.publicHost === "string"
-			? (req.body as { publicHost: string }).publicHost
-			: "";
-		const ok = await bases.setPublicHost(req.params.id, host);
+		const b = (req.body ?? {}) as Record<string, unknown>;
+		const str = (k: string) => (typeof b[k] === "string" ? (b[k] as string) : undefined);
+		const port = b.rasPort === null ? null
+			: (typeof b.rasPort === "number" && Number.isInteger(b.rasPort) && b.rasPort > 0 && b.rasPort < 65536
+				? b.rasPort : undefined);
+
+		const ok = await bases.updateServer(req.params.id, {
+			name: str("name"), publicHost: str("publicHost"), rasHost: str("rasHost"), rasPort: port,
+		});
 		if (!ok) { send(res, fail(404, "NOT_FOUND", "Сервер не найден")); return; }
 		res.json({ success: true, data: { items: await bases.listServers() } });
 	});
