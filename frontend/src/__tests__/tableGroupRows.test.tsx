@@ -223,3 +223,60 @@ describe("Table: вложенные строки поясняют группу, 
     expect(child.querySelectorAll("td").length).toBe(all[0].querySelectorAll("td").length);
   });
 });
+
+// ── Перенос текста в ячейках (wrapCells) ───────────────────────────────────
+//
+// Бывают таблицы, где содержимое ячейки — ПРЕДЛОЖЕНИЕ, а не значение: текст технического
+// сообщения, ответ агента, причина отказа. Обрезать их многоточием значит спрятать ровно
+// то, ради чего в таблицу и смотрят.
+//
+// Вместе с переносом ОБЯЗАТЕЛЬНО отключается виртуализация: она считает положение строки
+// как index × ROW_HEIGHT и верит, что все строки одной высоты. Строки разной высоты эту
+// веру ломают — отступы-заглушки перестают совпадать с содержимым, и таблица разъезжается.
+
+describe("Table: перенос текста в ячейках", () => {
+  const long = "ibcmd extension list по базе «almaz67» не ответил за 180 с — процесс снят. "
+    + "Обычно это занятый рабочий каталог или блокировка в самой базе";
+  const wordy: TDataItem[] = [{ id: 1, uuid: "m1", name: long, note: "" }];
+
+  it("без wrapCells таблица не помечена классом переноса", () => {
+    const { container } = render(
+      <TestWrapper>
+        <Table {...buildStaticTableProps({
+          componentName: "TestWrapOff", rows: wordy, columns: columns(), setColumns: () => { },
+        })} />
+      </TestWrapper>,
+    );
+    expect(container.querySelector('[class*="WrapCells"]')).toBeNull();
+  });
+
+  it("с wrapCells класс переноса стоит, а текст не обрезан", () => {
+    const { container } = render(
+      <TestWrapper>
+        <Table {...buildStaticTableProps({
+          componentName: "TestWrapOn", rows: wordy, columns: columns(), setColumns: () => { },
+          wrapCells: true,
+        })} />
+      </TestWrapper>,
+    );
+    expect(container.querySelector('[class*="WrapCells"]')).toBeTruthy();
+    // Текст доходит до разметки целиком: перенос — дело CSS, но прятать его нельзя.
+    expect(container.textContent).toContain("блокировка в самой базе");
+  });
+
+  it("с wrapCells отрисованы ВСЕ строки: виртуализация выключена", () => {
+    // Больше окна виртуализации: при включённой часть строк не дошла бы до разметки.
+    const many: TDataItem[] = Array.from({ length: 60 }, (_, i) => ({
+      id: i + 1, uuid: `m${i}`, name: `Сообщение ${i}`, note: "",
+    }));
+    const { container } = render(
+      <TestWrapper>
+        <Table {...buildStaticTableProps({
+          componentName: "TestWrapMany", rows: many, columns: columns(), setColumns: () => { },
+          wrapCells: true,
+        })} />
+      </TestWrapper>,
+    );
+    expect(bodyRows(container).length).toBe(60);
+  });
+});

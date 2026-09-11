@@ -31,7 +31,7 @@ export const TableBody = memo(() => {
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
     actions, scrollRef, search,
-    expandedRowIds,
+    expandedRowIds, wrapCells,
   } = useTableContext();
   // Волатильное состояние читаем ЗДЕСЬ (TableBody перерисуется на навигацию/выделение
   // — это один компонент), а в строки отдаём готовые булевы пропсами. Тогда memo на
@@ -201,8 +201,13 @@ export const TableBody = memo(() => {
   // список: раскрытие применяется на коротких таблицах, и правильная разметка там
   // важнее экономии на строках. На длинном списке (больше предела) окно сохраняем —
   // лучше неточный отступ, чем повисший браузер.
+  // Перенос текста ломает ту же веру, что и вложенные строки: ячейка с предложением
+  // выше ячейки со значением, и расчётные отступы перестают совпадать с содержимым.
+  // Поэтому таблица с переносом виртуализацию не использует вовсе — она для коротких
+  // читаемых списков, где важнее правильная разметка, чем экономия на строках.
   const loadedCount = deferredRowsForRender.length;
-  const unvirtualized = (expandedRowIds?.size ?? 0) > 0 && loadedCount <= EXPANDED_NO_VIRTUAL_LIMIT;
+  const unvirtualized = wrapCells
+    || ((expandedRowIds?.size ?? 0) > 0 && loadedCount <= EXPANDED_NO_VIRTUAL_LIMIT);
   const effectiveContainerHeight = containerHeight > 0 ? containerHeight : 600;
   const virtualRowsCount = normalizedSearch ? loadedCount : total;
 

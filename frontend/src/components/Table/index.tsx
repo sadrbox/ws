@@ -96,6 +96,16 @@ export interface TableProps {
    * щелчка, и снять её было бы невозможно.
    */
   presetSelectedRows?: Set<number>;
+  /**
+   * Ячейки переносят текст и тянутся под содержимое (до восьми строк).
+   *
+   * Для таблиц, где содержимое ячейки — ПРЕДЛОЖЕНИЕ, а не значение: текст технического
+   * сообщения, ответ агента, причина отказа. Вместе с переносом выключается
+   * виртуализация — она считает положение строки как index × ROW_HEIGHT и верит, что все
+   * строки одной высоты. Поэтому перенос включают только там, где список заведомо
+   * короткий и читаемый, а не листаемый.
+   */
+  wrapCells?: boolean;
   // ── Inline-редактирование ──────────────────────────────────────────────
   inlineEditing?: boolean;
   renderCell?: (row: TDataItem, col: TColumn) => React.ReactNode | undefined;
@@ -328,6 +338,7 @@ const Table: FC<TableProps> = memo((props) => {
     onSelectItem,
     onSelectionChange,
     presetSelectedRows,
+    wrapCells,
     enableDateRange = true,
     componentName, rows, columns, total, totalPages,
     isLoading, error,
@@ -632,6 +643,7 @@ const Table: FC<TableProps> = memo((props) => {
       // Групповая таблица тоже «умеет выбирать» — своими отметками (см. groupSelection).
       canSelect: !!onDelete || !!onSelectionChange || !!groupSelection,
       groupSelection,
+      wrapCells,
       renderCellRef, inlineEditingRef, getCellMetaRef,
       scrollRef,
       expandedRowIds,
@@ -659,7 +671,7 @@ const Table: FC<TableProps> = memo((props) => {
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
       expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
-      disableActiveRow, groupSelection,
+      disableActiveRow, groupSelection, wrapCells,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,
@@ -983,7 +995,7 @@ const Table: FC<TableProps> = memo((props) => {
           />
         )}
 
-        <div className={styles.TableScrollContainer}>
+        <div className={[styles.TableScrollContainer, wrapCells ? styles.WrapCells : null].filter(Boolean).join(" ")}>
           <div
             ref={scrollRef}
             className={`${styles.TableScrollWrapper} ${styles.NoOverflowAnchor}`}
