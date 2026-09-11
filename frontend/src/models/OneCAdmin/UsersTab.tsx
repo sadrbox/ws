@@ -15,7 +15,7 @@
  * только таблицы, поэтому появление сообщения ничего не сдвигает.
  */
 import { FC, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Tabs from "src/components/Tabs";
@@ -26,10 +26,11 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary,
+	fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary, refreshBases,
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
+import { showToast } from "src/components/UIToast";
 import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import { useOpenOnecBase } from "src/models/OneCBases";
@@ -65,6 +66,7 @@ export const UsersTab: FC = () => {
 
 	const openCard = useOpenBaseUser();
 	const openBase = useOpenOnecBase();
+	const qc = useQueryClient();
 	// Слежение за командами общее для экрана и карточки — см. useBatchWatch.
 	const watch = useBatchWatch();
 
@@ -136,6 +138,16 @@ export const UsersTab: FC = () => {
 	// в карточке базы обязана делать ровно то же самое.
 	const check = useBaseUsersCheck();
 
+	/** Состав баз заводит кластер: обновление списка спрашивает его, а не наш кэш. */
+	const refreshFromCluster = useMutation({
+		mutationFn: refreshBases,
+		onSuccess: (d) => {
+			qc.setQueryData(["onec", "bases"], d);
+			showToast(translate("onecBasesRefreshed"), "success");
+		},
+		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+	});
+
 	// ── Таблицы ─────────────────────────────────────────────────────────────
 	const basesTable = (
 		<Table {...buildStaticTableProps({
@@ -144,20 +156,20 @@ export const UsersTab: FC = () => {
 			isLoading: bases.isLoading || occurrences.isLoading,
 			// Таблица не гаснет на время чтения: крутится только кнопка, прежние данные
 			// остаются читаемыми.
-			reloading: check.checking,
+			reloading: refreshFromCluster.isPending,
 			/*
-			 * «Обновить» = ПРОЧИТАТЬ СОДЕРЖИМОЕ активной базы у самой 1С; базы не выбрана —
-			 * перечитать список баз (больше обновлять нечего).
+			 * «Обновить» в таблице БАЗ обновляет БАЗЫ — спрашивает кластер и перечитывает
+			 * список. Раньше она читала пользователей активной базы: кнопка стояла в одной
+			 * таблице, а обновляла содержимое соседней, и по ней нельзя было понять, что
+			 * именно сейчас запросят. Содержимое базы обновляет та таблица, которая его
+			 * показывает, — своей кнопкой.
 			 *
 			 * ОТМЕТОК СТРОК ЗДЕСЬ НЕТ намеренно: этот экран — про связь «человек ↔ база»,
 			 * а групповые операции по многим базам живут там, где базы и выбирают, — в
-			 * списке «Базы 1С». Две точки выбора баз расходились бы между собой.
+			 * списке «Базы 1С».
 			 */
-			onReload: () => {
-				if (activeBase) void check.run([activeBase]);
-				else void bases.refetch();
-			},
-			reloadTitle: activeBase ? `${translate("onecUsersCheck")}: ${activeBase}` : translate("onecReloadCached"),
+			onReload: () => void refreshFromCluster.mutate(),
+			reloadTitle: translate("onecRefreshFromCluster"),
 			// Одиночный щелчок — связанный список справа. Двойной — карточка БАЗЫ:
 			// строка таблицы баз открывает элемент своего типа, а не то, ради чего
 			// таблицу показали рядом.
