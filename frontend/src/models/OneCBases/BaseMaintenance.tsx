@@ -17,6 +17,7 @@
 import { FC, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
@@ -147,7 +148,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 
 					<FormArea title={translate("onecBackup")}>
 						<GroupRow>
-							<Field name="mnt_dir" label={translate("onecBackupDir")} value={backupDir} noAutofill
+							<Field name="mnt_dir" label={translate("onecBackupDir")} value={backupDir} noAutofill width={FIELD_WIDTH.lg}
 								disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackupDir(e.target.value)} />
 							<Button variant="secondary" disabled={busy} title={translate("onecBackup")}
 								onClick={() => apply.mutate("backup")}>
@@ -159,7 +160,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 					<FormArea title={translate("onecMaintRestore")}>
 						<GroupCol>
 							<GroupRow>
-								<Field name="mnt_path" label={translate("onecMaintFileDt")} value={restorePath} noAutofill
+								<Field name="mnt_path" label={translate("onecMaintFileDt")} value={restorePath} noAutofill width={FIELD_WIDTH.lg}
 									disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRestorePath(e.target.value)} />
 								<FieldToggle name="mnt_lock" label={translate("onecMaintLockSessions")} value={restoreLock}
 									disabled={busy} onChange={setRestoreLock} />
@@ -177,7 +178,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 					<FormArea title={translate("onecMaintUpdate")}>
 						<GroupCol>
 							<GroupRow>
-								<Field name="mnt_cfu" label={translate("onecMaintFileCfu")} value={updatePath} noAutofill
+								<Field name="mnt_cfu" label={translate("onecMaintFileCfu")} value={updatePath} noAutofill width={FIELD_WIDTH.lg}
 									disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpdatePath(e.target.value)} />
 								<FieldToggle name="mnt_backup" label={translate("onecMaintBackupFirst")} value={updateBackup}
 									disabled={busy} onChange={setUpdateBackup} />

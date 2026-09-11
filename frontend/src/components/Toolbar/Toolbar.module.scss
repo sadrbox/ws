@@ -45,6 +45,7 @@
 /* Портальный слот — невидимый контейнер */
 .ToolbarSlot {
 	display: contents;
+	height: $heightFieldInput + 4px;
 }
 
 

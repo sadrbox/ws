@@ -603,7 +603,7 @@ body {
 	gap: 6px;
 	align-items: center;
 	justify-content: flex-start;
-	height: $heightFieldInput;
+	height: $heightFieldInput + 4px;
 
 	flex-shrink: 0;
 	// margin: 0px -6px 0px -6px;
@@ -634,7 +634,7 @@ body {
 	gap: 6px;
 	flex-shrink: 0;
 	margin-left: auto;
-	height: $heightFieldInput + 2px;
+	// height: $heightFieldInput +;
 }
 
 // Слот для дополнительных кнопок формы в шапке (например «Печать»).
@@ -663,7 +663,6 @@ body {
 	gap: 6px;
 	justify-content: flex-start;
 	margin: 0px;
-	height: $heightFieldInput + 2px;
 }
 
 
