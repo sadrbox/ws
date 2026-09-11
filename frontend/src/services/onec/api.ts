@@ -315,9 +315,16 @@ export type OnecAgent = {
 	owner: { instanceId: string | null; seenAt: string | null };
 };
 
-/** Вместе с агентами приходят лимиты: число одновременных проверок задаёт сервис. */
+/**
+ * Вместе с агентами приходят лимиты сервиса: сколько баз опрашивать одновременно и сколько
+ * обращений к кластеру ещё осталось в текущей минуте. Квота общая на всю установку, поэтому
+ * её остаток — это состояние среды, а не свойство нажавшего.
+ */
 export const fetchAgents = () =>
-	aiFetch<{ items: OnecAgent[]; limits: { checkParallel: number } }>("/v1/onec/agents");
+	aiFetch<{
+		items: OnecAgent[];
+		limits: { checkParallel: number; clusterPerMin?: number; clusterRemaining?: number };
+	}>("/v1/onec/agents");
 
 /** Назначить владельцем конкретный экземпляр: аренду мог занять не тот компьютер. */
 export const setAgentOwner = (id: string, instanceId: string) =>

@@ -44,6 +44,13 @@ const columns = (): TColumn[] => ([
 export const AgentsTab: FC = () => {
 	const qc = useQueryClient();
 	const agents = useAgents();
+	const limits = agents.data?.limits;
+	const quota = {
+		left: limits?.clusterRemaining ?? 0,
+		max: limits?.clusterPerMin ?? 0,
+		// Порог — пятая часть: раньше поздно, позже бесполезно.
+		low: !!limits?.clusterPerMin && (limits.clusterRemaining ?? 0) <= Math.ceil(limits.clusterPerMin / 5),
+	};
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_agents"));
 	const [dialog, setDialog] = useState<null | "create">(null);
 	const [name, setName] = useState("");
@@ -88,6 +95,14 @@ export const AgentsTab: FC = () => {
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecAgentsHint")}</div>
+			{/* Остаток общей квоты обращений к кластеру: когда он на исходе, отказ
+			    «слишком часто» приходит тому, кто нажал последним, — а причина общая. */}
+			{quota.low && (
+				<Notice wide items={[{
+					type: "warning",
+					text: `${translate("onecClusterQuotaLow")}: ${quota.left} / ${quota.max}`,
+				}]} />
+			)}
 			{doubled.map((a) => {
 				// Адреса источников: экземпляры с РАЗНЫХ адресов — это один токен на двух
 				// машинах (классика: сервер 1С и машина разработки), и лечится это не

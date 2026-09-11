@@ -81,7 +81,7 @@ export function onecRouter(deps: Deps) {
 	// Раньше ключом была организация, но администрирование от организации не зависит —
 	// иначе один и тот же rac дёргали бы N раз по числу организаций. Локальное чтение
 	// реестра баз (GET /bases) не считается: оно отвечает из своей БД и до rac не доходит.
-	r.use(rateLimit({
+	const clusterLimit = rateLimit({
 		max: cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN,
 		windowMs: 60_000,
 		key: () => "onec-cluster",
@@ -108,7 +108,8 @@ export function onecRouter(deps: Deps) {
 			);
 		},
 		message: "Слишком часто обращаемся к кластеру 1С — подождите немного",
-	}));
+	});
+	r.use(clusterLimit);
 
 	// Доступ даёт ПРАВО, а не организация: сервер 1С один на установку и никакой
 	// организации ERP не принадлежит. Активная организация здесь ни при чём — раньше
@@ -171,6 +172,18 @@ export function onecRouter(deps: Deps) {
 			payload: built.payload,
 			userUuid: u.uuid,
 			ttlSeconds: 300,
+			/**
+			 * ЧТЕНИЯ НЕ ДУБЛИРУЮТСЯ. Одна и та же база показана на нескольких экранах, и
+			 * два «Обновить» подряд создавали ДВЕ команды: два входа в базу по десятку
+			 * секунд там, где ответ один и тот же. Детерминированный requestId заставляет
+			 * второй запрос присоединиться к уже идущей команде и получить её результат —
+			 * очередь умеет это с самого начала (частично-уникальный индекс среди
+			 * незавершённых), просто им никто не пользовался.
+			 *
+			 * Только для READ: у изменяющих команд «повторить» — это законное намерение,
+			 * и склеивать их молча нельзя.
+			 */
+			...(spec.operation === "READ" ? { requestId: `${spec.type}:${built.baseKey ?? "-"}` } : {}),
 		});
 		await audit.write({
 			event: "onec.admin",
@@ -382,7 +395,14 @@ export function onecRouter(deps: Deps) {
 			// Владелец токена: единственный экземпляр, которому разрешено работать.
 			owner: await agents.owner(a.id),
 		})));
-		res.json({ success: true, data: { items, limits: { checkParallel: cfg.ONEC_CHECK_PARALLEL } } });
+		res.json({ success: true, data: { items, limits: {
+			checkParallel: cfg.ONEC_CHECK_PARALLEL,
+			// Остаток общей квоты обращений к кластеру: она одна на всю установку, и, когда
+			// кончается, отказ выглядит как вина того, кто нажал последним. Панель видит
+			// остаток заранее — этот ответ она и так опрашивает раз в 15 секунд.
+			clusterPerMin: cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN,
+			clusterRemaining: clusterLimit.remaining("onec-cluster"),
+		} } });
 	});
 
 	/**
@@ -602,6 +622,9 @@ export function onecRouter(deps: Deps) {
 			const cmd = await queue.enqueue({
 				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: key,
 				type: spec.type, payload: built.payload, userUuid: u.uuid, ttlSeconds: 900,
+				// Пачку по многим базам запускают и уходят: она не должна загораживать
+				// одиночный запрос человека, который ждёт ответа на экране.
+				priority: 10,
 			});
 			await batches.attach(batchId, cmd.id);
 			queued += 1;

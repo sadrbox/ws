@@ -24,7 +24,16 @@ export type RateLimitOptions = {
 	message?: string;
 };
 
-export function rateLimit(opts: RateLimitOptions): RequestHandler {
+/**
+ * Ограничитель с возможностью СПРОСИТЬ ОСТАТОК.
+ *
+ * Лимит на кластер общий для всей установки, и когда он кончается, человек видит «слишком
+ * часто обращаемся к кластеру» и не понимает, что виноват не он один. Панель показывает
+ * остаток заранее — для этого ограничитель умеет отвечать, сколько запросов ещё можно.
+ */
+export type RateLimitHandler = RequestHandler & { remaining: (key: string) => number };
+
+export function rateLimit(opts: RateLimitOptions): RateLimitHandler {
 	const hits = new Map<string, number[]>();
 	const key = opts.key ?? ((req: Request) => req.erpUser?.uuid ?? req.ip ?? "anonymous");
 	const applies = opts.applies ?? (() => true);
@@ -38,7 +47,7 @@ export function rateLimit(opts: RateLimitOptions): RequestHandler {
 	}, Math.max(opts.windowMs, 60_000));
 	sweep.unref();
 
-	return (req, res, next) => {
+	const handler: RateLimitHandler = Object.assign<RequestHandler, { remaining: (key: string) => number }>((req, res, next) => {
 		if (opts.max <= 0 || !applies(req)) {
 			next();
 			return;
@@ -59,5 +68,13 @@ export function rateLimit(opts: RateLimitOptions): RequestHandler {
 		times.push(now);
 		hits.set(k, times);
 		next();
-	};
+	}, {
+		remaining: (k: string) => {
+			if (opts.max <= 0) return Number.POSITIVE_INFINITY;
+			const border = Date.now() - opts.windowMs;
+			const times = (hits.get(k) ?? []).filter((t) => t > border);
+			return Math.max(0, opts.max - times.length);
+		},
+	});
+	return handler;
 }

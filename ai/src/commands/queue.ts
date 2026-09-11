@@ -27,6 +27,12 @@ export type EnqueueInput = {
 	userUuid?: string | null;
 	conversationId?: string | null;
 	ttlSeconds?: number;
+	/**
+	 * Меньше — раньше. 0 (по умолчанию) — то, что человек запросил сейчас и ждёт на
+	 * экране; 10 — пакетные операции по многим базам: их запускают и уходят, и они не
+	 * должны загораживать одиночный запрос.
+	 */
+	priority?: number;
 };
 
 export type CommandRow = {
@@ -115,13 +121,14 @@ export class CommandQueue {
 		// возвращает уже стоящую в очереди, а не создаёт вторую. Идемпотентность самой операции
 		// в 1С обеспечивает requestId — здесь мы защищаем только очередь.
 		const r = await this.db.query<CommandRow>(
-			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval)
+			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at, priority)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11)
 			 ON CONFLICT (agent_id, COALESCE(base_key, ''), request_id)
 			     WHERE request_id IS NOT NULL AND state IN ('queued', 'dispatched') DO NOTHING
 			 RETURNING *`,
 			[id, input.agentId, input.organizationUuid, baseKey, input.requestId ?? null, input.type,
-				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(ttl)],
+				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(ttl),
+				input.priority ?? 0],
 		);
 		if (!r.rows[0]) {
 			const existing = await this.db.query<CommandRow>(
@@ -195,8 +202,13 @@ export class CommandQueue {
 			`UPDATE commands SET state = 'dispatched', dispatched_at = now()
 			  WHERE id IN (
 			    SELECT id FROM (
-			      SELECT c.id,
-			             row_number() OVER (PARTITION BY COALESCE(c.base_key, c.id) ORDER BY c.created_at) AS rn
+			      SELECT c.id, c.priority, c.created_at,
+			             row_number() OVER (
+			               PARTITION BY COALESCE(c.base_key, c.id)
+			               -- Внутри базы порядок ТОЛЬКО по времени: приоритет не должен
+			               -- переставлять зависимые операции над одним объектом местами.
+			               ORDER BY c.created_at
+			             ) AS rn
 			        FROM commands c
 			       WHERE c.agent_id = $1 AND c.state = 'queued'
 			         AND (c.base_key IS NULL OR NOT EXISTS (
@@ -204,6 +216,9 @@ export class CommandQueue {
 			                WHERE d.agent_id = c.agent_id AND d.state = 'dispatched'
 			                  AND d.base_key = c.base_key))
 			    ) t WHERE t.rn = 1
+			    -- А вот МЕЖДУ базами приоритет решает: одиночный запрос человека уходит
+			    -- раньше пачки, которую запустили и ушли.
+			    ORDER BY t.priority, t.created_at
 			    LIMIT 20
 			  )
 			  RETURNING *`,
