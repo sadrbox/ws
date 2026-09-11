@@ -344,7 +344,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			const data = p.data.result as { items?: { key: string; published?: boolean; url?: string | null }[]; complete?: boolean } | null;
 			const me = await agents.findById(req.agent!.agentId);
 			if (me?.serverId && Array.isArray(data?.items) && data.items.length) {
-				await bases.applyPublications(me.serverId, data.items, data.complete === true);
+				const r = await bases.applyPublications(me.serverId, data.items, data.complete === true);
+				// Ответ, из которого не узнана ни одна база, — не «ничего не опубликовано», а
+				// разговор на разных языках. Молча проглатывать такое нельзя: реестр
+				// останется с прежним, а в логе будет видно, с чем разбираться.
+				const anyPublished = data.items.some((i) => i.published === true);
+				if (!r.matched || !anyPublished) {
+					log.warn({
+						agentId: req.agent!.agentId, items: data.items.length, matched: r.matched,
+						anyPublished, sample: data.items[0]?.key,
+					}, !r.matched
+						? "срез публикаций не сопоставлен ни с одной базой — реестр не тронут"
+						: "в срезе публикаций нет ни одной опубликованной базы — принимаем это за незнание, а не за факт");
+				}
 			}
 		}
 		/**

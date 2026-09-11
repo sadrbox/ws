@@ -185,7 +185,19 @@ export class BaseService {
 				        last_seen_at   = now()`,
 				[randomUUID(), serverId, key, s.name ?? null, s.status ?? null,
 					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled, s.id ?? null,
-					s.published ?? null, s.publishUrl ?? null],
+					// ПУБЛИКАЦИЯ ИЗ СРЕЗА БАЗ ПРИНИМАЕТСЯ ТОЛЬКО ПОЛОЖИТЕЛЬНАЯ.
+					//
+					// Срез базы приходит от rac, который про веб-публикации не знает вовсе.
+					// Если агент всё же кладёт туда признак, «нашёл публикацию» — это факт
+					// (иначе откуда), а «не нашёл» — не факт, а незнание: у него мог быть
+					// виден один веб-сервер из двух или сломан разбор конфигурации. Раньше
+					// принималось и то, и другое, и очередной срез затирал `true`,
+					// поставленный нашей же командой IB_PUBLISH: база оставалась
+					// опубликованной, а панель показывала «нет».
+					//
+					// Отрицательный ответ имеет право дать только специальный срез
+					// публикаций с обещанием полноты (см. applyPublications).
+					s.published === true ? true : null, s.publishUrl ?? null],
 			);
 		}
 
@@ -302,23 +314,58 @@ export class BaseService {
 		serverId: string,
 		items: { key: string; published?: boolean; url?: string | null }[],
 		complete: boolean,
-	): Promise<{ marked: number; cleared: number }> {
+	): Promise<{ marked: number; cleared: number; matched: number }> {
+		/*
+		 * «СПИСОК, В КОТОРОМ НЕТ НИ ОДНОЙ ПУБЛИКАЦИИ» — НЕ ФАКТ, А МОЛЧАНИЕ.
+		 *
+		 * Веб-сервер, где не опубликовано вообще ничего, снаружи неотличим от читателя,
+		 * который не умеет читать. Измерено: сразу после нашей же удачной команды
+		 * IB_PUBLISH (агент вернул адрес) следующий «полный» срез не содержал этой базы
+		 * вовсе и объявлял неопубликованными все сто девять — то есть затирал то, что мы
+		 * только что проверили делом.
+		 *
+		 * Пока в ответе нет ни одной опубликованной базы, реестр не трогаем вовсе: ни
+		 * отметок, ни снятия. Появится хоть одна — значит читатель работает, и его «нет»
+		 * чего-то стоит.
+		 */
+		if (!items.some((i) => i.published === true)) return { marked: 0, cleared: 0, matched: 0 };
+
 		let marked = 0;
+		let matched = 0;
 		for (const it of items) {
-			if (!it.key) continue;
-			await this.setPublication(serverId, it.key, it.published !== false, it.url ?? null);
+			const label = (it.key ?? "").trim();
+			if (!label) continue;
+			// Агент называет базу то ключом, то ИМЕНЕМ («Карамурт-Газ ТОО» вместо
+			// karamurt_gaz). Ищем по обоим: иначе ответ целиком уходит в никуда, а мы
+			// считаем, что применили его.
+			const hit = await this.db.query<{ key: string }>(
+				`SELECT key FROM bases WHERE server_id = $1 AND (key = $2 OR name = $2) LIMIT 1`,
+				[serverId, label],
+			);
+			const key = hit.rows[0]?.key;
+			if (!key) continue;
+			matched += 1;
+			await this.setPublication(serverId, key, it.published !== false, it.url ?? null);
 			marked += 1;
 		}
-		if (!complete || !items.length) return { marked, cleared: 0 };
+		/*
+		 * НИ ОДНА СТРОКА НЕ УЗНАНА — ответ в чужом словаре, и верить ему нельзя.
+		 *
+		 * Массово проставить «не опубликована» по списку, из которого мы не нашли ни одной
+		 * базы, значит выдать собственное непонимание за факт по всем базам сразу. Именно
+		 * так сто десять работающих баз однажды стали «не опубликованными».
+		 */
+		if (!complete || !matched) return { marked, cleared: 0, matched };
 
-		const keys = items.filter((i) => i.published !== false).map((i) => i.key);
+		const labels = items.filter((i) => i.published !== false).map((i) => (i.key ?? "").trim());
 		const r = await this.db.query(
 			`UPDATE bases SET published = false, publish_url = NULL, publish_seen_at = now()
-			  WHERE server_id = $1 AND NOT (key = ANY($2::text[]))
+			  WHERE server_id = $1
+			    AND NOT (key = ANY($2::text[])) AND NOT (name = ANY($2::text[]))
 			    AND (published IS DISTINCT FROM false)`,
-			[serverId, keys],
+			[serverId, labels],
 		);
-		return { marked, cleared: r.rowCount ?? 0 };
+		return { marked, cleared: r.rowCount ?? 0, matched };
 	}
 
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
