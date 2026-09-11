@@ -104,6 +104,7 @@ export function onecRouter(deps: Deps) {
 				(req.path === "/roles" && req.query.live !== "1") ||
 				req.path.startsWith("/roles/") ||
 				req.path.endsWith("/users/cached") ||
+				req.path.endsWith("/extensions/cached") ||
 				req.path.startsWith("/commands/") ||
 				req.path.startsWith("/batches") ||
 				req.path.startsWith("/users/")
@@ -357,6 +358,24 @@ export function onecRouter(deps: Deps) {
 		const outcome = await run(req, "IB_LIST_USERS", { baseKey: req.params.key });
 		await cacheList(req.params.key, outcome, (id, items) => registry.syncUsers(id, items as IbUser[]));
 		send(res, outcome);
+	});
+
+	/**
+	 * Расширения базы ИЗ КЭША — без обращения к 1С.
+	 *
+	 * У пользователей такой путь был с самого начала, у расширений — нет, и карточка базы
+	 * открывалась с пустой таблицей, хотя прочитанное лежало в реестре (`base_extensions`,
+	 * из него же считается счётчик «Расширений» в списке баз). Выглядело это как «панель
+	 * не показывает расширения»: показать было что, спросить — некого.
+	 *
+	 * Живое чтение (ручка ниже) — это вход в базу на минуты; для показа известного такая
+	 * цена не нужна. Поэтому карточка открывается кэшем и говорит, когда он прочитан, а
+	 * «Обновить» идёт к самой 1С.
+	 */
+	r.get("/bases/:key/extensions/cached", async (req, res) => {
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		res.json({ success: true, data: { items: await registry.extensionsOfBase(base.id) } });
 	});
 
 	r.get("/bases/:key/extensions", async (req, res) => {

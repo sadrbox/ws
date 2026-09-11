@@ -101,9 +101,14 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 			targets,
 			async (baseKey) => {
 				const data = isUsers ? await fetchBaseUsers(baseKey) : await fetchBaseExtensions(baseKey);
+				// Время чтения ставим здесь: у агента его в ответе нет, а карточка показывает
+				// возраст данных (колонка «Прочитано»). Без метки только что прочитанное
+				// выглядело бы как «неизвестно когда» — ровно наоборот правде.
+				const seenAt = new Date().toISOString();
+				const stamped = { items: (data.items as { seenAt?: string | null }[]).map((x) => ({ ...x, seenAt })) };
 				// Прочитанное сразу становится данными карточки базы: иначе она сделала бы
 				// второй такой же вход в базу, чтобы показать то же самое.
-				qc.setQueryData(["onec", isUsers ? "base-users" : "base-ext", baseKey], data);
+				qc.setQueryData(["onec", isUsers ? "base-users" : "base-ext", baseKey], stamped);
 				return data;
 			},
 			parallel,

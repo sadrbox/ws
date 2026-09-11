@@ -125,12 +125,17 @@ export const setSessionsLock = (baseKey: string, enabled: boolean, message?: str
 // ── Содержимое базы: пользователи ИБ и расширения (E15/A3-P1) ───────────────
 // Списки спрашиваются у 1С вживую (это команда агенту), сводки — из кэша сервиса.
 
-export type IbUser = { name: string; fullName?: string; disabled?: boolean; roles?: string[] };
+/** `seenAt` — когда это читали у самой 1С: из кэша реестра либо проставлено чтением. */
+export type IbUser = {
+	name: string; fullName?: string; disabled?: boolean; roles?: string[];
+	seenAt?: string | null;
+};
 export type IbExtension = {
 	name: string;
 	/** Синоним — человеческое имя расширения; служебное Имя часто нечитаемо. */
 	synonym?: string | null;
 	version?: string | null; purpose?: string | null; safeMode?: boolean | null;
+	seenAt?: string | null;
 };
 
 export const fetchBaseUsers = (baseKey: string) =>
@@ -207,6 +212,14 @@ export const fetchRoles = (baseKey?: string, live?: boolean) =>
  */
 export const fetchBaseUsersCached = (baseKey: string) =>
 	aiFetch<{ items: IbUser[] }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/users/cached`);
+
+/**
+ * Расширения базы ИЗ КЭША реестра — без обращения к 1С.
+ * Тем и отличается от `fetchBaseExtensions`: та входит в базу и стоит минуты.
+ * `seenAt` — когда расширения этой базы читали у 1С в последний раз.
+ */
+export const fetchBaseExtensionsCached = (baseKey: string) =>
+	aiFetch<{ items: IbExtension[] }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions/cached`);
 
 /**
  * Сколько держателей роли в каждой базе — для защиты «последний администратор».

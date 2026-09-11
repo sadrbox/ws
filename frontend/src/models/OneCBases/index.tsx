@@ -16,8 +16,6 @@ import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
-import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import Notice from "src/components/Notice";
@@ -31,7 +29,10 @@ import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { fetchSessions, refreshBases, type IbExtension, type IbUser, type OnecBase } from "src/services/onec/api";
+import {
+	fetchBaseExtensionsCached, fetchBaseUsersCached, fetchSessions, refreshBases,
+	type IbExtension, type IbUser, type OnecBase,
+} from "src/services/onec/api";
 import { QueryError, publishLabel, useBaseContentCheck } from "src/models/OneCAdmin/shared";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
@@ -50,11 +51,25 @@ const statusLabel = (v: string): string => {
 	return key ? translate(key) : v;
 };
 
+/**
+ * «Прочитано» — когда содержимое базы читали у самой 1С.
+ *
+ * Метку ставит либо реестр (кэш хранит время чтения), либо сама проверка в момент
+ * ответа агента (см. useBaseContentCheck). Без времени строка не выдаёт себя за свежую.
+ */
+const seenLabel = (x: { seenAt?: string | null }): string =>
+	x.seenAt ? getFormatDate(x.seenAt) : "—";
+
 const extColumns = (): TColumn[] => ([
-	{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "name", type: "string", width: "240px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+	// Синоним — человеческое имя расширения: служебное Имя вида EF_00_00062473 не говорит
+	// ни о чём, а в кэше синоним лежит с самого начала и никуда не показывался.
+	{ identifier: "synonym", type: "string", width: "240px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "version", type: "string", width: "130px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "purpose", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "safeMode", type: "string", width: "140px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
+	// Когда это читали у самой 1С: таблица наполняется кэшем, и её возраст — часть данных.
+	{ identifier: "seenAtLabel", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 const userColumns = (): TColumn[] => ([
@@ -62,6 +77,7 @@ const userColumns = (): TColumn[] => ([
 	{ identifier: "fullName", type: "string", width: "240px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "disabledLabel", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "rolesLabel", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "seenAtLabel", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 const sessionColumns = (): TColumn[] => ([
@@ -127,19 +143,29 @@ const useBaseTabs = (row: TDataItem) => {
 	// карточку пары — кнопка «Изменить» делает тот же жест явным.
 	const [activeUser, setActiveUser] = useState("");
 
-	// enabled требует ключа базы: без него запрос уходил бы в `/bases//extensions`.
-	// Запрос существует ради кэша: наполняет его проверка (см. useBaseContentCheck),
-	// сам он в 1С не ходит никогда.
+	/*
+	 * Карточка ОТКРЫВАЕТСЯ КЭШЕМ реестра, а не пустой таблицей.
+	 *
+	 * Раньше здесь стояла заглушка (`enabled: false`, пустой список): считалось, что
+	 * показать нечего, пока человек не нажмёт «Обновить». Но показать было что — всё
+	 * прочитанное лежит в реестре сервиса, из него же в списке баз считается колонка
+	 * «Расширений». Выходило «панель не показывает расширения базы», хотя она их знает.
+	 *
+	 * Кэш стоит один запрос к БД сервиса и в 1С не ходит; живое чтение (кнопка «Обновить»)
+	 * — это вход в базу на минуты. Возраст данных виден в колонке «Прочитано», поэтому
+	 * кэш никого не обманывает: видно и что известно, и насколько это свежо.
+	 * `enabled` по ключу базы: без него запрос уходил бы в `/bases//extensions/cached`.
+	 */
 	const ext = useQuery({
 		queryKey: ["onec", "base-ext", baseKey],
-		queryFn: (): Promise<{ items: IbExtension[] }> => Promise.resolve({ items: [] }),
-		enabled: false,
+		queryFn: (): Promise<{ items: IbExtension[] }> => fetchBaseExtensionsCached(baseKey),
+		enabled: !!baseKey,
 		staleTime: Infinity,
 	});
 	const users = useQuery({
 		queryKey: ["onec", "base-users", baseKey],
-		queryFn: (): Promise<{ items: IbUser[] }> => Promise.resolve({ items: [] }),
-		enabled: false,
+		queryFn: (): Promise<{ items: IbUser[] }> => fetchBaseUsersCached(baseKey),
+		enabled: !!baseKey,
 		staleTime: Infinity,
 	});
 
@@ -148,8 +174,10 @@ const useBaseTabs = (row: TDataItem) => {
 	const [sesCols, setSesCols] = useState<TColumn[]>(() => getModelColumns(sessionColumns(), "OneCBases_sessions"));
 
 	const extRows = (ext.data?.items ?? []).map((x, i) => ({
-		id: i + 1, uuid: x.name, name: x.name, version: x.version ?? "—", purpose: x.purpose ?? "—",
+		id: i + 1, uuid: x.name, name: x.name, synonym: x.synonym || "—",
+		version: x.version ?? "—", purpose: x.purpose ?? "—",
 		safeMode: x.safeMode == null ? "—" : x.safeMode ? translate("yes") : translate("no"),
+		seenAtLabel: seenLabel(x),
 	}));
 	const extView = useStaticTableView(extRows, { name: "asc" });
 
@@ -157,6 +185,7 @@ const useBaseTabs = (row: TDataItem) => {
 		id: i + 1, uuid: x.name, name: x.name, fullName: x.fullName || "—",
 		disabledLabel: x.disabled ? translate("onecUserDisabled") : translate("onecUserActive"),
 		rolesLabel: (x.roles ?? []).join(", ") || "—",
+		seenAtLabel: seenLabel(x),
 	}));
 	const userView = useStaticTableView(userRows, { name: "asc" });
 
@@ -172,45 +201,58 @@ const useBaseTabs = (row: TDataItem) => {
 		{
 			id: "ext", label: translate("onecTabExtensions"),
 			component: (
-				<Table {...buildStaticTableProps({
-					componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
-					onRowClick: (r) => openExt(r, baseKey),
-					sorting: extView.sorting, search: extView.search,
-					isLoading: false,
-					reloading: extCheck.checking,
-					// «Обновить» = прочитать расширения этой базы у самой 1С: другого
-					// источника у таблицы нет.
-					onReload: () => void extCheck.run([baseKey]),
-					reloadTitle: translate("onecExtCheck"),
-				})} />
+				<>
+					<QueryError error={ext.error} />
+					{/*
+					  * Пустая таблица молчит о причине: расширений у базы нет — или их ещё
+					  * никто не читал? Это разные вещи, и вторая требует действия человека.
+					  * Пояснение занимает место только когда показывать всё равно нечего.
+					  */}
+					{!ext.isLoading && !ext.error && !extRows.length && (
+						<Notice items={[{ type: "info", text: translate("onecExtNeverRead") }]} />
+					)}
+					<Table {...buildStaticTableProps({
+						componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
+						onRowClick: (r) => openExt(r, baseKey),
+						sorting: extView.sorting, search: extView.search,
+						isLoading: ext.isLoading,
+						reloading: extCheck.checking,
+						// «Обновить» = войти в базу и прочитать её расширения у самой 1С.
+						// Таблица при этом показывает известное из реестра: гасить её незачем.
+						onReload: () => void extCheck.run([baseKey]),
+						reloadTitle: translate("onecExtCheck"),
+					})} />
+				</>
 			),
 		},
 		{
 			id: "users", label: translate("onecTabUsers"),
 			component: (
-				<Table {...buildStaticTableProps({
-					componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
-					onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
-					sorting: userView.sorting, search: userView.search,
-					isLoading: false,
+				<>
+					<QueryError error={users.error} />
+					{!users.isLoading && !users.error && !userRows.length && (
+						<Notice items={[{ type: "info", text: translate("onecUsersNeverRead") }]} />
+					)}
+					<Table {...buildStaticTableProps({
+						componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
+						onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
+						sorting: userView.sorting, search: userView.search,
+						isLoading: users.isLoading,
 						reloading: usersCheck.checking,
-					// «Обновить» здесь — то же чтение у 1С: другого источника у таблицы нет.
-					onReload: () => void usersCheck.run([baseKey]),
-					reloadTitle: translate("onecUsersCheck"),
-					onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
-					extraButtons: (
-						<>
-							<Button variant="secondary" disabled={!baseKey || usersCheck.checking}
-								title={baseKey ? `${translate("onecUsersCheck")}: ${baseKey}` : translate("onecPickBaseFirst")}
-								onClick={() => void usersCheck.run([baseKey])}>
-								<Icon name="reload" /> {translate("onecUsersCheck")}
-							</Button>
-							{/* Создать, изменить, удалить — по ЭТОЙ базе; роли читаются из неё же. */}
+						// «Обновить» = войти в базу и прочитать её пользователей у 1С.
+						// Отдельной кнопки «Проверить пользователей» здесь больше нет: она
+						// делала ровно это же, и две кнопки одного действия только спорили,
+						// какая «настоящая».
+						onReload: () => void usersCheck.run([baseKey]),
+						reloadTitle: translate("onecUsersCheck"),
+						onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
+						// Создать, изменить, удалить — по ЭТОЙ базе; роли читаются из неё же.
+						extraButtons: (
 							<BaseUserCommands baseKey={baseKey} activeUser={activeUser}
 								onDone={() => void usersCheck.run([baseKey])} />
-						</>
-					),
-				})} />
+						),
+					})} />
+				</>
 			),
 		},
 		{
