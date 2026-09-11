@@ -171,7 +171,21 @@ export class CommandQueue {
 	 */
 	async expireOverdue(): Promise<number> {
 		const r = await this.db.query(
-			`UPDATE commands SET state = 'expired', finished_at = now()
+			/*
+			 * ПРИЧИНУ ЗАПИСЫВАЕМ СРАЗУ, пока известно состояние. После перевода в `expired`
+			 * уже не отличить «агент не забрал» от «забрал и не ответил», а это два разных
+			 * разговора: первое — про связь со службой, второе — про базу или про то, что
+			 * операция дольше отведённого ей срока. Советовать чинить связь во втором
+			 * случае — отправлять человека не туда.
+			 */
+			`UPDATE commands
+			    SET state = 'expired', finished_at = now(),
+			        error = COALESCE(error, jsonb_build_object(
+			          'code', 'COMMAND_EXPIRED',
+			          'message', CASE WHEN state = 'queued'
+			            THEN 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'
+			            ELSE 'Агент забрал команду, но не ответил за отведённое ей время. Связь тут ни при чём: проверьте базу и журнал агента — операция могла идти дольше своего срока.'
+			          END))
 			  WHERE state IN ('queued', 'dispatched') AND expires_at < now()`,
 		);
 		return r.rowCount ?? 0;
@@ -179,8 +193,13 @@ export class CommandQueue {
 
 	private async dispatchQueued(agentId: string): Promise<WireCommand[]> {
 		// Просроченные — в expired, чтобы агент не выполнял то, чего уже никто не ждёт.
+		// Причина пишется тут же (см. expireOverdue): здесь это всегда «не забрал».
 		await this.db.query(
-			`UPDATE commands SET state = 'expired', finished_at = now()
+			`UPDATE commands
+			    SET state = 'expired', finished_at = now(),
+			        error = COALESCE(error, jsonb_build_object(
+			          'code', 'COMMAND_EXPIRED',
+			          'message', 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'))
 			  WHERE agent_id = $1 AND state = 'queued' AND expires_at < now()`,
 			[agentId],
 		);

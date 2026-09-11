@@ -234,6 +234,9 @@ export type BatchType =
 	| "IB_UPDATE_USER"
 	// Выгрузка .dt: агент делает её ibcmd (без клиентской лицензии), запасной путь — конфигуратор.
 	| "IB_BACKUP"
+	// Проверка базы — единственная из обслуживания, которую имеет смысл гнать группой:
+	// она ничего не меняет без флага «Исправлять».
+	| "IB_CHECK"
 	// Чтение тоже пакетное: наполнить сводку по ста базам поштучно нереально.
 	| "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
 
@@ -258,6 +261,51 @@ export type BatchProgress = {
 
 export const fetchBatch = (id: string) => aiFetch<BatchProgress>(`/v1/onec/batches/${encodeURIComponent(id)}`);
 export const fetchBatches = () => aiFetch<{ items: BatchProgress[] }>("/v1/onec/batches");
+
+// ── Обслуживание базы: проверка, загрузка, обновление конфигурации ──────────
+// Все три долгие (часы) и все три понимают dryRun: агент возвращает план и базу не
+// трогает. Для разрушающих это и есть текст подтверждения — точнее сочинённого нами.
+
+export type IbCheckPayload = {
+	reindex?: boolean; logicalIntegrity?: boolean; recalcTotals?: boolean;
+	repair?: boolean; dryRun?: boolean;
+};
+/** План агента приходит списком строк («проверить базу без изменений»), иногда строкой. */
+export type IbPlan = string | string[];
+
+export type IbCheckResult = {
+	ok?: boolean; issues?: number; repaired?: number; repairMode?: boolean;
+	report?: string; plan?: IbPlan;
+};
+
+/** План к показу человеку: строки с новой строки, как их прислал агент. */
+export const planText = (plan: IbPlan | undefined): string =>
+	Array.isArray(plan) ? plan.join("\n") : (plan ?? "");
+
+export const checkBase = (baseKey: string, p: IbCheckPayload) =>
+	aiFetch<IbCheckResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/check`, {
+		method: "POST", body: JSON.stringify(p),
+	}).then((d) => awaitCommand<IbCheckResult>(d));
+
+export type IbRestoreResult = { ok?: boolean; path?: string; transport?: string; plan?: IbPlan };
+
+export const restoreBase = (baseKey: string, p: { path: string; lockSessions?: boolean; dryRun?: boolean }) =>
+	aiFetch<IbRestoreResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/restore`, {
+		method: "POST", body: JSON.stringify(p),
+	}).then((d) => awaitCommand<IbRestoreResult>(d));
+
+export type IbApplyUpdateResult = {
+	ok?: boolean; versionFrom?: string; versionTo?: string; backupPath?: string;
+	transport?: string; plan?: IbPlan;
+};
+
+export const applyBaseUpdate = (
+	baseKey: string,
+	p: { path: string; backup?: boolean; lockSessions?: boolean; dryRun?: boolean },
+) =>
+	aiFetch<IbApplyUpdateResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/apply-update`, {
+		method: "POST", body: JSON.stringify(p),
+	}).then((d) => awaitCommand<IbApplyUpdateResult>(d));
 
 // ── Процессы, запущенные агентом на сервере 1С ──────────────────────────────
 // Агент работает чужими руками (rac, ibcmd, конфигуратор, webinst), и часть этих

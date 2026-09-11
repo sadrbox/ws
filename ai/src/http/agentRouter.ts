@@ -140,6 +140,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			res.status(409).json({ success: false, error: {
 				code: "AGENT_INSTANCE_CONFLICT",
 				message: instanceConflictMessage(decision.ownerInstanceId, decision.ownerSeenSecsAgo),
+				/**
+				 * ВЛАДЕЛЕЦ — ОТДЕЛЬНЫМ ПОЛЕМ, а не только в тексте.
+				 *
+				 * Агенту нужно отличить свой же перезапуск (та же машина и служба — подождать
+				 * и повторить) от чужой копии токена (выключиться). Раньше он доставал
+				 * идентификатор разбором фразы, и первая же правка формулировки заставила бы
+				 * его выключаться при каждом обновлении службы — а чинить это было бы уже
+				 * некому: он к тому моменту не подключится.
+				 */
+				details: {
+					ownerInstanceId: decision.ownerInstanceId,
+					ownerSeenSecsAgo: decision.ownerSeenSecsAgo,
+				},
 			} });
 			return;
 		}

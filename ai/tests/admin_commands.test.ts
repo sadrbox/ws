@@ -28,17 +28,27 @@ test("опасные операции помечены CRITICAL — они ид�
 		// снесённое расширение не вернуть, а установка меняет конфигурацию базы.
 		// Выгрузка данным не вредит, но стоит часов работы сервера и десятков гигабайт:
 		// подтверждение здесь про цену, а не про риск.
+		// Обновление конфигурации переписывает саму конфигурацию базы, загрузка .dt —
+		// затирает её данные целиком. Дальше некуда.
+		"IB_APPLY_UPDATE",
 		"IB_BACKUP",
 		"IB_CREATE_USER", "IB_DELETE_EXTENSION", "IB_DELETE_USER", "IB_INSTALL_EXTENSION",
 		// Публикация меняет конфигурацию веб-сервера, а не базы, но так же необратима
 		// для стороннего наблюдателя — подтверждение обязательно. Снятие публикации
 		// критично не из-за данных, а из-за людей: доступ по HTTP пропадает немедленно.
-		"IB_PUBLISH", "IB_UNPUBLISH",
+		"IB_PUBLISH",
+		// Загрузка .dt затирает данные базы целиком — дальше некуда.
+		"IB_RESTORE",
+		"IB_UNPUBLISH",
 		// Изменение пользователя правит чужую базу — подтверждение обязательно.
 		"IB_UPDATE_USER",
 	]);
-	// Всё остальное — только чтение: список баз или сеансов ничего не меняет.
-	assert.ok(ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL").every((c) => c.operation === "READ"));
+	// Остальное — чтение, кроме проверки базы: без `repair` она ничего не меняет, и
+	// подтверждать её целиком нельзя — иначе привыкнут подтверждать не читая, а
+	// подтверждение нужно именно на исправление.
+	const rest = ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL");
+	assert.deepEqual(rest.filter((c) => c.operation === "WRITE").map((c) => c.type), ["IB_CHECK"]);
+	assert.ok(rest.filter((c) => c.type !== "IB_CHECK").every((c) => c.operation === "READ"));
 });
 
 test("гейт: админ-команду получает только агент с cluster.admin", () => {
@@ -191,4 +201,34 @@ test("гейт: агент старее сервиса не получает н�
 	// Агент без перечня типов (только способности) — проверяем лишь способность:
 	// иначе старые сборки перестали бы работать вовсе.
 	assert.equal(agentCanRun({ role: "admin", capabilities: ["cluster.admin"] }, locks), true);
+});
+
+test("долгим операциям над базой дан свой срок жизни, остальным — общий", () => {
+	// Выгрузка базы на сотню гигабайт идёт дольше пятнадцати минут всегда. Общий срок
+	// объявлял её просроченной посреди работы, и человек шёл чинить связь, пока база
+	// выгружалась.
+	const long = ADMIN_COMMANDS.filter((c) => c.ttlSeconds).map((c) => c.type).sort();
+	assert.deepEqual(long, ["IB_APPLY_UPDATE", "IB_BACKUP", "IB_CHECK", "IB_RESTORE"]);
+	assert.ok(ADMIN_COMMANDS.filter((c) => c.ttlSeconds).every((c) => (c.ttlSeconds ?? 0) >= 4 * 3600));
+});
+
+test("обслуживание базы понимает dryRun — план вместо действия", () => {
+	// У каждой команды свои поля: лишнее схема отвергает (.strict), поэтому проверяем
+	// ровно тот набор, который она принимает.
+	const cases: [string, Record<string, unknown>][] = [
+		["IB_CHECK", { baseKey: "buh", reindex: true, dryRun: true }],
+		["IB_RESTORE", { baseKey: "buh", path: "D:/dump.dt", dryRun: true }],
+		["IB_APPLY_UPDATE", { baseKey: "buh", path: "D:/update.cfu", dryRun: true }],
+	];
+	for (const [type, payload] of cases) {
+		const built = buildAdminPayload(findAdminCommand(type)!, payload);
+		assert.equal(built.ok, true, type);
+	}
+});
+
+test("загрузка и обновление требуют путь к файлу", () => {
+	for (const type of ["IB_RESTORE", "IB_APPLY_UPDATE"]) {
+		const built = buildAdminPayload(findAdminCommand(type)!, { baseKey: "buh" });
+		assert.equal(built.ok, false, type);
+	}
 });

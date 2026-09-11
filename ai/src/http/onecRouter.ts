@@ -29,7 +29,9 @@ import type { Audit } from "../audit/index.ts";
 import type { BatchService } from "../onec/batches.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
-import { type AdminCommandSpec, agentCanRun, buildAdminPayload, findAdminCommand } from "../commands/admin.ts";
+import {
+	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, findAdminCommand,
+} from "../commands/admin.ts";
 
 type Deps = {
 	erp: Db;
@@ -171,7 +173,9 @@ export function onecRouter(deps: Deps) {
 			type: spec.type,
 			payload: built.payload,
 			userUuid: u.uuid,
-			ttlSeconds: 300,
+			// Срок берётся из спецификации: выгрузка базы идёт часами, и общие 15 минут
+			// объявляли её просроченной посреди работы (см. LONG_COMMAND_TTL_SECS).
+			ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
 			/**
 			 * ЧТЕНИЯ НЕ ДУБЛИРУЮТСЯ. Одна и та же база показана на нескольких экранах, и
 			 * два «Обновить» подряд создавали ДВЕ команды: два входа в базу по десятку
@@ -621,7 +625,8 @@ export function onecRouter(deps: Deps) {
 			}
 			const cmd = await queue.enqueue({
 				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: key,
-				type: spec.type, payload: built.payload, userUuid: u.uuid, ttlSeconds: 900,
+				type: spec.type, payload: built.payload, userUuid: u.uuid,
+				ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
 				// Пачку по многим базам запускают и уходят: она не должна загораживать
 				// одиночный запрос человека, который ждёт ответа на экране.
 				priority: 10,
@@ -668,7 +673,9 @@ export function onecRouter(deps: Deps) {
 		if (row.state !== "done") {
 			const e = humanizeAgentError(row.error, await authContext(row.base_key, await agents.findById(row.agent_id)))
 				?? (row.state === "expired"
-					? { code: "COMMAND_EXPIRED", message: "Агент не забрал команду до истечения срока — служба 1С-агента не на связи." }
+					// Текст просрочки записан в момент истечения — там ещё было известно,
+					// забирал ли агент команду. Сюда попадаем, только если его почему-то нет.
+					? { code: "COMMAND_EXPIRED", message: "Команда не выполнена: срок ожидания истёк." }
 					: { code: "COMMAND_FAILED", message: "Команда не выполнена" });
 			// 422 по той же причине, что и в run(): 5xx съедает прокси.
 			res.status(422).json({ success: false, error: e });
@@ -717,7 +724,8 @@ export function onecRouter(deps: Deps) {
 			}
 			const fresh = await queue.enqueue({
 				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: cmd.base_key,
-				type: cmd.type, payload: cmd.payload, userUuid: u.uuid, ttlSeconds: 900,
+				type: cmd.type, payload: cmd.payload, userUuid: u.uuid,
+				ttlSeconds: findAdminCommand(cmd.type)?.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
 			});
 			await batches.attach(batchId, fresh.id);
 			queued += 1;
@@ -784,6 +792,28 @@ export function onecRouter(deps: Deps) {
 			});
 		}
 		res.json({ success: true, data: { removed } });
+	});
+
+	/**
+	 * ОБСЛУЖИВАНИЕ БАЗЫ: проверка, загрузка из выгрузки, обновление конфигурации.
+	 *
+	 * Все три понимают `dryRun: true` — агент возвращает план и базу не трогает. Для
+	 * разрушающих команд это готовый текст подтверждения: показать его человеку точнее,
+	 * чем сочинять свой.
+	 */
+	r.post("/bases/:key/check", async (req, res) => {
+		const body = (req.body ?? {}) as Record<string, unknown>;
+		send(res, await run(req, "IB_CHECK", { ...body, baseKey: req.params.key }));
+	});
+
+	r.post("/bases/:key/restore", async (req, res) => {
+		const body = (req.body ?? {}) as Record<string, unknown>;
+		send(res, await run(req, "IB_RESTORE", { ...body, baseKey: req.params.key }));
+	});
+
+	r.post("/bases/:key/apply-update", async (req, res) => {
+		const body = (req.body ?? {}) as Record<string, unknown>;
+		send(res, await run(req, "IB_APPLY_UPDATE", { ...body, baseKey: req.params.key }));
 	});
 
 	/**

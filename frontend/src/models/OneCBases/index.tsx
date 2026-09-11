@@ -38,6 +38,7 @@ import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import BaseUserCommands from "src/models/OneCAdmin/BaseUserCommands";
 import BaseCredentialsTab from "./BaseCredentials";
+import BaseMaintenance from "./BaseMaintenance";
 import columnsJson from "./columns.json";
 
 const ENDPOINT = "onec-bases";
@@ -211,6 +212,13 @@ const useBaseTabs = (row: TDataItem) => {
 					),
 				})} />
 			),
+		},
+		{
+			// Обслуживание — операции над самой базой: проверка, выгрузка, загрузка,
+			// обновление конфигурации. Все они об одном и том же и стоят часов работы
+			// сервера, поэтому живут в карточке базы, а не в списке.
+			id: "maintenance", label: translate("onecTabMaintenance"),
+			component: <BaseMaintenance baseKey={baseKey} />,
 		},
 		{
 			// Доступ — отдельной вкладкой: это НАСТРОЙКА базы, а не её состояние, и

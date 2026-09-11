@@ -29,6 +29,23 @@ import type { AgentRole, AgentView } from "../agents/service.ts";
  */
 export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs";
 
+/**
+ * Сколько живёт команда в очереди, если спецификация молчит. Пятнадцати минут хватает
+ * всему, кроме операций над самой базой — им срок задаётся в спецификации явно.
+ */
+export const DEFAULT_COMMAND_TTL_SECS = 900;
+
+/**
+ * Срок для ДОЛГИХ операций: выгрузка, загрузка, проверка, обновление конфигурации.
+ *
+ * Четыре часа — столько же даёт им сам агент (`long_command_timeout_secs`), плюс запас на
+ * ожидание в очереди. Раньше все команды жили 15 минут, и выгрузка базы на сотню гигабайт
+ * объявлялась просроченной ПОСРЕДИ работы: человек получал «служба 1С-агента не на связи»
+ * и шёл чинить связь, пока база выгружалась. Результат при этом не терялся (его принимают
+ * и у просроченной команды), но приходил уже после приговора.
+ */
+export const LONG_COMMAND_TTL_SECS = 15_000;
+
 export type AdminCommandSpec = {
 	type: string;
 	operation: OperationClass;
@@ -36,6 +53,8 @@ export type AdminCommandSpec = {
 	role: AgentRole;
 	/** Нужна ли конкретная база: для неё выбирается агент того сервера, где она живёт. */
 	requiresBase: boolean;
+	/** Срок жизни команды в очереди; без него — DEFAULT_COMMAND_TTL_SECS. */
+	ttlSeconds?: number;
 	schema: z.ZodType<Record<string, unknown>>;
 	/** Короткое описание для карточки подтверждения и аудита. */
 	title: string;
@@ -304,6 +323,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 	},
 	{
 		type: "IB_BACKUP",
+		ttlSeconds: LONG_COMMAND_TTL_SECS,
 		title: "Выгрузить базу (.dt)",
 		// CRITICAL не из-за риска для данных — выгрузка ничего не портит, — а из-за цены:
 		// на сотне баз это часы работы сервера и десятки гигабайт на диске. Такое
@@ -317,6 +337,73 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			// Каталог назначения; без него агент берёт свой из настроек. Панель не должна
 			// знать раскладку дисков сервера 1С — это его дело.
 			dir: z.string().max(500).optional(),
+		}).strict(),
+	},
+	{
+		type: "IB_CHECK",
+		ttlSeconds: LONG_COMMAND_TTL_SECS,
+		title: "Проверить базу",
+		/**
+		 * WRITE, а не CRITICAL: без `repair` команда ничего не меняет — смотрит и считает.
+		 * Само исправление подтверждается ОТДЕЛЬНО в интерфейсе, флагом `repair`. Если
+		 * подтверждать всю проверку целиком, человек привыкнет подтверждать её не читая —
+		 * и однажды подтвердит исправление, думая, что подтверждает осмотр.
+		 */
+		operation: "WRITE",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({
+			baseKey,
+			// Ни одна проверка не выбрана — агент сам берёт переиндексацию и логическую
+			// целостность: пустой набор ключей конфигуратор понимает как «ничего не
+			// проверять», и команда молча не делала бы ничего.
+			reindex: z.boolean().optional(),
+			logicalIntegrity: z.boolean().optional(),
+			recalcTotals: z.boolean().optional(),
+			/** Чинить, а не только смотреть: это уже изменение данных. */
+			repair: z.boolean().optional(),
+			/** Вернуть план и не трогать базу — готовый текст подтверждения. */
+			dryRun: z.boolean().optional(),
+		}).strict(),
+	},
+	{
+		type: "IB_RESTORE",
+		ttlSeconds: LONG_COMMAND_TTL_SECS,
+		title: "Загрузить базу из выгрузки (.dt)",
+		// Единственная команда, которая ЗАТИРАЕТ данные целиком. Подтверждение обязано
+		// называть и базу, и файл: перепутать можно и то, и другое.
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({
+			baseKey,
+			/** Файл на сервере 1С. Панель его не проверяет — несуществующий отвергнет агент. */
+			path: z.string().min(1).max(500),
+			/** Заблокировать вход и дождаться выхода пользователей; снимает блокировку агент сам. */
+			lockSessions: z.boolean().optional(),
+			dryRun: z.boolean().optional(),
+		}).strict(),
+	},
+	{
+		type: "IB_APPLY_UPDATE",
+		ttlSeconds: LONG_COMMAND_TTL_SECS,
+		title: "Обновить конфигурацию базы (.cfu/.cf)",
+		operation: "CRITICAL",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({
+			baseKey,
+			path: z.string().min(1).max(500),
+			/**
+			 * Выгрузка перед обновлением. `false` означает «откатывать будет нечем»: агент
+			 * скажет это в ошибке, но уже после того, как обновление не удалось.
+			 */
+			backup: z.boolean().optional(),
+			lockSessions: z.boolean().optional(),
+			dryRun: z.boolean().optional(),
 		}).strict(),
 	},
 	{

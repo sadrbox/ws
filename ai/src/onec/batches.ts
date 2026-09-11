@@ -66,7 +66,16 @@ export class BatchService {
 		// Просроченные команды закрываем перед чтением отчёта: иначе задание, чьи команды
 		// никто не забрал, вечно показывает «выполняется».
 		await this.db.query(
-			`UPDATE commands SET state = 'expired', finished_at = now()
+			// Причину пишем здесь же: после перевода в expired уже не отличить «не забрал»
+			// (это про связь) от «забрал и не ответил» (это про базу).
+			`UPDATE commands
+			    SET state = 'expired', finished_at = now(),
+			        error = COALESCE(error, jsonb_build_object(
+			          'code', 'COMMAND_EXPIRED',
+			          'message', CASE WHEN state = 'queued'
+			            THEN 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'
+			            ELSE 'Агент забрал команду, но не ответил за отведённое ей время. Проверьте базу и журнал агента.'
+			          END))
 			  WHERE batch_id = $1 AND state IN ('queued','dispatched') AND expires_at < now()`, [id],
 		);
 		const b = await this.db.query<{ id: string; type: string; total: number; created_at: Date }>(

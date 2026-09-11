@@ -38,7 +38,7 @@ type Op =
 	| "publish" | "unpublish"
 	| "createUser" | "deleteUser"
 	| "installExt" | "deleteExt"
-	| "backup";
+	| "backup" | "checkBase";
 
 type OpSpec = {
 	type: BatchType;
@@ -61,6 +61,9 @@ const SPECS: Record<Op, OpSpec> = {
 	installExt: { type: "IB_INSTALL_EXTENSION", title: "onecExtInstall", warning: "onecExtInstallWarning", needs: "ib", needsName: "extension", needsFile: true },
 	deleteExt: { type: "IB_DELETE_EXTENSION", title: "onecExtRemove", warning: "onecExtRemoveWarning", needs: "ib", needsName: "extension" },
 	backup: { type: "IB_BACKUP", title: "onecBackup", warning: "onecBackupWarning", needs: "ib", needsDir: true },
+	// Из обслуживания в группу вынесена ТОЛЬКО проверка: загрузка и обновление по сотне
+	// баз одной кнопкой не нужны никому, а ошибиться там нечем — данные затираются целиком.
+	checkBase: { type: "IB_CHECK", title: "onecMaintCheck", warning: "onecMaintCheckPlan", needs: "ib" },
 };
 
 /** Строка списка баз ERP-прокси в терминах применимости. */
@@ -195,6 +198,7 @@ export const BaseGroupCommands: FC<{
 			{btn("installExt", "onecExtInstall")}
 			{btn("deleteExt", "onecExtRemove")}
 			{btn("backup", "onecBackup")}
+			{btn("checkBase", "onecMaintCheck")}
 
 			{spec && (
 				<Modal title={translate(spec.title)} onClose={close} onApply={apply}>
