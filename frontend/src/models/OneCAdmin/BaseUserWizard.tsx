@@ -280,26 +280,45 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 				plan.set(base, entry);
 			}
 
-			const op = startOp({
-				kind: "update", title: translate("onecUserGroupEdit"),
-				target: `${userName} · ${translate("onecBases")}: ${plan.size}`,
-				total: plan.size, scope: { user: userName, bases: [...plan.keys()] },
-			});
-			try {
-				// Одна команда на базу, но задание одно: групповая операция должна быть
-				// видна и отменяема целиком.
-				const results = [];
-				for (const [base, payload] of plan) {
-					results.push(await runBatch("IB_UPDATE_USER", [base], payload));
-				}
-				const first = results[0];
-				if (first) attachBatch(op, first.batchId, plan.size);
-				else finishOp(op);
-				return results.length;
-			} catch (e) {
-				finishOp(op, { failed: plan.size, note: e instanceof Error ? e.message : String(e) });
-				throw e;
+			/*
+			 * БАЗЫ С ОДИНАКОВЫМ ИЗМЕНЕНИЕМ — ОДНИМ ЗАДАНИЕМ.
+			 *
+			 * Реквизиты задаются сразу всем выбранным базам, а роли могут различаться —
+			 * значит и полезная нагрузка у баз где-то одна, а где-то разная. Отправлять
+			 * задание на каждую базу отдельно было бы расточительно, а одно задание на всех
+			 * — неверно: в него не уложить разные наборы ролей.
+			 *
+			 * Поэтому группируем по СОДЕРЖИМОМУ команды. И заводим СВОЮ запись прогресса на
+			 * каждое задание: одна запись, следящая за первым из нескольких заданий, врала
+			 * бы — показывала бы «готово», когда остальные ещё идут.
+			 */
+			const byPayload = new Map<string, { bases: string[]; payload: Record<string, unknown> }>();
+			for (const [base, payload] of plan) {
+				// Имя базы в подпись не входит: оно и есть то, чем группы различают цели.
+				const sig = JSON.stringify(payload);
+				const g = byPayload.get(sig) ?? { bases: [], payload };
+				g.bases.push(base);
+				byPayload.set(sig, g);
 			}
+
+			let started = 0;
+			for (const { bases: group, payload } of byPayload.values()) {
+				const opId = startOp({
+					kind: "update", title: translate("onecUserGroupEdit"),
+					target: `${userName} · ${translate("onecBases")}: ${group.length}`,
+					total: group.length, scope: { user: userName, bases: group },
+				});
+				try {
+					const r = await runBatch("IB_UPDATE_USER", group, payload);
+					attachBatch(opId, r.batchId, r.total,
+						r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
+					started += 1;
+				} catch (e) {
+					finishOp(opId, { failed: group.length, note: e instanceof Error ? e.message : String(e) });
+					throw e;
+				}
+			}
+			return started;
 		},
 		onSuccess: (n) => {
 			showToast(`${translate("onecBatchQueued")}: ${n}`, "success");
