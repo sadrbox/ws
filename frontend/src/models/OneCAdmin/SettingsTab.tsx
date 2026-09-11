@@ -100,8 +100,17 @@ export const SettingsTab: FC = () => {
 			<div className={main.FormWrapper}>
 				<GroupCol className={main.Form}>
 					{items.map((s) => <ServerRow key={s.id} server={s} />)}
+					{/*
+					  * ПУСТО — НЕ ОДНО И ТО ЖЕ. «Серверов нет» и «не удалось спросить» —
+					  * разные ответы, и валить их в один текст значит выдавать незнание за
+					  * факт. Живой случай: сервис ещё не перезапущен, ручка отвечает 404, а
+					  * вкладка сообщала «серверов в реестре пока нет» — и человек шёл искать
+					  * несуществующую проблему в реестре.
+					  */}
 					{!items.length && !servers.isLoading && (
-						<Notice inline items={[{ type: "info", text: translate("onecSettingsNoServers") }]} />
+						<Notice inline items={[servers.error
+							? { type: "error", text: translate("onecSettingsUnavailable") }
+							: { type: "info", text: translate("onecSettingsNoServers") }]} />
 					)}
 				</GroupCol>
 
