@@ -403,7 +403,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: ActivityHistoriesList })}>{translate("ActivityHistoriesList")}</NavItem>}
           {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: PipeActivitiesList })}>{translate("PipeActivitiesList")}</NavItem>}
           {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: PipeActivitiesDashboard, label: translate("PipeActivitiesDashboard") })}>{translate("PipeActivitiesDashboard")}</NavItem>}
-          {can("Notification") && <NavItem onClick={() => addPane({ component: NotificationsList, label: translate("notificationsCenter") })}>{translate("notificationsCenter")}</NavItem>}
+          {can("Notification") && <NavItem onClick={() => addPane({ component: NotificationsList, label: translate("techMessages") })}>{translate("techMessages")}</NavItem>}
           <NavItem onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</NavItem>
           <NavItem onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</NavItem>
           {can("ScheduledTask") && <NavItem onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</NavItem>}

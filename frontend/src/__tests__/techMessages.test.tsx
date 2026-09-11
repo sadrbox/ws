@@ -2,8 +2,12 @@ import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import Notice from "src/components/Notice";
 import {
-	APP_SCOPE, NoticeScope, clearNoticeHistory, reportNotices, useScopedNotices,
+	APP_SCOPE, NoticeScope, clearNoticeHistory, clearScope, getMessages, reportNotices,
+	useScopedNotices,
 } from "src/components/TechMessages/store";
+import { groupMessages } from "src/components/TechMessages/grouping";
+import { addPaneNotification } from "src/hooks/paneNotifications";
+import { translate } from "src/i18";
 
 // Правило вывода (запрос 2026-09-11): `<Notice />` НИЧЕГО не рисует на месте — он
 // сообщает свои строки в область «Технические сообщения», и показывает их она.
@@ -100,5 +104,66 @@ describe("Технические сообщения — единственное
 		);
 		// Запись осталась, но уже как история: «было и прошло» — тоже ответ.
 		expect(screen.getByText("Базы: Агент не на связи").getAttribute("data-active")).toBe("false");
+	});
+});
+
+// ── Слияние с уведомлениями панелей ────────────────────────────────────────
+//
+// Раньше об одном и том же рассказывали четыре поверхности: колокольчик уведомлений
+// панелей, второй колокольчик со своим журналом, пейн «Центр уведомлений» и `<Notice />`
+// внутри форм. Теперь хранилище одно, и уведомление панели — такая же запись, как
+// сообщение формы: видно в том же списке, группируется по тому же объекту.
+
+describe("Технические сообщения — один механизм с уведомлениями панелей", () => {
+	beforeEach(() => {
+		act(() => { clearScope("pane-1"); clearScope("pane-2"); clearNoticeHistory(APP_SCOPE); });
+	});
+
+	it("уведомление панели попадает в тот же список, что и <Notice />", () => {
+		act(() => {
+			addPaneNotification("pane-1", "warning", "Сохранено локально", { paneLabel: "Реализация № 12" });
+		});
+		render(<Board scope="pane-1" />);
+		expect(screen.getByText("Реализация № 12: Сохранено локально")).toBeTruthy();
+	});
+
+	it("группа — ВИД ОБЪЕКТА: разные документы одного вида идут вместе", () => {
+		act(() => {
+			addPaneNotification("pane-1", "error", "Не проведён", {
+				paneLabel: "Реализация № 12", ref: { endpoint: "sales", uuid: "u1", label: "№ 12" },
+			});
+			addPaneNotification("pane-2", "error", "Нет договора", {
+				paneLabel: "Реализация № 13", ref: { endpoint: "sales", uuid: "u2", label: "№ 13" },
+			});
+		});
+		const groups = groupMessages(getMessages());
+		const sales = groups.find((g) => g.id === "ref:sales");
+		expect(sales).toBeTruthy();
+		expect(sales!.items).toHaveLength(2);
+		// Заголовок — вид объекта из словаря, а не заголовок формы: у двух документов
+		// заголовки разные, а назначение одно.
+		expect(sales!.title).toBe(translate("sale"));
+	});
+
+	it("без ссылки на объект группой служит источник, без источника — «Прочее»", () => {
+		act(() => {
+			addPaneNotification("pane-1", "info", "Агент не на связи", { paneLabel: "Базы 1С" });
+			addPaneNotification("pane-1", "info", "Что-то общее", {});
+		});
+		const groups = groupMessages(getMessages());
+		expect(groups.some((g) => g.title === "Базы 1С")).toBe(true);
+		expect(groups.some((g) => g.title === translate("techMessagesOther"))).toBe(true);
+	});
+
+	it("группа с актуальными сообщениями идёт выше группы из одной истории", () => {
+		act(() => {
+			// История: запись, которая уже не активна.
+			reportNotices("pane-1", "old", "Прошлое", [{ type: "info", text: "Было" }]);
+			reportNotices("pane-1", "old", "Прошлое", []);
+			// Актуальное — заведено позже, но важнее.
+			addPaneNotification("pane-1", "error", "Сейчас", { paneLabel: "Сейчас" });
+		});
+		const groups = groupMessages(getMessages());
+		expect(groups[0].active).toBeGreaterThan(0);
 	});
 });

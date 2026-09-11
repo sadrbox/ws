@@ -107,10 +107,119 @@
 	padding: 6px;
 }
 
+// ── Группа: вид объекта («Реализации», «Базы 1С») ────────────────────────────
+// Заголовок — кнопка: он же и переключатель свёрнутости. Кликабельной должна быть вся
+// строка, а не одна стрелка: попадать курсором в иконку 10×10 — работа, а не действие.
+//
+// Имя НЕ `.Group`: такой класс объявлен в общем variables.scss, который подмешивается в
+// каждый модуль, и модульный `.Group` молча получил бы чужие правила. На этом уже дважды
+// ломалась вёрстка (строки таблицы, цвет текста кнопок) — линтер css-modules-lint ловит
+// такие совпадения именно поэтому.
+.MsgGroup {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid $color33;
+	border-radius: var(--radius-3, 3px);
+	overflow: hidden;
+}
+
+.GroupHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 3px 6px;
+	border: none;
+	background: $color30;
+	cursor: pointer;
+	text-align: left;
+	color: $color6;
+	font-size: $fontsize;
+
+	&:hover {
+		background: $color33;
+	}
+
+	svg {
+		width: 10px;
+		height: 10px;
+		display: block;
+	}
+}
+
+.GroupTitle {
+	font-weight: 600;
+	margin-right: auto;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+// Сколько в группе АКТУАЛЬНЫХ сообщений — то, ради чего в список и смотрят.
+.GroupActive {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 3px;
+	border-radius: 9px;
+	background: var(--sv-attention, #b91c1c);
+	color: #fff;
+	font-size: $fontsize - 2px;
+	font-weight: 700;
+}
+
+// Всего записей в группе, включая прошедшие: даёт понять объём, не крича.
+.GroupTotal {
+	color: $color51;
+	font-size: $fontsize - 1px;
+}
+
+.GroupBody {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px;
+}
+
 .Row {
 	display: flex;
 	flex-direction: column;
 	gap: 3px;
+}
+
+.RowHead {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+
+// Когда это случилось. Прижато вправо вместе с крестиком: слева — о чём речь.
+.When {
+	color: $color51;
+	font-size: $fontsize - 1px;
+	margin-left: auto;
+	white-space: nowrap;
+}
+
+.Dismiss {
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	color: $color51;
+	padding: 0 3px;
+	line-height: 1;
+
+	&:hover {
+		color: $color6;
+	}
+}
+
+.RowActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
 // Кто сообщил: без источника сообщение в общем списке не отвечает на вопрос «где это».

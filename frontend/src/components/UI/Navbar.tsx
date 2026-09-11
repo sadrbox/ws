@@ -2,16 +2,14 @@
 // Вынесено из UI/index.tsx (Q9).
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import styles from "../../styles/main.module.scss";
-import { createPortal } from 'react-dom';
 import { translate, getLanguage, setLanguage } from 'src/i18';
 import { getEffectiveTheme, toggleTheme } from 'src/services/theme';
 import { useAppContext } from 'src/app/context';
-import { useAllPaneNotifications, dismissPaneNotification } from 'src/hooks/useFormStore';
-import { openFormByRef, canOpenByRef } from 'src/utils/openFormByRef';
+import {
+  useActiveNoticeCount, setTechMessagesOpen, useTechMessagesOpen,
+} from 'src/components/TechMessages/store';
 import OrgSwitcher from 'src/components/OrgSwitcher';
-import NotificationToast from 'src/components/NotificationToast';
 import OfflineIndicator from 'src/components/OfflineIndicator';
-import { NotificationsList } from "src/registry/viewRegistry";
 import { usePersistenceMode } from 'src/services/persistenceMode';
 
 // LanguageSwitcher — переключатель RU / ҚАЗ в Navbar
@@ -67,152 +65,34 @@ const PersistenceModeToggle: FC = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// NavbarPaneBell — колокольчик уведомлений активной панели в Navbar
+// Колокольчик технических сообщений — ОДИН на всё приложение.
+//
+// Их было два: этот показывал уведомления панелей своим всплывающим списком, соседний —
+// журнал в localStorage своим. Плюс пейн «Центр уведомлений» и `<Notice />` внутри форм:
+// четыре поверхности об одном и том же. Теперь колокольчик ничего не показывает сам — он
+// раскрывает область «Технические сообщения» справа, где список один и тот же.
+//
+// Всплывающего списка здесь больше нет намеренно: он повторял бы область, стоящую рядом,
+// и отвечал бы на тот же вопрос по-своему. Счётчик остался — по нему и решают, открывать.
 // ═══════════════════════════════════════════════════════════════════════════
-
-// endpoint источника → i18n-ключ типа элемента (для информативной ссылки).
-const NOTE_ENTITY_KEY: Record<string, string> = {
-  sales: "sale",
-  purchases: "purchase",
-  salereturns: "saleReturn",
-  purchasereturns: "purchaseReturn",
-  inventorytransfers: "inventoryTransfer",
-  cashreceiptorders: "cashReceiptOrder",
-  counterparties: "counterparty",
-  contracts: "contract",
-  organizations: "organization",
-  employees: "employee",
-  contacts: "contact",
-  contactpersons: "contactPerson",
-  bankaccounts: "bankAccount",
-};
-
-/** Текст ссылки-перехода: «{Тип элемента} {№/дата или наименование}» либо короткий uuid. */
-function noteRefLinkText(ref: { endpoint: string; uuid: string; label?: string }): string {
-  const key = NOTE_ENTITY_KEY[ref.endpoint];
-  const entity = key ? translate(key) : "";
-  const ident = ref.label || `#${ref.uuid.slice(0, 8)}`;
-  return [entity, ident].filter(Boolean).join(" ");
-}
-
 const NavbarPaneBell: FC = () => {
-  const { windows: { addPane } } = useAppContext();
-  const groups = useAllPaneNotifications();
-  const [showNotes, setShowNotes] = useState(false);
-  // Позиция попапа (position:fixed) — попап портируется в body, т.к. навбар имеет
-  // overflow: clip и иначе обрезал бы absolute-потомка (как .NavbarMobileMenu).
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
-  const bellRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  const totalCount = groups.reduce((sum, g) => sum + g.notifications.length, 0);
-
-  // Закрыть попover при клике вне
-  useEffect(() => {
-    if (!showNotes) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        bellRef.current && !bellRef.current.contains(e.target as Node) &&
-        popoverRef.current && !popoverRef.current.contains(e.target as Node)
-      ) {
-        setShowNotes(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showNotes]);
-
-  const openJournal = useCallback(() => {
-    setShowNotes(false);
-    addPane({ component: NotificationsList, label: translate("notificationsCenter") });
-  }, [addPane]);
-
-  if (totalCount === 0) return null;
+  const open = useTechMessagesOpen();
+  const active = useActiveNoticeCount();
 
   return (
-    <div className={styles.PaneNoteBellWrap}>
-      <button
-        ref={bellRef}
-        className={[styles.NavbarBellBtn, styles.PaneNoteBell].join(" ")}
-        onClick={() => {
-          if (!showNotes && bellRef.current) {
-            const r = bellRef.current.getBoundingClientRect();
-            setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
-          }
-          setShowNotes((v) => !v);
-        }}
-        title={translate("panelNotifications")}
-        type="button"
-      >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M8 1.5a4 4 0 0 0-4 4v2.7L2.7 10.5a.75.75 0 0 0 .53 1.28h9.54a.75.75 0 0 0 .53-1.28L12 8.2V5.5a4 4 0 0 0-4-4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
-          <path d="M6.5 12.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
-        </svg>
-        <span className={styles.PaneNoteBadge}>{totalCount}</span>
-      </button>
-      {showNotes && pos && createPortal(
-        <div ref={popoverRef} className={styles.PaneNotePopover} style={{ position: "fixed", top: pos.top, right: pos.right }}>
-          <div className={styles.PaneNotePopoverHeader}>
-            <span>{translate("notifications")}</span>
-            <button className={styles.PaneNoteJournalLink} onClick={openJournal} type="button">
-              {translate("journal")} ➜
-            </button>
-          </div>
-          {groups.flatMap((g) =>
-            g.notifications.map((n) => (
-              <div
-                key={n.id}
-                className={[
-                  styles.PaneNoteItem,
-                  n.type === "error" ? styles.PaneNoteError
-                    : n.type === "warning" ? styles.PaneNoteWarning
-                      : styles.PaneNoteInfo,
-                  n.resolved ? styles.PaneNoteResolved : "",
-                ].filter(Boolean).join(" ")}
-              >
-                <span className={styles.PaneNoteIcon}>{n.type === "error" ? "❌" : n.type === "warning" ? "⚠️" : "ℹ️"}</span>
-                <span className={styles.PaneNoteText}>
-                  {n.text}
-                  {n.ref && canOpenByRef(n.ref.endpoint) && (
-                    <button
-                      className={styles.PaneNoteOpenBtn}
-                      type="button"
-                      title={`${translate("open")}: ${noteRefLinkText(n.ref)}`}
-                      onClick={() => {
-                        void openFormByRef(n.ref!, addPane);
-                        setShowNotes(false);
-                      }}
-                    >{translate("open")}: {noteRefLinkText(n.ref)} ➜</button>
-                  )}
-                  {n.actions && n.actions.length > 0 && !n.resolved && (
-                    <span className={styles.PaneNoteActions}>
-                      {n.actions.map((a, i) => (
-                        <button
-                          key={i}
-                          className={styles.PaneNoteActionBtn}
-                          type="button"
-                          onClick={() => {
-                            void a.onClick();
-                            dismissPaneNotification(g.paneId, n.id);
-                          }}
-                        >{a.label}</button>
-                      ))}
-                    </span>
-                  )}
-                </span>
-                <button
-                  className={styles.PaneNoteDismiss}
-                  onClick={() => dismissPaneNotification(g.paneId, n.id)}
-                  title={translate("hide")}
-                  type="button"
-                >✕</button>
-              </div>
-            ))
-          )}
-        </div>,
-        document.body,
-      )}
-    </div>
+    <button
+      className={[styles.NavbarBellBtn, styles.PaneNoteBell].join(" ")}
+      onClick={() => setTechMessagesOpen(!open)}
+      title={`${translate("techMessages")}${active ? `: ${active}` : ""}`}
+      aria-pressed={open}
+      type="button"
+    >
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 1.5a4 4 0 0 0-4 4v2.7L2.7 10.5a.75.75 0 0 0 .53 1.28h9.54a.75.75 0 0 0 .53-1.28L12 8.2V5.5a4 4 0 0 0-4-4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
+        <path d="M6.5 12.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+      </svg>
+      {active > 0 && <span className={styles.PaneNoteBadge}>{active}</span>}
+    </button>
   );
 };
 
@@ -296,7 +176,6 @@ export const Navbar: React.FC = () => {
           <PersistenceModeToggle />
           <NavbarPaneBell />
           <OfflineIndicator />
-          <NotificationToast />
           <OrgSwitcher />
           {context.auth?.user && (
             <span className={styles.NavbarUserName}>

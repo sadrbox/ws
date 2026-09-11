@@ -1,5 +1,13 @@
 /**
- * «Технические сообщения» — ВСЕ `<Notice />` приложения в одном месте.
+ * «Технические сообщения» — ЕДИНЫЙ механизм сообщений приложения.
+ *
+ * ЧТО СЮДА СВЕДЕНО. Раньше об одном и том же рассказывали четыре независимые поверхности:
+ * колокольчик уведомлений панелей в шапке со своим всплывающим списком, второй колокольчик
+ * со своим журналом в localStorage, отдельный пейн «Центр уведомлений» и `<Notice />`
+ * внутри каждой формы. Четыре места, которые обязаны совпадать, — это четыре места,
+ * которые расходятся: уведомление пропадало из одного и оставалось в другом, а человек
+ * искал, где смотреть. Теперь запись одна, и её показывают одни и те же данные — в правой
+ * области и в её полноэкранном виде.
  *
  * ЗАЧЕМ. Сообщение формы — это `<Notice />`, и раньше каждая форма вставляла его прямо в
  * свою разметку. Появилось сообщение — содержимое уехало вниз под курсором, потеряв
@@ -43,10 +51,30 @@ export type TechMessage = {
 	lastAt: number;
 	/** Источник всё ещё сообщает это? Нет — запись ушла в историю. */
 	active: boolean;
+	/**
+	 * Объект, о котором речь: по нему запись группируется и по нему же открывается форма.
+	 * «Назначение объекта» — это и есть `endpoint`: реализации к реализациям, базы к базам.
+	 */
+	ref?: { endpoint: string; uuid: string; label?: string };
+	/**
+	 * Кнопки прямо в сообщении («Повторить», «Открыть»). Не переживают перезагрузку —
+	 * обработчик не сериализуется, — поэтому в журнал сохраняется всё, кроме них.
+	 */
+	actions?: { label: string; onClick: () => void | Promise<void> }[];
+	/** Повод исчерпан (форму сохранили): запись видна, но действия уже ничего не сделают. */
+	resolved?: boolean;
 };
 
-/** Сколько записей держим: доска — не журнал; журнал команд живёт в «Заданиях». */
-const LIMIT = 50;
+/**
+ * Сколько записей держим. Прежний журнал уведомлений хранил 200 — столько же и здесь:
+ * теперь это один и тот же список, и урезать его вдвое значило бы потерять историю,
+ * которая у людей уже накоплена.
+ */
+const LIMIT = 200;
+
+/** Ключ хранения. Прежний журнал уведомлений лежал под `notification-journal`. */
+const STORE_KEY = "tech-messages";
+const LEGACY_KEY = "notification-journal";
 
 /**
  * Область «всё приложение»: сама область сообщений видит всё, что ей сообщили, а
@@ -68,10 +96,55 @@ export const useNoticeOrigin = (): NoticeOrigin => useContext(NoticeScope);
 /** Только область — там, где источник подставляют сами (общие компоненты). */
 export const useNoticeScope = (): string => useContext(NoticeScope).scope;
 
-let notices: TechMessage[] = [];
+/**
+ * ХРАНЕНИЕ. Записи переживают перезагрузку — так вёл себя прежний журнал уведомлений, и
+ * терять это при слиянии нельзя: «что было, пока меня не было» — половина смысла журнала.
+ * Действия (`actions`) не сериализуются: обработчик — функция. Поэтому из хранилища
+ * запись возвращается без кнопок, но с текстом и ссылкой на объект.
+ */
+function load(): TechMessage[] {
+	const parse = (raw: string | null): TechMessage[] => {
+		if (!raw) return [];
+		try {
+			const v: unknown = JSON.parse(raw);
+			return Array.isArray(v) ? (v as TechMessage[]) : [];
+		} catch { return []; }
+	};
+	try {
+		const own = parse(localStorage.getItem(STORE_KEY));
+		if (own.length) return own;
+		// Переезд со старого журнала — один раз: записи те же, форма другая.
+		const legacy = parse(localStorage.getItem(LEGACY_KEY)) as unknown as {
+			id: number; type: NoticeType; text: string; timestamp: number;
+			paneLabel?: string; ref?: { endpoint: string; uuid: string; label?: string };
+		}[];
+		if (!legacy.length) return [];
+		const moved: TechMessage[] = legacy.map((e, i) => ({
+			id: `legacy${i}`, scope: APP_SCOPE, key: `legacy${i}`,
+			type: e.type, text: e.text, source: e.paneLabel ?? "",
+			firstAt: e.timestamp, lastAt: e.timestamp, active: false, ref: e.ref,
+		})).reverse();
+		localStorage.removeItem(LEGACY_KEY);
+		return moved.slice(0, LIMIT);
+	} catch {
+		return [];
+	}
+}
+
+let notices: TechMessage[] = load();
 let seq = 0;
 const listeners = new Set<() => void>();
-const emit = () => { for (const l of listeners) l(); };
+
+/** Сохраняем только то, что имеет смысл после перезагрузки: без функций-обработчиков. */
+function persist(): void {
+	try {
+		localStorage.setItem(STORE_KEY, JSON.stringify(
+			notices.map(({ actions: _actions, ...rest }) => rest),
+		));
+	} catch { /* приватный режим или переполнение — не повод ломать экран */ }
+}
+
+const emit = () => { persist(); for (const l of listeners) l(); };
 
 const sameItems = (a: TechMessage[], b: NoticeItem[]): boolean =>
 	a.length === b.length && a.every((n, i) => n.type === b[i].type && n.text === b[i].text);
@@ -126,6 +199,70 @@ export function noteNotice(source: string, item: NoticeItem, scope = APP_SCOPE):
 	emit();
 }
 
+/**
+ * ИМПЕРАТИВНОЕ уведомление — то, что раньше заводила подсистема уведомлений панелей:
+ * «сохранено локально», «нет связи с сервером», отказ бэкенда с кнопкой «Повторить».
+ *
+ * Отличие от `<Notice />` одно: у того есть источник, который может ЗАМОЛЧАТЬ (ошибка
+ * ушла — запись перешла в историю), а это — событие: оно случилось и остаётся, пока его
+ * не уберут. Поэтому запись активна и снимается явно (`dismissMessage`).
+ */
+export function addMessage(m: {
+	scope: string;
+	type: NoticeType;
+	text: string;
+	source: string;
+	ref?: TechMessage["ref"];
+	actions?: TechMessage["actions"];
+}): string {
+	const now = Date.now();
+	const id = `m${++seq}`;
+	notices = [{
+		id, scope: m.scope, key: id, type: m.type, text: m.text, source: m.source,
+		firstAt: now, lastAt: now, active: true, ref: m.ref, actions: m.actions,
+	}, ...notices].slice(0, LIMIT);
+	emit();
+	return id;
+}
+
+/** Убрать запись совсем (крестик на сообщении). */
+export function dismissMessage(id: string): void {
+	const next = notices.filter((n) => n.id !== id);
+	if (next.length === notices.length) return;
+	notices = next;
+	emit();
+}
+
+/** Убрать записи области по признаку — например «сетевые» после удачного обращения. */
+export function dismissMessagesWhere(scope: string, match: (m: TechMessage) => boolean): void {
+	const next = notices.filter((n) => !(n.scope === scope && match(n)));
+	if (next.length === notices.length) return;
+	notices = next;
+	emit();
+}
+
+/**
+ * Повод исчерпан: форму сохранили, и действия в её сообщениях уже ничего не сделают.
+ * Сами сообщения остаются — человек должен видеть, что было, а не гадать, куда делось.
+ */
+export function resolveMessages(scope: string): void {
+	let changed = false;
+	notices = notices.map((n) => {
+		if (n.scope !== scope || n.resolved || !n.active) return n;
+		changed = true;
+		return { ...n, resolved: true };
+	});
+	if (changed) emit();
+}
+
+/** Убрать все записи области (закрыли форму и её сообщения больше ни о чём). */
+export function clearScope(scope: string): void {
+	const next = notices.filter((n) => n.scope !== scope);
+	if (next.length === notices.length) return;
+	notices = next;
+	emit();
+}
+
 /** Убрать историю. Актуальные записи остаются: они описывают то, что не так СЕЙЧАС. */
 export function clearNoticeHistory(scope = APP_SCOPE): void {
 	const next = notices.filter((n) => n.active || (scope !== APP_SCOPE && n.scope !== scope));
@@ -134,10 +271,40 @@ export function clearNoticeHistory(scope = APP_SCOPE): void {
 	emit();
 }
 
+/**
+ * РАСКРЫТА ЛИ ОБЛАСТЬ — состояние общее, потому что переключателей два: кнопка в самой
+ * области и колокольчик в шапке. Держать его в компоненте значило бы, что колокольчик не
+ * знает, открыта ли область, и «показать сообщения» иногда её закрывало бы.
+ */
+const OPEN_KEY = "tech_messages_open";
+let open = (() => {
+	try { return localStorage.getItem(OPEN_KEY) === "1"; } catch { return false; }
+})();
+const openListeners = new Set<() => void>();
+
+export function setTechMessagesOpen(v: boolean): void {
+	if (open === v) return;
+	open = v;
+	try { localStorage.setItem(OPEN_KEY, v ? "1" : "0"); } catch { /* не беда */ }
+	for (const l of openListeners) l();
+}
+
+export const useTechMessagesOpen = (): boolean => useSyncExternalStore(
+	(l) => { openListeners.add(l); return () => { openListeners.delete(l); }; },
+	() => open,
+	() => false,
+);
+
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const snapshot = () => notices;
 
 const useAllNotices = (): TechMessage[] => useSyncExternalStore(subscribe, snapshot, snapshot);
+
+/**
+ * Прочитать записи вне React — для чистых функций (группировка) и для проверок: городить
+ * рендер ради разбора списка значило бы проверять заодно и разметку.
+ */
+export const getMessages = (): TechMessage[] => notices;
 
 /**
  * Сообщения одной области.

@@ -1,94 +1,50 @@
+/**
+ * «Технические сообщения» — полноэкранный вид того же списка, что и в правой области.
+ *
+ * ЗАЧЕМ ОТДЕЛЬНЫЙ ПЕЙН. Правая область узкая и стоит рядом с работой: в ней смотрят «что
+ * сейчас не так». Здесь — вся история целиком, во всю ширину, когда разбираются «что
+ * вообще происходило» и какие объекты это затронуло.
+ *
+ * ДАННЫЕ ТЕ ЖЕ. Раньше это был «Центр уведомлений» со своим чтением своего журнала в
+ * localStorage — то есть второй механизм рядом с уведомлениями панелей и третий рядом с
+ * `<Notice />` форм. Теперь хранилище одно (components/TechMessages/store), а этот экран —
+ * лишь другой его вид: тот же список, та же группировка по объекту, те же действия.
+ */
 import type { TDataItem } from "src/components/Table/types";
-import { FC, useCallback } from "react";
-import { useAppContext } from "src/app/context";
-import {
-  useNotificationJournal,
-  clearNotificationJournal,
-} from "src/hooks/useFormStore";
-import type { NotificationJournalEntry } from "src/hooks/useFormStore";
+import { FC } from "react";
 import { translate } from "src/i18";
-import { getFormatDate } from "src/utils/datetime";
+import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
+import { APP_SCOPE, clearNoticeHistory, useScopedNotices } from "src/components/TechMessages/store";
+import MessageList from "src/components/TechMessages/MessageList";
+import main from "src/styles/main.module.scss";
 import styles from "./Notifications.module.scss";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Локальный журнал уведомлений (localStorage, без сервера)
-// ═══════════════════════════════════════════════════════════════════════════
-
 interface NotificationsListProps {
-  variant?: string;
-  onSelectItem?: (item: TDataItem) => void;
-}
-
-// Дата+время в настроенном формате и часовом поясе (единый рендер приложения).
-function formatDate(ts: number): string {
-  return getFormatDate(new Date(ts).toISOString());
+	variant?: string;
+	onSelectItem?: (item: TDataItem) => void;
 }
 
 const NotificationsList: FC<NotificationsListProps> = () => {
-  const journal = useNotificationJournal();
-  const { addPane } = useAppContext().windows;
+	// Всё приложение: экран открывают именно затем, чтобы увидеть картину целиком.
+	const messages = useScopedNotices(APP_SCOPE);
+	const history = messages.filter((m) => !m.active).length;
 
-  const openRef = useCallback(
-    (entry: NotificationJournalEntry) => {
-      if (!entry.ref) return;
-      const { endpoint, uuid } = entry.ref;
-      void import("../../registry/formRegistry").then(({ openFormByEndpoint }) => {
-        void openFormByEndpoint(endpoint, uuid, addPane);
-      }).catch(() => { /* intentional */ });
-    },
-    [addPane],
-  );
-
-  const reversed = [...journal].reverse();
-
-  return (
-    <div className={styles.JournalWrap}>
-      <div className={styles.JournalHeader}>
-        <h3 className={styles.JournalTitle}>{translate("notificationsCenter")}</h3>
-        {journal.length > 0 && (
-          <button className={styles.JournalClear} onClick={clearNotificationJournal} type="button">
-            Очистить журнал
-          </button>
-        )}
-      </div>
-      {reversed.length === 0 ? (
-        <div className={styles.JournalEmpty}>{translate("noNotifications")}</div>
-      ) : (
-        <div className={styles.JournalList}>
-          {reversed.map((entry) => (
-            <div
-              key={entry.id}
-              className={[styles.JournalItem, entry.type === "warning" ? styles.JournalWarning : styles.JournalInfo].join(" ")}
-            >
-              <span className={styles.JournalIcon}>
-                {entry.type === "warning" ? "⚠️" : "ℹ️"}
-              </span>
-              <div className={styles.JournalBody}>
-                {entry.paneLabel && (
-                  <div className={styles.JournalLabel}>
-                    {entry.ref ? (
-                      <button
-                        className={styles.JournalLink}
-                        onClick={() => openRef(entry)}
-                        type="button"
-                        title="Открыть объект"
-                      >
-                        {entry.paneLabel}
-                      </button>
-                    ) : (
-                      <span>{entry.paneLabel}</span>
-                    )}
-                  </div>
-                )}
-                <div className={styles.JournalText}>{entry.text}</div>
-                <div className={styles.JournalDate}>{formatDate(entry.timestamp)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+	return (
+		<div className={main.PaneFill}>
+			<div className={styles.JournalHeader}>
+				<h3 className={styles.JournalTitle}>{translate("techMessages")}</h3>
+				<Button size="sm" variant="secondary" disabled={!history}
+					title={history ? translate("techMessagesHistoryClear") : translate("techMessagesHistoryEmpty")}
+					onClick={() => clearNoticeHistory(APP_SCOPE)}>
+					<Icon name="clear" /> {translate("techMessagesHistoryClear")}
+				</Button>
+			</div>
+			<div className={styles.JournalList}>
+				<MessageList messages={messages} />
+			</div>
+		</div>
+	);
 };
 
 NotificationsList.displayName = "NotificationsList";

@@ -1,7 +1,26 @@
-// Подсистема уведомлений панелей (журнал в localStorage + подписки).
-// Вынесена из useFormStore.ts (Q9: декомпозиция мега-модуля). Самодостаточна:
-// зависит только от React useSyncExternalStore и localStorage, не от form-store.
-import { useSyncExternalStore } from "react";
+/**
+ * Уведомления панелей — ТОНКАЯ НАДСТРОЙКА над «Техническими сообщениями».
+ *
+ * ЧТО БЫЛО. Здесь жила своя карта уведомлений по пейнам, свой журнал в localStorage и своя
+ * рассылка подписчикам. Рядом жил `<Notice />` со своим выводом внутри форм, колокольчик в
+ * шапке со своим всплывающим списком и пейн «Центр уведомлений» со своим чтением журнала.
+ * Четыре механизма об одном и том же — это четыре места, которые обязаны совпадать, а они
+ * расходятся: уведомление пропадало из одного и оставалось в другом.
+ *
+ * ЧТО СТАЛО. Хранилище одно (components/TechMessages/store). Здесь остались только имена,
+ * которыми пользуется форма: завести уведомление по пейну, снять, погасить «сетевые»,
+ * пометить неактуальными после сохранения. Область видимости уведомления — идентификатор
+ * пейна, ровно как у `<Notice />`, поэтому и показываются они вместе.
+ *
+ * ВСПЛЫВАЮЩЕЕ СООБЩЕНИЕ остаётся: <UIToast /> отвечает на вопрос «что сейчас произошло»,
+ * а область — на вопрос «что вообще происходило». Это разные вопросы (см. памятку
+ * «Notice vs Toast»).
+ */
+import { useMemo } from "react";
+import {
+	addMessage, dismissMessage, dismissMessagesWhere, clearScope, resolveMessages,
+	useScopedNotices, type TechMessage,
+} from "src/components/TechMessages/store";
 
 export interface PaneNotificationAction {
 	label: string;
@@ -9,216 +28,97 @@ export interface PaneNotificationAction {
 }
 
 export interface PaneNotification {
-	id: number;
+	id: string;
 	type: "info" | "warning" | "error";
 	text: string;
 	timestamp: number;
 	actions?: PaneNotificationAction[];
 	/** Уведомление неактуально (форма сохранена/обновлена) — действия заблокированы */
 	resolved?: boolean;
-	/** Ссылка на объект-источник уведомления — для перехода к форме документа.
-	 *  label — человекочитаемый идентификатор (№/дата или наименование) для ссылки. */
+	/** Ссылка на объект-источник уведомления — для перехода к форме документа. */
 	ref?: { endpoint: string; uuid: string; label?: string };
 }
 
-/** Запись в локальном журнале уведомлений (localStorage) */
-export interface NotificationJournalEntry {
-	id: number;
-	type: "info" | "warning" | "error";
-	text: string;
-	timestamp: number;
-	/** Заголовок панели (например «Организации: ТОО Строй-Снаб №1») */
-	paneLabel?: string;
-	/** Ссылка на объект: endpoint + uuid (+ человекочитаемый label), чтобы можно было переоткрыть */
-	ref?: { endpoint: string; uuid: string; label?: string };
-}
+/** Запись хранилища → уведомление панели: имена полей прежние, источник один. */
+const toNote = (m: TechMessage): PaneNotification => ({
+	id: m.id,
+	// В хранилище палитра шире (info/success/warning/attention/error); у уведомлений
+	// панелей исторически три состояния, и «attention» ближе всего к ошибке.
+	type: m.type === "error" || m.type === "attention" ? "error" : m.type === "warning" ? "warning" : "info",
+	text: m.text,
+	timestamp: m.firstAt,
+	actions: m.actions,
+	resolved: m.resolved,
+	ref: m.ref,
+});
 
-const JOURNAL_KEY = "notification-journal";
-const JOURNAL_MAX = 200;
-
-function loadJournal(): NotificationJournalEntry[] {
-	try {
-		return JSON.parse(localStorage.getItem(JOURNAL_KEY) || "[]") as NotificationJournalEntry[];
-	} catch {
-		return [];
-	}
-}
-
-function saveJournal(entries: NotificationJournalEntry[]): void {
-	localStorage.setItem(
-		JOURNAL_KEY,
-		JSON.stringify(entries.slice(-JOURNAL_MAX)),
-	);
-}
-
-/** Журнал: подписчики для реактивного обновления */
-const journalListeners = new Set<() => void>();
-let journalCache: NotificationJournalEntry[] | null = null;
-
-function notifyJournalListeners(): void {
-	journalCache = null; // сброс кэша
-	for (const l of journalListeners) l();
-}
-
-function getJournalSnapshot(): NotificationJournalEntry[] {
-	if (!journalCache) journalCache = loadJournal();
-	return journalCache;
-}
-
-function subscribeJournal(listener: () => void): () => void {
-	journalListeners.add(listener);
-	return () => {
-		journalListeners.delete(listener);
-	};
-}
-
-/** Хук: получить журнал уведомлений (реактивный) */
-export function useNotificationJournal(): NotificationJournalEntry[] {
-	return useSyncExternalStore(subscribeJournal, getJournalSnapshot, () => []);
-}
-
-/** Очистить журнал уведомлений */
-export function clearNotificationJournal(): void {
-	localStorage.removeItem(JOURNAL_KEY);
-	notifyJournalListeners();
-}
-
-let nextNoteId = 1;
-const paneNotesMap = new Map<string, PaneNotification[]>();
-const noteListeners = new Set<() => void>();
-let groupsSnapshot: PaneNotificationGroup[] = [];
-
-function notifyNoteListeners(): void {
-	groupsSnapshot = paneNotesMap.size === 0
-		? emptyGroups
-		: Array.from(paneNotesMap.entries()).map(([paneId, notifications]) => ({ paneId, notifications }));
-	for (const l of noteListeners) l();
-}
-
-/** Добавить уведомление к панели. Также сохраняет в локальный журнал. */
+/** Добавить уведомление к панели. */
 export function addPaneNotification(
 	uniqId: string,
 	type: PaneNotification["type"],
 	text: string,
-	/** Контекст для журнала: заголовок панели и ссылка на объект */
+	/** Контекст: заголовок панели и ссылка на объект. */
 	context?: { paneLabel?: string; ref?: { endpoint: string; uuid: string; label?: string } },
-	/** Кнопки-действия внутри уведомления */
+	/** Кнопки-действия внутри уведомления. */
 	actions?: PaneNotificationAction[],
 ): void {
-	const ts = Date.now();
-	const id = nextNoteId++;
-	const list = paneNotesMap.get(uniqId) ?? [];
-	list.push({ id, type, text, timestamp: ts, actions, ref: context?.ref });
-	paneNotesMap.set(uniqId, list);
-	notifyNoteListeners();
-
-	// Сохраняем в журнал localStorage
-	const journal = loadJournal();
-	journal.push({
-		id,
+	addMessage({
+		scope: uniqId,
 		type,
 		text,
-		timestamp: ts,
-		paneLabel: context?.paneLabel,
+		source: context?.paneLabel ?? "",
 		ref: context?.ref,
+		actions,
 	});
-	saveJournal(journal);
-	notifyJournalListeners();
 
-	// Показываем всплывающий тост
-	const toastType =
-		type === "error"
-			? "error"
-			: type === "warning"
-				? "warning"
-				: type === "info"
-					? "info"
-					: "success";
+	// Всплывающее сообщение — по-прежнему: оно отвечает «что сейчас произошло», а область
+	// сообщений — «что вообще происходило». Это разные вопросы и разные поверхности.
 	window.dispatchEvent(
 		new CustomEvent("ui_toast", {
-			detail: { message: text, type: toastType, title: context?.paneLabel },
+			detail: {
+				message: text,
+				type: type === "error" ? "error" : type === "warning" ? "warning" : "info",
+				title: context?.paneLabel,
+			},
 		}),
 	);
 }
 
-/** Удалить конкретное уведомление */
-export function dismissPaneNotification(uniqId: string, noteId: number): void {
-	const list = paneNotesMap.get(uniqId);
-	if (!list) return;
-	const filtered = list.filter((n) => n.id !== noteId);
-	if (filtered.length === 0) paneNotesMap.delete(uniqId);
-	else paneNotesMap.set(uniqId, filtered);
-	notifyNoteListeners();
+/** Удалить конкретное уведомление. */
+export function dismissPaneNotification(_uniqId: string, noteId: string): void {
+	dismissMessage(noteId);
 }
 
-/** Удалить из панели «сетевые» уведомления (offline/нет связи/локальный кэш).
- *  Вызывается после успешного online-обращения к серверу, чтобы стальные
- *  предупреждения не вводили пользователя в заблуждение. */
+/**
+ * Удалить из панели «сетевые» уведомления (offline / нет связи / локальный кэш).
+ * Вызывается после успешного online-обращения к серверу, чтобы устаревшие
+ * предупреждения не вводили пользователя в заблуждение.
+ */
 export function dismissNetworkNotifications(uniqId: string): void {
-	const list = paneNotesMap.get(uniqId);
-	if (!list || list.length === 0) return;
-	const NETWORK_RE =
-		/Нет связи с сервером|режиме offline|локального кэша|Сохранено локально/i;
-	const filtered = list.filter((n) => !NETWORK_RE.test(n.text));
-	if (filtered.length === list.length) return;
-	if (filtered.length === 0) paneNotesMap.delete(uniqId);
-	else paneNotesMap.set(uniqId, filtered);
-	notifyNoteListeners();
+	const NETWORK_RE = /Нет связи с сервером|режиме offline|локального кэша|Сохранено локально/i;
+	dismissMessagesWhere(uniqId, (m) => NETWORK_RE.test(m.text));
 }
 
-/** Очистить все Уведомления */
+/** Очистить все уведомления панели. */
 export function clearPaneNotifications(uniqId: string): void {
-	if (paneNotesMap.has(uniqId)) {
-		paneNotesMap.delete(uniqId);
-		notifyNoteListeners();
-	}
+	clearScope(uniqId);
 }
 
-/** Пометить все Уведомления как неактуальные (resolved).
- *  Уведомления остаются видимыми, но действия (кнопки) блокируются. */
+/**
+ * Пометить уведомления панели неактуальными (resolved). Сами уведомления остаются
+ * видимыми, но действия (кнопки) блокируются: повод для них исчерпан.
+ */
 export function resolvePaneNotifications(uniqId: string): void {
-	const list = paneNotesMap.get(uniqId);
-	if (!list || list.length === 0) return;
-	let changed = false;
-	for (const n of list) {
-		if (!n.resolved) {
-			n.resolved = true;
-			changed = true;
-		}
-	}
-	if (changed) notifyNoteListeners();
+	resolveMessages(uniqId);
 }
 
-function subscribeNotes(listener: () => void): () => void {
-	noteListeners.add(listener);
-	return () => {
-		noteListeners.delete(listener);
-	};
-}
-
-/** Хук: уведомления конкретной панели */
+/**
+ * Хук: уведомления конкретной панели — на случай, если форме понадобится показать их у
+ * себя. Сейчас их показывает область «Технические сообщения», поэтому потребителей нет;
+ * оставлен как единственный законный способ прочитать уведомления пейна, чтобы следующая
+ * форма не завела вместо него собственную карту.
+ */
 export function usePaneNotifications(uniqId: string): PaneNotification[] {
-	return useSyncExternalStore(
-		subscribeNotes,
-		() => paneNotesMap.get(uniqId) ?? emptyNotes,
-		() => emptyNotes,
-	);
+	const all = useScopedNotices(uniqId);
+	return useMemo(() => all.filter((m) => m.active).map(toNote), [all]);
 }
-
-export interface PaneNotificationGroup {
-	paneId: string;
-	notifications: PaneNotification[];
-}
-
-const emptyGroups: PaneNotificationGroup[] = [];
-
-/** Хук: уведомления всех панелей сгруппированные по paneId. */
-export function useAllPaneNotifications(): PaneNotificationGroup[] {
-	return useSyncExternalStore(
-		subscribeNotes,
-		() => groupsSnapshot,
-		() => emptyGroups,
-	);
-}
-
-const emptyNotes: PaneNotification[] = [];
