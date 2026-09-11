@@ -1,10 +1,11 @@
 /**
  * OneCAdmin — администрирование сервера 1С: базы клиентов и их состояние (E15/A5, P0).
  *
- * ДВЕ ОБЛАСТИ ЭКРАНА. Слева — работа: вкладки с данными, по которым действуют. Справа —
- * наблюдение: ход запросов и команд и журнал заданий. Раньше «Прогресс» жил внутри вкладки
- * «Пользователи баз» и пропадал при переходе на любую другую, хотя операция продолжала
- * идти. Теперь наблюдение видно всегда и не отнимает места у работы.
+ * ВКЛАДКИ ОДНИМ РЯДОМ. «Прогресс запросов и команд» и «Задания» стоят после «Агентов» —
+ * такими же вкладками, как всё остальное. Прежде экран делился надвое: работа слева,
+ * наблюдение справа; деление съедало треть ширины постоянно, а таблицы баз и сеансов
+ * широкие. Наблюдение от переключения вкладок НЕ прерывается — за командами следит сама
+ * панель (useBatchWatch), а не вкладка; счётчик у «Прогресса» говорит, идёт ли что-то.
  *
  * СООБЩЕНИЯ ЗДЕСЬ НЕ ВЫВОДЯТСЯ. Все `<Notice />` приложения показывает одна область —
  * «Технические сообщения» справа от пейнов (components/TechMessages). Своей доски у панели
@@ -46,7 +47,6 @@
 import { FC, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import Tabs from "src/components/Tabs";
-import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { OneCBasesList } from "src/models/OneCBases";
 import SessionsTab from "./SessionsTab";
 import ConnectionsTab from "./ConnectionsTab";
@@ -58,11 +58,9 @@ import AgentsTab from "./AgentsTab";
 import ProcessesTab from "./ProcessesTab";
 import ProgressTab from "./ProgressTab";
 import { useBatchWatch } from "./progress";
-import styles from "./OneCAdmin.module.scss";
 import main from "src/styles/main.module.scss";
 
-type Tab = "bases" | "cluster" | "extensions" | "users" | "agents";
-type SideTab = "progress" | "batches";
+type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "progress" | "batches";
 
 /**
  * «Кластер» — живое состояние сервера 1С одним разделом.
@@ -103,7 +101,6 @@ const AgentsSection: FC = () => {
 
 export const OneCAdminList: FC = () => {
 	const [tab, setTab] = useState<Tab>("bases");
-	const [sideTab, setSideTab] = useState<SideTab>("progress");
 
 	/**
 	 * Слежение за командами — НА УРОВНЕ ПАНЕЛИ, а не вкладки.
@@ -111,19 +108,10 @@ export const OneCAdminList: FC = () => {
 	 * Команда, поставленная со вкладки «Базы», выполняется минутами; если следит за ней
 	 * только та вкладка, переход на соседнюю обрывает наблюдение, и результат команды
 	 * (например, новое состояние публикации) не доезжает до таблиц. Здесь наблюдатель
-	 * живёт, пока открыта панель.
+	 * живёт, пока открыта панель, — независимо от того, какая вкладка показана.
 	 */
 	const watch = useBatchWatch();
-
-	// Границу между работой и наблюдением человек двигает сам: на широком экране полезнее
-	// видеть прогресс целиком, на узком — отдать место таблицам.
-	const split = useSplitResize({
-		storageKey: "onec_admin_side",
-		side: "left",
-		defaultPercent: 68,
-		min: 40,
-		max: 88,
-	});
+	const running = watch.running;
 
 	const tabs = useMemo(() => [
 		{
@@ -154,40 +142,30 @@ export const OneCAdminList: FC = () => {
 			label: translate("onecTabAgents"),
 			component: tab === "agents" ? <AgentsSection /> : null,
 		},
-	], [tab]);
-
-	const running = watch.running;
+		{
+			// Наблюдение — В ОБЩЕМ РЯДУ ВКЛАДОК, после «Агентов».
+			//
+			// Раньше экран делился на две области: работа слева, наблюдение справа. Деление
+			// съедало треть ширины постоянно, а нужна она там не всегда — таблицы баз и
+			// сеансов широкие. Счётчик у вкладки говорит, идёт ли что-то, и этого довольно,
+			// чтобы решить, заглядывать ли: само наблюдение от переключения не прерывается
+			// (см. useBatchWatch выше).
+			id: "progress",
+			label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
+			component: tab === "progress"
+				? <ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} />
+				: null,
+		},
+		{
+			id: "batches",
+			label: translate("onecTabBatches"),
+			component: tab === "batches" ? <BatchesTab /> : null,
+		},
+	], [tab, running, watch.isFetching, watch.refresh]);
 
 	return (
 		<div className={main.PaneFill}>
-			<div className={styles.AdminScreen} ref={split.containerRef}>
-				<div className={styles.AdminMain} style={{ flexBasis: `${split.percent}%` }}>
-					<Tabs tabs={tabs} activeTab={tab} onTabChange={(id) => setTab(id as Tab)} />
-				</div>
-
-				<VSplitBar onPointerDown={split.startResize} onDoubleClick={split.reset} onNudge={split.nudge} />
-
-				<div className={styles.AdminSide} style={{ flexBasis: `${100 - split.percent}%` }}>
-					<div className={styles.AdminSideTabs}>
-						<Tabs
-							activeTab={sideTab}
-							onTabChange={(id) => setSideTab(id as SideTab)}
-							tabs={[
-								{
-									id: "progress",
-									label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
-									component: <ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} />,
-								},
-								{
-									id: "batches",
-									label: translate("onecTabBatches"),
-									component: <BatchesTab />,
-								},
-							]}
-						/>
-					</div>
-				</div>
-			</div>
+			<Tabs tabs={tabs} activeTab={tab} onTabChange={(id) => setTab(id as Tab)} />
 		</div>
 	);
 };
