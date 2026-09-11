@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Db } from "../src/db/pool.ts";
 import { AgentService, type AgentRole } from "../src/agents/service.ts";
-import { needsFullBases } from "../src/bases/service.ts";
+import { isPublished, needsFullBases, publicationReport } from "../src/bases/service.ts";
 
 type FakeAgent = {
 	id: string;
@@ -122,4 +122,41 @@ test("полный срез по базам: нужен при первом hear
 	assert.equal(needsFullBases(null, 300, сейчас), true);
 	assert.equal(needsFullBases(new Date(сейчас - 60_000), 300, сейчас), false);
 	assert.equal(needsFullBases(new Date(сейчас - 301_000), 300, сейчас), true);
+});
+
+// ── Срез публикаций: один критерий «опубликована» и честный разбор ──────────
+//
+// Правило родилось из измерения: агент присылал сто десять записей, все с
+// `published: false`, и объявлял список полным — а сразу перед этим наша же команда
+// IB_PUBLISH вернула адрес публикации. Срез, в котором нет ни одной опубликованной
+// базы, снаружи неотличим от читателя, который не умеет читать, и принимать его за
+// факт нельзя: он затирал состояние, проверенное делом.
+
+test("опубликована: явное true, либо адрес при умолчанном признаке", () => {
+	assert.equal(isPublished({ key: "a", published: true }), true);
+	// Адрес берётся из default.vrd — его нельзя получить, не найдя публикацию.
+	assert.equal(isPublished({ key: "b", url: "http://localhost/b" }), true);
+	// Явное «нет» — это ответ, и он отрицательный.
+	assert.equal(isPublished({ key: "c", published: false, url: "http://localhost/c" }), false);
+	// Ни признака, ни адреса — незнание агента, а НЕ «да». Раньше критерий был
+	// `published !== false`, и такая запись становилась опубликованной.
+	assert.equal(isPublished({ key: "d" }), false);
+});
+
+test("разбор среза: пустой по публикациям срез не принимается", () => {
+	const all = [{ key: "a", published: false }, { key: "b", published: false }];
+	const r = publicationReport(all, true);
+	assert.equal(r.total, 2);
+	assert.equal(r.published, 0);
+	assert.equal(r.complete, true);
+	// Полнота не спасает: нечего подтверждать полнотой.
+	assert.equal(r.accepted, false);
+});
+
+test("разбор среза: одна найденная публикация делает срез достоверным", () => {
+	const r = publicationReport([{ key: "a", published: true, url: "http://localhost/a" }, { key: "b", published: false }], false);
+	assert.equal(r.published, 1);
+	assert.equal(r.accepted, true);
+	// `complete` при этом остаётся своим: он решает только вопрос массового снятия.
+	assert.equal(r.complete, false);
 });

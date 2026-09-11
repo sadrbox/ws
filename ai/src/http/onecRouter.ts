@@ -23,7 +23,7 @@ import type { Logger } from "../logger.ts";
 import { requireErpUser } from "../auth/index.ts";
 import { rateLimit } from "./rateLimit.ts";
 import type { AgentRole, AgentService } from "../agents/service.ts";
-import type { BaseService, BaseState } from "../bases/service.ts";
+import { publicationReport, type BaseService, type BaseState, type PublicationItem } from "../bases/service.ts";
 import type { CommandQueue, CommandRow } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { BatchService } from "../onec/batches.ts";
@@ -258,6 +258,19 @@ export function onecRouter(deps: Deps) {
 	 * после нашей же команды IB_PUBLISH — то есть у ста баз он оставался «не проверялся»
 	 * навсегда. Здесь он берётся у источника.
 	 */
+	/**
+	 * Проверка публикаций: агент читает веб-сервер, сервис применяет срез, панель узнаёт,
+	 * ЧТО ИМЕННО нашлось.
+	 *
+	 * Раньше в ответе было одно число — длина списка, — и панель радостно сообщала
+	 * «Проверено публикаций: 110», хотя опубликованной не нашлось НИ ОДНОЙ, срез был
+	 * отвергнут как недостоверный и состояние ста десяти баз осталось прежним. Кнопка
+	 * говорила «сделано», не сделав ничего: это и есть «проверка работает некорректно».
+	 *
+	 * Теперь отдаём разбор среза: сколько баз в нём, сколько из них опубликованы, объявлен
+	 * ли список полным, принят ли он — и где агент искал. По этим полям панель пишет
+	 * человеку правду, включая неприятную.
+	 */
 	r.post("/publications/refresh", async (req, res) => {
 		const outcome = await run(req, "CLUSTER_LIST_PUBLICATIONS", {});
 		if (outcome.status !== 200) { send(res, outcome); return; }
@@ -265,12 +278,28 @@ export function onecRouter(deps: Deps) {
 		// Применять здесь нечего: срез уже применён на общем пути приёма результатов
 		// (agentRouter), куда он попадает раньше, чем run() возвращает управление. Второе
 		// применение было бы не ошибкой, а лишней парой мест, которые обязаны совпадать.
-		const data = outcome.data as { items?: unknown[] } | null;
-		const found = Array.isArray(data?.items) ? data.items.length : 0;
+		// А вот РАЗБОР среза повторяем — теми же правилами, той же функцией.
+		const data = outcome.data as {
+			items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
+		} | null;
+		const items = Array.isArray(data?.items) ? data.items : [];
+		const report = publicationReport(items, data?.complete === true);
 
 		// Отвечаем реестром, как и обновление баз: панели нужен готовый список, а не сырой
 		// ответ агента, у которого другая форма.
-		res.json({ success: true, data: { items: await bases.listAll(), found } });
+		res.json({
+			success: true,
+			data: {
+				items: await bases.listAll(),
+				report: {
+					...report,
+					// Где искали — единственный способ отличить «не опубликовано» от
+					// «смотрели не в том каталоге», не заходя на сервер.
+					source: typeof data?.source === "string" ? data.source : null,
+					lookedIn: Array.isArray(data?.lookedIn) ? data.lookedIn.length : 0,
+				},
+			},
+		});
 	});
 
 	// Ручное обновление реестра: спрашиваем список у кластера и сразу применяем к базе сервиса,

@@ -33,6 +33,8 @@ export type OnecBase = {
 	 */
 	published: boolean | null;
 	publishUrl: string | null;
+	/** Когда состояние публикации проверяли; null — не проверяли никогда. */
+	publishSeenAt: string | null;
 };
 
 /** Строка сеанса или соединения: состав полей задаёт `rac`, поэтому словарь, а не жёсткий тип. */
@@ -192,8 +194,31 @@ export const fetchUserOccurrences = (name: string) =>
  * баз. Без этого признак публикации у сотни баз оставался «не проверялся» до тех пор,
  * пока публикацию не сделают из панели.
  */
+export type PublicationReport = {
+	/** Сколько баз в срезе и сколько из них опубликованы. */
+	total: number;
+	published: number;
+	/** Агент объявил список полным (просмотрены все веб-серверы). */
+	complete: boolean;
+	/** Срез принят: без единой найденной публикации ему верить нельзя (см. сервис). */
+	accepted: boolean;
+	/** Чем собран срез и сколько каталогов просмотрено — диагностика для человека. */
+	source: string | null;
+	lookedIn: number;
+};
+
+/**
+ * Обновить состояние публикаций: агент читает веб-сервер, сервис применяет срез.
+ *
+ * ЖДЁМ КОМАНДУ. Раньше ответ брали как есть — а сервис отдаёт 202 `{pending}`, если агент
+ * не уложился в отведённое время. Тогда `items` оказывался `undefined`, панель клала его
+ * в кэш списка баз, и СПИСОК БАЗ СТАНОВИЛСЯ ПУСТЫМ, а в сообщении появлялось «Проверено
+ * публикаций: undefined».
+ */
 export const refreshPublications = () =>
-	aiFetch<{ items: OnecBase[]; found: number }>("/v1/onec/publications/refresh", { method: "POST" });
+	aiFetch<{ items: OnecBase[]; report: PublicationReport } | Pending>(
+		"/v1/onec/publications/refresh", { method: "POST" },
+	).then((d) => awaitCommand<{ items: OnecBase[]; report: PublicationReport }>(d));
 
 /**
  * Роли для выбора при создании и изменении пользователя.

@@ -384,7 +384,8 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									    групповые, здесь цель уже выбрана и она на экране. */}
 									<BasePublication baseKey={asText(row.baseKey)}
 										published={row.published as boolean | null}
-										publishUrl={row.publishUrl ? asText(row.publishUrl) : null} />
+										publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
+										seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
 								</GroupCol>
 
 								<GroupCol className={main.FormNotice}>
@@ -426,7 +427,7 @@ export function useOpenOnecBase() {
 			? ({
 				baseKey: found.key, name: found.name, status: found.status, serverName: found.serverName,
 				onecVersion: found.onecVersion, extensionsCount: found.extensionsCount,
-				published: found.published, publishUrl: found.publishUrl,
+				published: found.published, publishUrl: found.publishUrl, publishSeenAt: found.publishSeenAt,
 				lastSeenAt: found.lastSeenAt, infobaseId: found.infobaseId,
 			} as unknown as TDataItem)
 			: (typeof base === "string" ? ({ baseKey: key } as unknown as TDataItem) : base);
@@ -478,6 +479,11 @@ export const OneCBasesList: FC<{
 			// «—» читалось бы как «версии нет»; версия есть всегда, её просто не сообщили.
 			if (col.identifier === "onecVersion") {
 				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;
+			}
+			// Когда состояние публикации проверяли. Без даты «не опубликована» и
+			// «не проверялась» выглядят одинаково убедительно, хотя вторая — незнание.
+			if (col.identifier === "publishSeenAt") {
+				return <span>{row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "—"}</span>;
 			}
 			return undefined;
 		}}

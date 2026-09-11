@@ -65,6 +65,8 @@ export type BaseView = {
 	/** Публикация на веб-сервере: null — не проверялась, false — точно нет. */
 	published: boolean | null;
 	publishUrl: string | null;
+	/** Когда состояние публикации проверяли в последний раз; null — не проверяли никогда. */
+	publishSeenAt: string | null;
 	extensionsCount: number | null;
 	extensionsSeenAt: string | null;
 	extensionNames: string[];
@@ -80,6 +82,49 @@ export type ServerRow = {
 	ras_host: string | null;
 	ras_port: number | null;
 	created_at: Date;
+};
+
+/** Одна строка среза публикаций, как её присылает агент (CLUSTER_LIST_PUBLICATIONS). */
+export type PublicationItem = { key: string; name?: string; published?: boolean; url?: string | null };
+
+/**
+ * ОПУБЛИКОВАНА ЛИ база по одной строке среза — единственный критерий на весь сервис.
+ *
+ * Явное `true` — да. Признака нет вовсе, но есть адрес публикации — тоже да: адрес
+ * берётся из `default.vrd`, его нельзя получить, не найдя публикацию. Всё остальное,
+ * включая отсутствие и признака, и адреса, — НЕ «нет», а незнание агента.
+ *
+ * Раньше критериев было два и они расходились: отметка ставилась по `published !== false`
+ * (то есть запись без признака становилась опубликованной), а список «не снимать» строился
+ * по тому же выражению — и запись без признака одновременно попадала в «не трогать» и
+ * получала отметку. Теперь правило одно и на обоих путях.
+ */
+export const isPublished = (i: PublicationItem): boolean =>
+	i.published === true || (i.published === undefined && !!i.url);
+
+/**
+ * Что вообще пришло в срезе — и можно ли ему верить.
+ *
+ * ПОЧЕМУ ОТДЕЛЬНО ОТ ПРИМЕНЕНИЯ. Ответ нужен не только реестру, но и человеку: он нажал
+ * «Проверить публикации» и обязан узнать, что именно проверка нашла. Раньше панель
+ * получала одно число — длину списка — и показывала «Проверено публикаций: 110», хотя
+ * найдено было НОЛЬ, а состояние ста десяти баз не изменилось. Число, не отвечающее на
+ * заданный вопрос, хуже отсутствия числа.
+ *
+ * `accepted` — тот же критерий доверия, по которому срез применяется: пока в нём нет ни
+ * одной опубликованной базы, веб-сервер без публикаций неотличим от читателя, который не
+ * умеет читать (измерено: такой срез затирал состояние, поставленное нашей же командой).
+ */
+export type PublicationReport = {
+	total: number;
+	published: number;
+	complete: boolean;
+	accepted: boolean;
+};
+
+export const publicationReport = (items: PublicationItem[], complete: boolean): PublicationReport => {
+	const published = items.filter(isPublished).length;
+	return { total: items.length, published, complete, accepted: published > 0 };
 };
 
 const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b.ext_version,
@@ -312,7 +357,7 @@ export class BaseService {
 	 */
 	async applyPublications(
 		serverId: string,
-		items: { key: string; published?: boolean; url?: string | null }[],
+		items: PublicationItem[],
 		complete: boolean,
 	): Promise<{ marked: number; cleared: number; matched: number }> {
 		/*
@@ -328,7 +373,7 @@ export class BaseService {
 		 * отметок, ни снятия. Появится хоть одна — значит читатель работает, и его «нет»
 		 * чего-то стоит.
 		 */
-		if (!items.some((i) => i.published === true)) return { marked: 0, cleared: 0, matched: 0 };
+		if (!publicationReport(items, complete).accepted) return { marked: 0, cleared: 0, matched: 0 };
 
 		let marked = 0;
 		let matched = 0;
@@ -345,7 +390,10 @@ export class BaseService {
 			const key = hit.rows[0]?.key;
 			if (!key) continue;
 			matched += 1;
-			await this.setPublication(serverId, key, it.published !== false, it.url ?? null);
+			// `published !== false` считало опубликованной запись БЕЗ признака вовсе:
+			// отсутствие поля — это незнание агента, а не «да». Единственный критерий —
+			// isPublished (явное true либо адрес публикации при умолчанном признаке).
+			await this.setPublication(serverId, key, isPublished(it), it.url ?? null);
 			marked += 1;
 		}
 		/*
@@ -357,7 +405,9 @@ export class BaseService {
 		 */
 		if (!complete || !matched) return { marked, cleared: 0, matched };
 
-		const labels = items.filter((i) => i.published !== false).map((i) => (i.key ?? "").trim());
+		// Список тех, кого снимать НЕЛЬЗЯ, — по тому же критерию, что и отметка выше:
+		// иначе запись без признака попадала в «не трогать», но отмечалась как «нет».
+		const labels = items.filter(isPublished).map((i) => (i.key ?? "").trim());
 		const r = await this.db.query(
 			`UPDATE bases SET published = false, publish_url = NULL, publish_seen_at = now()
 			  WHERE server_id = $1
@@ -389,6 +439,7 @@ export class BaseService {
 			infobaseId: r.infobase_id,
 			published: r.published,
 			publishUrl: r.publish_url,
+			publishSeenAt: r.publish_seen_at?.toISOString() ?? null,
 			extensionsCount: r.extensions_count,
 			// Имена нужны панели, чтобы отобрать базы БЕЗ нужного расширения: иначе их
 			// пришлось бы выискивать глазами среди ста строк.

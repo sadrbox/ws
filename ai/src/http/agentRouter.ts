@@ -18,7 +18,10 @@ import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
-import { type BaseService, type BaseState, needsFullBases } from "../bases/service.ts";
+import {
+	needsFullBases, publicationReport,
+	type BaseService, type BaseState, type PublicationItem,
+} from "../bases/service.ts";
 
 // Состояние одной базы в register/heartbeat (E15/A2). Незаполненное поле значит «не знаю»:
 // список баз и версию платформы даёт админ-агент, версию расширения — бизнес-агент, и
@@ -341,21 +344,25 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// Срез публикаций может прийти и не из ручки панели (пакет, повтор задания) —
 		// применяем его на общем пути приёма результатов.
 		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_LIST_PUBLICATIONS") {
-			const data = p.data.result as { items?: { key: string; published?: boolean; url?: string | null }[]; complete?: boolean } | null;
+			const data = p.data.result as {
+				items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
+			} | null;
 			const me = await agents.findById(req.agent!.agentId);
 			if (me?.serverId && Array.isArray(data?.items) && data.items.length) {
+				const report = publicationReport(data.items, data.complete === true);
 				const r = await bases.applyPublications(me.serverId, data.items, data.complete === true);
 				// Ответ, из которого не узнана ни одна база, — не «ничего не опубликовано», а
 				// разговор на разных языках. Молча проглатывать такое нельзя: реестр
 				// останется с прежним, а в логе будет видно, с чем разбираться.
-				const anyPublished = data.items.some((i) => i.published === true);
-				if (!r.matched || !anyPublished) {
+				if (!r.matched || !report.accepted) {
 					log.warn({
-						agentId: req.agent!.agentId, items: data.items.length, matched: r.matched,
-						anyPublished, sample: data.items[0]?.key,
-					}, !r.matched
-						? "срез публикаций не сопоставлен ни с одной базой — реестр не тронут"
-						: "в срезе публикаций нет ни одной опубликованной базы — принимаем это за незнание, а не за факт");
+						agentId: req.agent!.agentId, items: report.total, matched: r.matched,
+						published: report.published, complete: report.complete,
+						source: data.source ?? null, lookedIn: data.lookedIn?.length ?? 0,
+						sample: data.items[0]?.key,
+					}, !report.accepted
+						? "в срезе публикаций нет ни одной опубликованной базы — принимаем это за незнание, а не за факт"
+						: "срез публикаций не сопоставлен ни с одной базой — реестр не тронут");
 				}
 			}
 		}

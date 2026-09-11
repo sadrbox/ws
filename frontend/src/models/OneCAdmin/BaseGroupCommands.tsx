@@ -31,6 +31,7 @@ import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
 import { refreshPublications, runBatch, type BatchType } from "src/services/onec/api";
 import { isApplicable, type OnecOperation } from "./shared";
+import { noteNotice } from "./notices";
 import { attachBatch, startOp, withOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
@@ -214,7 +215,30 @@ export const BaseGroupCommands: FC<{
 		onSuccess: (d) => {
 			qc.setQueryData(["onec", "bases"], { items: d.items });
 			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
-			showToast(`${translate("onecPublicationsChecked")}: ${d.found}`, "success");
+
+			/*
+			 * ГОВОРИМ ТО, ЧТО ПРОИЗОШЛО НА САМОМ ДЕЛЕ.
+			 *
+			 * Раньше здесь было «Проверено публикаций: 110» — по длине списка. На деле
+			 * опубликованной не нашлось НИ ОДНОЙ, срез был отвергнут как недостоверный, и
+			 * состояние ста десяти баз осталось прежним. Зелёное сообщение с большим числом
+			 * означало «сделано», а сделано не было ничего.
+			 */
+			const r = d.report;
+			if (r.accepted) {
+				showToast(`${translate("onecPublicationsChecked")}: ${r.published} / ${r.total}`, "success");
+				return;
+			}
+			// Почему не приняли — на доску сообщений: это не мгновенная новость, а
+			// состояние, с которым дальше разбираются.
+			const where = r.lookedIn
+				? ` ${translate("onecPublicationsLookedIn")}: ${r.lookedIn}${r.source ? ` (${r.source})` : ""}.`
+				: "";
+			noteNotice(translate("onecPublication"), {
+				type: "warning",
+				text: `${translate("onecPublicationsNoneFound")} ${translate("onecPublicationsNotApplied")}${where}`,
+			});
+			showToast(translate("onecPublicationsNoneFound"), "warning");
 		},
 		onError: (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error"),
 	});
