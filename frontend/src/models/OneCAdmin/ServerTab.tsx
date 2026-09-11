@@ -11,6 +11,7 @@
  * в отличие от всего внутрибазового.
  */
 import { FC, useState } from "react";
+import { translate } from "src/i18";
 import { useQuery } from "@tanstack/react-query";
 import Table from "src/components/Table";
 import { getModelColumns } from "src/components/Table/services";
@@ -57,7 +58,7 @@ export const ServerTab: FC = () => {
 	return (
 		<VSplit
 			storageKey="server"
-			main={<><QueryError error={processes.error} />
+			main={<><QueryError error={processes.error} noticeKey="server-processes" source={translate("onecTabServer")} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_processes", rows: procView.rows, columns: procCols, setColumns: setProcCols,
 				sorting: procView.sorting, search: procView.search,
@@ -65,7 +66,7 @@ export const ServerTab: FC = () => {
 				reloading: processes.isFetching,
 				onReload: () => void processes.refetch(),
 			})} /></>}
-			side={<><QueryError error={licenses.error} />
+			side={<><QueryError error={licenses.error} noticeKey="licenses" source={translate("onecTabServer")} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_licenses", rows: licView.rows, columns: licCols, setColumns: setLicCols,
 				sorting: licView.sorting, search: licView.search,

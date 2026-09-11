@@ -18,7 +18,6 @@ import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
-import Tabs from "src/components/Tabs";
 import { Button } from "src/components/Button";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
@@ -34,8 +33,6 @@ import { showToast } from "src/components/UIToast";
 import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import { useOpenOnecBase } from "src/models/OneCBases";
-import ProgressTab from "./ProgressTab";
-import { useBatchWatch } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 const baseColumns = (): TColumn[] => ([
@@ -67,8 +64,6 @@ export const UsersTab: FC = () => {
 	const openCard = useOpenBaseUser();
 	const openBase = useOpenOnecBase();
 	const qc = useQueryClient();
-	// Слежение за командами общее для экрана и карточки — см. useBatchWatch.
-	const watch = useBatchWatch();
 
 	// Ширина таблиц — тем же разделителем, что в списках с предпросмотром и отчётах:
 	// у администратора свои пропорции (сто баз против десятка людей), и они должны
@@ -212,7 +207,7 @@ export const UsersTab: FC = () => {
 			<div className={styles.ModeBar}>
 				{/* Один переключатель, а не два состояния кнопками: раскладок ровно две,
 				    и «поменять местами» — одно действие, а не выбор из списка. */}
-				<Button variant="secondary" title={translate("onecSwapTables")}
+				<Button variant="secondary" title={translate("onecSwapTablesHint")}
 					onClick={() => setPrimary((p) => (p === "bases" ? "users" : "bases"))}>
 					<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
 				</Button>
@@ -232,7 +227,8 @@ export const UsersTab: FC = () => {
 			<div className={styles.StatusBar}>
 				<span className={styles.StatusText}>{status}</span>
 				<span className={styles.HeadActions}>
-					<QueryError error={bases.error ?? summary.error ?? baseUsers.error ?? occurrences.error} />
+					<QueryError error={bases.error ?? summary.error ?? baseUsers.error ?? occurrences.error}
+						noticeKey="base-users" source={translate("onecTabUsers")} />
 					<Button variant="primary"
 						disabled={primary === "bases" ? !activeBase || !activeUser : !activeUser}
 						title={primary === "bases"
@@ -247,26 +243,15 @@ export const UsersTab: FC = () => {
 		</div>
 	);
 
-	// Прогресс — соседняя вкладка, а не окно поверх: длинная проверка не должна закрывать
-	// собой таблицы, а короткая — отвлекать. Обе панели остаются смонтированными, поэтому
-	// переключение не теряет ни выделения, ни прокрутки.
-	const running = watch.running;
-
+	/*
+	 * Прогресс здесь БОЛЬШЕ НЕ ЖИВЁТ: он переехал в правую область панели и виден с любой
+	 * вкладки. Своя вкладка прогресса означала, что операция, запущенная отсюда, пропадает
+	 * из виду, стоит уйти на «Базы», — хотя она продолжает идти.
+	 */
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
-			<Tabs
-				tabs={[
-					{ id: "screen", label: translate("onecTabUsersList"), component: screen },
-					{
-						id: "progress",
-						label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
-						component: (
-							<ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} />
-						),
-					},
-				]}
-			/>
+			{screen}
 		</>
 	);
 };

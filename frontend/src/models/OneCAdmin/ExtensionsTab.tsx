@@ -159,7 +159,7 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 
 			<div className={styles.UsersLayout}>
 				<div className={styles.UsersList}>
-					<QueryError error={summary.error} />
+					<QueryError error={summary.error} noticeKey="ext-summary" source={translate("onecTabExtensions")} />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCAdmin_extSummary", rows: sumView.rows, columns: sumCols,
 						setColumns: setSumCols, sorting: sumView.sorting, search: sumView.search,

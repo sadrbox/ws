@@ -196,12 +196,9 @@
 	font-size: $fontsize;
 }
 
-// Слот предупреждения о способностях агента: место занято всегда, поэтому появление
-// сообщения ничего не опускает вниз. Высота — под одну строку Notice.
-.GuardSlot {
-	flex: 0 0 auto;
-	min-height: 34px;
-}
+// .GuardSlot удалён: предупреждение о способностях агента больше не рисуется над
+// таблицей и не резервирует под себя строку на каждом экране — оно уходит сообщением
+// на доску (см. notices.ts, NoticeBoard).
 
 .UsersScreen {
 	display: grid;
@@ -551,4 +548,110 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+}
+// ── Две области экрана: работа слева, наблюдение справа ──────────────────────
+// Левая — вкладки самой панели (базы, кластер, расширения…). Правая — то, что
+// относится ко ВСЕЙ панели и не принадлежит ни одной вкладке: ход операций, журнал
+// заданий и доска сообщений. Раньше «Прогресс» жил внутри одной вкладки и пропадал
+// при переходе на другую — хотя операция продолжала идти.
+.AdminScreen {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	gap: 6px;
+}
+
+.AdminMain {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.AdminSide {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-left: 1px solid $color34;
+	padding-left: 6px;
+}
+
+// Верх правой области — вкладки наблюдения, низ — доска сообщений. Доска занимает
+// свою долю ВСЕГДА: в этом её смысл, иначе появление сообщения снова двигало бы разметку.
+.AdminSideTabs {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+// ── Доска сообщений ──────────────────────────────────────────────────────────
+.NoticeBoard {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	// Доля высоты СВОЕЙ колонки, а не экрана: содержимое прокручивается внутри, и внешняя
+	// разметка от появления сообщений не меняется ни на пиксель.
+	flex: 0 0 30%;
+	min-height: 132px;
+	max-height: 45%;
+	border-top: 1px solid $color34;
+	padding-top: 6px;
+}
+
+.NoticeBoardHead {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.NoticeBoardTitle {
+	font-weight: 600;
+	color: $color6;
+	margin-right: auto;
+}
+
+.NoticeBoardBody {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.NoticeBoardEmpty {
+	color: $color51;
+	opacity: 0.75;
+	padding: 6px;
+}
+
+.NoticeRow {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+// Кто сообщил: без источника сообщение на общей доске не отвечает на вопрос «где это».
+.NoticeSource {
+	color: $color51;
+	font-size: $fontsize - 1px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+// Раскрытая история: та же стрелка, перевёрнутая.
+.CaretOpen {
+	display: inline-flex;
+	transform: rotate(180deg);
+}
+
+// Доска в карточке: та же доска, но полосой внизу пейна и ниже — форме нужно место.
+.NoticeBoardCompact {
+	flex: 0 0 auto;
+	max-height: 30%;
+	min-height: 84px;
 }

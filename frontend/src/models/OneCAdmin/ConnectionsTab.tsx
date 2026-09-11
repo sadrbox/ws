@@ -77,7 +77,7 @@ export const ConnectionsTab: FC = () => {
 		<>
 			<VSplit
 				storageKey="connections"
-				main={<><QueryError error={connections.error} />
+				main={<><QueryError error={connections.error} noticeKey="connections" source={translate("onecTabConnections")} />
 				<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_connections", rows: connView.rows, columns: connCols, setColumns: setConnCols,
 				sorting: connView.sorting, search: connView.search,
@@ -93,7 +93,7 @@ export const ConnectionsTab: FC = () => {
 					</Button>
 					: undefined,
 			})} /></>}
-				side={<><QueryError error={locks.error} />
+				side={<><QueryError error={locks.error} noticeKey="locks" source={translate("onecTabConnections")} />
 				<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_locks", rows: lockView.rows, columns: lockCols, setColumns: setLockCols,
 				sorting: lockView.sorting, search: lockView.search,

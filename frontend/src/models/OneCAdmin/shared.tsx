@@ -8,13 +8,14 @@
 import { FC, useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import Notice from "src/components/Notice";
+import type { NoticeItem } from "src/components/Notice";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import {
 	fetchBaseExtensions, fetchBaseUsers, fetchAgents, hasCapability, type OnecBase,
 } from "src/services/onec/api";
 import { finishOp, progressOp, startOp } from "./progress";
+import { useNoticeReport, useNoticeScope } from "./notices";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -167,16 +168,19 @@ export function useCheckParallel(): number {
 }
 
 /**
- * Предупреждение «агент этого не умеет» — В СЛОТЕ ПОСТОЯННОЙ ВЫСОТЫ.
+ * «Агент этого не умеет» — СООБЩЕНИЕМ НА ДОСКУ, а не блоком над таблицей.
  *
- * Раньше оно рендерилось первым элементом экрана и при появлении опускало вниз всё
- * содержимое: агент терял способность (обновление службы) — и таблица уезжала под
- * курсором, теряя позицию прокрутки. Слот занимает своё место всегда, пустой он или нет.
+ * Раньше предупреждение занимало слот постоянной высоты в каждом экране: он не давал
+ * разметке прыгать, но отнимал строку у таблицы всегда — и на девяти экранах из десяти
+ * ради пустоты. Теперь экран сообщает о своём состоянии доске сообщений (правая область
+ * панели, для карточки — её собственная полоса), и не рисует ничего.
+ *
+ * `scope` берётся из контекста доски: панель и каждая карточка — своя область.
  */
 export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNode }> = ({ capability }) => {
 	const agents = useAgents();
+	const scope = useNoticeScope();
 	const ok = agents.isLoading || hasCapability(agents.data?.items, capability);
-	if (ok) return <div className={styles.GuardSlot} aria-hidden />;
 
 	const online = (agents.data?.items ?? []).filter((a) => a.role === "admin" && a.online && !a.disabled);
 	// Агент НА СВЯЗИ, но способности нет — почти всегда это его обновление: новая сборка
@@ -185,31 +189,37 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
 	const declared = online[0]?.capabilities.length ?? 0;
 	// Агент НА СВЯЗИ, но без способности — предупреждение: часть экрана работает.
 	// Агента нет вовсе — внимание: не выполнится ни одна команда.
-	return (
-		<div className={styles.GuardSlot}>
-			<Notice wide items={[online.length
-			? {
-				type: "warning",
-				text: `${translate("onecCapabilityMissing")}: ${capability}. ${translate("onecCapabilityLostHint")} (${declared})`,
-			}
-				: { type: "attention", text: translate("onecNoAdminAgent") }]} />
-		</div>
-	);
+	const items: NoticeItem[] = ok ? [] : [online.length
+		? {
+			type: "warning",
+			text: `${translate("onecCapabilityMissing")}: ${capability}. ${translate("onecCapabilityLostHint")} (${declared})`,
+		}
+		: { type: "attention", text: translate("onecNoAdminAgent") }];
+
+	useNoticeReport(scope, `capability_${capability}`, translate("onecAgentCapability"), items);
+	return null;
 };
 
 /**
  * Причина, по которой таблица пуста. Ошибку запроса react-query по умолчанию НИКУДА не
  * показывает: пользователь видел пустой список и ни слова о том, что 1С ответила отказом.
- * Текст приходит от сервиса и написан для человека — выводим как есть.
+ * Текст приходит от сервиса и написан для человека — передаём как есть.
+ *
+ * Рисует НИЧЕГО: сообщение уходит на доску. Блок над таблицей сдвигал её вниз ровно в тот
+ * момент, когда человек в ней работал, — а исчезнув, сдвигал обратно.
  */
-export const QueryError: FC<{ error: unknown }> = ({ error }) => {
-	if (!error) return null;
+export const QueryError: FC<{ error: unknown; source?: string; noticeKey?: string }> = ({ error, source, noticeKey }) => {
+	const scope = useNoticeScope();
 	// Только Error даёт осмысленный текст; всё прочее — неизвестная ошибка, а не
 	// «[object Object]» в лицо пользователю.
-	const text = error instanceof Error ? error.message : translate("unknownError");
+	const text = !error ? "" : error instanceof Error ? error.message : translate("unknownError");
+	// Ключ по умолчанию — по тексту: у экрана может быть несколько запросов, и без своего
+	// ключа второй затирал бы сообщение первого.
+	const key = noticeKey ?? `query_${text.slice(0, 40)}`;
 	// Ошибка предметной области (1С ответила отказом, сервис отверг запрос) — «error»:
 	// системные сбои сюда не попадают, для них <UIToast />.
-	return <Notice wide items={[{ type: "error", text }]} />;
+	useNoticeReport(scope, key, source ?? translate("onecAdmin"), text ? [{ type: "error", text }] : []);
+	return null;
 };
 
 /**

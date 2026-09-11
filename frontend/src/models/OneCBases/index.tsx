@@ -10,7 +10,7 @@
  * СОЗДАНИЕ И УДАЛЕНИЕ НЕПРИМЕНИМЫ: базы заводят и удаляют в кластере 1С, а не в панели.
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
-import { FC, useMemo, useState } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
@@ -34,6 +34,8 @@ import {
 	type IbExtension, type IbUser, type OnecBase,
 } from "src/services/onec/api";
 import { QueryError, publishLabel, useBaseContentCheck } from "src/models/OneCAdmin/shared";
+import { NoticeScope, useNoticeReport, useNoticeScope } from "src/models/OneCAdmin/notices";
+import NoticeBoard from "src/models/OneCAdmin/NoticeBoard";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
@@ -181,6 +183,15 @@ const useBaseTabs = (row: TDataItem) => {
 	}));
 	const extView = useStaticTableView(extRows, { name: "asc" });
 
+	/*
+	 * Почему вкладка пуста — сообщением, а не блоком над таблицей. «Расширений нет» и
+	 * «их ещё не читали» — разные ответы, и второй требует действия человека.
+	 */
+	const scope = useNoticeScope();
+	useNoticeReport(scope, "base-ext-empty", translate("onecTabExtensions"),
+		!ext.isLoading && !ext.error && !extRows.length
+			? [{ type: "info", text: translate("onecExtNeverRead") }] : []);
+
 	const userRows = (users.data?.items ?? []).map((x, i) => ({
 		id: i + 1, uuid: x.name, name: x.name, fullName: x.fullName || "—",
 		disabledLabel: x.disabled ? translate("onecUserDisabled") : translate("onecUserActive"),
@@ -188,6 +199,9 @@ const useBaseTabs = (row: TDataItem) => {
 		seenAtLabel: seenLabel(x),
 	}));
 	const userView = useStaticTableView(userRows, { name: "asc" });
+	useNoticeReport(scope, "base-users-empty", translate("onecTabUsers"),
+		!users.isLoading && !users.error && !userRows.length
+			? [{ type: "info", text: translate("onecUsersNeverRead") }] : []);
 
 	const own = useBaseSessions(asText(row.infobaseId), loadSessions);
 	const sesRows = own.rows.map((s, i) => ({
@@ -202,15 +216,13 @@ const useBaseTabs = (row: TDataItem) => {
 			id: "ext", label: translate("onecTabExtensions"),
 			component: (
 				<>
-					<QueryError error={ext.error} />
 					{/*
 					  * Пустая таблица молчит о причине: расширений у базы нет — или их ещё
 					  * никто не читал? Это разные вещи, и вторая требует действия человека.
-					  * Пояснение занимает место только когда показывать всё равно нечего.
+					  * Сообщение уходит НА ДОСКУ карточки (полоса внизу): вставленное над
+					  * таблицей, оно сдвигало бы её вниз при каждом появлении.
 					  */}
-					{!ext.isLoading && !ext.error && !extRows.length && (
-						<Notice items={[{ type: "info", text: translate("onecExtNeverRead") }]} />
-					)}
+					<QueryError error={ext.error} noticeKey="base-ext" source={translate("onecTabExtensions")} />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
 						onRowClick: (r) => openExt(r, baseKey),
@@ -229,10 +241,7 @@ const useBaseTabs = (row: TDataItem) => {
 			id: "users", label: translate("onecTabUsers"),
 			component: (
 				<>
-					<QueryError error={users.error} />
-					{!users.isLoading && !users.error && !userRows.length && (
-						<Notice items={[{ type: "info", text: translate("onecUsersNeverRead") }]} />
-					)}
+					<QueryError error={users.error} noticeKey="base-users" source={translate("onecTabUsers")} />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
 						onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
@@ -274,7 +283,7 @@ const useBaseTabs = (row: TDataItem) => {
 				<>
 					{/* Ошибку среза показываем здесь же: раньше вкладка молчала — ни данных,
 					    ни причины, хотя команда в кластер могла отказать. */}
-					<QueryError error={own.query.error} />
+					<QueryError error={own.query.error} noticeKey="base-sessions" source={translate("onecTabSessions")} />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_sessions", rows: sesView.rows, columns: sesCols, setColumns: setSesCols,
 						sorting: sesView.sorting, search: sesView.search,
@@ -300,15 +309,26 @@ const useBaseTabs = (row: TDataItem) => {
 export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const tabs = useBaseTabs(row);
+	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
+	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
+	const { requestClose } = useAppContext().windows;
+	const close = useCallback(() => {
+		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
+	}, [requestClose, paneProps.uniqId]);
+
+	// Своя область сообщений: карточка открыта отдельным пейном и может быть единственным,
+	// что человек видит, — её сообщения обязаны быть видны в ней самой.
+	const scope = paneProps.uniqId ?? "base-card";
 
 	return (
+		<NoticeScope.Provider value={scope}>
 		<ModelForm
 			paneId={paneProps.uniqId}
 			endpoint={ENDPOINT}
 			readonly
 			isLoading={false}
 			// Реестр наполняется кластером и агентом — править и сохранять нечего.
-			onSave={() => {}} onSaveAndClose={() => {}} onClose={() => {}}
+			onSave={() => {}} onSaveAndClose={() => {}} onClose={close}
 			tabs={[
 				{
 					id: "main", label: translate("general"),
@@ -360,6 +380,9 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 				...tabs,
 			]}
 		/>
+		{/* Полоса сообщений внизу пейна: место занято всегда — форма не дёргается. */}
+		<NoticeBoard compact scope={scope} />
+		</NoticeScope.Provider>
 	);
 };
 OneCBasesForm.displayName = "OneCBasesForm";
@@ -394,7 +417,12 @@ export function useOpenOnecBase() {
 /** Вкладки предпросмотра в split-виде — те же, что и в форме. */
 const PreviewTabs: FC<{ row: TDataItem }> = ({ row }) => <>{useBaseTabs(row)[0].component}</>;
 
-export const OneCBasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
+export const OneCBasesList: FC<{
+	variant?: TTableVariant;
+	onSelectItem?: (item: TDataItem) => void;
+	/** Запущенное задание открывают сразу: групповая операция не должна уходить «в никуда». */
+	onBatchStarted?: (batchId: string) => void;
+}> = ({ variant, onSelectItem, onBatchStarted }) => (
 	<ModelList
 		endpoint={ENDPOINT}
 		listName={LIST_NAME}
@@ -423,7 +451,7 @@ export const OneCBasesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: 
 		previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
 		// Групповые команды по отмеченным базам: публикация и её снятие, пользователи,
 		// расширения. Здесь набор баз уже выбран — уходить за ним на другую вкладку незачем.
-		extraButtons={(selected) => <BaseGroupCommands selected={selected} />}
+		extraButtons={(selected) => <BaseGroupCommands selected={selected} onBatchStarted={onBatchStarted} />}
 	/>
 );
 OneCBasesList.displayName = "OneCBasesList";

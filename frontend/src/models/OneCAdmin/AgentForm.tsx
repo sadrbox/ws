@@ -10,9 +10,11 @@
  * ТОЛЬКО ЧТЕНИЕ РЕКВИЗИТОВ. Имя и роль приходят от самого агента при регистрации, панель их
  * не назначает. Здесь — состояние, способности, экземпляры и команды над ними.
  */
-import { FC, useMemo, useState } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
+import { NoticeScope } from "./notices";
+import NoticeBoard from "./NoticeBoard";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
@@ -103,8 +105,18 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	// читается как «запущено десять экземпляров» — ровно то, чего мы избегаем.
 	const instances = showHistory ? all : (live.length ? live : all.slice(0, 1));
 
+	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
+	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
+	const { requestClose } = useAppContext().windows;
+	// Своя область сообщений: карточка открыта отдельным пейном и может быть единственным,
+	// что человек видит, — её сообщения обязаны быть видны в ней самой.
+	const scope = paneProps.uniqId ?? "agent-card";
+	const closeCard = useCallback(() => {
+		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
+	}, [requestClose, paneProps.uniqId]);
+
 	return (
-		<>
+		<NoticeScope.Provider value={scope}>
 			<ModelForm
 				paneId={paneProps.uniqId}
 				// endpoint не передаём: у агентов нет эндпойнта ERP, а он нужен ModelForm
@@ -113,7 +125,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 				readonly
 				isLoading={agents.isLoading}
 				// Реквизиты присылает сам агент — сохранять нечего.
-				onSave={() => {}} onSaveAndClose={() => {}} onClose={() => {}}
+				onSave={() => {}} onSaveAndClose={() => {}} onClose={closeCard}
 				tabs={[
 					{
 						id: "main", label: translate("general"),
@@ -258,7 +270,9 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 					</div>
 				</Modal>
 			)}
-		</>
+			{/* Полоса сообщений внизу пейна: место занято всегда — форма не дёргается. */}
+			<NoticeBoard compact scope={scope} />
+		</NoticeScope.Provider>
 	);
 };
 AgentForm.displayName = "AgentForm";

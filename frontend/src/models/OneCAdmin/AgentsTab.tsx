@@ -120,7 +120,7 @@ export const AgentsTab: FC = () => {
 					}]} />
 				);
 			})}
-			<QueryError error={agents.error} />
+			<QueryError error={agents.error} noticeKey="agents" source={translate("onecTabAgents")} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_agents", rows, columns: cols, setColumns: setCols,
 				sorting: view.sorting, search: view.search,

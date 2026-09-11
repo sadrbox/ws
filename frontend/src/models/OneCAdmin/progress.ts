@@ -196,10 +196,23 @@ export function useBatchWatch(): { isFetching: boolean; refresh: () => void; run
 		const prev = was.current;
 		was.current = watching;
 		if (!prev || watching) return;
+		// Перечитываем ВСЁ, что команда могла изменить, а не только пользователей.
+		// Раньше здесь были три ключа про пользователей — и состояние публикации после
+		// «Опубликовать» не менялось в списке баз до перезагрузки страницы: команда
+		// отрабатывала, реестр обновлялся, а панель об этом не спрашивала.
+		// Живое состояние кластера (сеансы, соединения, процессы) сюда НЕ входит: каждый
+		// такой запрос — команда в 1С, и дёргать их после любой чужой команды незачем.
 		const refresh = () => {
-			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
+			for (const key of [
+				"bases",              // состояние баз, включая публикацию
+				"base-ext",           // расширения в карточке базы
+				"ext-summary",        // сводка «в каких базах какое расширение»
+				"user-summary",
+				"base-users-cached",
+				"user-where",
+			]) void qc.invalidateQueries({ queryKey: ["onec", key] });
+			// Список баз ERP-прокси (ModelList) живёт под своим ключом.
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
 		};
 		refresh();
 		const t = window.setTimeout(refresh, 5000);
