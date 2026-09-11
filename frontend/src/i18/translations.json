@@ -1654,6 +1654,7 @@
   "onecPublishUnknown": "Не проверялась",
   "onecPublication": "Публикация",
   "publishSeenAt": "Публикация проверена",
+  "publishUrl": "Адрес публикации",
   "onecPublicationsNoneFound": "Агент не нашёл ни одной опубликованной базы.",
   "onecPublicationsNotApplied": "Состояние публикаций не изменено: срез без единой публикации неотличим от неудачного чтения, и принимать его за факт нельзя.",
   "onecPublicationsLookedIn": "Просмотрено каталогов",

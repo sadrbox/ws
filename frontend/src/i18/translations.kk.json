@@ -1654,6 +1654,7 @@
   "onecPublishUnknown": "Тексерілмеген",
   "onecPublication": "Жариялау",
   "publishSeenAt": "Жарияланым тексерілді",
+  "publishUrl": "Жарияланым мекенжайы",
   "onecPublicationsNoneFound": "Агент бірде-бір жарияланған базаны таппады.",
   "onecPublicationsNotApplied": "Жарияланым күйі өзгертілмеді: бірде-бір жарияланымы жоқ тілім сәтсіз оқудан ажыратылмайды.",
   "onecPublicationsLookedIn": "Қаралған каталогтар",

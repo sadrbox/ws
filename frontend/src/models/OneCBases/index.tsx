@@ -481,10 +481,20 @@ export const OneCBasesList: FC<{
 			if (col.identifier === "onecVersion") {
 				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;
 			}
-			// Когда состояние публикации проверяли. Без даты «не опубликована» и
-			// «не проверялась» выглядят одинаково убедительно, хотя вторая — незнание.
+			/*
+			 * Когда состояние публикации проверяли. Колонка СКРЫТА по умолчанию (см.
+			 * columns.json): агент присылает признак в каждом срезе баз, и дата у всех
+			 * строк получается одна и та же — в списке это столбец одинаковых значений.
+			 * Свою работу она делает в КАРТОЧКЕ базы, рядом с самим состоянием: там и
+			 * задают вопрос «насколько это свежо». В списке включается настройкой колонок.
+			 */
 			if (col.identifier === "publishSeenAt") {
 				return <span>{row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "—"}</span>;
+			}
+			// Адрес публикации — тоже скрыт по умолчанию: он длинный, а нужен точечно.
+			// «—» у неопубликованной базы — не пропуск, а отсутствие адреса как такового.
+			if (col.identifier === "publishUrl") {
+				return <span>{asText(row.publishUrl) || "—"}</span>;
 			}
 			return undefined;
 		}}
