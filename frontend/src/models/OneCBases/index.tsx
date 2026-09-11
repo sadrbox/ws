@@ -467,6 +467,18 @@ export const OneCBasesList: FC<{
 		// прямым потомком ячейки и выпадает из общей вёрстки (обрезка, выравнивание).
 		renderCell={(row, col) => {
 			if (col.identifier === "published") return <span>{publishLabel(row.published as boolean | null)}</span>;
+			/*
+			 * Состояние: у фантома кластер отвечает ONLINE — запись в кластере есть, самой
+			 * базы нет. Показывать такую базу как рабочую значит звать в неё командой,
+			 * которая заведомо откажет; поэтому состояние называет именно это.
+			 */
+			if (col.identifier === "status") {
+				return (
+					<span title={row.ibUnreachableAt ? translate("onecBaseIbUnreachable") : undefined}>
+						{row.ibUnreachableAt ? translate("onecBaseUnreachableShort") : statusLabel(asText(row.status))}
+					</span>
+				);
+			}
 			// «—» читалось бы как «версии нет»; версия есть всегда, её просто не сообщили.
 			if (col.identifier === "onecVersion") {
 				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;

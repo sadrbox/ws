@@ -79,6 +79,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			// «не проверялась» выглядят в списке одинаково убедительно, хотя второе —
 			// незнание: срез публикаций сервис принимает не всегда (см. applyPublications).
 			publishSeenAt: b.publishSeenAt,
+			// База числится в кластере, но войти в неё нельзя. Отдельно от status: тот
+			// отвечает «зарегистрирована ли», а это — «можно ли с ней работать».
+			ibUnreachableAt: b.ibUnreachableAt,
 			disabled: b.disabled,
 		}));
 

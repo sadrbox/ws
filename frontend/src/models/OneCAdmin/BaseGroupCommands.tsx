@@ -30,7 +30,7 @@ import { showToast } from "src/components/UIToast";
 import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
 import { refreshPublications, runBatch, type BatchType } from "src/services/onec/api";
-import { isApplicable, type OnecOperation } from "./shared";
+import { isApplicable, unreachableReason, type OnecOperation } from "./shared";
 import { noteNotice } from "src/components/TechMessages/store";
 import { attachBatch, startOp, withOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
@@ -69,13 +69,18 @@ const SPECS: Record<Op, OpSpec> = {
 };
 
 /** Строка списка баз ERP-прокси в терминах применимости. */
-type BaseRow = { key: string; status: string; disabled: boolean; published: boolean | null };
+type BaseRow = {
+	key: string; status: string; disabled: boolean; published: boolean | null;
+	/** База числится в кластере, но войти в неё нельзя — цель непригодна для операций в ней. */
+	ibUnreachableAt: string | null;
+};
 
 const toBase = (r: TDataItem): BaseRow => ({
 	key: asText(r.baseKey),
 	status: asText(r.status),
 	disabled: r.disabled === true,
 	published: typeof r.published === "boolean" ? r.published : null,
+	ibUnreachableAt: r.ibUnreachableAt ? asText(r.ibUnreachableAt) : null,
 });
 
 /**
@@ -87,11 +92,8 @@ const toBase = (r: TDataItem): BaseRow => ({
  * публикация, которой и лечится расхождение, оказывалась запрещена. Обе команды
  * идемпотентны (это в контракте), поэтому лишний запуск безвреден, а запрет — вреден.
  */
-const skipReason = (b: BaseRow, _needs: OnecOperation): string | null => {
-	if (b.disabled) return translate("onecBaseDisabled");
-	if (b.status === "MISSING") return translate("onecBaseMissing");
-	return null;
-};
+const skipReason = (b: BaseRow, needs: OnecOperation): string | null =>
+	(isApplicable(b, needs) ? null : unreachableReason(b));
 
 const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 	const reader = new FileReader();

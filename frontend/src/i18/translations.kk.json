@@ -1502,6 +1502,8 @@
   "onecServer": "1С сервері",
   "onecBaseOnline": "Қолжетімді",
   "onecBaseMissing": "Кластерде жоқ",
+  "onecBaseUnreachableShort": "Қолжетімсіз",
+  "onecBaseIbUnreachable": "Кластер оны тізімдейді, бірақ базаға кіру мүмкін емес: соңғы жолы ол табылмады. Әдетте бұл база ДҚБЖ-де жойылғанын, ал кластердегі жазба қалғанын білдіреді.",
   "onecBaseDisabled": "Өшірілген",
   "onecBaseUnknown": "Тексерілмеген",
   "onecTerminateMany": "Сеанстарды аяқтау",

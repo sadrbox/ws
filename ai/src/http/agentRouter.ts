@@ -16,6 +16,7 @@ import { requireAgent } from "../auth/index.ts";
 import { decideInstance, instanceConflictMessage } from "../agents/instances.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
+import { findAdminCommand } from "../commands/admin.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import {
@@ -396,12 +397,27 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				ttlSeconds: 900,
 			});
 		}
-		// База, которой нет: агент сообщил «не найдена». Помечаем в реестре — иначе фантом
-		// остаётся в списке наравне с рабочими, и о проблеме узнают только по ошибке при
-		// каждой попытке. Обратно в ONLINE её вернёт ближайший успешный срез кластера.
-		if (p.data.status === "ERROR" && p.data.error?.code === "INFOBASE_NOT_FOUND" && row.base_key) {
-			const me = await agents.findById(req.agent!.agentId);
-			if (me?.serverId) await bases.markStatus(me.serverId, row.base_key, "MISSING");
+		/*
+		 * ВОЙТИ В БАЗУ НЕ УДАЛОСЬ — ОТДЕЛЬНЫЙ ФАКТ, И ОН НЕ ДОЛЖЕН ТЕРЯТЬСЯ.
+		 *
+		 * Раньше такую базу помечали `status = MISSING`, а вернуть её в ONLINE должен был
+		 * «ближайший успешный срез кластера». На деле срез возвращал ONLINE ВСЕГДА: `rac`
+		 * перечисляет регистрацию в кластере, и для базы, снесённой на СУБД, запись есть.
+		 * Знание, добытое входом, затиралось источником, который входить не умеет, — и по
+		 * кругу: база выглядит рабочей, человек жмёт «Обновить», ждёт, получает «база не
+		 * найдена на сервере», через минуту всё повторяется.
+		 *
+		 * Теперь признак ставит и снимает ТОЛЬКО тот, кто в базу заходит.
+		 */
+		if (row.base_key && (p.data.status === "SUCCESS" || p.data.error?.code === "INFOBASE_NOT_FOUND")) {
+			const spec = findAdminCommand(row.type);
+			// Только команды ВНУТРЬ базы: срез кластера об этом ничего не знает.
+			if (spec?.requiresBase && spec.capability === "ib.admin") {
+				const me = await agents.findById(req.agent!.agentId);
+				if (me?.serverId) {
+					await bases.markIbReachable(me.serverId, row.base_key, p.data.status === "SUCCESS");
+				}
+			}
 		}
 		// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
 		// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.

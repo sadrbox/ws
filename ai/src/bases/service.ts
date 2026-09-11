@@ -34,6 +34,7 @@ export type BaseRow = {
 	published: boolean | null;
 	publish_url: string | null;
 	publish_seen_at: Date | null;
+	ib_unreachable_at: Date | null;
 	extensions_count: number | null;
 	extensions_seen_at: Date | null;
 	extension_names: string[] | null;
@@ -67,6 +68,12 @@ export type BaseView = {
 	publishUrl: string | null;
 	/** Когда состояние публикации проверяли в последний раз; null — не проверяли никогда. */
 	publishSeenAt: string | null;
+	/**
+	 * База ЧИСЛИТСЯ в кластере, но войти в неё нельзя: последняя команда внутрь ответила
+	 * «база не найдена». Отдельно от `status`, потому что это отдельный факт и знает его
+	 * другой источник — тот, который входит в базу, а не перечисляет их (см. миграцию 016).
+	 */
+	ibUnreachableAt: string | null;
 	extensionsCount: number | null;
 	extensionsSeenAt: string | null;
 	extensionNames: string[];
@@ -159,7 +166,7 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	-- а не флаг: колонка «Расширение» показывала «не установлено» всем базам подряд, хотя
 	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ — ext_version заполняет только heartbeat
 	-- бизнес-агента, и то лишь про своё расширение bpapi.
-	b.infobase_id, b.published, b.publish_url, b.publish_seen_at,
+	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -367,6 +374,24 @@ export class BaseService {
 	}
 
 	/**
+	 * «Войти в базу не удалось — её там нет» либо «удалось».
+	 *
+	 * ПОЧЕМУ НЕ `status`. Его пишет срез кластера, а он отвечает на ДРУГОЙ вопрос: база
+	 * зарегистрирована в кластере? Для базы, снесённой на СУБД, ответ честный «да» — запись
+	 * есть. Пока оба факта жили в одном поле, срез затирал знание, добытое входом: база
+	 * снова выглядела рабочей, человек жал «Обновить», ждал и получал ту же ошибку. Теперь
+	 * признак ставит и снимает только тот, кто в базу заходит.
+	 */
+	async markIbReachable(serverId: string, key: string, reachable: boolean): Promise<void> {
+		await this.db.query(
+			`UPDATE bases SET ib_unreachable_at = ${reachable ? "NULL" : "now()"}
+			  WHERE server_id = $1 AND key = $2
+			    AND ib_unreachable_at IS ${reachable ? "NOT NULL" : "NULL"}`,
+			[serverId, key],
+		);
+	}
+
+	/**
 	 * Состояние публикации по результату команды.
 	 *
 	 * Отдельно от `sync`: тот бережёт прежние значения (`COALESCE`), потому что «поле не
@@ -475,6 +500,7 @@ export class BaseService {
 			published: r.published,
 			publishUrl: r.publish_url,
 			publishSeenAt: r.publish_seen_at?.toISOString() ?? null,
+			ibUnreachableAt: r.ib_unreachable_at?.toISOString() ?? null,
 			extensionsCount: r.extensions_count,
 			// Имена нужны панели, чтобы отобрать базы БЕЗ нужного расширения: иначе их
 			// пришлось бы выискивать глазами среди ста строк.

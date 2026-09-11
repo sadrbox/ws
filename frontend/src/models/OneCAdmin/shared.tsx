@@ -15,7 +15,7 @@ import {
 	fetchBaseExtensions, fetchBaseUsers, fetchAgents, hasCapability, type OnecBase,
 } from "src/services/onec/api";
 import { finishOp, progressOp, startOp } from "./progress";
-import { useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
+import { noteNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -42,11 +42,19 @@ export type OnecOperation = "ib" | "http" | "publish" | "unpublish";
 
 /** Принимает всё, у чего есть эти три поля: строку списка баз или запись реестра. */
 export function isApplicable(
-	b: Pick<OnecBase, "status" | "disabled" | "published">,
+	b: Pick<OnecBase, "status" | "disabled" | "published"> & { ibUnreachableAt?: string | null },
 	op: OnecOperation,
 ): boolean {
 	// Базы, которой нет в кластере, нет ни для одной операции.
 	if (b.status === "MISSING" || b.disabled) return false;
+	/*
+	 * База ЧИСЛИТСЯ в кластере, но войти в неё нельзя — фантом: запись в кластере осталась,
+	 * самой базы на СУБД уже нет. Для операций ВНУТРИ базы это отказ, известный заранее:
+	 * посылать туда команду значит заставить человека ждать полминуты ради ответа, который
+	 * у нас уже есть. Для команд уровня кластера (публикация, снятие) признак ничего не
+	 * значит — они с базой не соединяются.
+	 */
+	if (op === "ib" && b.ibUnreachableAt) return false;
 	// «Не проверялась» (null) публикацию не запрещает: считать незнание отказом значило бы
 	// прятать базы, с которыми всё в порядке.
 	// http — единственный случай, где состояние публикации означает НЕВОЗМОЖНОСТЬ:
@@ -61,6 +69,20 @@ export const publishLabel = (v: boolean | null | undefined): string =>
 	v === true ? translate("onecPublished")
 		: v === false ? translate("onecNotPublished")
 			: translate("onecPublishUnknown");
+
+/**
+ * Почему в базу не войти — словами человека и с подсказкой, что делать.
+ *
+ * Текст агента («база «shahs_backup» не найдена на сервере SERVER») верен, но не отвечает
+ * на вопрос, который после него задают: как так, если она в списке? Отвечаем: в списке она
+ * потому, что кластер её перечисляет; войти нельзя потому, что самой базы уже нет.
+ */
+export function unreachableReason(b: Pick<OnecBase, "status" | "disabled"> & { ibUnreachableAt?: string | null }): string {
+	if (b.disabled) return translate("onecBaseDisabled");
+	if (b.status === "MISSING") return translate("onecBaseMissing");
+	if (b.ibUnreachableAt) return translate("onecBaseIbUnreachable");
+	return translate("unknownError");
+}
 
 /** Что читаем у базы: её пользователей или её расширения. */
 export type BaseContentKind = "users" | "extensions";
@@ -88,13 +110,47 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 	const isUsers = kind === "users";
 
 	const run = useCallback(async (keys: string[]) => {
-		const targets = keys.filter(Boolean);
-		if (!targets.length || checking) return;
+		const asked = keys.filter(Boolean);
+		if (!asked.length || checking) return;
+
+		/*
+		 * ОТСЕИВАЕМ ТО, ЧТО ЗАВЕДОМО НЕ ВЫПОЛНИТСЯ.
+		 *
+		 * Чтение содержимого — это вход в базу: десятки секунд ожидания. Посылать его в
+		 * базу, про которую в реестре уже написано, что войти в неё нельзя (пропала из
+		 * кластера, отключена, или числится, но при входе не находится), значит заставить
+		 * человека ждать ради ответа, который у нас уже есть. Он и получал его в виде
+		 * «Проверено баз: 0/1. Не удалось: … база не найдена на сервере» — текст агента,
+		 * из которого не следует, что делать.
+		 *
+		 * Реестр может и не знать базу (её только что завели) — тогда не мешаем: незнание
+		 * не повод отказывать.
+		 */
+		const known = qc.getQueryData<{ items?: OnecBase[] }>(["onec", "bases"])?.items ?? [];
+		const byKey = new Map(known.map((b) => [b.key.toLowerCase(), b]));
+		const skipped: { baseKey: string; message: string }[] = [];
+		const targets = asked.filter((key) => {
+			const b = byKey.get(key.toLowerCase());
+			if (!b || isApplicable(b, "ib")) return true;
+			skipped.push({ baseKey: key, message: unreachableReason(b) });
+			return false;
+		});
+
+		if (!targets.length) {
+			// Ничего не осталось — не заводим операцию вовсе: работы нет, есть объяснение.
+			const first = skipped[0];
+			noteNotice(translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
+				{ type: "warning", text: `${first.baseKey} — ${first.message}` });
+			showToast(`${first.baseKey} — ${first.message}`, "warning");
+			return;
+		}
+
 		setChecking(true);
 		const op = startOp({
 			kind: "read", title: translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
 			target: targets.length === 1 ? targets[0] : `${translate("onecBases")}: ${targets.length}`,
 			total: targets.length,
+			note: skipped.length ? `${translate("onecSkippedBases")}: ${skipped.length}` : "",
 			// Читаем содержимое этих баз — карточки их пользователей на это время не правятся.
 			scope: { bases: targets },
 		});
@@ -120,11 +176,19 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 			note: r.failed.length ? `${r.failed[0].baseKey}: ${r.failed[0].message}` : "",
 		});
 		setChecking(false);
+
+		// Пропущенные называем поимённо и с причиной: «проверено 3 из 5» без объяснения
+		// выглядит как потеря половины выбора.
+		for (const sk of skipped) {
+			noteNotice(translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
+				{ type: "warning", text: `${sk.baseKey} — ${sk.message}` });
+		}
+		const tail = skipped.length ? ` ${translate("onecSkippedBases")}: ${skipped.length}.` : "";
 		showToast(
 			r.failed.length
-				? `${translate("onecChecked")}: ${r.ok}/${targets.length}. ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
-				: `${translate("onecChecked")}: ${r.ok}`,
-			r.failed.length ? "warning" : "success",
+				? `${translate("onecChecked")}: ${r.ok}/${targets.length}.${tail} ${translate("onecCheckFailed")}: ${r.failed[0].baseKey} — ${r.failed[0].message}`
+				: `${translate("onecChecked")}: ${r.ok}.${tail}`,
+			r.failed.length || skipped.length ? "warning" : "success",
 		);
 		// Сводки считаются из того же кэша реестра, что наполняет чтение.
 		if (isUsers) {
