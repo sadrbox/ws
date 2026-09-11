@@ -85,26 +85,183 @@
 	flex-direction: column;
 }
 
-// Показ — ТАБЛИЦЕЙ (MessagesTable), поэтому разметки карточек здесь больше нет: строки,
-// группы и раскрытие рисует <Table />. Своим остаётся ровно одно — цвет самого сообщения
-// по его палитре: в остальном это обычная ячейка обычной таблицы.
-// Обрезки здесь НЕТ: перенос делает сама таблица (проп wrapCells), а этому классу
-// остаётся только цвет по палитре сообщения. Прежний nowrap спорил бы с переносом —
-// два правила об одном, и побеждало бы более специфичное, а не более верное.
-.MsgText {
-	display: block;
+// ── Одна вертикальная колонка вместо табличной сетки ────────────────────────
+//
+// Колоночная сетка требует, чтобы у всех строк были одни и те же колонки одной ширины.
+// Здесь строки разной природы: заголовок объекта в одну строку и сообщение на три-четыре.
+// Дата и состояние в отдельных колонках отнимали ширину у главного — у текста, — и он всё
+// равно не помещался. Вся ширина принадлежит тексту, уточнения стоят под ним.
+.View {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	gap: 6px;
+}
 
-	&[data-type="error"],
-	&[data-type="attention"] {
-		color: var(--sv-attentionText, #6b1119);
+.ViewTools {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.List {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.Empty {
+	color: $color51;
+	opacity: 0.75;
+	padding: 6px;
+}
+
+// ── Объект ──────────────────────────────────────────────────────────────────
+.Obj {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid $color33;
+	border-radius: var(--radius-3, 3px);
+	overflow: hidden;
+}
+
+// Заголовок объекта — ФИКСИРОВАННОЙ высоты (в одну строку поля): по нему ведут взглядом
+// сверху вниз, и прыгающая высота мешала бы этому больше, чем помогала. Кликабельна вся
+// строка, а не одна стрелка: попадать курсором в иконку 10×10 — работа, а не действие.
+.ObjHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-height: $heightFieldInput;
+	padding: 0 6px;
+	border: none;
+	background: $color30;
+	cursor: pointer;
+	text-align: left;
+	color: $color6;
+	font-size: $fontsize;
+
+	&:hover {
+		background: $color33;
 	}
 
-	&[data-type="warning"] {
-		color: var(--sv-warningText, #7a4d12);
-	}
-
-	&[data-type="success"] {
-		color: var(--sv-successText, #145523);
+	svg {
+		width: 10px;
+		height: 10px;
+		display: block;
 	}
 }
 
+.ObjTitle {
+	font-weight: 600;
+	margin-right: auto;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+// Сколько у объекта АКТУАЛЬНЫХ сообщений — то, ради чего в список и смотрят.
+.ObjActive {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 3px;
+	border-radius: 9px;
+	background: var(--sv-attention, #b91c1c);
+	color: #fff;
+	font-size: $fontsize - 2px;
+	font-weight: 700;
+}
+
+// Всего записей, включая прошедшие: даёт понять объём, не крича.
+.ObjTotal {
+	color: $color51;
+	font-size: $fontsize - 1px;
+}
+
+.ObjBody {
+	display: flex;
+	flex-direction: column;
+}
+
+// ── Сообщение: высота ПО СОДЕРЖИМОМУ ────────────────────────────────────────
+.Msg {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 6px;
+	border-top: 1px solid $color33;
+	// Слева — цветная полоса по палитре сообщения: цвет виден, даже когда текста много,
+	// и не спорит с читаемостью, как крашеный текст целого абзаца.
+	border-left: 3px solid transparent;
+
+	&[data-type="error"],
+	&[data-type="attention"] {
+		border-left-color: var(--sv-attention, #b91c1c);
+	}
+
+	&[data-type="warning"] {
+		border-left-color: var(--sv-warningText, #7a4d12);
+	}
+
+	&[data-type="success"] {
+		border-left-color: var(--sv-successText, #145523);
+	}
+
+	&[data-type="info"] {
+		border-left-color: $color34;
+	}
+
+	// Прошедшее — бледнее: оно уже не требует действия, но и прятать его незачем.
+	&[data-past] {
+		opacity: 0.7;
+	}
+}
+
+// Текст занимает всю ширину и переносится целиком: обрезанное сообщение прячет ровно то,
+// ради чего в список и смотрят.
+.MsgText {
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+	line-height: 17px;
+	color: $color6;
+}
+
+// Уточнения ПОД текстом: тип, источник, когда, актуально ли. Мелкой строкой — они
+// отвечают на вопросы, которые возникают после прочтения, а не вместо него.
+.MsgMeta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	color: $color51;
+	font-size: $fontsize - 1px;
+}
+
+.MsgType {
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+// Действия — в самом сообщении: в общей панели они относились бы к «выбранной строке»,
+// и пришлось бы держать в голове, какая выбрана.
+.MsgActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+// Раскрытая группа: та же стрелка, перевёрнутая.
+.CaretOpen {
+	display: inline-flex;
+	transform: rotate(180deg);
+}

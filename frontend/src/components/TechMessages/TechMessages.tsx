@@ -8,10 +8,10 @@
  * обязаны совпадать, — это четыре места, которые расходятся. Теперь данные одни, а
  * показывают их два вида одного и того же списка: эта область и её полноэкранный вид.
  *
- * ВИД — ТАБЛИЦА (MessagesTable): группа — объект, вложенные строки — сами сообщения.
- * Список карточек читался как лента: в нём нельзя было ни отсортировать по времени, ни
- * отобрать поиском, ни сравнить два объекта — а спрашивают у технических сообщений почти
- * всегда именно это. `<Notice />` для показа здесь не используется (решение 2026-09-11).
+ * ВИД — ОДНА ВЕРТИКАЛЬНАЯ КОЛОНКА (MessagesView): заголовок объекта фиксированной высоты,
+ * сообщения под ним — по содержимому. Колоночная сетка требует одинаковых колонок у всех
+ * строк, а здесь строки разной природы, и дата с состоянием отнимали ширину у главного —
+ * у текста. `<Notice />` для показа здесь не используется (решение 2026-09-11).
  *
  * ДВА СРЕЗА ПО ИСТОЧНИКУ. По умолчанию — сообщения ТЕКУЩЕЙ формы: у человека открыто до
  * десятка пейнов, и «не заполнено обязательное поле» из соседнего документа сбивает с
@@ -31,7 +31,7 @@ import { useAppContext } from "src/app/context";
 import {
 	APP_SCOPE, clearNoticeHistory, setTechMessagesOpen, useScopedNotices, useTechMessagesOpen,
 } from "./store";
-import MessagesTable from "./MessagesTable";
+import MessagesView from "./MessagesView";
 import styles from "./TechMessages.module.scss";
 
 /** Чьи сообщения показывать — настройка рабочего места, переживает перезагрузку. */
@@ -89,24 +89,23 @@ export const TechMessages: FC = () => {
 			</div>
 
 			<div className={styles.Body}>
-				{/* Переключатели и очистка живут в командной панели таблицы: свой ряд
-				    кнопок над ней ломал бы ритм — тот же довод, что и в остальных экранах. */}
-				<MessagesTable
-					componentName="TechMessages_dock"
+				{/* Переключатели и очистка — команды ВСЕГО списка, поэтому стоят над ним.
+				    Действия по отдельному сообщению живут в самом сообщении. */}
+				<MessagesView
 					messages={messages}
-					extraButtons={(
+					toolbar={(
 						<>
-							<Button variant="secondary" active={!showAll}
+							<Button size="sm" variant="secondary" active={!showAll}
 								title={translate("techMessagesCurrentHint")}
 								onClick={() => toggleAll(false)}>
 								{translate("techMessagesCurrent")}
 							</Button>
-							<Button variant="secondary" active={showAll}
+							<Button size="sm" variant="secondary" active={showAll}
 								title={translate("techMessagesAllHint")}
 								onClick={() => toggleAll(true)}>
 								{translate("techMessagesAll")}
 							</Button>
-							<Button variant="secondary"
+							<Button size="sm" variant="secondary"
 								disabled={messages.every((m) => m.active)}
 								title={translate("techMessagesHistoryClear")}
 								onClick={() => clearNoticeHistory(scope)}>
