@@ -410,6 +410,10 @@ export function onecRouter(deps: Deps) {
 		const items = await Promise.all(all.map(async (a) => ({
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			capabilities: a.capabilities, lastSeenAt: a.lastSeenAt, disabled: a.disabled,
+			// Версия платформы 1С на сервере агента. Панель показывает её в карточке базы,
+			// когда сам агент не прислал версию по базе: платформа у всех баз одного
+			// сервера одна, и «неизвестно» здесь — отсутствие ответа, а не разнобой.
+			serverId: a.serverId, platform: a.onec.version,
 			// Сутки истории — чтобы владельцем можно было назначить и молчащий экземпляр
 			// (займёт аренду, как поднимется). Признак `live` у каждой строки отделяет
 			// работающие процессы от прежних запусков: смешивать их нельзя, иначе панель

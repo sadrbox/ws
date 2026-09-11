@@ -145,6 +145,28 @@ export function mergeBatch(p: BatchProgress): void {
 	}));
 }
 
+/**
+ * Обернуть одиночную операцию записью реестра.
+ *
+ * Правило панели: ВСЯ работа, которую она поручает сервису или агенту, видна в «Прогрессе».
+ * Без этого экран отвечал «команда отправлена» и замолкал — а команда идёт минутами, и
+ * узнать, чем она кончилась, было неоткуда.
+ */
+export async function withOp<T>(
+	init: { kind: OpKind; title: string; target: string; total?: number; scope?: { user?: string; bases?: string[] } },
+	run: () => Promise<T>,
+): Promise<T> {
+	const id = startOp({ ...init, total: init.total ?? 1 });
+	try {
+		const r = await run();
+		finishOp(id);
+		return r;
+	} catch (e) {
+		finishOp(id, { failed: 1, note: e instanceof Error ? e.message : "" });
+		throw e;
+	}
+}
+
 /** Убрать завершённые: список нужен для наблюдения, а не как журнал (журнал — «Задания»). */
 export function clearFinished(): void {
 	const next = ops.filter((o) => o.state === "running");

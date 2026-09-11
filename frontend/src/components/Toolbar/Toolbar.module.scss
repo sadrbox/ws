@@ -50,19 +50,28 @@
 
 
 /* ── ActionsDropdownButton — текстовая кнопка «На основании ▾» ─────── */
+// Метрики — ТЕ ЖЕ, что у обычной кнопки (components/Button, размер md): выпадающая
+// кнопка стоит с ними в одном ряду тулбара, и своя высота 24px против 30px делала ряд
+// ступенчатым. Цвета и фон тоже общие: иначе «На основании ▾» выглядит чужой среди
+// соседей. Всё, что остаётся своим, — каретка и раскрытое состояние.
 .ActionsButton {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	padding: 2px 8px;
+	padding: 0 var(--space-12, 12px);
 	border: 1px solid var(--sv-color34);
-	border-radius: 3px;
-	background: var(--sv-color60);
+	border-radius: var(--radius-3, 3px);
+	background: linear-gradient(180deg, var(--sv-color60) 0%, var(--sv-color31) 100%);
+	box-shadow: 0 1px 1px rgba(15, 23, 42, 0.06);
 	cursor: pointer;
-	font-size: 12px;
+	font-size: 13px;
 	white-space: nowrap;
-	color: var(--n-20);
-	height: 24px;
+	color: #000;
+	height: 30px;
+
+	:global(html[data-theme="dark"]) & {
+		background: var(--sv-btnFace);
+	}
 
 	svg {
 		display: block;
@@ -83,8 +92,12 @@
 		box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.25);
 	}
 
+	// Недоступная кнопка должна читаться — как и обычная: гасим подложку, а не подпись.
 	&:disabled {
-		opacity: 0.45;
+		background: var(--sv-color30);
+		border-color: var(--sv-color33);
+		color: var(--sv-color51, #666);
+		box-shadow: none;
 		cursor: default;
 		pointer-events: none;
 	}

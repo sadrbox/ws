@@ -14,6 +14,7 @@
 import { FC, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import { showToast } from "src/components/UIToast";
@@ -61,7 +62,7 @@ export const RolesPicker: FC<{
 	return (
 		<div className={styles.Roles}>
 			<div className={styles.RolesHead}>
-				<Field name="roles_search" value={needle} placeholder={translate("search")} width="220px" noAutofill
+				<Field name="roles_search" value={needle} placeholder={translate("search")} width={FIELD_WIDTH.wide} noAutofill
 					disabled={disabled}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNeedle(e.target.value)} />
 				<span className={styles.Hint}>{translate("onecRolesSelected")}: {value.length}</span>
@@ -89,7 +90,7 @@ export const RolesPicker: FC<{
 			<div className={styles.RolesHead}>
 				{/* Ручной ввод — для роли, которой ещё нет в списке: идентификатор должен
 				    совпадать с тем, что в конфигурации, посимвольно. */}
-				<Field name="roles_custom" value={custom} placeholder={translate("onecRolesCustom")} width="260px" noAutofill
+				<Field name="roles_custom" value={custom} placeholder={translate("onecRolesCustom")} width={FIELD_WIDTH.wide} noAutofill
 					disabled={disabled}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustom(e.target.value)} />
 				<Button disabled={disabled || !custom.trim()} onClick={addCustom}>{translate("add")}</Button>

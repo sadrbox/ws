@@ -15,14 +15,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import { NoticeScope } from "./notices";
 import NoticeBoard from "./NoticeBoard";
+import { withOp } from "./progress";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import Notice from "src/components/Notice";
+import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import type { TDataItem } from "src/components/Table/types";
@@ -60,28 +63,37 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	const refresh = () => qc.invalidateQueries({ queryKey: ["onec", "agents"] });
 	const fail = (e: unknown) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error");
 
+	/** Над кем операция — в реестре прогресса это единственный ориентир. */
+	const agentName = agent?.name || agentId.slice(0, 8);
+
 	const rotate = useMutation({
-		mutationFn: () => rotateAgentToken(agentId),
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRotate"), target: agentName },
+			() => rotateAgentToken(agentId)),
 		onSuccess: (d) => { setConfirm(null); setIssued(d.token); void refresh(); },
 		onError: fail,
 	});
 	const toggle = useMutation({
-		mutationFn: (disabled: boolean) => setAgentDisabled(agentId, disabled),
+		mutationFn: (disabled: boolean) => withOp(
+			{ kind: "update", title: translate(disabled ? "onecAgentDisable" : "onecAgentEnable"), target: agentName },
+			() => setAgentDisabled(agentId, disabled)),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const release = useMutation({
-		mutationFn: () => releaseAgentInstance(agentId),
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentReleaseInstance"), target: agentName },
+			() => releaseAgentInstance(agentId)),
 		onSuccess: () => { setConfirm(null); showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const rename = useMutation({
-		mutationFn: () => renameAgent(agentId, name.trim()),
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRename"), target: agentName },
+			() => renameAgent(agentId, name.trim())),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const remove = useMutation({
-		mutationFn: () => deleteAgent(agentId),
+		mutationFn: () => withOp({ kind: "delete", title: translate("onecAgentDelete"), target: agentName },
+			() => deleteAgent(agentId)),
 		onSuccess: () => {
 			setConfirm(null);
 			showToast(translate("saved"), "success");
@@ -134,59 +146,85 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 							<div className={main.FormContainer}>
 								<div className={main.FormWrapper}>
 									<GroupCol className={main.Form}>
-										<GroupRow>
-											{/* Имя — единственный правимый реквизит: остальное присылает агент. */}
-											<Field name="ag_name" label={translate("name")} noAutofill
-												value={name || agent?.name || ""}
-												onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
-											<Button disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
-												onClick={() => rename.mutate()}>
-												<Icon name="editInline" /> {translate("onecAgentRename")}
-											</Button>
-											<Field name="ag_role" label={translate("role")} value={agent?.role ?? "—"} disabled onChange={() => {}} width="150px" />
-											<Field name="ag_state" label={translate("status")} value={agent ? stateLabel(agent) : "—"} disabled onChange={() => {}} width="170px" />
-											<Field name="ag_seen" label={translate("lastSeenAt")}
-												value={agent?.lastSeenAt ? getFormatDate(agent.lastSeenAt) : "—"} disabled onChange={() => {}} width="190px" />
-										</GroupRow>
-										<GroupRow>
-											<Field name="ag_id" label={translate("id")} value={agentId} disabled onChange={() => {}} width="320px" />
-											<Field name="ag_owner" label={translate("ownerInstance")}
-												value={agent?.owner?.instanceId || "—"} disabled onChange={() => {}} />
-										</GroupRow>
+										{/*
+										  * Области — как в остальных карточках панели: реквизиты агента,
+										  * его экземпляр, команды над ним. Раньше пять полей и кнопка
+										  * стояли одной строкой, и колонки не совпадали ни с одной другой
+										  * формой: поля разъезжались по ширине содержимого.
+										  */}
+										<FormArea title={translate("onecAgent")}>
+											<GroupCol>
+												<GroupRow>
+													{/* Имя — единственный правимый реквизит: остальное присылает агент. */}
+													<Field name="ag_name" label={translate("name")} noAutofill
+														width={FIELD_WIDTH.wide}
+														value={name || agent?.name || ""}
+														onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+													<Field name="ag_role" label={translate("role")} value={agent?.role ?? "—"}
+														disabled onChange={() => {}} width={FIELD_WIDTH.md} />
+													<Field name="ag_state" label={translate("status")} value={agent ? stateLabel(agent) : "—"}
+														disabled onChange={() => {}} width={FIELD_WIDTH.md} />
+												</GroupRow>
+												<GroupRow>
+													<Field name="ag_seen" label={translate("lastSeenAt")}
+														value={agent?.lastSeenAt ? getFormatDate(agent.lastSeenAt) : "—"}
+														disabled onChange={() => {}} width={FIELD_WIDTH.date} />
+													<Button disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
+														onClick={() => rename.mutate()}>
+														<Icon name="editInline" /> {translate("onecAgentRename")}
+													</Button>
+												</GroupRow>
+											</GroupCol>
+										</FormArea>
+
+										<FormArea title={translate("onecAgentInstance")}>
+											<GroupRow>
+												<Field name="ag_id" label={translate("id")} value={agentId} disabled
+													onChange={() => {}} width={FIELD_WIDTH.lg} />
+												<Field name="ag_owner" label={translate("ownerInstance")}
+													value={agent?.owner?.instanceId || "—"} disabled
+													onChange={() => {}} width={FIELD_WIDTH.lg} />
+											</GroupRow>
+										</FormArea>
 
 										{/* Команды над агентом — здесь, а не в командной панели списка: тут
 										    видно, НАД КЕМ они выполняются. */}
-										<GroupRow>
-											<Button variant="danger" disabled={rotate.isPending} onClick={() => setConfirm("rotate")}>
-												<Icon name="link" /> {translate("onecAgentRotate")}
-											</Button>
-											<Button disabled={toggle.isPending || !agent}
-												onClick={() => agent && toggle.mutate(!agent.disabled)}>
-												{agent?.disabled ? translate("onecAgentEnable") : translate("onecAgentDisable")}
-											</Button>
-											<Button variant="danger"
-												disabled={remove.isPending || !agent || !agent.disabled}
-												title={agent && !agent.disabled ? translate("onecAgentDeleteHint") : undefined}
-												onClick={() => setConfirm("delete")}>
-												<Icon name="trash" /> {translate("onecAgentDelete")}
-											</Button>
-											<Button
-												disabled={release.isPending || !agent?.owner?.instanceId}
-												title={agent?.owner?.instanceId
-													? `${translate("ownerInstance")}: ${agent.owner.instanceId}`
-													: translate("onecAgentNoOwnerHint")}
-												onClick={() => setConfirm("release")}>
-												<Icon name="clear" /> {translate("onecAgentReleaseInstance")}
-											</Button>
-										</GroupRow>
-
-										<div className={styles.Hint}>
-											{translate("onecAgentCapabilities")}: {agent?.capabilities.join(", ") || "—"}
-										</div>
+										<FormArea title={translate("onecCommands")}>
+											<GroupRow>
+												<Button variant="danger" disabled={rotate.isPending} onClick={() => setConfirm("rotate")}>
+													<Icon name="link" /> {translate("onecAgentRotate")}
+												</Button>
+												<Button disabled={toggle.isPending || !agent}
+													onClick={() => agent && toggle.mutate(!agent.disabled)}>
+													{agent?.disabled ? translate("onecAgentEnable") : translate("onecAgentDisable")}
+												</Button>
+												<Button variant="danger"
+													disabled={remove.isPending || !agent || !agent.disabled}
+													title={agent && !agent.disabled ? translate("onecAgentDeleteHint") : undefined}
+													onClick={() => setConfirm("delete")}>
+													<Icon name="trash" /> {translate("onecAgentDelete")}
+												</Button>
+												<Button
+													disabled={release.isPending || !agent?.owner?.instanceId}
+													title={agent?.owner?.instanceId
+														? `${translate("ownerInstance")}: ${agent.owner.instanceId}`
+														: translate("onecAgentNoOwnerHint")}
+													onClick={() => setConfirm("release")}>
+													<Icon name="clear" /> {translate("onecAgentReleaseInstance")}
+												</Button>
+											</GroupRow>
+										</FormArea>
 									</GroupCol>
 
 									<GroupCol className={main.FormNotice}>
-										<QueryError error={agents.error} />
+										{/* Подсказка стала сообщением: .Hint серым мелким шрифтом под полями
+										    читался как «служебная надпись», хотя это ответ на вопрос
+										    «а что этот агент вообще умеет». */}
+										<QueryError error={agents.error} noticeKey="agent-card" source={translate("onecAgent")} />
+										<Notice items={[{
+											type: "info",
+											text: `${translate("onecAgentCapabilities")}: ${agent?.capabilities.join(", ") || "—"}`,
+										}]} />
 									</GroupCol>
 								</div>
 							</div>

@@ -22,8 +22,8 @@ import { FC, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Modal from "src/components/Modal";
-import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
+import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
+import type { IconName } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { showToast } from "src/components/UIToast";
@@ -31,6 +31,7 @@ import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
 import { refreshPublications, runBatch, type BatchType } from "src/services/onec/api";
 import { isApplicable, type OnecOperation } from "./shared";
+import { attachBatch, startOp, withOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 /** Что именно делаем: у каждой команды свои поля и своя применимость. */
@@ -98,11 +99,35 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 	reader.readAsDataURL(file);
 });
 
+/**
+ * Команды сгруппированы ПО НАЗНАЧЕНИЮ, и каждая группа живёт там, где её предмет.
+ *
+ * Раньше все девять кнопок стояли одним рядом в командной панели списка «Базы»: там были и
+ * публикация, и обслуживание, и пользователи, и расширения. Ряд из девяти равных кнопок не
+ * отвечает на вопрос «что здесь вообще можно сделать» — в нём ищут глазами.
+ *
+ * Теперь: «Публикация» и «Обслуживание» — в списке баз (их предмет — сама база);
+ * пользователи — на вкладке «Пользователи баз»; расширения — на вкладке «Расширения».
+ * В карточке базы те же команды, но по одной базе — той, что открыта.
+ */
+export type CommandGroup = "publication" | "maintenance" | "users" | "extensions";
+
+const GROUPS: Record<CommandGroup, { label: string; icon: IconName; ops: Op[] }> = {
+	publication: { label: "onecPublication", icon: "open", ops: ["publish", "unpublish"] },
+	maintenance: { label: "onecTabMaintenance", icon: "save", ops: ["checkBase", "backup"] },
+	users: { label: "onecTabUsers", icon: "plus", ops: ["createUser", "deleteUser"] },
+	extensions: { label: "onecTabExtensions", icon: "download", ops: ["installExt", "deleteExt"] },
+};
+
 export const BaseGroupCommands: FC<{
 	selected: TDataItem[];
 	/** Запущенное задание открывают сразу: групповая операция не должна уходить «в никуда». */
 	onBatchStarted?: (batchId: string) => void;
-}> = ({ selected, onBatchStarted }) => {
+	/** Какие группы показывать. По умолчанию — те, чей предмет сама база. */
+	groups?: CommandGroup[];
+	/** Имя объекта, подставляемое в окно: экран расширений знает его заранее. */
+	presetName?: string;
+}> = ({ selected, onBatchStarted, groups = ["publication", "maintenance"], presetName }) => {
 	const qc = useQueryClient();
 	const [op, setOp] = useState<Op | null>(null);
 	const [name, setName] = useState("");
@@ -140,6 +165,15 @@ export const BaseGroupCommands: FC<{
 	const batch = useMutation({
 		mutationFn: async () => {
 			if (!spec) throw new Error(translate("unknownError"));
+			// Групповая команда — запись в «Прогрессе»: она идёт по десяткам баз, и без
+			// записи панель отвечала «задание поставлено» и замолкала.
+			const op = startOp({
+				kind: spec.type.includes("DELETE") ? "delete" : spec.type.includes("CREATE") || spec.type.includes("INSTALL") ? "create" : "update",
+				title: translate(spec.title),
+				target: `${translate("onecBases")}: ${targets.length}`,
+				total: targets.length,
+				scope: { bases: targets },
+			});
 			const payload: Record<string, unknown> =
 				spec.type === "IB_CREATE_USER"
 					? { name: name.trim(), ...(fullName.trim() ? { fullName: fullName.trim() } : {}), ...(password ? { password } : {}) }
@@ -148,7 +182,9 @@ export const BaseGroupCommands: FC<{
 						: spec.needsDir
 							? (dir.trim() ? { dir: dir.trim() } : {})
 							: spec.needsName ? { name: name.trim() } : {};
-			return runBatch(spec.type, targets, payload);
+			const r = await runBatch(spec.type, targets, payload);
+			attachBatch(op, r.batchId, r.total, r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
+			return r;
 		},
 		onSuccess: (d) => {
 			const tail = d.skipped.length ? ` ${translate("onecBatchSkipped")}: ${d.skipped.length}` : "";
@@ -171,7 +207,10 @@ export const BaseGroupCommands: FC<{
 	// Чтение публикаций: одна команда на весь веб-сервер, отметки строк ей не нужны —
 	// поэтому кнопка активна всегда, в отличие от групповых операций.
 	const checkPublications = useMutation({
-		mutationFn: refreshPublications,
+		mutationFn: () => withOp(
+			{ kind: "read", title: translate("onecPublicationsCheck"), target: translate("onecTabBases") },
+			refreshPublications,
+		),
 		onSuccess: (d) => {
 			qc.setQueryData(["onec", "bases"], { items: d.items });
 			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
@@ -180,25 +219,57 @@ export const BaseGroupCommands: FC<{
 		onError: (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error"),
 	});
 
-	const btn = (o: Op, label: string) => (
-		<Button variant="secondary" disabled={!selected.length} onClick={() => { setName(""); setOp(o); }}>
-			{translate(label)}
-		</Button>
-	);
+	/** Подпись команды в списке группы — та же, что была на отдельной кнопке. */
+	const OP_LABEL: Record<Op, string> = {
+		publish: "onecPublish", unpublish: "onecUnpublish",
+		createUser: "onecUserCreate", deleteUser: "onecUserDelete",
+		installExt: "onecExtInstall", deleteExt: "onecExtRemove",
+		backup: "onecBackup", checkBase: "onecMaintCheck",
+	};
+
+	/**
+	 * «Проверить публикации» стоит В ГРУППЕ «Публикация», но отметок строк ей не нужно:
+	 * это одна команда на весь веб-сервер. Поэтому она — единственный пункт группы,
+	 * доступный без выбора баз.
+	 */
+	const CHECK_PUBLICATIONS = "checkPublications";
 
 	return (
 		<>
-			<Button variant="secondary" disabled={checkPublications.isPending} onClick={() => checkPublications.mutate()}>
-				<Icon name="reload" /> {translate("onecPublicationsCheck")}
-			</Button>
-			{btn("publish", "onecPublish")}
-			{btn("unpublish", "onecUnpublish")}
-			{btn("createUser", "onecUserCreate")}
-			{btn("deleteUser", "onecUserDelete")}
-			{btn("installExt", "onecExtInstall")}
-			{btn("deleteExt", "onecExtRemove")}
-			{btn("backup", "onecBackup")}
-			{btn("checkBase", "onecMaintCheck")}
+			{groups.map((g) => {
+				const spec = GROUPS[g];
+				const options = [
+					...spec.ops.map((o) => ({
+						id: o,
+						label: translate(OP_LABEL[o]),
+						disabled: !selected.length,
+						hint: selected.length ? undefined : translate("onecPickBasesFirst"),
+					})),
+					...(g === "publication"
+						? [{
+							id: CHECK_PUBLICATIONS,
+							label: translate("onecPublicationsCheck"),
+							disabled: checkPublications.isPending,
+						}]
+						: []),
+				];
+				return (
+					<ActionsDropdownButton
+						key={g}
+						label={translate(spec.label)}
+						icon={spec.icon}
+						options={options}
+						title={selected.length
+							? `${translate("onecBatchTargets")}: ${selected.length}`
+							: translate("onecPickBasesFirst")}
+						onSelect={(id) => {
+							if (id === CHECK_PUBLICATIONS) { checkPublications.mutate(); return; }
+							setName(presetName ?? "");
+							setOp(id as Op);
+						}}
+					/>
+				);
+			})}
 
 			{spec && (
 				<Modal title={translate(spec.title)} onClose={close} onApply={apply}>

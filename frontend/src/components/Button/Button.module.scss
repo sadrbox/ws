@@ -84,10 +84,29 @@
 
 	&:enabled {}
 
+	// Недоступная кнопка должна ЧИТАТЬСЯ. Раньше она целиком уходила в opacity: 0.5 —
+	// вместе с подписью: чёрный текст на светлой подложке превращался в светло-серый, и
+	// было видно, что кнопка есть, но не что на ней написано. А в этой панели половина
+	// кнопок недоступна по умолчанию (пока не отмечены строки) — то есть нечитаемым был
+	// обычный вид экрана, а не исключение.
+	//
+	// Теперь гаснет ПОДЛОЖКА, а подпись остаётся контрастной: приглушённый тёмно-серый
+	// вместо чёрного. Недоступность видна по плоскому фону и отсутствию тени.
 	&:disabled {
-		opacity: 0.5;
+		background: $color30;
+		border-color: $color33;
+		color: $color51;
+		box-shadow: none;
 		cursor: default;
 		pointer-events: none;
+	}
+
+	// В тёмной теме подложка кнопки светлая (btnFace) — гасим её к более тусклой,
+	// а текст держим тёмным: светло-серый на светлом снова стал бы невидимым.
+	:global(html[data-theme="dark"]) &:disabled {
+		background: var(--sv-btnFaceDisabled, #b3b9c2);
+		color: #3b4149;
+		border-color: var(--sv-btnFaceDisabled, #b3b9c2);
 	}
 }
 
@@ -112,6 +131,14 @@
 
 	&:hover:not(:disabled) {
 		background: linear-gradient(180deg, var(--btn-gold-from, #ffe240), var(--btn-gold-from, #ffe240));
+	}
+
+	// В тёмной теме `html[data-theme="dark"] .Button` перекрывал золото своей подложкой:
+	// у него на один селектор больше. Повторяем правило с той же силой — и оно выигрывает
+	// как более позднее. Иначе основное действие формы в тёмной теме ничем не выделялось.
+	:global(html[data-theme="dark"]) & {
+		background: linear-gradient(180deg, var(--btn-gold-from, #ffe240), var(--btn-gold-to, #caac00));
+		border-color: var(--btn-gold-to, #caac00);
 	}
 }
 

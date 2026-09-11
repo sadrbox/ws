@@ -17,6 +17,7 @@
 import { FC, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
@@ -26,6 +27,7 @@ import { showToast } from "src/components/UIToast";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
 import { QueryError, useAgents } from "src/models/OneCAdmin/shared";
+import { withOp } from "src/models/OneCAdmin/progress";
 import {
 	clearBaseCredentials, fetchBaseCredentials, hasCapability, saveBaseCredentials,
 } from "src/services/onec/api";
@@ -47,11 +49,14 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 	useEffect(() => { setUser(creds.data?.user ?? ""); setPassword(""); }, [creds.data]);
 
 	const save = useMutation({
-		mutationFn: () => saveBaseCredentials(baseKey, {
-			user: user.trim(),
-			// Поле пустое — пароль не трогаем вовсе (см. заголовок файла).
-			...(password ? { password } : {}),
-		}),
+		mutationFn: () => withOp(
+			{ kind: "update", title: translate("onecCredsTitle"), target: baseKey, scope: { bases: [baseKey] } },
+			() => saveBaseCredentials(baseKey, {
+				user: user.trim(),
+				// Поле пустое — пароль не трогаем вовсе (см. заголовок файла).
+				...(password ? { password } : {}),
+			}),
+		),
 		onSuccess: () => {
 			showToast(translate("onecCredsSaved"), "success");
 			setPassword("");
@@ -61,7 +66,10 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 	});
 
 	const drop = useMutation({
-		mutationFn: () => clearBaseCredentials(baseKey),
+		mutationFn: () => withOp(
+			{ kind: "delete", title: translate("onecCredsClear"), target: baseKey, scope: { bases: [baseKey] } },
+			() => clearBaseCredentials(baseKey),
+		),
 		onSuccess: () => {
 			showToast(translate("onecCredsCleared"), "success");
 			setUser(""); setPassword("");
@@ -83,16 +91,16 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 					<FormArea title={translate("onecCredsTitle")}>
 						<GroupCol>
 							<GroupRow>
-								<Field name="bc_user" label={translate("onecUserName")} value={user} width="200px"
+								<Field name="bc_user" label={translate("onecUserName")} value={user} width={FIELD_WIDTH.wide}
 									noAutofill disabled={busy}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
 								<Field name="bc_pwd" label={translate("onecUserPassword")} type="password" value={password}
-									width="200px" disabled={busy}
+									width={FIELD_WIDTH.wide} disabled={busy}
 									placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
 									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 								<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}
 									value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
-									disabled width="170px" onChange={() => {}} />
+									disabled width={FIELD_WIDTH.date} onChange={() => {}} />
 							</GroupRow>
 							<GroupRow>
 								<Button variant="primary" disabled={busy || !user.trim()}

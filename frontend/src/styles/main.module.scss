@@ -634,6 +634,7 @@ body {
 	gap: 6px;
 	flex-shrink: 0;
 	margin-left: auto;
+	height: $heightFieldInput + 2px;
 }
 
 // Слот для дополнительных кнопок формы в шапке (например «Печать»).
@@ -662,6 +663,7 @@ body {
 	gap: 6px;
 	justify-content: flex-start;
 	margin: 0px;
+	height: $heightFieldInput + 2px;
 }
 
 

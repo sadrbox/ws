@@ -21,7 +21,7 @@ import Table from "src/components/Table";
 import { Button } from "src/components/Button";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
-import type { TColumn } from "src/components/Table/types";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
@@ -32,6 +32,8 @@ import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
+import BaseGroupCommands from "./BaseGroupCommands";
+import { withOp } from "./progress";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import styles from "./OneCAdmin.module.scss";
 
@@ -60,6 +62,8 @@ export const UsersTab: FC = () => {
 	const [primary, setPrimary] = useState<"bases" | "users">("bases");
 	const [activeBase, setActiveBase] = useState("");
 	const [activeUser, setActiveUser] = useState("");
+	/** Отмеченные базы — цель групповых команд по пользователям. */
+	const [pickedBases, setPickedBases] = useState<TDataItem[]>([]);
 
 	const openCard = useOpenBaseUser();
 	const openBase = useOpenOnecBase();
@@ -96,16 +100,25 @@ export const UsersTab: FC = () => {
 
 	// ── Строки: базы ────────────────────────────────────────────────────────
 	const baseRows = useMemo(() => {
+		const known = new Map((bases.data?.items ?? []).map((b) => [b.key.toLowerCase(), b]));
 		const src = primary === "bases"
 			? (bases.data?.items ?? []).filter((b) => isApplicable(b, "ib"))
 				.map((b) => ({ key: b.key, name: b.name || "—", users: "" }))
 			// Правая таблица в режиме «слева пользователи»: базы выбранного человека.
 			: (occurrences.data?.items ?? [])
 				.map((o) => ({ key: o.baseKey, name: o.baseName || "—", users: String((o.roles ?? []).length) }));
-		return src.map((x, i) => ({
-			id: i + 1, uuid: x.key, baseKey: x.key, name: x.name,
-			usersCount: x.users || (primary === "bases" ? "" : "0"),
-		}));
+		return src.map((x, i) => {
+			const b = known.get(x.key.toLowerCase());
+			return {
+				id: i + 1, uuid: x.key, baseKey: x.key, name: x.name,
+				usersCount: x.users || (primary === "bases" ? "" : "0"),
+				// Реквизиты применимости — для групповых команд по отмеченным базам:
+				// без них команда ушла бы в пропавшую или отключённую базу.
+				status: b?.status ?? "UNKNOWN",
+				disabled: b?.disabled ?? false,
+				published: b?.published ?? null,
+			};
+		});
 	}, [primary, bases.data, occurrences.data]);
 	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });
 
@@ -135,7 +148,11 @@ export const UsersTab: FC = () => {
 
 	/** Состав баз заводит кластер: обновление списка спрашивает его, а не наш кэш. */
 	const refreshFromCluster = useMutation({
-		mutationFn: refreshBases,
+		// Операция видна в «Прогрессе»: срез кластера по сотне баз идёт не мгновенно.
+		mutationFn: () => withOp(
+			{ kind: "read", title: translate("onecRefreshFromCluster"), target: translate("onecTabBases") },
+			refreshBases,
+		),
 		onSuccess: (d) => {
 			qc.setQueryData(["onec", "bases"], d);
 			showToast(translate("onecBasesRefreshed"), "success");
@@ -159,17 +176,22 @@ export const UsersTab: FC = () => {
 			 * именно сейчас запросят. Содержимое базы обновляет та таблица, которая его
 			 * показывает, — своей кнопкой.
 			 *
-			 * ОТМЕТОК СТРОК ЗДЕСЬ НЕТ намеренно: этот экран — про связь «человек ↔ база»,
-			 * а групповые операции по многим базам живут там, где базы и выбирают, — в
-			 * списке «Базы 1С».
+			 * ОТМЕТКИ СТРОК — для групповых команд по пользователям: завести или удалить
+			 * человека сразу в нескольких базах. Раньше они жили в списке «Базы 1С», то
+			 * есть команда про пользователей стояла там, где о пользователях ни слова;
+			 * теперь каждая команда живёт рядом со своим предметом.
 			 */
 			onReload: () => void refreshFromCluster.mutate(),
 			reloadTitle: translate("onecRefreshFromCluster"),
+			selectable: true,
+			onSelectionChange: (sel, all) =>
+				setPickedBases(all.filter((r) => sel.has(Number(r.id)))),
 			// Одиночный щелчок — связанный список справа. Двойной — карточка БАЗЫ:
 			// строка таблицы баз открывает элемент своего типа, а не то, ради чего
 			// таблицу показали рядом.
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
 			onRowClick: (r) => openBase(asText(r.baseKey)),
+			extraButtons: <BaseGroupCommands selected={pickedBases} groups={["users"]} />,
 		})} />
 	);
 

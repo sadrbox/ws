@@ -16,6 +16,7 @@
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
@@ -35,6 +36,7 @@ import {
 } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { CapabilityGuard, QueryError, isApplicable, useBaseContentCheck } from "./shared";
+import { attachBatch, startOp } from "./progress";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import styles from "./OneCAdmin.module.scss";
 
@@ -107,8 +109,20 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	const present = pickedBases.filter((k) => !missing.includes(k));
 
 	const batch = useMutation({
-		mutationFn: (p: { type: BatchType; keys: string[]; payload: Record<string, unknown> }) =>
-			runBatch(p.type, p.keys, p.payload),
+		// Операция видна в «Прогрессе запросов и команд»: установка расширения по десяткам
+		// баз идёт минутами, и «задание поставлено» — это ещё не ответ о том, чем кончилось.
+		mutationFn: async (p: { type: BatchType; keys: string[]; payload: Record<string, unknown> }) => {
+			const op = startOp({
+				kind: p.type === "IB_DELETE_EXTENSION" ? "delete" : "create",
+				title: translate(p.type === "IB_DELETE_EXTENSION" ? "onecExtRemove" : "onecExtInstall"),
+				target: `${asText(p.payload.name)} · ${translate("onecBases")}: ${p.keys.length}`,
+				total: p.keys.length,
+				scope: { bases: p.keys },
+			});
+			const r = await runBatch(p.type, p.keys, p.payload);
+			attachBatch(op, r.batchId, r.total, r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
+			return r;
+		},
 		onSuccess: (d) => {
 			setDialog(null);
 			const skipped = d.skipped.length ? ` ${translate("onecBatchSkipped")}: ${d.skipped.length}` : "";
@@ -200,11 +214,11 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 							<div className={styles.SecBody}>
 								<GroupCol>
 									<GroupRow>
-										<Field name="ex_name" label={translate("onecExtName")} value={current} disabled width="240px" onChange={() => {}} />
-										<Field name="ex_syn" label={translate("onecExtSynonym")} value={currentRow?.synonym || "—"} disabled width="240px" onChange={() => {}} />
-										<Field name="ex_bases" label={translate("bases")} value={String(currentRow?.bases ?? 0)} disabled width="90px" onChange={() => {}} />
+										<Field name="ex_name" label={translate("onecExtName")} value={current} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
+										<Field name="ex_syn" label={translate("onecExtSynonym")} value={currentRow?.synonym || "—"} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
+										<Field name="ex_bases" label={translate("bases")} value={String(currentRow?.bases ?? 0)} disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
 										<Field name="ex_ver" label={translate("version")}
-											value={(currentRow?.versions ?? []).join(", ") || "—"} disabled width="180px" onChange={() => {}} />
+											value={(currentRow?.versions ?? []).join(", ") || "—"} disabled width={FIELD_WIDTH.md} onChange={() => {}} />
 									</GroupRow>
 									<GroupRow>
 										<input type="file" accept=".cfe" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

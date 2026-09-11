@@ -27,9 +27,11 @@ import Table from "src/components/Table";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import Notice from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -207,43 +209,56 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 							<div className={main.FormContainer}>
 								<div className={main.FormWrapper}>
 									<GroupCol className={main.Form}>
-										<GroupRow>
-											<Field name="el_name" label={isUser ? translate("onecUserName") : translate("onecExtName")}
-												value={name} width="260px" noAutofill
-												onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
-											{isUser ? (
-												<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width="260px" noAutofill
-													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
-											) : (
-												<Field name="el_syn" label={translate("onecExtSynonym")} value={asText(row.synonym) || "—"}
-													disabled width="260px" onChange={() => {}} />
-											)}
-											<Field name="el_bases" label={translate("bases")} value={String(present.size)} disabled
-												width="110px" onChange={() => {}} />
-										</GroupRow>
+										{/* Области — как в остальных карточках панели: сперва чем элемент
+										    является, затем что в нём меняют. Колонки полей совпадают с
+										    другими формами за счёт общих токенов ширины. */}
+										<FormArea title={isUser ? translate("onecUser") : translate("onecExtension")}>
+											<GroupRow>
+												<Field name="el_name" label={isUser ? translate("onecUserName") : translate("onecExtName")}
+													value={name} width={FIELD_WIDTH.wide} noAutofill
+													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+												{isUser ? (
+													<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width={FIELD_WIDTH.wide} noAutofill
+														onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)} />
+												) : (
+													<Field name="el_syn" label={translate("onecExtSynonym")} value={asText(row.synonym) || "—"}
+														disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
+												)}
+												<Field name="el_bases" label={translate("bases")} value={String(present.size)} disabled
+													width={FIELD_WIDTH.sm} onChange={() => {}} />
+											</GroupRow>
+										</FormArea>
 
-										{isUser ? (
-											<GroupRow>
-												<Field name="el_pwd" label={translate("onecUserPassword")} type="password" value={password}
-													width="240px"
-													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
-												<FieldToggle name="el_disabled" label={translate("onecUserDisabled")}
-													value={disabled} onChange={setDisabled} />
-											</GroupRow>
-										) : (
-											<GroupRow>
-												<Field name="el_version" label={translate("version")} value={asText(row.version) || "—"}
-													disabled width="150px" onChange={() => {}} />
-												<Field name="el_purpose" label={translate("purpose")} value={asText(row.purpose) || "—"}
-													disabled width="180px" onChange={() => {}} />
-												<input type="file" accept=".cfe" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-												<FieldToggle name="el_safe" label={translate("onecExtSafeMode")} value={safeMode} onChange={setSafeMode} />
-											</GroupRow>
-										)}
+										<FormArea title={isUser ? translate("onecAreaUserData") : translate("onecExtFile")}>
+											{isUser ? (
+												<GroupRow>
+													<Field name="el_pwd" label={translate("onecUserPassword")} type="password" value={password}
+														width={FIELD_WIDTH.wide}
+														onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
+													<FieldToggle name="el_disabled" label={translate("onecUserDisabled")}
+														value={disabled} onChange={setDisabled} />
+												</GroupRow>
+											) : (
+												<GroupCol>
+													<GroupRow>
+														<Field name="el_version" label={translate("version")} value={asText(row.version) || "—"}
+															disabled width={FIELD_WIDTH.md} onChange={() => {}} />
+														<Field name="el_purpose" label={translate("purpose")} value={asText(row.purpose) || "—"}
+															disabled width={FIELD_WIDTH.md} onChange={() => {}} />
+													</GroupRow>
+													<GroupRow>
+														<input type="file" accept=".cfe" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+														<FieldToggle name="el_safe" label={translate("onecExtSafeMode")} value={safeMode} onChange={setSafeMode} />
+													</GroupRow>
+												</GroupCol>
+											)}
+										</FormArea>
 									</GroupCol>
 
 									<GroupCol className={main.FormNotice}>
-										<QueryError error={bases.error ?? occurrences.error} />
+										<QueryError error={bases.error ?? occurrences.error}
+											noticeKey="element-card" source={isUser ? translate("onecUser") : translate("onecExtension")} />
+										<Notice items={[{ type: "info", text: translate("onecElementCardHint") }]} />
 									</GroupCol>
 								</div>
 							</div>

@@ -27,6 +27,7 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
@@ -476,10 +477,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 											<Field name="buf_seen" label={translate("onecDataFrom")}
 												value={occ.find((o) => o.baseKey === baseKey)?.seenAt
 													? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}
-												disabled width="170px" onChange={() => {}} />
+												disabled width={FIELD_WIDTH.date} onChange={() => {}} />
 											<Field name="buf_roles" label={translate("roles")}
 												value={String((rolesByBase.get(baseKey.toLowerCase()) ?? []).length)}
-												disabled width="90px" onChange={() => {}} />
+												disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
 										</GroupRow>
 									</FormArea>
 
@@ -488,14 +489,14 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 											<GroupRow>
 												{/* Имя входа правится, как и прочее: в 1С это смена свойства
 												    «Имя» у того же пользователя, а не новый пользователь. */}
-												<Field name="buf_user" label={translate("onecUserName")} value={form.name} width="200px"
+												<Field name="buf_user" label={translate("onecUserName")} value={form.name} width={FIELD_WIDTH.wide}
 													noAutofill disabled={locked}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
-												<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width="200px"
+												<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width={FIELD_WIDTH.wide}
 													noAutofill disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
 												<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
-													width="190px" disabled={locked} placeholder={translate("onecKeepAsIs")}
+													width={FIELD_WIDTH.md} disabled={locked} placeholder={translate("onecKeepAsIs")}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
 											</GroupRow>
 											<GroupRow>

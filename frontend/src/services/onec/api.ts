@@ -355,6 +355,10 @@ export const killAgentProcess = (pid: number, force?: boolean) =>
 export type OnecAgent = {
 	id: string; name: string; role: "business" | "admin";
 	online: boolean; capabilities: string[]; lastSeenAt: string | null; disabled: boolean;
+	/** Сервер, за который отвечает агент: по нему база находит свою платформу. */
+	serverId: string | null;
+	/** Версия платформы 1С на сервере агента; null — агент её не сообщает. */
+	platform: string | null;
 	/**
 	 * Экземпляры (процессы) агента, отзывавшиеся за последнее время. Больше одного — авария:
 	 * два процесса под одним токеном разбирают одну очередь команд, и стоит их настройкам

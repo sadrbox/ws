@@ -21,6 +21,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import Notice from "src/components/Notice";
 import main from "src/styles/main.module.scss";
 import { translate } from "src/i18";
+import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
@@ -33,7 +34,7 @@ import {
 	fetchBaseExtensionsCached, fetchBaseUsersCached, fetchSessions, refreshBases,
 	type IbExtension, type IbUser, type OnecBase,
 } from "src/services/onec/api";
-import { QueryError, publishLabel, useBaseContentCheck } from "src/models/OneCAdmin/shared";
+import { QueryError, publishLabel, useAgents, useBaseContentCheck } from "src/models/OneCAdmin/shared";
 import { NoticeScope, useNoticeReport, useNoticeScope } from "src/models/OneCAdmin/notices";
 import NoticeBoard from "src/models/OneCAdmin/NoticeBoard";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
@@ -41,6 +42,8 @@ import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import BaseUserCommands from "src/models/OneCAdmin/BaseUserCommands";
 import BaseCredentialsTab from "./BaseCredentials";
+import BasePublication from "./BasePublication";
+import { withOp } from "src/models/OneCAdmin/progress";
 import BaseMaintenance from "./BaseMaintenance";
 import columnsJson from "./columns.json";
 
@@ -320,6 +323,18 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	// что человек видит, — её сообщения обязаны быть видны в ней самой.
 	const scope = paneProps.uniqId ?? "base-card";
 
+	/*
+	 * ПЛАТФОРМА. Поле `onecVersion` у базы заполняет агент в срезе баз — и не заполняет:
+	 * во всех 111 записях реестра оно пустое. Поэтому спрашиваем агента САМОГО СЕРВЕРА:
+	 * платформа у всех баз одного сервера одна, и это тот же факт, только с другой
+	 * стороны. Когда не знает никто — так и пишем: «—» читается как «нет версии», а
+	 * версия есть всегда, просто её не сообщили.
+	 */
+	const agents = useAgents();
+	const platform = asText(row.onecVersion)
+		|| (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform
+		|| translate("onecPlatformUnknown");
+
 	return (
 		<NoticeScope.Provider value={scope}>
 		<ModelForm
@@ -345,27 +360,31 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 								<GroupCol className={main.Form}>
 									<Group>
 										<GroupRow>
-											<Field name="ob_key" label={translate("baseKey")} value={asText(row.baseKey)} disabled onChange={() => {}} width="220px" />
-											<Field name="ob_status" label={translate("status")} value={statusLabel(asText(row.status))} disabled onChange={() => {}} width="170px" />
+											<Field name="ob_key" label={translate("baseKey")} value={asText(row.baseKey)} disabled onChange={() => {}} width={FIELD_WIDTH.wide} />
+											<Field name="ob_status" label={translate("status")} value={statusLabel(asText(row.status))} disabled onChange={() => {}} width={FIELD_WIDTH.md} />
 										</GroupRow>
 										<Field name="ob_name" label={translate("name")} value={asText(row.name) || "—"} disabled onChange={() => {}} />
 									</Group>
 
 									<Group>
 										<GroupRow>
-											<Field name="ob_server" label={translate("onecServer")} value={asText(row.serverName) || "—"} disabled onChange={() => {}} width="220px" />
-											<Field name="ob_platform" label={translate("onecVersion")} value={asText(row.onecVersion) || "—"} disabled onChange={() => {}} width="170px" />
+											<Field name="ob_server" label={translate("onecServer")} value={asText(row.serverName) || "—"} disabled onChange={() => {}} width={FIELD_WIDTH.wide} />
+											<Field name="ob_platform" label={translate("onecVersion")} value={platform} disabled onChange={() => {}} width={FIELD_WIDTH.md} />
 										</GroupRow>
 										<GroupRow>
 											<Field name="ob_ext" label={translate("extensionsCount")}
 												value={row.extensionsCount == null ? translate("onecExtNotChecked") : asText(row.extensionsCount)}
-												disabled onChange={() => {}} width="170px" />
-											<Field name="ob_published" label={translate("onecPublication")}
-												value={publishLabel(row.published as boolean | null)} disabled onChange={() => {}} width="170px" />
+												disabled onChange={() => {}} width={FIELD_WIDTH.sm} />
 											<Field name="ob_seen" label={translate("lastSeenAt")}
-												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} disabled onChange={() => {}} width="190px" />
+												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} disabled onChange={() => {}} width={FIELD_WIDTH.date} />
 										</GroupRow>
 									</Group>
+
+									{/* Публикация — со своими командами по ЭТОЙ базе: в списке те же команды
+									    групповые, здесь цель уже выбрана и она на экране. */}
+									<BasePublication baseKey={asText(row.baseKey)}
+										published={row.published as boolean | null}
+										publishUrl={row.publishUrl ? asText(row.publishUrl) : null} />
 								</GroupCol>
 
 								<GroupCol className={main.FormNotice}>
@@ -407,7 +426,8 @@ export function useOpenOnecBase() {
 			? ({
 				baseKey: found.key, name: found.name, status: found.status, serverName: found.serverName,
 				onecVersion: found.onecVersion, extensionsCount: found.extensionsCount,
-				published: found.published, lastSeenAt: found.lastSeenAt, infobaseId: found.infobaseId,
+				published: found.published, publishUrl: found.publishUrl,
+				lastSeenAt: found.lastSeenAt, infobaseId: found.infobaseId,
 			} as unknown as TDataItem)
 			: (typeof base === "string" ? ({ baseKey: key } as unknown as TDataItem) : base);
 		addPane({ label: `${translate("onecBase")}: ${key}`, component: OneCBasesForm as never, data: row });
@@ -422,7 +442,12 @@ export const OneCBasesList: FC<{
 	onSelectItem?: (item: TDataItem) => void;
 	/** Запущенное задание открывают сразу: групповая операция не должна уходить «в никуда». */
 	onBatchStarted?: (batchId: string) => void;
-}> = ({ variant, onSelectItem, onBatchStarted }) => (
+}> = ({ variant, onSelectItem, onBatchStarted }) => {
+	// Платформа: у баз она пуста (агент не заполняет поле в срезе), поэтому подставляем
+	// версию сервера, за который отвечает админ-агент, — см. карточку базы.
+	const agents = useAgents();
+	const platform = (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform ?? "";
+	return (
 	<ModelList
 		endpoint={ENDPOINT}
 		listName={LIST_NAME}
@@ -436,7 +461,10 @@ export const OneCBasesList: FC<{
 		 * честно показывает вчерашний состав, называя это обновлением. Отдельная кнопка
 		 * «Обновить из кластера» после этого не нужна: у обновления один смысл.
 		 */
-		onReload={refreshBases}
+		onReload={() => withOp(
+			{ kind: "read", title: translate("onecRefreshFromCluster"), target: translate("onecTabBases") },
+			refreshBases,
+		)}
 		// Создание и удаление неприменимы: базы приходят из кластера 1С.
 		hideAddDelete
 		variant={variant}
@@ -445,15 +473,21 @@ export const OneCBasesList: FC<{
 		// к нему — дело интерфейса: в API текста для человека быть не должно.
 		// Значение обёрнуто в <span>, как и штатный рендер ячейки: голая строка ложится
 		// прямым потомком ячейки и выпадает из общей вёрстки (обрезка, выравнивание).
-		renderCell={(row, col) => (col.identifier === "published"
-			? <span>{publishLabel(row.published as boolean | null)}</span>
-			: undefined)}
+		renderCell={(row, col) => {
+			if (col.identifier === "published") return <span>{publishLabel(row.published as boolean | null)}</span>;
+			// «—» читалось бы как «версии нет»; версия есть всегда, её просто не сообщили.
+			if (col.identifier === "onecVersion") {
+				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;
+			}
+			return undefined;
+		}}
 		previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
 		// Групповые команды по отмеченным базам: публикация и её снятие, пользователи,
 		// расширения. Здесь набор баз уже выбран — уходить за ним на другую вкладку незачем.
 		extraButtons={(selected) => <BaseGroupCommands selected={selected} onBatchStarted={onBatchStarted} />}
 	/>
-);
+	);
+};
 OneCBasesList.displayName = "OneCBasesList";
 
 export default OneCBasesList;
