@@ -443,6 +443,10 @@ export function onecRouter(deps: Deps) {
 			// когда сам агент не прислал версию по базе: платформа у всех баз одного
 			// сервера одна, и «неизвестно» здесь — отсутствие ответа, а не разнобой.
 			serverId: a.serverId, platform: a.onec.version,
+			// «Выполняет команду» — не то же самое, что «на связи»: агент как раз молчит,
+			// и молчание ожидаемо. Без этого остановленная посреди команды служба выглядела
+			// в панели работающей.
+			busy: a.busy,
 			// Сутки истории — чтобы владельцем можно было назначить и молчащий экземпляр
 			// (займёт аренду, как поднимется). Признак `live` у каждой строки отделяет
 			// работающие процессы от прежних запусков: смешивать их нельзя, иначе панель
@@ -704,6 +708,8 @@ export function onecRouter(deps: Deps) {
 		// Просроченное закрываем здесь же: агент, который замолчал, этого не сделает, а
 		// панель иначе опрашивает несуществующую работу до своего предела.
 		await queue.expireOverdue();
+		// И то, что ждёт агента, которого нет: забирать команду некому — ждать нечего.
+		await queue.expireOrphaned(cfg.AGENT_OFFLINE_AFTER_SECS * 2);
 		const row = await queue.get(req.params.id);
 		if (!row) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
 		if (row.state === "queued" || row.state === "dispatched") {
@@ -739,7 +745,34 @@ export function onecRouter(deps: Deps) {
 	});
 
 	r.get("/batches", async (req, res) => {
+		// Задания опрашивает панель, пока в них есть незавершённое, — здесь и закрываем то,
+		// чему уже не суждено выполниться. Иначе групповая операция висела бы «в работе»
+		// до истечения срока каждой команды, хотя службы агента давно нет.
+		await queue.expireOverdue();
+		await queue.expireOrphaned(cfg.AGENT_OFFLINE_AFTER_SECS * 2);
 		res.json({ success: true, data: { items: await batches.list(req.erpUser!.organizationUuid ?? "") } });
+	});
+
+	/**
+	 * Отменить команды, которые ещё не начаты.
+	 *
+	 * Отменяется только `queued` — см. queue.cancel: команду, которую агент уже забрал,
+	 * останавливает не панель, а сам агент, и называть отменой прекращение ожидания
+	 * значило бы врать о состоянии чужой системы.
+	 */
+	r.post("/commands/cancel", async (req, res) => {
+		const ids = Array.isArray((req.body as { ids?: unknown })?.ids)
+			? ((req.body as { ids: unknown[] }).ids).filter((x): x is string => typeof x === "string")
+			: [];
+		if (!ids.length) { send(res, fail(400, "VALIDATION_ERROR", "Не указано, что отменять")); return; }
+		const canceled = await queue.cancel(ids, req.erpUser!.uuid);
+		res.json({ success: true, data: { canceled, asked: ids.length } });
+	});
+
+	/** Остановить групповую операцию: отменяются все её команды, которые ещё не начаты. */
+	r.post("/batches/:id/cancel", async (req, res) => {
+		const canceled = await queue.cancelBatch(req.params.id, req.erpUser!.uuid);
+		res.json({ success: true, data: { canceled } });
 	});
 
 	/**

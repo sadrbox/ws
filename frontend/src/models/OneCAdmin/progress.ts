@@ -19,7 +19,8 @@
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchBatches, type BatchProgress } from "src/services/onec/api";
+import { cancelBatch, fetchBatches, type BatchProgress } from "src/services/onec/api";
+import { translate } from "src/i18";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
 export type OpKind = "read" | "create" | "update" | "delete";
@@ -40,6 +41,11 @@ export type Op = {
 	finishedAt: number | null;
 	/** Задание сервиса, если операция — команда агенту. */
 	batchId: string | null;
+	/**
+	 * Сколько команд операции ещё можно отменить: их никто не начинал. Ноль значит, что
+	 * отменять нечего — работа уже идёт на сервере 1С, и остановить её панель не может.
+	 */
+	cancelable: number;
 	/** Короткий итог или причина отказа. */
 	note: string;
 	/**
@@ -91,7 +97,7 @@ export function startOp(init: {
 		id, kind: init.kind, title: init.title, target: init.target,
 		total: Math.max(init.total, 0), done: 0, failed: 0,
 		state: "running", startedAt: Date.now(), finishedAt: null,
-		batchId: init.batchId ?? null, note: init.note ?? "",
+		batchId: init.batchId ?? null, note: init.note ?? "", cancelable: 0,
 		scope: { ...(init.scope?.user ? { user: init.scope.user } : {}), bases: init.scope?.bases ?? [] },
 	}, ...ops];
 	emit();
@@ -135,6 +141,7 @@ export function mergeBatch(p: BatchProgress): void {
 	replace(target.id, (o) => ({
 		...o,
 		total: p.total,
+		cancelable: p.cancelable ?? 0,
 		done: p.done + p.failed,
 		failed: p.failed,
 		state: running ? "running" : (p.failed > 0 ? "failed" : "done"),
@@ -165,6 +172,27 @@ export async function withOp<T>(
 		finishOp(id, { failed: 1, note: e instanceof Error ? e.message : "" });
 		throw e;
 	}
+}
+
+/**
+ * ОТМЕНИТЬ операцию — то, что в ней ещё не начато.
+ *
+ * Панель может остановить только команды в очереди: ту, что агент забрал, выполняет он, и
+ * «отмена» означала бы лишь, что мы перестали ждать ответа. Поэтому возвращаем ЧЕСТНОЕ
+ * число отменённого: ноль — значит не успели, и это ответ, а не ошибка.
+ */
+export async function cancelOp(id: string): Promise<number> {
+	const op = ops.find((o) => o.id === id);
+	if (!op?.batchId) return 0;
+	const r = await cancelBatch(op.batchId);
+	if (r.canceled > 0) {
+		replace(id, (o) => ({
+			...o,
+			cancelable: 0,
+			note: `${translate("onecOpCanceled")}: ${r.canceled}`,
+		}));
+	}
+	return r.canceled;
 }
 
 /** Убрать завершённые: список нужен для наблюдения, а не как журнал (журнал — «Задания»). */

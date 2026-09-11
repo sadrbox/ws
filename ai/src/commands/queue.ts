@@ -176,6 +176,37 @@ export class CommandQueue {
 	 * опрашивает её до своего пятнадцатиминутного предела: в консоли непрерывный поток
 	 * запросов, на экране ничего. Срок истёк — значит выполнять её уже некому.
 	 */
+	/**
+	 * Команды АГЕНТА, КОТОРОГО НЕТ, — закрываем, не дожидаясь их собственного срока.
+	 *
+	 * Живой случай: службу агента остановили на сервере 1С. Панель показывала операции
+	 * «в работе», а через пятнадцать минут они закрывались по сроку с текстом про базу и
+	 * журнал агента — хотя дело было не в базе, а в том, что забирать команду некому.
+	 *
+	 * ТОЛЬКО `queued`: их никто не начинал, и пока агент молчит, начать некому. Команды,
+	 * которые агент уже ЗАБРАЛ, не трогаем — он мог уйти их выполнять и ответить позже
+	 * (измерено: честный отказ приходил на 186-й секунде молчания). Их закроет свой срок.
+	 *
+	 * `silentSecs` — сколько агент должен молчать, чтобы счесть его отсутствующим.
+	 * Перезапуск службы занимает секунды, поэтому короткая пауза ничего не значит.
+	 */
+	async expireOrphaned(silentSecs: number): Promise<number> {
+		const r = await this.db.query(
+			`UPDATE commands c
+			    SET state = 'expired', finished_at = now(),
+			        error = COALESCE(c.error, jsonb_build_object(
+			          'code', 'AGENT_OFFLINE',
+			          'message', 'Служба 1С-агента не на связи — забрать команду некому. '
+			            || 'Проверьте, запущена ли она на сервере 1С.'))
+			  FROM agents a
+			 WHERE a.id = c.agent_id
+			   AND c.state = 'queued'
+			   AND (a.last_seen_at IS NULL OR a.last_seen_at < now() - make_interval(secs => $1::int))`,
+			[silentSecs],
+		);
+		return r.rowCount ?? 0;
+	}
+
 	async expireOverdue(): Promise<number> {
 		const r = await this.db.query(
 			/*
@@ -196,6 +227,40 @@ export class CommandQueue {
 			  WHERE state IN ('queued', 'dispatched') AND expires_at < now()`,
 		);
 		return r.rowCount ?? 0;
+	}
+
+	/**
+	 * ОТМЕНА — только до начала выполнения.
+	 *
+	 * Команду, которую агент уже забрал, отменить нельзя: она выполняется на сервере 1С, и
+	 * «отмена» в панели означала бы лишь то, что мы перестали ждать ответа, — а пользователь
+	 * прочитал бы это как «операция не выполнена». Врать о состоянии чужой системы нельзя.
+	 * Поэтому отменяются только `queued`: их ещё никто не начинал.
+	 *
+	 * Возвращает, сколько команд действительно отменено: ноль значит «не успели» — и это
+	 * честный ответ, а не ошибка.
+	 */
+	async cancel(ids: string[], by: string): Promise<number> {
+		if (!ids.length) return 0;
+		const r = await this.db.query(
+			`UPDATE commands
+			    SET state = 'canceled', finished_at = now(),
+			        error = jsonb_build_object(
+			          'code', 'COMMAND_CANCELED',
+			          'message', 'Команда отменена до начала выполнения.',
+			          'details', jsonb_build_object('by', $2::text))
+			  WHERE id = ANY($1::text[]) AND state = 'queued'`,
+			[ids, by],
+		);
+		return r.rowCount ?? 0;
+	}
+
+	/** Отменить всё, что ещё не начато, в задании: групповую операцию останавливают целиком. */
+	async cancelBatch(batchId: string, by: string): Promise<number> {
+		const r = await this.db.query<{ id: string }>(
+			`SELECT id FROM commands WHERE batch_id = $1 AND state = 'queued'`, [batchId],
+		);
+		return this.cancel(r.rows.map((x) => x.id), by);
 	}
 
 	private async dispatchQueued(agentId: string): Promise<WireCommand[]> {

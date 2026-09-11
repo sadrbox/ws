@@ -26,7 +26,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
 import { createAgent } from "src/services/onec/api";
-import { useOpenAgent } from "./AgentForm";
+import { stateLabel, useOpenAgent } from "./AgentForm";
 import { QueryError, useAgents } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -70,7 +70,8 @@ export const AgentsTab: FC = () => {
 		id: i + 1, uuid: a.id, agentId: a.id,
 		name: a.name || "—", role: a.role,
 		// Отключённый агент не «оффлайн»: его исключили намеренно, и это разные вещи.
-		onlineLabel: a.disabled ? translate("onecAgentDisabled") : a.online ? translate("onecAgentOnline") : translate("onecAgentOffline"),
+		// Три состояния, а не два: «выполняет команду» — не «на связи» (см. stateLabel).
+		onlineLabel: stateLabel(a),
 		lastSeenAt: a.lastSeenAt,
 		capabilitiesCount: a.capabilities.length,
 		// Считаем РАБОТАЮЩИЕ, а не всю историю: идентификатор меняется при каждом

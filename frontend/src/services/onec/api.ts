@@ -292,13 +292,35 @@ export type BatchStart = {
 	skipped: { baseKey: string; reason: string }[];
 };
 
+/**
+ * Отменить команды, которые ещё НЕ НАЧАТЫ.
+ *
+ * Команду, которую агент уже забрал, панель отменить не может: она выполняется на сервере
+ * 1С. Назвать отменой прекращение ожидания значило бы соврать о состоянии чужой системы —
+ * человек прочитал бы «отменено» как «не выполнено».
+ */
+export const cancelCommands = (ids: string[]) =>
+	aiFetch<{ canceled: number; asked: number }>("/v1/onec/commands/cancel", {
+		method: "POST", body: JSON.stringify({ ids }),
+	});
+
+/** Остановить групповую операцию: отменяются все её команды, которые ещё не начаты. */
+export const cancelBatch = (batchId: string) =>
+	aiFetch<{ canceled: number }>(`/v1/onec/batches/${encodeURIComponent(batchId)}/cancel`, {
+		method: "POST",
+	});
+
 export const runBatch = (type: BatchType, baseKeys: string[], payload: Record<string, unknown>) =>
 	aiFetch<BatchStart>("/v1/onec/batch", { method: "POST", body: JSON.stringify({ type, baseKeys, payload }) });
 
 export type BatchProgress = {
 	id: string; type: string; total: number; done: number; failed: number; pending: number;
+	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
+	cancelable: number;
 	createdAt: string;
 	items: {
+		/** Идентификатор команды — по нему её отменяют, пока она не начата. */
+		commandId: string | null;
 		baseKey: string | null; state: string; error: { code: string; message: string } | null;
 		/** Итог одной строкой: путь к выгрузке или адрес публикации. */
 		outcome: string | null;
@@ -392,6 +414,11 @@ export type OnecAgent = {
 	serverId: string | null;
 	/** Версия платформы 1С на сервере агента; null — агент её не сообщает. */
 	platform: string | null;
+	/**
+	 * Агент забрал команду и ещё не ответил. Отдельно от `online`: там «откликается», а
+	 * здесь он как раз молчит — и молчание ожидаемо, пока идёт взятая им работа.
+	 */
+	busy: boolean;
 	/**
 	 * Экземпляры (процессы) агента, отзывавшиеся за последнее время. Больше одного — авария:
 	 * два процесса под одним токеном разбирают одну очередь команд, и стоит их настройкам

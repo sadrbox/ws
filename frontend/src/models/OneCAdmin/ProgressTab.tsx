@@ -15,7 +15,7 @@
  * Здесь — только то, что запустили с этого экрана, вместе с чтениями, которых в журнале
  * нет вовсе: заданий они не создают.
  */
-import { FC, useMemo, useState } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
@@ -25,8 +25,9 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { getFormatDate } from "src/utils/datetime";
+import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
-import { clearFinished, useOnecOps, type Op } from "./progress";
+import { cancelOp, clearFinished, useOnecOps, type Op } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 const opColumns = (): TColumn[] => ([
@@ -73,11 +74,25 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		__percent: o.total ? Math.min(Math.round((o.done / o.total) * 100), 100) : (o.state === "running" ? 0 : 100),
 		__state: o.state,
 		__failed: o.failed,
+		__id: o.id,
+		// Отменить можно только НЕ НАЧАТОЕ: ту команду, что агент забрал, останавливает он.
+		__cancelable: o.cancelable,
 	})), [ops]);
 	const view = useStaticTableView(rows, {});
 
 	const running = ops.filter((o) => o.state === "running").length;
 	const finished = ops.length - running;
+	/** Строка, выбранная щелчком: её и отменяют — кнопка действует на выбранное. */
+	const [active, setActive] = useState<{ id: string; cancelable: number } | null>(null);
+
+	const cancel = useCallback(async () => {
+		if (!active?.cancelable) return;
+		const n = await cancelOp(active.id);
+		showToast(n
+			? `${translate("onecOpCanceled")}: ${n}`
+			: translate("onecOpCancelTooLate"), n ? "success" : "warning");
+		setActive((a) => (a ? { ...a, cancelable: 0 } : a));
+	}, [active]);
 
 	return (
 		<Table {...buildStaticTableProps({
@@ -106,12 +121,30 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 					</span>
 				);
 			},
+			onActiveRowChange: (r) => setActive(r
+				? { id: asText(r.__id), cancelable: Number(r.__cancelable ?? 0) }
+				: null),
 			extraButtons: (
-				<Button variant="secondary" disabled={!finished}
-					title={finished ? translate("onecOpsClear") : translate("onecOpsNothingToClear")}
-					onClick={clearFinished}>
-					<Icon name="clear" /> {translate("onecOpsClear")}
-				</Button>
+				<>
+					{/*
+					  * Отмена — ДО начала выполнения. Команду, которую агент уже забрал,
+					  * останавливает он сам на сервере 1С; назвать отменой прекращение
+					  * ожидания значило бы соврать о состоянии чужой системы.
+					  */}
+					<Button variant="danger" disabled={!active?.cancelable}
+						title={!active ? translate("onecOpPickFirst")
+							: active.cancelable ? `${translate("onecOpCancel")}: ${active.cancelable}`
+								: translate("onecOpCancelTooLate")}
+						onClick={() => void cancel()}>
+						<Icon name="close" /> {translate("onecOpCancel")}
+						{active?.cancelable ? ` (${active.cancelable})` : ""}
+					</Button>
+					<Button variant="secondary" disabled={!finished}
+						title={finished ? translate("onecOpsClear") : translate("onecOpsNothingToClear")}
+						onClick={clearFinished}>
+						<Icon name="clear" /> {translate("onecOpsClear")}
+					</Button>
+				</>
 			),
 		})} />
 	);

@@ -76,6 +76,15 @@ export type AgentView = {
 	processes: AgentProcess[];
 	processesSeenAt: string | null;
 	onec: { reachable: boolean; version: string | null };
+	/**
+	 * Агент ЗАБРАЛ команду и ещё не ответил.
+	 *
+	 * Отдельно от `online`, потому что это разные ответы: «на связи» значит «откликается»,
+	 * а здесь агент как раз не откликается — он работает, и молчание ожидаемо. Пока эти два
+	 * состояния показывались одним словом, человек, остановивший службу посреди команды,
+	 * видел «на связи» и не понимал, почему ничего не происходит.
+	 */
+	busy: boolean;
 	lastSeenAt: string | null;
 	registeredAt: string | null;
 	disabled: boolean;
@@ -501,6 +510,7 @@ export class AgentService {
 			status: online ? r.status : "OFFLINE",
 			online,
 			onec: { reachable: online && r.onec_reachable, version: r.onec_version },
+			busy: (this.polls.get(r.id)?.busyUntil ?? 0) > Date.now(),
 			// Процессы показываем, только пока агент на связи: список остановленной службы
 			// — это её прошлое, а не то, что сейчас происходит на сервере.
 			processes: online && Array.isArray(r.processes) ? (r.processes as AgentProcess[]) : [],

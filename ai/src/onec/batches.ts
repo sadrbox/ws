@@ -22,10 +22,14 @@ export type BatchProgress = {
 	pending: number;
 	createdAt: string;
 	items: {
+		/** Идентификатор команды — по нему её отменяют, пока она не начата. */
+		commandId: string | null;
 		baseKey: string | null; state: string; error: { code: string; message: string } | null;
 		/** Итог операции одной строкой: путь к выгрузке, адрес публикации. */
 		outcome: string | null;
 	}[];
+	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
+	cancelable: number;
 };
 
 /**
@@ -85,11 +89,12 @@ export class BatchService {
 		if (!head) return null;
 
 		const c = await this.db.query<{
+			id: string;
 			base_key: string | null; state: string; error: { code: string; message: string } | null; outcome: string | null;
 		}>(
 			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
-			`SELECT base_key, state, error, COALESCE(result->>'path', result->>'url') AS outcome
+			`SELECT id, base_key, state, error, COALESCE(result->>'path', result->>'url') AS outcome
 			   FROM commands WHERE batch_id = $1 ORDER BY created_at`, [id],
 		);
 		// Ошибку 1С/COM дополняем подсказкой «что чинить»: сырой HRESULT в отчёте задания
@@ -112,7 +117,8 @@ export class BatchService {
 			 ) AS ok`,
 		)).rows[0]?.ok === true;
 
-		const items = c.rows.map((r) => ({
+		const items: BatchProgress["items"] = c.rows.map((r) => ({
+			commandId: r.id as string | null,
 			baseKey: r.base_key,
 			state: r.state,
 			error: humanizeAgentError(r.error, r.base_key
@@ -127,6 +133,7 @@ export class BatchService {
 		if (missing > 0 && ageMs > LOST_AFTER_MS) {
 			for (let i = 0; i < missing; i++) {
 				items.push({
+					commandId: null,
 					baseKey: null, state: "expired", outcome: null,
 					error: { code: "COMMAND_LOST", message: "Команда не найдена: срок её жизни истёк. Повторите операцию." },
 				});
@@ -134,11 +141,15 @@ export class BatchService {
 		}
 
 		const done = items.filter((i) => i.state === "done").length;
-		// expired считаем неуспехом: команда не выполнена, и повторять её придётся так же.
-		const failed = items.filter((i) => i.state === "failed" || i.state === "expired").length;
+		// expired и canceled считаем неуспехом: команда не выполнена, и если она нужна —
+		// повторять её придётся так же. Отмену при этом видно отдельной подписью строки.
+		const failed = items.filter((i) =>
+			i.state === "failed" || i.state === "expired" || i.state === "canceled").length;
 		return {
 			id: head.id, type: head.type, total: head.total,
 			done, failed, pending: Math.max(0, head.total - done - failed),
+			// Отменить можно только не начатое: см. queue.cancel.
+			cancelable: items.filter((i) => i.state === "queued").length,
 			createdAt: head.created_at.toISOString(), items,
 		};
 	}

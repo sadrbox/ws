@@ -37,8 +37,19 @@ import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
 /** Состояние агента одним словом: отключён — это не «оффлайн», а решение администратора. */
-const stateLabel = (a: { disabled: boolean; online: boolean }): string =>
-	a.disabled ? translate("onecAgentDisabled") : a.online ? translate("onecAgentOnline") : translate("onecAgentOffline");
+/**
+ * Состояние агента: три ответа, а не два.
+ *
+ * «Выполняет команду» — не то же самое, что «на связи»: агент как раз молчит, и молчание
+ * ожидаемо, пока идёт взятая им работа. Пока оба состояния назывались «на связи», человек,
+ * остановивший службу посреди команды, видел «на связи» и не понимал, почему ничего не
+ * происходит; а пока оба назывались «не на связи» — панель отказывала в командах занятому
+ * агенту. Разные состояния — разные слова.
+ */
+export const stateLabel = (a: { disabled: boolean; online: boolean; busy?: boolean }): string =>
+	a.disabled ? translate("onecAgentDisabled")
+		: a.busy ? translate("onecAgentBusy")
+			: a.online ? translate("onecAgentOnline") : translate("onecAgentOffline");
 
 export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	const row = (paneProps.data ?? {}) as TDataItem;
