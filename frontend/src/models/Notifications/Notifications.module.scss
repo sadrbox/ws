@@ -47,9 +47,15 @@
 	padding: 40px;
 }
 
+// Прокрутку держит сам список (у него рамка с липкой шапкой и подвалом, как у таблицы):
+// вторая прокрутка снаружи увела бы шапку вверх вместе со строками.
 .JournalList {
 	flex: 1;
-	overflow-y: auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	padding: 6px;
 }
 
 .JournalItem {
