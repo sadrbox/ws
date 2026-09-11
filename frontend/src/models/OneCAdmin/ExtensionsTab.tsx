@@ -13,30 +13,25 @@
  * а одно и то же имя в разных базах может принадлежать разным расширениям — склеивать их
  * в одну строку значило бы врать о том, что стоит одинаковое.
  */
-import { FC, useCallback, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FC, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Table from "src/components/Table";
-import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
-import FieldToggle from "src/components/Field/FieldToggle";
 import { GroupCol, GroupRow } from "src/components/UI";
-import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import {
-	fetchBases, fetchBatch, fetchExtensionSummary, runBatch, type BatchType,
-} from "src/services/onec/api";
+import { fetchBases, fetchExtensionSummary } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
 import { CapabilityGuard, QueryError, isApplicable, useBaseContentCheck } from "./shared";
-import { attachBatch, startOp } from "./progress";
+import { useOpenGroupCommand } from "./GroupCommandWizard";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import styles from "./OneCAdmin.module.scss";
 
@@ -54,22 +49,11 @@ const baseColumns = (): TColumn[] => ([
 ] as unknown as TColumn[]);
 
 /** Файл .cfe → base64: агент не ходит за ним в сеть, файл едет телом команды. */
-const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-	const reader = new FileReader();
-	reader.onerror = () => reject(new Error(translate("onecExtFileRequired")));
-	reader.onload = () => resolve(typeof reader.result === "string" ? (reader.result.split(",")[1] ?? "") : "");
-	reader.readAsDataURL(file);
-});
-
-export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ onBatchStarted }) => {
-	const qc = useQueryClient();
+export const ExtensionsTab: FC = () => {
 	const openBase = useOpenOnecBase();
 
 	const [pickedExt, setPickedExt] = useState<string[]>([]);
 	const [pickedBases, setPickedBases] = useState<string[]>([]);
-	const [dialog, setDialog] = useState<null | "install" | "remove">(null);
-	const [form, setForm] = useState({ name: "", safeMode: true });
-	const [file, setFile] = useState<File | null>(null);
 
 	const summary = useQuery({ queryKey: ["onec", "ext-summary"], queryFn: fetchExtensionSummary });
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
@@ -108,64 +92,18 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 	}), [pickedBases, bases.data, current]);
 	const present = pickedBases.filter((k) => !missing.includes(k));
 
-	const batch = useMutation({
-		// Операция видна в «Прогрессе запросов и команд»: установка расширения по десяткам
-		// баз идёт минутами, и «задание поставлено» — это ещё не ответ о том, чем кончилось.
-		mutationFn: async (p: { type: BatchType; keys: string[]; payload: Record<string, unknown> }) => {
-			const op = startOp({
-				kind: p.type === "IB_DELETE_EXTENSION" ? "delete" : "create",
-				title: translate(p.type === "IB_DELETE_EXTENSION" ? "onecExtRemove" : "onecExtInstall"),
-				target: `${asText(p.payload.name)} · ${translate("onecBases")}: ${p.keys.length}`,
-				total: p.keys.length,
-				scope: { bases: p.keys },
-			});
-			const r = await runBatch(p.type, p.keys, p.payload);
-			attachBatch(op, r.batchId, r.total, r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
-			return r;
-		},
-		onSuccess: (d) => {
-			setDialog(null);
-			const skipped = d.skipped.length ? ` ${translate("onecBatchSkipped")}: ${d.skipped.length}` : "";
-			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}.${skipped}`, d.skipped.length ? "warning" : "success");
-			onBatchStarted(d.batchId);
-			void watchBatch(d.batchId);
-		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
-	});
-
-	/** Дождаться конца задания и перечитать: иначе экран остаётся с картиной «до». */
-	const watchBatch = useCallback(async (batchId: string) => {
-		let pause = 2000;
-		const until = Date.now() + 15 * 60_000;
-		while (Date.now() < until) {
-			await new Promise((r) => setTimeout(r, pause));
-			pause = Math.min(15_000, Math.round(pause * 1.4));
-			const b = await fetchBatch(batchId).catch(() => null);
-			if (!b) return;
-			if (b.pending === 0) break;
-		}
-		await qc.invalidateQueries({ queryKey: ["onec", "ext-summary"] });
-		await qc.invalidateQueries({ queryKey: ["onec", "bases"] });
-	}, [qc]);
+	/*
+	 * Отправки задания здесь БОЛЬШЕ НЕТ: групповые операции выполняет помощник
+	 * (GroupCommandWizard) — он спрашивает базы, параметры и показывает, что произойдёт,
+	 * он же заводит запись в «Прогрессе». Экран остался тем, чем и должен быть: сводкой
+	 * «какое расширение в каких базах стоит».
+	 */
+	const openWizard = useOpenGroupCommand();
 
 	// Чтение расширений баз — тем же механизмом, что и пользователей (см.
 	// useBaseContentCheck): операция видна в «Прогрессе запросов и команд», её итог
 	// приходит сообщением, сводки после неё перечитываются.
 	const check = useBaseContentCheck("extensions");
-
-	const apply = useCallback(async () => {
-		const name = (current || form.name).trim();
-		if (!name || !pickedBases.length) return;
-		if (dialog === "remove") {
-			batch.mutate({ type: "IB_DELETE_EXTENSION", keys: pickedBases, payload: { name } });
-			return;
-		}
-		if (!file) { showToast(translate("onecExtFileRequired"), "error"); return; }
-		batch.mutate({
-			type: "IB_INSTALL_EXTENSION", keys: pickedBases,
-			payload: { name, safeMode: form.safeMode, contentBase64: await toBase64(file) },
-		});
-	}, [batch, current, form, file, dialog, pickedBases]);
 
 	return (
 		<>
@@ -188,15 +126,11 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 						 * «целей: 3». Работаем с активной строкой, а множественность живёт там,
 						 * где она настоящая, — в выборе БАЗ ниже.
 						 */
-						onActiveRowChange: (r) => {
-							const name = r ? asText(r.name) : "";
-							setPickedExt(name ? [name] : []);
-							if (name) setForm((f) => ({ ...f, name }));
-						},
+						onActiveRowChange: (r) => setPickedExt(r ? [asText(r.name)] : []),
 						extraButtons: (
-							<Button variant="secondary" disabled={!pickedBases.length}
+							<Button variant="secondary"
 								title={translate("onecExtInstall")}
-								onClick={() => { setPickedExt([]); setForm({ name: "", safeMode: true }); setFile(null); setDialog("install"); }}>
+								onClick={() => { setPickedExt([]); openWizard("installExt", pickedBases, ""); }}>
 								<Icon name="plus" /> {translate("create")}
 							</Button>
 						),
@@ -222,11 +156,6 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 										<Field name="ex_ver" label={translate("version")}
 											value={(currentRow?.versions ?? []).join(", ") || "—"} disabled width={FIELD_WIDTH.md} onChange={() => {}} />
 									</GroupRow>
-									<GroupRow>
-										<input type="file" accept=".cfe" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-										<FieldToggle name="ex_safe" label={translate("onecExtSafeMode")} value={form.safeMode}
-											onChange={(v) => setForm((f) => ({ ...f, safeMode: v }))} />
-									</GroupRow>
 								</GroupCol>
 							</div>
 
@@ -248,15 +177,22 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 									setPickedBases(all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.baseKey))),
 								// Строка — база: двойной щелчок открывает её карточку.
 								onRowClick: (r) => openBase(asText(r.baseKey)),
+								/*
+								 * Групповые операции — ТОЛЬКО через помощник: набор баз, параметры
+								 * и «что произойдёт» он спрашивает по шагам. Здешние отметки уходят
+								 * заготовкой, имя расширения — тоже: то, что уже известно, человек
+								 * вводить не должен.
+								 */
 								extraButtons: (
 									<>
 										<Button variant="primary" disabled={!missing.length}
-											title={missing.length ? undefined : translate("onecExtAlreadyEverywhere")}
-											onClick={() => setDialog("install")}>
+											title={missing.length ? translate("onecExtInstall") : translate("onecExtAlreadyEverywhere")}
+											onClick={() => openWizard("installExt", missing, current)}>
 											<Icon name="download" /> {translate("onecExtInstall")}
 										</Button>
 										<Button variant="danger" disabled={!present.length}
-											onClick={() => setDialog("remove")}>
+											title={present.length ? translate("onecExtRemove") : translate("onecPickBasesFirst")}
+											onClick={() => openWizard("deleteExt", present, current)}>
 											<Icon name="trash" /> {translate("onecExtRemove")}
 										</Button>
 									</>
@@ -290,25 +226,6 @@ export const ExtensionsTab: FC<{ onBatchStarted: (id: string) => void }> = ({ on
 				</div>
 			</div>
 
-			{dialog && (
-				<Modal
-					title={dialog === "install" ? translate("onecExtInstall") : translate("onecExtRemove")}
-					onClose={() => setDialog(null)}
-					onApply={() => void apply()}
-				>
-					<div className={styles.ModalForm}>
-						{!current && dialog === "install" && (
-							<Field name="ex_new" label={translate("onecExtName")} value={form.name} noAutofill
-								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
-						)}
-						<div>{translate("onecExtName")}: {current || form.name}</div>
-						<div>{translate("onecBatchTargets")}: {dialog === "install" ? (missing.length || pickedBases.length) : present.length}</div>
-						<div className={styles.ConfirmWarning}>
-							{dialog === "install" ? translate("onecExtInstallWarning") : translate("onecExtRemoveWarning")}
-						</div>
-					</div>
-				</Modal>
-			)}
 		</>
 	);
 };

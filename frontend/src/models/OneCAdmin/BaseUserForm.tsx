@@ -47,7 +47,7 @@ import { attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps } f
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "inBases", type: "string", width: "140px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "inBase", type: "string", width: "140px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "changedLabel", type: "string", width: "130px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
@@ -79,7 +79,6 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 
 	const [baseKey, setBaseKey] = useState(asText(row.baseKey));
 	const [draft, setDraft] = useState<Draft>(new Map());
-	const [expanded, setExpanded] = useState<Set<string>>(new Set());
 	/** Строка вкладки «Базы», выбранная одиночным щелчком: цель «Открыть в другой базе». */
 	const [activeOccurrence, setActiveOccurrence] = useState("");
 	const [form, setForm] = useState({ name: "", fullName: "", password: "", disabled: false, showInList: true });
@@ -190,7 +189,18 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		});
 	}, [rolesByBase, isOn]);
 
-	// ── Права: строки = роли, раскрытие = базы ──────────────────────────────
+	/*
+	 * ── ПРАВА — ПО ОДНОЙ БАЗЕ, ТОЙ, ЧТО ВЫБРАНА В «ОСНОВНОМ» ────────────────
+	 *
+	 * Карточка — про пару «человек + база»: база названа в её первой же вкладке, и права
+	 * здесь относятся к ней. Раньше строка роли была заголовком группы и считала «в
+	 * скольких базах из скольких» роль есть, а отдельная база пряталась во вложенной
+	 * строке: карточка одной базы незаметно правила остальные, и человек, снявший галочку,
+	 * не мог сказать, где именно она снялась.
+	 *
+	 * Групповая правка никуда не делась — она переехала туда, где ей и место: в помощник
+	 * группового редактирования, где базы выбирают явным шагом (см. BaseUserWizard).
+	 */
 	const allRoles = useMemo(() => {
 		const own = [...new Set(occ.flatMap((o) => o.roles ?? []))];
 		const known = (roles.data?.items ?? []).map((r) => r.name);
@@ -198,53 +208,26 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	}, [occ, roles.data]);
 
 	const [rightsCols, setRightsCols] = useState<TColumn[]>(() => getModelColumns(rightsColumns(), "OneCAdmin_bufRights"));
-	const rightsRows = useMemo(() => allRoles.map((role, i) => {
-		// Строка роли — ЗАГОЛОВОК ГРУППЫ: её значения считаются по всем базам человека,
-		// а не по выбранной. Отдельная база видна в своей вложенной строке.
-		const changed = occ.filter((o) => draft.has(draftKey(o.baseKey, role))).length;
-		return {
-			id: i + 1, uuid: role, role,
-			inBases: `${occ.filter((o) => isOn(o.baseKey, role)).length} / ${occ.length}`,
-			changedLabel: changed ? `${translate("onecChanged")}: ${changed}` : "",
-		};
-	}), [allRoles, occ, isOn, draft]);
+	const rightsRows = useMemo(() => allRoles.map((role, i) => ({
+		id: i + 1, uuid: role, role,
+		// «Есть в базе» — ответ про ЭТУ базу, а не счёт по всем: счёт здесь не значил бы
+		// ничего, кроме того, что человек заведён и где-то ещё.
+		inBase: isOn(baseKey, role) ? translate("yes") : translate("no"),
+		changedLabel: draft.has(draftKey(baseKey, role)) ? translate("onecChanged") : "",
+	})), [allRoles, baseKey, isOn, draft]);
 	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
 
-	/**
-	 * Раскрытие роли — СТРОКИ ТАБЛИЦЫ, а не врезка.
-	 *
-	 * Потомки рисуются тем же TableBodyRow и в тех же колонках: «Роль» показывает базу,
-	 * «Есть в базах» — её название, «Изменение» — пометку правки. Отметка потомка живёт
-	 * в его данных (`__selected`), переключение приходит обратно колбэком.
-	 */
-	const childRows = useCallback((r: TDataItem): TDataItem[] => {
-		const role = asText(r.role);
-		// Ни одной базы — значит содержимое ещё не читали: строка об этом честнее пустого
-		// раскрытия, из которого не понять, «нет прав» или «не спрашивали».
-		if (!occ.length) {
-			return [{
-				id: -1, uuid: `${role}|none`, role: translate("onecUserNeverRead"),
-				inBases: "", changedLabel: "", __selected: false,
-			}];
-		}
-		return occ.map((o, i) => ({
-			// Отрицательные идентификаторы: пространство строк у потомков своё, и они не
-			// должны совпасть с идентификаторами ролей (отметки/активная строка — по ним).
-			id: -(i + 1), uuid: `${role}|${o.baseKey}`,
-			role: o.baseKey,
-			inBases: o.baseName || "—",
-			changedLabel: draft.has(draftKey(o.baseKey, role)) ? translate("onecChanged") : "",
-			__selected: isOn(o.baseKey, role),
-			__role: role, __base: o.baseKey,
-		}));
-	}, [occ, draft, isOn]);
+	/** Отмеченные строки = роли, выданные в этой базе (с учётом черновика). */
+	const rightsSelected = useMemo(
+		() => new Set(rightsView.rows.filter((r) => isOn(baseKey, asText(r.role))).map((r) => Number(r.id))),
+		[rightsView.rows, baseKey, isOn],
+	);
 
-	const toggleChild = useCallback((child: TDataItem, next: boolean) => {
-		const base = asText(child.__base);
-		const role = asText(child.__role);
-		if (!base || !role || next === isOn(base, role)) return;
-		toggle(base, role);
-	}, [isOn, toggle]);
+	/*
+	 * Вложенных строк здесь БОЛЬШЕ НЕТ: раскрытие роли базами — инструмент ГРУППОВОЙ
+	 * правки, и он переехал в помощник (BaseUserWizard), где базы выбирают явным первым
+	 * шагом. Карточка правит одну базу — ту, что названа в «Основном».
+	 */
 
 	// ── Базы, где заведён человек ───────────────────────────────────────────
 	const [basesCols, setBasesCols] = useState<TColumn[]>(() => getModelColumns(basesColumns(), "OneCAdmin_bufBases"));
@@ -527,26 +510,25 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							reloading: occurrences.isFetching,
 							onReload: () => void occurrences.refetch(),
 							reloadTitle: translate("onecReloadCached"),
-							// Активной строки здесь нет: в этой таблице строка — не «текущая запись»,
-							// а набор отметок и раскрытий. Подсветка активной строки спорила бы с
-							// подложкой группы и уводила фокус, ничего не давая взамен.
+							// Активной строки здесь нет: строка — не «текущая запись», а отметка.
 							disableActiveRow: true,
-							// Отметка роли — групповая: полная, если роль есть во ВСЕХ базах человека,
-							// промежуточная, если в части. Отдельная база правится своей вложенной
-							// строкой; обе отметки — одна и та же правка, просто разного охвата.
+							/*
+							 * ОТМЕТКА = РОЛЬ ВЫДАНА В ЭТОЙ БАЗЕ. Ни групповых отметок, ни вложенных
+							 * строк: карточка правит одну базу — ту, что выбрана в «Основном».
+							 * Вложенные строки по базам остались в помощнике группового
+							 * редактирования, где базы выбирают явным шагом.
+							 */
 							selectable: !locked,
-							// Раскрывает роль базами шеврон в ячейке группы. На одиночный клик это
-							// не вешаем: переход по строке (в том числе стрелками) не должен
-							// разворачивать группы.
-							expandedRowIds: expanded,
-							onToggleExpand: (r) => setExpanded((prev) => {
-								const key = asText(r.uuid);
-								const next = new Set(prev);
-								if (!next.delete(key)) next.add(key);
-								return next;
-							}),
-							childRows,
-							onChildToggle: (_parent, child, next) => toggleChild(child, next),
+							presetSelectedRows: rightsSelected,
+							onSelectionChange: (sel, all) => {
+								// Сравниваем с текущим состоянием и записываем в черновик только
+								// РАЗНИЦУ: иначе каждое перерисовывание таблицы выглядело бы правкой.
+								for (const r of all) {
+									const role = asText(r.role);
+									const now = sel.has(Number(r.id));
+									if (now !== isOn(baseKey, role)) toggle(baseKey, role);
+								}
+							},
 							extraButtons: (
 								<>
 									<Button variant="secondary" disabled={!draft.size || locked}

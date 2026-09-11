@@ -432,9 +432,7 @@ const PreviewTabs: FC<{ row: TDataItem }> = ({ row }) => <>{useBaseTabs(row)[0].
 export const OneCBasesList: FC<{
 	variant?: TTableVariant;
 	onSelectItem?: (item: TDataItem) => void;
-	/** Запущенное задание открывают сразу: групповая операция не должна уходить «в никуда». */
-	onBatchStarted?: (batchId: string) => void;
-}> = ({ variant, onSelectItem, onBatchStarted }) => {
+}> = ({ variant, onSelectItem }) => {
 	// Платформа: у баз она пуста (агент не заполняет поле в срезе), поэтому подставляем
 	// версию сервера, за который отвечает админ-агент, — см. карточку базы.
 	const agents = useAgents();
@@ -491,9 +489,9 @@ export const OneCBasesList: FC<{
 			return undefined;
 		}}
 		previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
-		// Групповые команды по отмеченным базам: публикация и её снятие, пользователи,
-		// расширения. Здесь набор баз уже выбран — уходить за ним на другую вкладку незачем.
-		extraButtons={(selected) => <BaseGroupCommands selected={selected} onBatchStarted={onBatchStarted} />}
+		// Групповые команды по отмеченным базам. Отметки — заготовка: набор целей,
+		// параметры и «что произойдёт» спрашивает помощник, он же заводит задание.
+		extraButtons={(selected) => <BaseGroupCommands selected={selected} />}
 	/>
 	);
 };

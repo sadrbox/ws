@@ -32,6 +32,7 @@ import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
+import { useOpenBaseUserWizard } from "./BaseUserWizard";
 import BaseGroupCommands from "./BaseGroupCommands";
 import { withOp } from "./progress";
 import { useOpenOnecBase } from "src/models/OneCBases";
@@ -66,6 +67,7 @@ export const UsersTab: FC = () => {
 	const [pickedBases, setPickedBases] = useState<TDataItem[]>([]);
 
 	const openCard = useOpenBaseUser();
+	const openWizard = useOpenBaseUserWizard();
 	const openBase = useOpenOnecBase();
 	const qc = useQueryClient();
 
@@ -191,6 +193,10 @@ export const UsersTab: FC = () => {
 			// таблицу показали рядом.
 			onActiveRowChange: (r) => setActiveBase(r ? asText(r.baseKey) : ""),
 			onRowClick: (r) => openBase(asText(r.baseKey)),
+			/*
+			 * Групповые команды по пользователям — через помощник: набор баз, параметры и
+			 * «что произойдёт» он спрашивает по шагам. Отметки строк уходят заготовкой.
+			 */
 			extraButtons: <BaseGroupCommands selected={pickedBases} groups={["users"]} />,
 		})} />
 	);
@@ -259,6 +265,16 @@ export const UsersTab: FC = () => {
 							: (!activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))}
 						onClick={() => openCard(activeUser, activeBase)}>
 						<Icon name="open" /> {translate("onecOpenCard")}
+					</Button>
+					{/*
+					  * Групповая правка одного человека сразу в нескольких базах — помощником:
+					  * базы выбирают явным шагом, расхождения видно до применения. Карточка
+					  * пары правит ОДНУ базу и в чужие не лезет.
+					  */}
+					<Button variant="secondary" disabled={!activeUser}
+						title={activeUser ? `${translate("onecUserGroupEdit")}: ${activeUser}` : translate("onecPickUserFirst")}
+						onClick={() => openWizard(activeUser)}>
+						<Icon name="editInline" /> {translate("onecUserGroupEdit")}
 					</Button>
 				</span>
 			</div>

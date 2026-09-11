@@ -1,0 +1,126 @@
+@use "src/styles/variables" as *;
+
+// Каркас помощника: полоса шагов, тело, полоса кнопок. Прокручивается ТОЛЬКО тело —
+// поэтому переход между шагами не двигает кнопки под курсором.
+.Wizard {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	gap: 12px;
+	padding: 12px;
+}
+
+.Steps {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: stretch;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	flex-wrap: wrap;
+}
+
+.Step {
+	display: flex;
+}
+
+// Пройденный шаг — кнопка возврата: щёлкнуть по нему быстрее, чем жать «Назад» трижды.
+// Непройденный выключен: перепрыгнуть вопрос, на который не ответили, нельзя.
+.StepButton {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 12px;
+	border: 1px solid $color34;
+	border-radius: var(--radius-3, 3px);
+	background: $color30;
+	color: $color51;
+	cursor: pointer;
+	font-size: $fontsize;
+	white-space: nowrap;
+
+	&:disabled {
+		cursor: default;
+		opacity: 0.7;
+	}
+}
+
+.StepNumber {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border-radius: 9px;
+	background: $color33;
+	color: $color6;
+	font-weight: 700;
+	font-size: $fontsize - 2px;
+}
+
+// Подпись шага: длинное название не должно распирать полосу — она одна на все шаги.
+.StepTitle {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 220px;
+}
+
+.StepCurrent .StepButton {
+	background: var(--sv-color60);
+	border-color: $colorPrimaryDark;
+	color: $color6;
+	font-weight: 600;
+}
+
+.StepCurrent .StepNumber {
+	background: $colorPrimaryDark;
+	color: #fff;
+}
+
+.StepDone .StepButton {
+	color: $color6;
+}
+
+.StepDone .StepNumber {
+	background: var(--sv-successText, #145523);
+	color: #fff;
+}
+
+.Hint {
+	flex: 0 0 auto;
+	color: $color51;
+	font-size: $fontsize;
+}
+
+.Body {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.Foot {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.FootSpacer {
+	flex: 1 1 auto;
+}
+
+// Одна иконка на оба направления: «Назад» — влево, «Далее» — вправо. Классом, а не
+// позицией в разметке: порядок кнопок — не то, на чём держат оформление.
+.CaretBack {
+	display: inline-flex;
+	transform: rotate(90deg);
+}
+
+.CaretNext {
+	display: inline-flex;
+	transform: rotate(-90deg);
+}

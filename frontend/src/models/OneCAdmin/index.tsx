@@ -104,8 +104,6 @@ const AgentsSection: FC = () => {
 export const OneCAdminList: FC = () => {
 	const [tab, setTab] = useState<Tab>("bases");
 	const [sideTab, setSideTab] = useState<SideTab>("progress");
-	// Запущенное задание открываем сразу: иначе групповая операция уходит «в никуда».
-	const [watchBatch, setWatchBatch] = useState<string>("");
 
 	/**
 	 * Слежение за командами — НА УРОВНЕ ПАНЕЛИ, а не вкладки.
@@ -134,7 +132,7 @@ export const OneCAdminList: FC = () => {
 			// Штатный список: ModelList даёт отметки строк, поиск, сортировку, курсорную
 			// подгрузку, предпросмотр по «Переключить вид списка» и открытие карточки
 			// отдельным пейном. Своя таблица здесь была ровно тем же, но хуже.
-			component: tab === "bases" ? <OneCBasesList onBatchStarted={(id) => { setWatchBatch(id); setSideTab("batches"); }} /> : null,
+			component: tab === "bases" ? <OneCBasesList /> : null,
 		},
 		{
 			id: "cluster",
@@ -144,9 +142,7 @@ export const OneCAdminList: FC = () => {
 		{
 			id: "extensions",
 			label: translate("onecTabExtensions"),
-			component: tab === "extensions"
-				? <ExtensionsTab onBatchStarted={(id) => { setWatchBatch(id); setSideTab("batches"); }} />
-				: null,
+			component: tab === "extensions" ? <ExtensionsTab /> : null,
 		},
 		{
 			id: "users",
@@ -185,7 +181,7 @@ export const OneCAdminList: FC = () => {
 								{
 									id: "batches",
 									label: translate("onecTabBatches"),
-									component: <BatchesTab watchId={watchBatch} />,
+									component: <BatchesTab />,
 								},
 							]}
 						/>
