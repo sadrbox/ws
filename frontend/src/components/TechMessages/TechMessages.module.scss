@@ -76,165 +76,35 @@
 	text-overflow: ellipsis;
 }
 
-.Tools {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
+// Тело области отдано таблице целиком: прокрутку и липкую шапку она держит сама, и
+// внешний overflow отнял бы у неё обе — строки поехали бы под заголовок.
 .Body {
 	flex: 1 1 auto;
 	min-height: 0;
-	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
 }
 
-.Foot {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	border-top: 1px solid $color33;
-	padding-top: 6px;
-}
-
-.Empty {
-	color: $color51;
-	opacity: 0.75;
-	padding: 6px;
-}
-
-// ── Группа: вид объекта («Реализации», «Базы 1С») ────────────────────────────
-// Заголовок — кнопка: он же и переключатель свёрнутости. Кликабельной должна быть вся
-// строка, а не одна стрелка: попадать курсором в иконку 10×10 — работа, а не действие.
-//
-// Имя НЕ `.Group`: такой класс объявлен в общем variables.scss, который подмешивается в
-// каждый модуль, и модульный `.Group` молча получил бы чужие правила. На этом уже дважды
-// ломалась вёрстка (строки таблицы, цвет текста кнопок) — линтер css-modules-lint ловит
-// такие совпадения именно поэтому.
-.MsgGroup {
-	display: flex;
-	flex-direction: column;
-	border: 1px solid $color33;
-	border-radius: var(--radius-3, 3px);
-	overflow: hidden;
-}
-
-.GroupHead {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	width: 100%;
-	padding: 3px 6px;
-	border: none;
-	background: $color30;
-	cursor: pointer;
-	text-align: left;
-	color: $color6;
-	font-size: $fontsize;
-
-	&:hover {
-		background: $color33;
-	}
-
-	svg {
-		width: 10px;
-		height: 10px;
-		display: block;
-	}
-}
-
-.GroupTitle {
-	font-weight: 600;
-	margin-right: auto;
-	white-space: nowrap;
+// Показ — ТАБЛИЦЕЙ (MessagesTable), поэтому разметки карточек здесь больше нет: строки,
+// группы и раскрытие рисует <Table />. Своим остаётся ровно одно — цвет самого сообщения
+// по его палитре: в остальном это обычная ячейка обычной таблицы.
+.MsgText {
+	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-
-// Сколько в группе АКТУАЛЬНЫХ сообщений — то, ради чего в список и смотрят.
-.GroupActive {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 18px;
-	height: 18px;
-	padding: 0 3px;
-	border-radius: 9px;
-	background: var(--sv-attention, #b91c1c);
-	color: #fff;
-	font-size: $fontsize - 2px;
-	font-weight: 700;
-}
-
-// Всего записей в группе, включая прошедшие: даёт понять объём, не крича.
-.GroupTotal {
-	color: $color51;
-	font-size: $fontsize - 1px;
-}
-
-.GroupBody {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 6px;
-}
-
-.Row {
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-}
-
-.RowHead {
-	display: flex;
-	align-items: baseline;
-	gap: 6px;
-}
-
-// Когда это случилось. Прижато вправо вместе с крестиком: слева — о чём речь.
-.When {
-	color: $color51;
-	font-size: $fontsize - 1px;
-	margin-left: auto;
 	white-space: nowrap;
-}
 
-.Dismiss {
-	border: none;
-	background: transparent;
-	cursor: pointer;
-	color: $color51;
-	padding: 0 3px;
-	line-height: 1;
+	&[data-type="error"],
+	&[data-type="attention"] {
+		color: var(--sv-attentionText, #6b1119);
+	}
 
-	&:hover {
-		color: $color6;
+	&[data-type="warning"] {
+		color: var(--sv-warningText, #7a4d12);
+	}
+
+	&[data-type="success"] {
+		color: var(--sv-successText, #145523);
 	}
 }
 
-.RowActions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-// Кто сообщил: без источника сообщение в общем списке не отвечает на вопрос «где это».
-.Source {
-	color: $color51;
-	font-size: $fontsize - 1px;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-// Раскрытая история: та же стрелка, перевёрнутая.
-.CaretOpen {
-	display: inline-flex;
-	transform: rotate(180deg);
-}

@@ -8,7 +8,7 @@
  * ДАННЫЕ ТЕ ЖЕ. Раньше это был «Центр уведомлений» со своим чтением своего журнала в
  * localStorage — то есть второй механизм рядом с уведомлениями панелей и третий рядом с
  * `<Notice />` форм. Теперь хранилище одно (components/TechMessages/store), а этот экран —
- * лишь другой его вид: тот же список, та же группировка по объекту, те же действия.
+ * лишь другой его вид: та же таблица, та же группировка по объекту, те же действия.
  */
 import type { TDataItem } from "src/components/Table/types";
 import { FC } from "react";
@@ -16,7 +16,7 @@ import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { APP_SCOPE, clearNoticeHistory, useScopedNotices } from "src/components/TechMessages/store";
-import MessageList from "src/components/TechMessages/MessageList";
+import MessagesTable from "src/components/TechMessages/MessagesTable";
 import main from "src/styles/main.module.scss";
 import styles from "./Notifications.module.scss";
 
@@ -41,7 +41,9 @@ const NotificationsList: FC<NotificationsListProps> = () => {
 				</Button>
 			</div>
 			<div className={styles.JournalList}>
-				<MessageList messages={messages} />
+				{/* Полный вид — та же таблица, но со своим именем: настройки колонок узкой
+				    области и этого экрана не должны спорить друг с другом. */}
+				<MessagesTable componentName="TechMessages_full" messages={messages} />
 			</div>
 		</div>
 	);
