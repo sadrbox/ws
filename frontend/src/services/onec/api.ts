@@ -148,6 +148,12 @@ export const setSessionsLock = (baseKey: string, enabled: boolean, message?: str
 /** `seenAt` — когда это читали у самой 1С: из кэша реестра либо проставлено чтением. */
 export type IbUser = {
 	name: string; fullName?: string; disabled?: boolean; roles?: string[];
+	/**
+	 * Показывать в списке выбора при входе. ТРЁХЗНАЧНО: `null`/отсутствие — «агент не
+	 * сообщил», и это не «выключено». Панель умеет признак записывать, но читает его только
+	 * у тех сборок агента, которые возвращают его в списке пользователей.
+	 */
+	showInList?: boolean | null;
 	seenAt?: string | null;
 };
 export type IbExtension = {

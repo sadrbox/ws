@@ -10,7 +10,16 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 
-export type IbUser = { name: string; fullName?: string; disabled?: boolean; roles?: string[] };
+export type IbUser = {
+	name: string; fullName?: string; disabled?: boolean; roles?: string[];
+	/**
+	 * Показывать в списке выбора при входе. Трёхзначно: отсутствие поля — «агент не
+	 * сообщил», а не «нет». Панель умеет этот признак записывать, но пока не всякая сборка
+	 * агента возвращает его в списке пользователей — и выдавать незнание за «выключено»
+	 * значило бы показывать выдуманное значение как факт.
+	 */
+	showInList?: boolean | null;
+};
 export type IbExtension = {
 	name: string;
 	/** Синоним — человеческое имя расширения; служебное Имя часто нечитаемо. */
@@ -36,12 +45,18 @@ export class OnecRegistry {
 			const name = (u.name ?? "").trim();
 			if (!name) continue;
 			await this.db.query(
-				`INSERT INTO base_users (id, base_id, name, full_name, disabled, roles, seen_at)
-				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, false), $6::jsonb, now())
+				`INSERT INTO base_users (id, base_id, name, full_name, disabled, roles, show_in_list, seen_at)
+				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, false), $6::jsonb, $7, now())
 				 ON CONFLICT (base_id, lower(name)) DO UPDATE
 				    SET name = EXCLUDED.name, full_name = EXCLUDED.full_name,
-				        disabled = EXCLUDED.disabled, roles = EXCLUDED.roles, seen_at = now()`,
-				[randomUUID(), baseId, name, u.fullName ?? null, u.disabled ?? null, JSON.stringify(u.roles ?? [])],
+				        disabled = EXCLUDED.disabled, roles = EXCLUDED.roles,
+				        -- «Поля нет» значит «агент не сообщил»: прежнее знание сохраняем, как
+				        -- и у публикации. Иначе сборка, которая признак не отдаёт, стирала бы
+				        -- его при каждом чтении списка.
+				        show_in_list = COALESCE(EXCLUDED.show_in_list, base_users.show_in_list),
+				        seen_at = now()`,
+				[randomUUID(), baseId, name, u.fullName ?? null, u.disabled ?? null,
+					JSON.stringify(u.roles ?? []), u.showInList ?? null],
 			);
 		}
 		await this.db.query(
@@ -206,12 +221,20 @@ export class OnecRegistry {
 	}
 
 	async usersOfBase(baseId: string): Promise<(IbUser & { seenAt: string })[]> {
-		const r = await this.db.query<{ name: string; full_name: string; disabled: boolean; roles: string[]; seen_at: Date }>(
-			`SELECT name, full_name, disabled, roles, seen_at FROM base_users WHERE base_id = $1 ORDER BY name`, [baseId],
+		const r = await this.db.query<{
+			name: string; full_name: string; disabled: boolean; roles: string[];
+			show_in_list: boolean | null; seen_at: Date;
+		}>(
+			`SELECT name, full_name, disabled, roles, show_in_list, seen_at
+			   FROM base_users WHERE base_id = $1 ORDER BY name`, [baseId],
 		);
 		return r.rows.map((x) => ({
 			name: x.name, fullName: x.full_name, disabled: x.disabled,
-			roles: x.roles ?? [], seenAt: x.seen_at.toISOString(),
+			roles: x.roles ?? [],
+			// null остаётся null: «агент не сообщил» — не «выключено». Панель по этому
+			// признаку и решает, показывать ли значение как факт или спросить, что записать.
+			showInList: x.show_in_list,
+			seenAt: x.seen_at.toISOString(),
 		}));
 	}
 

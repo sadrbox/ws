@@ -45,6 +45,7 @@ import { Icon } from "src/components/IconButton/icons";
 import { QueryError } from "./shared";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import { attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps } from "./progress";
+import { buildUserUpdate } from "./userUpdate";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
@@ -82,7 +83,24 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const [draft, setDraft] = useState<Draft>(new Map());
 	/** Строка вкладки «Базы», выбранная одиночным щелчком: цель «Открыть в другой базе». */
 	const [activeOccurrence, setActiveOccurrence] = useState("");
-	const [form, setForm] = useState({ name: "", fullName: "", password: "", disabled: false, showInList: true });
+	/**
+	 * «Показывать в списке выбора» — ТРЁХЗНАЧНО: `null` значит «не менять».
+	 *
+	 * Прочитать текущее значение неоткуда: `IB_LIST_USERS` возвращает имя, полное имя,
+	 * признак отключения и роли — этого признака там нет. Раньше форма подставляла
+	 * «включено» как факт и отправляла его при КАЖДОМ «Применить»: правка полного имени
+	 * молча включала показ в списке у того, у кого он был выключен. А переключение самого
+	 * тумблера, наоборот, не считалось изменением — и «Применить» не делало ничего. Отсюда
+	 * и жалоба: «значение не сохраняется».
+	 *
+	 * Поэтому: пока значение неизвестно, поле стоит в положении «не менять» и в команду не
+	 * попадает вовсе. Известное (сборка агента научится его отдавать — сервис уже готов,
+	 * миграция 019) подставляется как есть.
+	 */
+	const [form, setForm] = useState<{
+		name: string; fullName: string; password: string; disabled: boolean;
+		showInList: boolean | null;
+	}>({ name: "", fullName: "", password: "", disabled: false, showInList: null });
 	/** Переименование, поставленное в очередь: ждём его результата, чтобы переехать. */
 	const [renaming, setRenaming] = useState<{ opId: string; to: string } | null>(null);
 
@@ -146,7 +164,16 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 
 	// Реквизиты следуют за выбранной базой: в другой базе у человека своё полное имя.
 	useEffect(() => {
-		setForm({ name: userName, fullName: "", password: "", disabled: here?.disabled ?? false, showInList: true });
+		setForm({
+			// ПОЛНОЕ ИМЯ ПОКАЗЫВАЕМ ТО, ЧТО ЕСТЬ. Поле стояло пустым, хотя реестр знает
+			// значение: человек не видел, что записано в базе, и «пусто — не трогать»
+			// превращалось в «не видно». Пустым остаётся только то, чего мы знать не можем
+			// (пароль).
+			name: userName, fullName: here?.fullName ?? "", password: "",
+			disabled: here?.disabled ?? false,
+			// Значение известно — показываем его; неизвестно — «не менять» (см. выше).
+			showInList: here?.showInList ?? null,
+		});
 	}, [here, userName]);
 
 	/**
@@ -255,8 +282,20 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	/** Введённое имя отличается от текущего — значит, просят переименовать. */
 	const renameTo = form.name.trim() && form.name.trim() !== userName ? form.name.trim() : "";
 
-	const dirtyProfile = !!renameTo || !!form.fullName.trim() || !!form.password
-		|| form.disabled !== (here?.disabled ?? false);
+	/**
+	 * Что именно изменилось — считает общий расчёт (userUpdate). Форма только показывает;
+	 * правило «в команду уходит только изменённое» живёт в одном месте и покрыто тестом,
+	 * потому что теряется оно легко, а стоит дорого: выдуманное значение уезжает в 1С.
+	 */
+	const profileUpdate = useMemo(
+		() => buildUserUpdate(userName, {
+			fullName: here?.fullName ?? "",
+			disabled: here?.disabled ?? false,
+			showInList: here?.showInList ?? null,
+		}, form),
+		[userName, here, form],
+	);
+	const dirtyProfile = !!profileUpdate;
 
 	/**
 	 * Постановка команды сразу попадает в реестр операций: запись прав на десятке баз
@@ -307,18 +346,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			/** База → что в ней изменить. Одна запись — одна команда. */
 			const plan = new Map<string, Record<string, unknown>>();
 
-			if (dirtyProfile && baseKey) {
-				plan.set(baseKey, {
-					name: userName,
-					// Имя входа меняется ТОЛЬКО явно: прежнее значение поля не шлём вовсе,
-					// иначе правка полного имени выглядела бы как переименование.
-					...(renameTo ? { newName: renameTo } : {}),
-					...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
-					...(form.password ? { password: form.password } : {}),
-					disabled: form.disabled,
-					showInList: form.showInList,
-				});
-			}
+			if (profileUpdate && baseKey) plan.set(baseKey, profileUpdate);
 			for (const [base, { add, remove }] of changedByBase) {
 				const entry = plan.get(base) ?? { name: userName };
 				if (add.length) entry.addRoles = add;
@@ -477,9 +505,24 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
 											</GroupRow>
 											<GroupRow>
-												<FieldToggle name="buf_show" label={translate("onecShowInList")} value={form.showInList}
+												{/*
+												  * ТРИ ПОЛОЖЕНИЯ, А НЕ ДВА. Текущее значение прочитать неоткуда —
+												  * агент не возвращает его в списке пользователей, — и тумблер
+												  * в положении «включено» врал бы о состоянии 1С. «Не менять»
+												  * — честное значение по умолчанию: поле в команду не попадёт.
+												  */}
+												<FieldSelect name="buf_show" label={translate("onecShowInList")}
+													value={form.showInList === null ? "" : form.showInList ? "1" : "0"}
 													disabled={locked}
-													onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
+													options={[
+														{ value: "", label: translate("onecKeepAsIs") },
+														{ value: "1", label: translate("yes") },
+														{ value: "0", label: translate("no") },
+													]}
+													onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm((f) => ({
+														...f,
+														showInList: e.target.value === "" ? null : e.target.value === "1",
+													}))} />
 												<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
 													disabled={locked}
 													onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
