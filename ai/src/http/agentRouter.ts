@@ -40,6 +40,9 @@ const baseStateSchema = z.object({
 	onecVersion: z.string().max(50).nullable().optional(),
 	extVersion: z.string().max(50).nullable().optional(),
 	sessionsCount: z.number().int().min(0).max(100000).optional(),
+	// Есть ли у базы её данные в СУБД: ответ агента БЕЗ входа в базу (сборка 2026-09-12).
+	// Трёхзначно, как и публикация: отсутствие поля — «не проверял», а не «всё хорошо».
+	dbMissing: z.boolean().nullable().optional(),
 });
 
 const registerSchema = z.object({

@@ -17,8 +17,7 @@ import { FC, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
-import { Field } from "src/components/Field";
-import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
+import { ValueList, ValueRow } from "src/components/ValueList";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
@@ -96,22 +95,19 @@ export const BasePublication: FC<{
 	return (
 		<FormArea title={translate("onecPublication")}>
 			<GroupCol>
-				<GroupRow>
-					<Field name="ob_published" label={translate("onecPublication")}
-						value={publishLabel(published)} disabled onChange={() => {}} width={FIELD_WIDTH.md} />
-					<Field name="ob_url" label={translate("onecPublishUrl")}
-						value={publishUrlPublic || publishUrl || "—"} disabled onChange={() => {}} width={FIELD_WIDTH.lg} />
-					<Field name="ob_pub_seen" label={translate("publishSeenAt")}
-						value={seenAt ? getFormatDate(seenAt) : "—"} disabled onChange={() => {}} width={FIELD_WIDTH.date} />
-				</GroupRow>
-				{/* Ответ агента — рядом, и только когда он отличается от показанного:
-				    расхождение и есть повод проверить привязку сайта на сервере. */}
-				{publishUrlPublic && publishUrl && publishUrlPublic !== publishUrl && (
-					<GroupRow>
-						<Field name="ob_url_raw" label={translate("onecPublishUrlAgent")}
-							value={publishUrl} disabled onChange={() => {}} width={FIELD_WIDTH.lg} />
-					</GroupRow>
-				)}
+				{/* Состояние публикации в карточке не правят — его сообщает агент. Тот же
+				    список «подпись — значение», что и в «Основном»: одна колонка подписей на
+				    всю вкладку, и значения стоят по одной линии. */}
+				<ValueList>
+					<ValueRow label={translate("onecPublication")} value={publishLabel(published)} />
+					<ValueRow label={translate("onecPublishUrl")} value={publishUrlPublic || publishUrl || "—"} />
+					<ValueRow label={translate("publishSeenAt")} value={seenAt ? getFormatDate(seenAt) : "—"} />
+					{/* Ответ агента — рядом, и только когда он отличается от показанного:
+					    расхождение и есть повод проверить привязку сайта на сервере. */}
+					{publishUrlPublic && publishUrl && publishUrlPublic !== publishUrl && (
+						<ValueRow label={translate("onecPublishUrlAgent")} value={publishUrl} />
+					)}
+				</ValueList>
 				<GroupRow>
 					<Button variant="secondary" disabled={run.isPending}
 						title={`${translate("onecPublish")}: ${baseKey}`}

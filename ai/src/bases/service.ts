@@ -27,6 +27,20 @@ export type BaseState = {
 	onecVersion?: string | null;
 	extVersion?: string | null;
 	sessionsCount?: number;
+	/**
+	 * ЕСТЬ ЛИ У БАЗЫ ЕЁ ДАННЫЕ В СУБД — ответ агента, полученный БЕЗ входа в базу.
+	 *
+	 * Трёхзначно, как и публикация: `true` — регистрация есть, базы данных нет (фантом);
+	 * `false` — база данных на месте; поля НЕТ ВОВСЕ — агент ещё не проверял (или ему не
+	 * задан пароль СУБД), и это не «всё в порядке»: прежнее знание сохраняется.
+	 *
+	 * Зачем это в срезе. Раньше фантом обнаруживался только тем, что по нему промахнулись:
+	 * признак ставила неудавшаяся команда внутрь базы. На сотне баз это значит, что фантомы
+	 * не видны, пока в каждую не постучались, — а вручную такой обход никто не делает.
+	 * Теперь агент проверяет базы фоном и присылает ответ вместе со срезом, и кнопка
+	 * «Обновить» показывает фантомы сама, не потратив ни одной команды внутрь базы.
+	 */
+	dbMissing?: boolean | null;
 };
 
 export type BaseRow = {
@@ -387,9 +401,11 @@ export class BaseService {
 			// когда своего ещё нет.
 			const mangled = !!s.name && s.name.includes("?");
 			await this.db.query(
-				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version, sessions_count, infobase_id, last_seen_at, published, publish_url, publish_seen_at)
+				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version, sessions_count, infobase_id, last_seen_at, published, publish_url, publish_seen_at, ib_unreachable_at, ib_unreachable_reason)
 				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, 'UNKNOWN'), $6, $7, $8, $10, now(), $11, $12,
-				         CASE WHEN $11::boolean IS NULL THEN NULL ELSE now() END)
+				         CASE WHEN $11::boolean IS NULL THEN NULL ELSE now() END,
+				         CASE WHEN $13::boolean IS TRUE THEN now() ELSE NULL END,
+				         CASE WHEN $13::boolean IS TRUE THEN 'NO_DB' ELSE NULL END)
 				 ON CONFLICT (server_id, key) DO UPDATE
 				    SET name           = CASE
 				                           WHEN EXCLUDED.name = '' THEN bases.name
@@ -407,6 +423,28 @@ export class BaseService {
 				        publish_url    = CASE WHEN EXCLUDED.published IS FALSE THEN NULL
 				                              ELSE COALESCE(EXCLUDED.publish_url, bases.publish_url) END,
 				        publish_seen_at = COALESCE(EXCLUDED.publish_seen_at, bases.publish_seen_at),
+				        /*
+				         * «БАЗЫ НЕТ В СУБД» ИЗ СРЕЗА — тот же признак, что ставит неудавшаяся
+				         * команда внутрь базы, только добытый дешевле и заранее.
+				         *
+				         * Время отметки не сдвигаем на каждый срез: важно, С КАКОГО МОМЕНТА
+				         * не войти, а не когда об этом сказали в последний раз.
+				         *
+				         * Отрицательный ответ снимает ТОЛЬКО отметку NO_DB. Агент проверил
+				         * СУБД — он ответил про данные, а не про учётные записи: гасить им
+				         * «не пускают» (NO_ACCESS) значило бы объявить базу рабочей по
+				         * ответу на другой вопрос.
+				         */
+				        ib_unreachable_at = CASE
+				                              WHEN $13::boolean IS TRUE THEN COALESCE(bases.ib_unreachable_at, now())
+				                              WHEN $13::boolean IS FALSE AND bases.ib_unreachable_reason = 'NO_DB' THEN NULL
+				                              ELSE bases.ib_unreachable_at
+				                            END,
+				        ib_unreachable_reason = CASE
+				                              WHEN $13::boolean IS TRUE THEN 'NO_DB'
+				                              WHEN $13::boolean IS FALSE AND bases.ib_unreachable_reason = 'NO_DB' THEN NULL
+				                              ELSE bases.ib_unreachable_reason
+				                            END,
 				        last_seen_at   = now()`,
 				[randomUUID(), serverId, key, s.name ?? null, s.status ?? null,
 					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled, s.id ?? null,
@@ -427,7 +465,7 @@ export class BaseService {
 					// не умеет различать три состояния, признака в срезе баз НЕ ШЛЁТ вовсе
 					// (0 записей из 110) — то есть попадает в ветку «не знаю» и ничего не
 					// затирает. Различать берёмся только там, где агент сам взялся отвечать.
-					s.published ?? null, s.publishUrl ?? null],
+					s.published ?? null, s.publishUrl ?? null, s.dbMissing ?? null],
 			);
 		}
 

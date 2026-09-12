@@ -16,12 +16,11 @@ import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
-import { Field } from "src/components/Field";
-import { Group, GroupCol, GroupRow } from "src/components/UI";
+import { GroupCol } from "src/components/UI";
 import Notice from "src/components/Notice";
+import { ValueList, ValueRow } from "src/components/ValueList";
 import main from "src/styles/main.module.scss";
 import { translate } from "src/i18";
-import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
@@ -386,27 +385,36 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 						<div className={main.FormContainer}>
 							<div className={main.FormWrapper}>
 								<GroupCol className={main.Form}>
-									<Group>
-										<GroupRow>
-											<Field name="ob_key" label={translate("baseKey")} value={asText(row.baseKey)} disabled onChange={() => {}} width={FIELD_WIDTH.wide} />
-											<Field name="ob_status" label={translate("status")} value={statusLabel(asText(row.status))} disabled onChange={() => {}} width={FIELD_WIDTH.md} />
-										</GroupRow>
-										<Field name="ob_name" label={translate("name")} value={asText(row.name) || "—"} disabled onChange={() => {}} />
-									</Group>
-
-									<Group>
-										<GroupRow>
-											<Field name="ob_server" label={translate("onecServer")} value={asText(row.serverName) || "—"} disabled onChange={() => {}} width={FIELD_WIDTH.wide} />
-											<Field name="ob_platform" label={translate("onecVersion")} value={platform} disabled onChange={() => {}} width={FIELD_WIDTH.md} />
-										</GroupRow>
-										<GroupRow>
-											<Field name="ob_ext" label={translate("extensionsCount")}
-												value={row.extensionsCount == null ? translate("onecExtNotChecked") : asText(row.extensionsCount)}
-												disabled onChange={() => {}} width={FIELD_WIDTH.sm} />
-											<Field name="ob_seen" label={translate("lastSeenAt")}
-												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} disabled onChange={() => {}} width={FIELD_WIDTH.date} />
-										</GroupRow>
-									</Group>
+									{/*
+									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение»,
+									  * а не выключенными полями ввода. Поле с рамкой и серым фоном обещает
+									  * правку, которой нет: по нему щёлкают, ничего не происходит, и человек
+									  * идёт искать, где она включается. Ширина колонки подписей общая на весь
+									  * список, поэтому значения стоят по одной линии во всех группах.
+									  */}
+									<ValueList>
+										<ValueRow label={translate("baseKey")} value={asText(row.baseKey)} />
+										<ValueRow label={translate("status")}
+											title={row.ibUnreachableAt
+												? unreachableReason({
+													status: asText(row.status), disabled: row.disabled === true,
+													ibUnreachableAt: asText(row.ibUnreachableAt),
+													ibUnreachableReason: row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null,
+												})
+												: undefined}
+											value={row.ibUnreachableAt
+												? unreachableShort(row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null)
+												: statusLabel(asText(row.status))} />
+										<ValueRow label={translate("name")} value={asText(row.name)} />
+										<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
+										<ValueRow label={translate("onecVersion")} value={platform} />
+										<ValueRow label={translate("extensionsCount")}
+											value={row.extensionsCount == null
+												? translate("onecExtNotChecked")
+												: asText(row.extensionsCount)} />
+										<ValueRow label={translate("lastSeenAt")}
+											value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
+									</ValueList>
 
 									{/* Доступность: почему в базу не войти и что панель может с этим
 									    сделать. Молчит, пока всё в порядке. */}

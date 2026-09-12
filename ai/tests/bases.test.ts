@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import type { Db } from "../src/db/pool.ts";
 import { AgentService, type AgentRole } from "../src/agents/service.ts";
 import {
-	ibFailureReason, isPublished, needsFullBases, publicUrl, publicationReport,
+	BaseService, ibFailureReason, isPublished, needsFullBases, publicUrl, publicationReport,
 } from "../src/bases/service.ts";
 
 type FakeAgent = {
@@ -286,4 +286,45 @@ test("ibFailureReason: временный отказ не объявляется
 	);
 	assert.equal(ibFailureReason(null), null);
 	assert.equal(ibFailureReason({ code: "IB_ERROR", message: "" }), null);
+});
+
+// ── «Базы нет в СУБД» приходит СРЕЗОМ, а не только неудавшейся командой ─────
+//
+// Раньше фантом обнаруживался тем, что по нему промахнулись: признак ставила команда
+// внутрь базы. На сотне баз это значит, что фантомы не видны, пока в каждую не постучались,
+// — вручную такой обход никто не делает. Агент (сборка 2026-09-12) проверяет базы фоном
+// через СУБД и присылает ответ вместе со срезом; сервис обязан его принять.
+//
+// Признак ТРЁХЗНАЧНЫЙ, как и публикация: отсутствие поля — «не проверял», и прежнее знание
+// должно сохраниться. Проверяем именно это: что уходит в SQL тринадцатым параметром.
+
+test("срез баз: dbMissing принимается трёхзначно и не выдумывает ответ за агента", async () => {
+	const seen: { sql: string; params: unknown[] }[] = [];
+	const db = {
+		query: async (sql: string, params?: unknown[]) => {
+			seen.push({ sql, params: params ?? [] });
+			return { rows: [], rowCount: 0 };
+		},
+		connect: async () => { throw new Error("не нужен"); },
+	} as unknown as Db;
+
+	const svc = new BaseService(db);
+	await svc.sync("srv-1", [
+		{ key: "aibek", dbMissing: true },
+		{ key: "alfa", dbMissing: false },
+		{ key: "beta" },
+	], { complete: false, authoritative: true });
+
+	const upserts = seen.filter((q) => q.sql.includes("INSERT INTO bases"));
+	assert.equal(upserts.length, 3);
+	// Тринадцатый параметр — сам признак: true / false / «не знаю».
+	assert.equal(upserts[0].params[12], true);
+	assert.equal(upserts[1].params[12], false);
+	assert.equal(upserts[2].params[12], null);
+
+	// Положительный ответ помечает базу той же причиной, что и отказ команды.
+	assert.ok(upserts[0].sql.includes("'NO_DB'"));
+	// Отрицательный снимает ТОЛЬКО NO_DB: агент отвечал про данные, а не про учётные записи,
+	// и гасить им «не пускают» значило бы объявить базу рабочей по ответу на другой вопрос.
+	assert.ok(upserts[0].sql.includes("ib_unreachable_reason = 'NO_DB'"));
 });

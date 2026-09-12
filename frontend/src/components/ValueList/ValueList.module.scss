@@ -1,0 +1,44 @@
+@use "src/styles/variables" as *;
+
+// Список «подпись — значение» для нередактируемых реквизитов.
+//
+// Ширина колонки подписей — ПЕРЕМЕННАЯ, одна на весь список: так значения стоят по одной
+// линии во всех группах формы. Задавать её построчно (max-content) значило бы, что колонка
+// значений гуляет от группы к группе и глаз ищет начало значения заново в каждом ряду.
+.List {
+	--value-label: 180px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+}
+
+.Row {
+	display: grid;
+	grid-template-columns: var(--value-label) minmax(0, 1fr);
+	align-items: baseline;
+	gap: 6px;
+	min-height: $heightFieldInput;
+	// Выравнивание по базовой линии само по себе не даёт строке высоту поля ввода: добиваем
+	// вертикальный ритм отступом, чтобы ряды стояли с тем же шагом, что и поля рядом.
+	padding: 3px 0;
+}
+
+.Label {
+	margin: 0;
+	color: $color51;
+	font-size: $fontsize;
+	// Длинная подпись переносится, а не растягивает колонку: ширина у неё общая.
+	overflow-wrap: anywhere;
+}
+
+.Value {
+	margin: 0;
+	color: $color6;
+	font-size: $fontsize;
+	font-weight: 500;
+	// Значение может быть длинным (адрес публикации, имя базы) — переносим, не обрезая:
+	// обрезанный адрес бесполезен, а прокрутки в карточке нет.
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
