@@ -56,4 +56,25 @@ describe("Список «подпись — значение»", () => {
 		// Значения стоят по одной линии, потому что ширину задаёт список, а не строка.
 		expect((container.querySelector("dl") as HTMLElement).style.getPropertyValue("--value-label")).toBe("200px");
 	});
+
+	it("в два столбца строки текут слева направо, а на узком месте складываются в один", () => {
+		// Семь реквизитов в один столбец занимали высоту всей вкладки, а правая половина
+		// ширины пустовала. Признак раскладки — на самом списке: сжимать подпись со
+		// значением до многоточия ради второй колонки нельзя, и столбцы схлопываются сами.
+		const { container } = render(
+			<ValueList columns={2}>
+				<ValueRow label="Имя базы" value="akacapital" />
+				<ValueRow label="Сервер 1С" value="SERVER" />
+			</ValueList>,
+		);
+		expect(container.querySelector("dl")?.getAttribute("data-cols")).toBe("2");
+		// Порядок разметки — он же порядок чтения.
+		expect(Array.from(container.querySelectorAll("dt")).map((d) => d.textContent))
+			.toEqual(["Имя базы", "Сервер 1С"]);
+	});
+
+	it("по умолчанию столбец один: признака раскладки нет", () => {
+		const { container } = render(<ValueList><ValueRow label="Имя" value="a" /></ValueList>);
+		expect(container.querySelector("dl")?.getAttribute("data-cols")).toBeNull();
+	});
 });

@@ -22,10 +22,20 @@ export const ValueList: FC<{
 	children: ReactNode;
 	/** Ширина колонки подписей: одна на весь список — отсюда и сквозное выравнивание. */
 	labelWidth?: string;
+	/**
+	 * В ДВА СТОЛБЦА, когда строк много, а значения короткие.
+	 *
+	 * Семь реквизитов в один столбец занимают высоту всей вкладки, а правая половина ширины
+	 * при этом пустует — и блок, стоящий под ними, уезжает за нижний край. Столбцы
+	 * складываются в один сами, как только места перестаёт хватать: подпись и значение не
+	 * должны сжиматься до многоточия ради второй колонки.
+	 */
+	columns?: 1 | 2;
 	className?: string;
-}> = ({ children, labelWidth, className }) => (
+}> = ({ children, labelWidth, columns = 1, className }) => (
 	<dl
 		className={[styles.List, className].filter(Boolean).join(" ")}
+		data-cols={columns === 2 ? "2" : undefined}
 		style={labelWidth ? ({ "--value-label": labelWidth } as React.CSSProperties) : undefined}
 	>
 		{children}

@@ -13,6 +13,16 @@
 	margin: 0;
 }
 
+// ДВА СТОЛБЦА: строки текут слева направо, поэтому порядок в разметке — это порядок
+// чтения. Складываются в один столбец сами, когда места не хватает: сжимать подпись со
+// значением до многоточия ради второй колонки нельзя — читать станет нечего.
+.List[data-cols="2"] {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	column-gap: 24px;
+	row-gap: 0;
+}
+
 .Row {
 	display: grid;
 	grid-template-columns: var(--value-label) minmax(0, 1fr);

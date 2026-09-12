@@ -98,7 +98,7 @@ export const BasePublication: FC<{
 				{/* Состояние публикации в карточке не правят — его сообщает агент. Тот же
 				    список «подпись — значение», что и в «Основном»: одна колонка подписей на
 				    всю вкладку, и значения стоят по одной линии. */}
-				<ValueList>
+				<ValueList columns={2}>
 					<ValueRow label={translate("onecPublication")} value={publishLabel(published)} />
 					<ValueRow label={translate("onecPublishUrl")} value={publishUrlPublic || publishUrl || "—"} />
 					<ValueRow label={translate("publishSeenAt")} value={seenAt ? getFormatDate(seenAt) : "—"} />

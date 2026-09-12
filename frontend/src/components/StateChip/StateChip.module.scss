@@ -1,0 +1,37 @@
+@use "src/styles/variables" as *;
+
+.Chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+}
+
+// Метка состояния: точка цвета + слово. Подложка светлее фона формы, чтобы ряд меток
+// читался как один элемент, а не как набор кнопок — нажимать здесь нечего.
+.Chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 9px;
+	border: 1px solid $color33;
+	border-radius: 10px;
+	background: $gray50;
+	color: $color6;
+	font-size: $fontsize - 1px;
+	white-space: nowrap;
+	user-select: none;
+
+	&::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: $color10;
+		flex: 0 0 auto;
+	}
+
+	&[data-tone="ok"]::before { background: var(--sv-success, #28a745); }
+	&[data-tone="bad"]::before { background: var(--sv-attention, #dc3545); }
+	&[data-tone="unknown"]::before { background: $color34; }
+}

@@ -19,6 +19,7 @@ import Table from "src/components/Table";
 import { GroupCol } from "src/components/UI";
 import Notice from "src/components/Notice";
 import { ValueList, ValueRow } from "src/components/ValueList";
+import { StateChip, StateChips } from "src/components/StateChip";
 import main from "src/styles/main.module.scss";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
@@ -359,6 +360,14 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	 * версия есть всегда, просто её не сообщили.
 	 */
 	const agents = useAgents();
+	/** Код причины и полное объяснение — нужны и метке, и строке состояния. */
+	const reasonCode = row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null;
+	const unreachableTitle = row.ibUnreachableAt
+		? unreachableReason({
+			status: asText(row.status), disabled: row.disabled === true,
+			ibUnreachableAt: asText(row.ibUnreachableAt), ibUnreachableReason: reasonCode,
+		})
+		: undefined;
 	const platform = asText(row.onecVersion)
 		|| (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform
 		|| translate("onecPlatformUnknown");
@@ -386,32 +395,51 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 							<div className={main.FormWrapper}>
 								<GroupCol className={main.Form}>
 									{/*
-									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение»,
-									  * а не выключенными полями ввода. Поле с рамкой и серым фоном обещает
-									  * правку, которой нет: по нему щёлкают, ничего не происходит, и человек
-									  * идёт искать, где она включается. Ширина колонки подписей общая на весь
-									  * список, поэтому значения стоят по одной линии во всех группах.
+									  * СОСТОЯНИЕ — МЕТКАМИ, ДО ЧТЕНИЯ. С вопросом «что с ней сейчас»
+									  * карточку и открывают, а в общем списке ответ стоял третьей строкой
+									  * наравне с именем сервера: чтобы узнать, опубликована ли база,
+									  * приходилось прочитать семь строк. Слово в метке говорит то же, что и
+									  * цвет, — цвет лишь помогает найти её взглядом.
 									  */}
-									<ValueList>
-										<ValueRow label={translate("baseKey")} value={asText(row.baseKey)} />
-										<ValueRow label={translate("status")}
-											title={row.ibUnreachableAt
-												? unreachableReason({
-													status: asText(row.status), disabled: row.disabled === true,
-													ibUnreachableAt: asText(row.ibUnreachableAt),
-													ibUnreachableReason: row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null,
-												})
-												: undefined}
-											value={row.ibUnreachableAt
-												? unreachableShort(row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null)
-												: statusLabel(asText(row.status))} />
-										<ValueRow label={translate("name")} value={asText(row.name)} />
-										<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
-										<ValueRow label={translate("onecVersion")} value={platform} />
-										<ValueRow label={translate("extensionsCount")}
-											value={row.extensionsCount == null
+									<StateChips>
+										<StateChip
+											tone={row.disabled === true ? "unknown" : row.ibUnreachableAt ? "bad" : "ok"}
+											title={unreachableTitle}>
+											{row.disabled === true
+												? translate("onecBaseDisabled")
+												: row.ibUnreachableAt
+													? unreachableShort(reasonCode)
+													: statusLabel(asText(row.status))}
+										</StateChip>
+										<StateChip tone={row.published === true ? "ok" : row.published === false ? "bad" : "unknown"}>
+											{publishLabel(row.published as boolean | null)}
+										</StateChip>
+										<StateChip tone={row.extensionsCount == null ? "unknown" : "neutral"}>
+											{row.extensionsCount == null
 												? translate("onecExtNotChecked")
-												: asText(row.extensionsCount)} />
+												: `${translate("extensionsCount")}: ${asText(row.extensionsCount)}`}
+										</StateChip>
+									</StateChips>
+
+									{/*
+									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение», а
+									  * не выключенными полями ввода. Поле с рамкой и серым фоном обещает
+									  * правку, которой нет: по нему щёлкают, ничего не происходит, и человек
+									  * идёт искать, где она включается.
+									  *
+									  * ДВА СТОЛБЦА: семь реквизитов в один занимали высоту всей вкладки, а
+									  * правая половина ширины пустовала — публикация уезжала за нижний край.
+									  * Порядок в разметке и есть порядок чтения: слева направо, сверху вниз.
+									  */}
+									<ValueList columns={2}>
+										<ValueRow label={translate("baseKey")} value={asText(row.baseKey)} />
+										<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
+										<ValueRow label={translate("name")} value={asText(row.name)} />
+										<ValueRow label={translate("onecVersion")} value={platform} />
+										<ValueRow label={translate("status")} title={unreachableTitle}
+											value={row.ibUnreachableAt
+												? unreachableShort(reasonCode)
+												: statusLabel(asText(row.status))} />
 										<ValueRow label={translate("lastSeenAt")}
 											value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
 									</ValueList>
