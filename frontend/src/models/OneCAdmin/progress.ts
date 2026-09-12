@@ -57,6 +57,44 @@ export type Op = {
 };
 
 /**
+ * КАК ОПЕРАЦИЯ ЧИТАЕТСЯ СЛОВАМИ И ЦИФРАМИ — здесь, а не на экране.
+ *
+ * Смотрят на одни и те же операции из двух мест: вкладка «Прогресс запросов и команд» на
+ * экране «Пользователи баз» и область «Технических сообщений», которая видна откуда
+ * угодно. Держать подписи и счёт процентов у каждого из них значило бы завести два ответа
+ * на один вопрос — и однажды разойтись в них.
+ */
+export const opKindLabel = (k: OpKind): string => translate(
+	k === "read" ? "onecOpRead" : k === "create" ? "onecOpCreate" : k === "delete" ? "onecOpDelete" : "onecOpUpdate",
+);
+
+export const opStateLabel = (o: Op): string => (
+	o.state === "running" ? translate("onecOpRunning")
+		: o.state === "failed" ? translate("onecOpFailed")
+			: translate("onecOpDone")
+);
+
+/** Длительность словами: «сколько уже идёт» важнее точной секунды старта. */
+export const opDuration = (o: Op, now = Date.now()): string => {
+	const ms = (o.finishedAt ?? now) - o.startedAt;
+	const s = Math.max(Math.round(ms / 1000), 0);
+	return s < 60 ? `${s} ${translate("secShort")}` : `${Math.floor(s / 60)} ${translate("minShort")} ${s % 60} ${translate("secShort")}`;
+};
+
+/**
+ * Доля выполненного, 0–100.
+ *
+ * ЧЕГО ЗДЕСЬ НЕТ — выдуманного прогресса. Пока неизвестно, из скольких частей состоит
+ * работа (`total` = 0), процента не существует: показывать «0 %» у работы, которая идёт,
+ * значит врать о ней, и такую операцию показывают неопределённым индикатором (спиннером),
+ * а не полосой. Поэтому здесь `null`, а не ноль.
+ */
+export const opPercent = (o: Op): number | null => {
+	if (o.total > 0) return Math.min(Math.round((o.done / o.total) * 100), 100);
+	return o.state === "running" ? null : 100;
+};
+
+/**
  * Сколько операция может блокировать правку, прежде чем перестанет это делать.
  *
  * ЗАЧЕМ ПРЕДЕЛ. Блокировка держится на записи реестра, а запись живёт в браузере: если
@@ -296,6 +334,13 @@ const snapshot = () => ops;
 
 /** Подписка на реестр: список меняется целиком, поэтому сравнение по ссылке верно. */
 export const useOnecOps = (): Op[] => useSyncExternalStore(subscribe, snapshot, snapshot);
+
+/**
+ * Прочитать реестр вне React — для чистых функций и для проверок: городить рендер ради
+ * разбора списка значило бы проверять заодно и разметку (так же читается журнал
+ * сообщений — `getMessages`).
+ */
+export const getOps = (): Op[] => ops;
 
 /**
  * Слежение за командами — В МОДУЛЕ, а не на экране.

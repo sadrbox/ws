@@ -112,6 +112,17 @@
 	font-weight: 700;
 }
 
+// Признак идущей работы в шапке: спиннер и число. Стоит сразу за названием области —
+// это про неё саму, а не про кнопки, что дальше.
+.HeadRunning {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: $color51;
+	font-size: $fontsize - 1px;
+	font-variant-numeric: tabular-nums;
+}
+
 .Head {
 	flex: 0 0 auto;
 	display: flex;
@@ -224,6 +235,19 @@
 // Рамка списка — аналог .TableScrollWrapper: та же граница, тот же радиус, та же
 // внутренняя тень. Прокрутка живёт здесь, поэтому заголовки групп и подвал могут липнуть.
 .Frame {
+	// СКВОЗНАЯ СЕТКА СПИСКА. Колонки задаются здесь, один раз, и ими пользуются все строки —
+	// и сообщения, и строки прогресса: при `auto` на каждой строке колонка времени мерилась
+	// заново, и текст соседних строк начинался на разных вертикалях. Единицы — ch по
+	// моноширинному шрифту колонки: любой из форматов даты ровно 10 знаков, время — 5.
+	--tm-time: 10ch;
+	--tm-rail: 14px;
+	--tm-gap: 6px;
+
+	// Под заголовком дня дата в строке не показывается — колонке хватает «чч:мм».
+	&[data-mode="date"] {
+		--tm-time: 5ch;
+	}
+
 	flex: 1 1 auto;
 	min-height: 0;
 	display: flex;
@@ -232,7 +256,7 @@
 	border: 1px solid $color10;
 	border-radius: $radius2;
 	box-shadow: inset 0 0 4px $color30;
-	overflow: auto;
+	overflow: scroll;
 }
 
 .Rows {
@@ -265,10 +289,16 @@
 	z-index: 2;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--tm-gap, 6px);
 	width: 100%;
 	min-height: $heightFieldInput;
-	padding: 0 6px;
+	/*
+	 * СКВОЗНОЕ ВЫРАВНИВАНИЕ. Отступ слева — ровно колонка времени: тогда стрелка встаёт на
+	 * место шкалы, а имя группы начинается на той же вертикали, что и текст сообщений под
+	 * ним. Раньше заголовок жил по своим отступам, и взгляд, скользя вниз, спотыкался о
+	 * три разных левых края — списка, заголовка и текста.
+	 */
+	padding: 0 6px 0 calc(var(--tm-time, 10ch) + var(--tm-gap, 6px));
 	border: none;
 	border-bottom: 1px solid $color34;
 	background: $color30;
@@ -305,6 +335,14 @@
 	}
 }
 
+// Стрелка стоит в колонке шкалы — той же ширины, что и линия со точкой у сообщений.
+.GroupCaret {
+	flex: 0 0 var(--tm-rail, 14px);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
 .GroupTitle {
 	margin-right: auto;
 	white-space: nowrap;
@@ -329,6 +367,23 @@
 	font-variant-numeric: tabular-nums;
 }
 
+// Сколько операций СЕЙЧАС в работе. Не красный, как у актуальных сообщений: отказ требует
+// внимания, а идущая работа — нет, она просто идёт.
+.GroupRunning {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 3px;
+	border-radius: 9px;
+	background: $color3;
+	color: #fff;
+	font-size: $fontsize - 2px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
 // Всего записей, включая прошедшие: даёт понять объём, не крича.
 .GroupTotal {
 	color: $color51;
@@ -347,8 +402,8 @@
 // сообщение прячет ровно то, ради чего в список и смотрят.
 .Row {
 	display: grid;
-	grid-template-columns: auto 14px minmax(0, 1fr);
-	gap: 0 6px;
+	grid-template-columns: var(--tm-time, 10ch) var(--tm-rail, 14px) minmax(0, 1fr);
+	gap: 0 var(--tm-gap, 6px);
 	min-height: $heightFieldInput;
 	padding: 4px 6px 4px 0;
 	border-bottom: 1px solid $color34;
@@ -486,4 +541,114 @@
 .CaretOpen {
 	display: inline-flex;
 	transform: rotate(180deg);
+}
+
+
+// ── Ход работы: полоса от 0 до 100 % либо спиннер ───────────────────────────
+//
+// ПОЧЕМУ ДВА ВИДА, А НЕ ОДИН. Полоса отвечает «сколько осталось» и имеет смысл там, где
+// известно, из скольких частей состоит работа (баз, команд). Где объём неизвестен —
+// одиночная команда, ожидание ответа сервера, — процента не существует, и полоса,
+// застывшая на нуле, читалась бы как «не движется». Там крутится спиннер: он не обещает
+// доли, он говорит «идёт».
+//
+// Полоса стоит В ТЕЛЕ СТРОКИ, между текстом и уточнениями: сетка у строки прогресса та же,
+// что у сообщения, и ширину она берёт ту же — иначе список рассыпался бы на две разметки.
+.Bar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 1px 0;
+}
+
+.BarTrack {
+	position: relative;
+	flex: 1 1 auto;
+	height: 6px;
+	border-radius: $radius3;
+	background: color-mix(in srgb, #{$color6} 12%, transparent);
+	overflow: hidden;
+}
+
+// Цвет полосы — состояние работы, те же три ответа, что и у точки на шкале.
+.BarFill {
+	display: block;
+	height: 100%;
+	border-radius: $radius3;
+	background: $color3;
+	transition: width 0.2s linear;
+
+	[data-state="done"] & {
+		background: var(--sv-successText, #145523);
+	}
+
+	[data-state="failed"] & {
+		background: var(--sv-attentionText, #6b1119);
+	}
+}
+
+// Цифры читают, сравнивая, — моноширинные разряды не пляшут при каждом обновлении.
+.BarValue {
+	flex: 0 0 auto;
+	color: $color51;
+	font-size: $fontsize - 1px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+// Спиннер — кольцо в рост строки уточнений: он стоит в ряду с текстом и не должен
+// раздвигать строку. Анимация одна и та же у всех спиннеров приложения — поворот.
+.Spinner {
+	flex: 0 0 auto;
+	width: 12px;
+	height: 12px;
+	border: 2px solid color-mix(in srgb, #{$color6} 20%, transparent);
+	border-top-color: $color3;
+	border-radius: 50%;
+	animation: TechSpin 0.8s linear infinite;
+}
+
+@keyframes TechSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+// ── Строка идущей работы ────────────────────────────────────────────────────
+// Идущая работа не бледнеет, как прошедшее: она про «сейчас». Точка на шкале пульсирует —
+// так видно, что список живой, даже когда цифры меняются редко.
+.Row[data-run] {
+	opacity: 1;
+}
+
+.Row[data-run] .RowDot {
+	background: $color3;
+	animation: TechDotPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes TechDotPulse {
+
+	0%,
+	100% {
+		transform: scale(1);
+	}
+
+	50% {
+		transform: scale(1.45);
+	}
+}
+
+// Заголовок секции прогресса — та же полоса, что и у группы сообщений: список один, и
+// вторая манера оформления делила бы его надвое.
+.GroupHead[data-kind="progress"] {
+	font-weight: 600;
+}
+
+// Движение — не для всех: кому анимация мешает, тот её отключил в системе.
+@media (prefers-reduced-motion: reduce) {
+
+	.Spinner,
+	.Row[data-run] .RowDot {
+		animation: none;
+	}
 }

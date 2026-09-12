@@ -37,7 +37,6 @@ import {
 import {
 	QueryError, publishLabel, unreachableReason, unreachableShort, useAgents, useBaseContentCheck,
 } from "src/models/OneCAdmin/shared";
-import { useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
@@ -189,13 +188,14 @@ const useBaseTabs = (row: TDataItem) => {
 	const extView = useStaticTableView(extRows, { name: "asc" });
 
 	/*
-	 * Почему вкладка пуста — сообщением, а не блоком над таблицей. «Расширений нет» и
-	 * «их ещё не читали» — разные ответы, и второй требует действия человека.
+	 * ПОЧЕМУ ВКЛАДКА ПУСТА — В САМОЙ ТАБЛИЦЕ. «Расширений нет» и «их ещё не читали» —
+	 * разные ответы, и второй требует действия человека. Раньше это уходило сообщением в
+	 * «Технические сообщения» и висело там, пока открыта карточка: очистка его не брала (и
+	 * не могла — форма сообщала его заново), а список выглядел незакрывающимся. Место
+	 * объяснения — там, где человек ищет данные.
 	 */
-	const scope = useNoticeScope();
-	useNoticeReport(scope, "base-ext-empty", translate("onecTabExtensions"),
-		!ext.isLoading && !ext.error && !extRows.length
-			? [{ type: "info", text: translate("onecExtNeverRead") }] : []);
+	const extEmptyText = !ext.isLoading && !ext.error && !extRows.length
+		? translate("onecExtNeverRead") : undefined;
 
 	const userRows = (users.data?.items ?? []).map((x, i) => ({
 		id: i + 1, uuid: x.name, name: x.name, fullName: x.fullName || "—",
@@ -204,9 +204,8 @@ const useBaseTabs = (row: TDataItem) => {
 		seenAtLabel: seenLabel(x),
 	}));
 	const userView = useStaticTableView(userRows, { name: "asc" });
-	useNoticeReport(scope, "base-users-empty", translate("onecTabUsers"),
-		!users.isLoading && !users.error && !userRows.length
-			? [{ type: "info", text: translate("onecUsersNeverRead") }] : []);
+	const usersEmptyText = !users.isLoading && !users.error && !userRows.length
+		? translate("onecUsersNeverRead") : undefined;
 
 	const own = useBaseSessions(asText(row.infobaseId), loadSessions);
 	const sesRows = own.rows.map((s, i) => ({
@@ -230,6 +229,7 @@ const useBaseTabs = (row: TDataItem) => {
 					<QueryError error={ext.error} noticeKey="base-ext" source={translate("onecTabExtensions")} />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_ext", rows: extView.rows, columns: extCols, setColumns: setExtCols,
+						emptyText: extEmptyText,
 						onRowClick: (r) => openExt(r, baseKey),
 						sorting: extView.sorting, search: extView.search,
 						isLoading: ext.isLoading,
@@ -249,6 +249,7 @@ const useBaseTabs = (row: TDataItem) => {
 					<QueryError error={users.error} noticeKey="base-users" source={translate("onecTabUsers")} />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
+						emptyText: usersEmptyText,
 						onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
 						sorting: userView.sorting, search: userView.search,
 						isLoading: users.isLoading,

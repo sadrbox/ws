@@ -33,6 +33,7 @@ import {
 	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement,
 } from "./store";
 import MessagesView from "./MessagesView";
+import { useRunningOps } from "./runningOps";
 import styles from "./TechMessages.module.scss";
 
 /** Чьи сообщения показывать — настройка рабочего места, переживает перезагрузку. */
@@ -57,6 +58,12 @@ export const TechMessages: FC = () => {
 	// Подписаны и в свёрнутом виде: счётчик на полосе обязан быть живым, иначе
 	// сворачивание означало бы «не знать о новых сообщениях».
 	const messages = useScopedNotices(scope);
+	/*
+	 * ПРИЗНАК ИДУЩЕЙ РАБОТЫ — и на свёрнутой полосе тоже. Счётчик сообщений говорит о
+	 * случившемся, а проверка сотни баз идёт минутами и не сообщает о себе ничего, пока не
+	 * кончится: свернув область, человек переставал знать, работает ли что-нибудь вообще.
+	 */
+	const running = useRunningOps();
 	const active = messages.filter((n) => n.active).length;
 	// Сколько записей держат открытые формы: именно они остаются после очистки.
 	const live = messages.filter((n) => n.active && n.fromSource).length;
@@ -77,6 +84,7 @@ export const TechMessages: FC = () => {
 				>
 					<Icon name="caretDown" />
 				</IconButton>
+				{running > 0 && <span className={styles.Spinner} title={translate("techMsgProgress")} />}
 				{active > 0 && <span className={styles.RailCount}>{active}</span>}
 				<span className={styles.RailTitle}>{translate("techMessages")}</span>
 			</aside>
@@ -87,6 +95,12 @@ export const TechMessages: FC = () => {
 		<aside className={styles.Dock} data-place={placement} aria-label={translate("techMessages")}>
 			<div className={styles.Head}>
 				<span className={styles.Title}>{translate("techMessages")}</span>
+				{running > 0 && (
+					<span className={styles.HeadRunning} title={translate("techMsgProgress")}>
+						<span className={styles.Spinner} />
+						{running}
+					</span>
+				)}
 				{/*
 				  * ГДЕ ДЕРЖАТЬ ОБЛАСТЬ — решает тот, кто работает. Длинной ошибке нужна
 				  * ширина: в узкой колонке справа абзац превращается в лесенку из двух слов.

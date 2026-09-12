@@ -26,7 +26,10 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
-import { abandonOp, cancelOp, clearFinished, useOnecOps, type Op } from "./progress";
+import {
+	abandonOp, cancelOp, clearFinished, opDuration, opKindLabel, opPercent, opStateLabel,
+	useOnecOps,
+} from "./progress";
 import { formatDuration, queueReason, useQueueStats } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";
 
@@ -39,23 +42,6 @@ const opColumns = (): TColumn[] => ([
 	{ identifier: "opStartedAt", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "opNote", type: "string", width: "320px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
-
-const kindLabel = (k: Op["kind"]): string => translate(
-	k === "read" ? "onecOpRead" : k === "create" ? "onecOpCreate" : k === "delete" ? "onecOpDelete" : "onecOpUpdate",
-);
-
-const stateLabel = (o: Op): string => (
-	o.state === "running" ? translate("onecOpRunning")
-		: o.state === "failed" ? translate("onecOpFailed")
-			: translate("onecOpDone")
-);
-
-/** Длительность словами: «сколько уже идёт» важнее точной секунды старта. */
-const duration = (o: Op): string => {
-	const ms = (o.finishedAt ?? Date.now()) - o.startedAt;
-	const s = Math.max(Math.round(ms / 1000), 0);
-	return s < 60 ? `${s} ${translate("secShort")}` : `${Math.floor(s / 60)} ${translate("minShort")} ${s % 60} ${translate("secShort")}`;
-};
 
 export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = ({ onRefresh, isLoading }) => {
 	const ops = useOnecOps();
@@ -71,15 +57,17 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 	const rows = useMemo(() => ops.map((o, i) => ({
 		id: i + 1, uuid: o.id,
 		opTitle: o.title,
-		opKind: kindLabel(o.kind),
+		opKind: opKindLabel(o.kind),
 		opTarget: o.target,
 		// Значение колонки — текст для поиска и сортировки; полосу рисует renderCell.
 		opProgress: o.total ? `${o.done} / ${o.total}` : (o.state === "running" ? "…" : "—"),
-		opState: stateLabel(o),
+		opState: opStateLabel(o),
 		// Дату рисует таблица: колонка типа datetime, значение — как есть.
 		opStartedAt: new Date(o.startedAt).toISOString(),
-		opNote: o.note || duration(o),
-		__percent: o.total ? Math.min(Math.round((o.done / o.total) * 100), 100) : (o.state === "running" ? 0 : 100),
+		opNote: o.note || opDuration(o),
+		// Неизвестной доли не бывает: у работы без известного объёма полоса стоит на нуле,
+		// а «сколько уже идёт» говорит колонка примечания.
+		__percent: opPercent(o) ?? 0,
 		__state: o.state,
 		__failed: o.failed,
 		__id: o.id,

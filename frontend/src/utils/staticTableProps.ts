@@ -21,6 +21,8 @@ interface Params {
 	onReload?: () => void;
 	/** Подпись кнопки «Обновить»: экрану важно сказать, ОТКУДА она перечитывает данные. */
 	reloadTitle?: string;
+	/** Что написать вместо пустой таблицы: «данных нет» и «их ещё не читали» — разные ответы. */
+	emptyText?: string;
 	/**
 	 * Идёт обновление. Таблица НЕ гаснет: прежние данные читаются, сортируются и ищутся,
 	 * пока идёт запрос; крутится только кнопка «Обновить», а данные заменяются по приходе.
@@ -92,6 +94,7 @@ export function buildStaticTableProps(p: Params) {
 		hideAddDelete: true,
 		hideReload: !p.onReload,
 		...(p.reloadTitle ? { reloadTitle: p.reloadTitle } : {}),
+		...(p.emptyText ? { emptyText: p.emptyText } : {}),
 		...(p.reloading ? { reloading: true } : {}),
 		hideToolbar: !!p.hideToolbar,
 		readonly: true,

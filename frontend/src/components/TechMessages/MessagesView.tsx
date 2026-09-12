@@ -39,6 +39,7 @@ import { getFormatDateOnly, getFormatTimeOnly } from "src/utils/datetime";
 import { useAppContext } from "src/app/context";
 import { openFormByRef, canOpenByRef } from "src/utils/openFormByRef";
 import { dismissMessage, type TechMessage } from "./store";
+import ProgressSection from "./ProgressSection";
 import {
 	GROUP_MODES, GROUP_MODE_LABEL, groupMessages, groupTitleOf, type GroupMode,
 } from "./grouping";
@@ -262,8 +263,18 @@ export const MessagesView: FC<{
 				)}
 			</div>
 
-			<div className={styles.Frame}>
+			{/*
+			  * СЕТКА СКВОЗНАЯ. Ширина колонки времени и шкалы задана здесь, а не в каждой
+			  * строке: при `auto` каждая строка меряла свою колонку сама, и текст соседних
+			  * строк начинался на разных вертикалях — список рассыпался на лесенку. Под
+			  * заголовком дня в колонке одно «чч:мм», в остальных режимах ещё и дата,
+			  * поэтому ширин две и выбирает их режим.
+			  */}
+			<div className={styles.Frame} data-mode={mode}>
 				<div className={styles.Rows}>
+					{/* Идущая работа — над случившимся: она про «сейчас», и она меняется. */}
+					<ProgressSection mode={mode} />
+
 					{!groups.length && (
 						<span className={styles.Empty}>
 							{/* «Ничего не нашлось» и «сообщений нет» — разные ответы: первый
@@ -280,7 +291,9 @@ export const MessagesView: FC<{
 								{g.kind !== "none" && (
 									<button type="button" className={styles.GroupHead} data-kind={g.kind}
 										aria-expanded={open} onClick={() => toggle(g.id, open)}>
-										<span className={open ? styles.CaretOpen : undefined}>
+										{/* Стрелка занимает колонку шкалы, а заголовок начинается там же, где
+										    текст сообщений: одна вертикаль на весь список. */}
+										<span className={`${styles.GroupCaret}${open ? ` ${styles.CaretOpen}` : ""}`}>
 											<Icon name="caretDown" />
 										</span>
 										<span className={styles.GroupTitle}>{g.title}</span>

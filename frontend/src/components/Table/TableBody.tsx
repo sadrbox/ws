@@ -31,7 +31,7 @@ export const TableBody = memo(() => {
     rows, deferredRowsForRender, columns, isLoading, total,
     isFetchingNextPage, hasNextPage,
     actions, scrollRef, search,
-    expandedRowIds, wrapCells,
+    expandedRowIds, wrapCells, emptyText,
   } = useTableContext();
   // Волатильное состояние читаем ЗДЕСЬ (TableBody перерисуется на навигацию/выделение
   // — это один компонент), а в строки отдаём готовые булевы пропсами. Тогда memo на
@@ -243,9 +243,17 @@ export const TableBody = memo(() => {
   if (!isLoading && rows.length === 0) {
     return (
       <tbody>
-        {/* <tr>
-          <td colSpan={visibleColumns.length + extraCol} />
-        </tr> */}
+        {/*
+          * ПУСТАЯ ТАБЛИЦА ДОЛЖНА СКАЗАТЬ, ПОЧЕМУ ОНА ПУСТА, — если вызывающий знает ответ.
+          * «Данных нет» и «данные ещё не читали» выглядят одинаково, а требуют разного:
+          * второе — действия человека. Объяснение стоит там, где ищут данные, а не в общей
+          * области сообщений, где оно висело бы, пока открыта форма.
+          */}
+        {emptyText && (
+          <tr className={styles.TableEmptyRow}>
+            <td colSpan={visibleColumns.length + extraCol}>{emptyText}</td>
+          </tr>
+        )}
         <tr className={styles.TableFillerRow} aria-hidden="true">
           <td colSpan={visibleColumns.length + extraCol} />
         </tr>

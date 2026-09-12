@@ -151,6 +151,8 @@ export interface TableProps {
    * группы и уводит фокус.
    */
   disableActiveRow?: boolean;
+  /** Что написать вместо пустой таблицы (см. context.emptyText). */
+  emptyText?: string;
   /**
    * Активная строка сменилась — ОДИНОЧНЫЙ клик (и стрелки клавиатуры).
    *
@@ -364,6 +366,7 @@ const Table: FC<TableProps> = memo((props) => {
     onChildToggle,
     onToggleExpand,
     disableActiveRow = false,
+    emptyText,
     onActiveRowChange,
     apiRef,
     highlightUuid,
@@ -664,6 +667,7 @@ const Table: FC<TableProps> = memo((props) => {
       onChildToggle,
       onToggleExpand,
       disableActiveRow,
+      emptyText,
       // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
         setSelectedRows,
@@ -683,7 +687,7 @@ const Table: FC<TableProps> = memo((props) => {
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
       expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
-      disableActiveRow, groupSelection, wrapCells,
+      disableActiveRow, emptyText, groupSelection, wrapCells,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,

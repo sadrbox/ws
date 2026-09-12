@@ -121,12 +121,15 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 
 				<GroupCol className={main.FormNotice}>
 					<QueryError error={creds.error} />
-					<Notice items={[
+					<Notice inline items={[
 						...(agents.isLoading || agentReady ? [] : [{
 							type: "warning" as const,
 							text: translate("onecCredsAgentUnsupported"),
 						}]),
 						{
+							// ПОЯСНЕНИЕ, А НЕ СООБЩЕНИЕ: оно верно всё время, пока вкладка открыта, и
+							// в общей области висело бы «актуальным» вечно — очистка такие записи не
+							// берёт, и список выглядел незакрывающимся. Рисуем на месте.
 							type: "info" as const,
 							/*
 							 * ДВА РАЗНЫХ ПОЛОЖЕНИЯ — ДВА РАЗНЫХ ТЕКСТА. Раньше в обоих стояла одна
