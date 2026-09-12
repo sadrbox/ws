@@ -281,6 +281,21 @@ export class AgentService {
 		return this.listAll();
 	}
 
+	/**
+	 * ПЕРЕЗАПУСК СЛУЖБЫ — ЭТО ДРУГОЙ ПРОЦЕСС, и всё, что мы знали о прежнем, недействительно.
+	 *
+	 * Снимок процессов принадлежит тому экземпляру, который его прислал: после перезапуска
+	 * в нём чужие pid'ы. Панель показывала их как текущие, человек жал «Снять процесс» и
+	 * получал от агента честный отказ — «процесса 10040 нет среди запущенных агентом».
+	 * Ответ верный, вопрос был неверный: список принадлежал покойнику.
+	 *
+	 * Признак занятости — оттуда же: прежний экземпляр забрал команду и умер вместе с ней.
+	 */
+	private forgetInstanceState(id: string): void {
+		const p = this.polls.get(id);
+		if (p) this.polls.set(id, { open: p.open, closedAt: p.closedAt, busyUntil: 0 });
+	}
+
 	async register(id: string, info: { name?: string; version: string; os: string; capabilities: string[]; role?: AgentRole; serverId?: string | null }): Promise<void> {
 		await this.db.query(
 			`UPDATE agents
@@ -384,15 +399,30 @@ export class AgentService {
 	}
 
 	async touchInstance(agentId: string, instanceId: string, version: string | null, remoteAddr?: string | null): Promise<void> {
-		await this.db.query(
+		const r = await this.db.query<{ inserted: boolean }>(
 			`INSERT INTO agent_instances (agent_id, instance_id, version, remote_addr)
 			 VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (agent_id, instance_id)
 			 DO UPDATE SET last_seen_at = now(),
 			               version = COALESCE(EXCLUDED.version, agent_instances.version),
-			               remote_addr = COALESCE(EXCLUDED.remote_addr, agent_instances.remote_addr)`,
+			               remote_addr = COALESCE(EXCLUDED.remote_addr, agent_instances.remote_addr)
+			 RETURNING (xmax = 0) AS inserted`,
 			[agentId, instanceId.slice(0, 200), version, remoteAddr ?? null],
 		);
+		/*
+		 * ПОЯВИЛСЯ НОВЫЙ ЭКЗЕМПЛЯР — значит, службу перезапустили, и всё, что мы знали о
+		 * прежнем, недействительно. Снимок процессов принадлежал ему: после перезапуска в
+		 * нём чужие pid'ы, и панель предлагала снять давно умерший процесс. Человек жал и
+		 * получал от агента честный отказ — «процесса 10040 нет среди запущенных агентом».
+		 * Ответ верный, вопрос неверный: список принадлежал покойнику.
+		 */
+		if (r.rows[0]?.inserted) {
+			this.forgetInstanceState(agentId);
+			await this.db.query(
+				`UPDATE agents SET processes = '[]'::jsonb, processes_seen_at = NULL WHERE id = $1`,
+				[agentId],
+			);
+		}
 	}
 
 	/**
@@ -481,11 +511,25 @@ export class AgentService {
 		const p = this.polls.get(agentId);
 		if (!p) return null;
 		if (p.open > 0) return true;
-		// Забрал нашу команду и ещё не отчитался — это не молчание, это работа. Сильнее
-		// любого косвенного признака: мы сами вручили ему дело и знаем, сколько оно длится.
+
+		/*
+		 * ОБОРВАННЫЙ ОПРОС СИЛЬНЕЕ ЗАНЯТОСТИ.
+		 *
+		 * Раньше «агент забрал команду» держало его в состоянии «на связи» до конца срока
+		 * команды — до пятнадцати минут, а у выгрузки и дольше. Службу останавливали посреди
+		 * работы, и панель все эти минуты показывала живого агента: кнопки активны, команды
+		 * уходят в очередь и там же умирают по сроку. Проверено на живом сервере: именно так
+		 * и выглядит «отключил агента, а панель не замечает».
+		 *
+		 * Но опрос молчит НЕ ТОЛЬКО когда агент умер: между двумя long-poll'ами всегда есть
+		 * зазор. Поэтому: закрылся давно (больше POLL_GAP_MS) — это смерть, и занятость её
+		 * не отменяет; закрылся только что — не знаем, и тогда занятость ещё говорит «жив».
+		 */
+		if (p.closedAt && Date.now() - p.closedAt >= POLL_GAP_MS) return false;
+		// Забрал нашу команду и ещё не отчитался — это не молчание, это работа: мы сами
+		// вручили ему дело и знаем, сколько оно длится.
 		if ((p.busyUntil ?? 0) > Date.now()) return true;
-		if (!p.closedAt) return null;
-		return Date.now() - p.closedAt < POLL_GAP_MS ? null : false;
+		return p.closedAt ? null : null;
 	}
 
 	/** Снимок процессов агента из heartbeat: последнее известное состояние, без истории. */

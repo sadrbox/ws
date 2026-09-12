@@ -27,13 +27,14 @@ import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
+import { formatDuration } from "./queueStats";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchAgentProcesses, killAgentProcess } from "src/services/onec/api";
-import { CapabilityGuard, QueryError } from "./shared";
+import { CapabilityGuard, QueryError, useAgents } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
@@ -103,9 +104,40 @@ export const ProcessesTab: FC = () => {
 
 	const orphans = (procs.data?.items ?? []).filter((p) => p.orphan).length;
 
+	/*
+	 * ЧЕЙ ЭТО СПИСОК И КОГДА СНЯТ.
+	 *
+	 * Список процессов — СНИМОК, который агент присылает с heartbeat, а не живое состояние
+	 * сервера. Пока это не было сказано, снимок выглядел как «сейчас»: агента
+	 * перезапускали, панель показывала pid'ы прежнего процесса, человек жал «Снять» и
+	 * получал честный отказ — «процесса 10040 нет среди запущенных агентом». Ответ верный,
+	 * вопрос был неверный.
+	 *
+	 * Теперь видно и возраст снимка, и то, что агента нет на связи: в обоих случаях
+	 * действовать по этому списку бессмысленно, и кнопка «Снять процесс» гаснет.
+	 */
+	const agents = useAgents();
+	const admin = (agents.data?.items ?? []).find((a) => a.role === "admin" && !a.disabled);
+	const offline = !!admin && !admin.online;
+	const snapshotAt = (procs.data?.items ?? []).map((p) => p.seenAt).find(Boolean) ?? null;
+	const snapshotAgeSecs = snapshotAt ? Math.max(0, Math.round((Date.now() - new Date(snapshotAt).getTime()) / 1000)) : 0;
+	// Полторы минуты — тот же срок, после которого сервис объявляет агента офлайн: снимок
+	// старше него описывает прошлое, а не настоящее.
+	const stale = snapshotAgeSecs > 90;
+
 	return (
 		<>
 			<CapabilityGuard capability="agent.procs" />
+
+			{offline && (
+				<Notice items={[{ type: "attention", text: translate("onecProcAgentOffline") }]} />
+			)}
+			{!offline && stale && (
+				<Notice items={[{
+					type: "warning",
+					text: `${translate("onecProcSnapshotStale")} (${formatDuration(snapshotAgeSecs)})`,
+				}]} />
+			)}
 
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_procs", rows: view.rows, columns: cols, setColumns: setCols,
@@ -118,8 +150,12 @@ export const ProcessesTab: FC = () => {
 				reloadTitle: translate("onecProcRefreshLive"),
 				onActiveRowChange: (r) => setActive(r ? Number(asText(r.pid)) : null),
 				extraButtons: (
-					<Button variant="danger" disabled={!active || kill.isPending}
-						title={active ? `${translate("onecProcKill")}: ${active}` : translate("onecProcPickFirst")}
+					// Пока агента нет на связи, снимать нечего: команда уйдёт в очередь и умрёт
+					// по сроку, а список всё равно принадлежит прошлому.
+					<Button variant="danger" disabled={!active || kill.isPending || offline}
+						title={offline
+							? translate("onecProcAgentOffline")
+							: active ? `${translate("onecProcKill")}: ${active}` : translate("onecProcPickFirst")}
 						onClick={() => active && setConfirm({ pid: active, force: false })}>
 						<Icon name="close" /> {translate("onecProcKill")}
 					</Button>
