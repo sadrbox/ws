@@ -298,7 +298,7 @@ test("ibFailureReason: временный отказ не объявляется
 // Признак ТРЁХЗНАЧНЫЙ, как и публикация: отсутствие поля — «не проверял», и прежнее знание
 // должно сохраниться. Проверяем именно это: что уходит в SQL тринадцатым параметром.
 
-test("срез баз: dbMissing принимается трёхзначно и не выдумывает ответ за агента", async () => {
+test("срез баз: один запрос на весь срез, а dbMissing остаётся трёхзначным", async () => {
 	const seen: { sql: string; params: unknown[] }[] = [];
 	const db = {
 		query: async (sql: string, params?: unknown[]) => {
@@ -315,16 +315,28 @@ test("срез баз: dbMissing принимается трёхзначно и 
 		{ key: "beta" },
 	], { complete: false, authoritative: true });
 
+	// ОДИН upsert на три базы, а не три: сто одиннадцать баз стоили ста одиннадцати
+	// round-trip'ов на каждый срез — и так каждые полминуты heartbeat'ом.
 	const upserts = seen.filter((q) => q.sql.includes("INSERT INTO bases"));
-	assert.equal(upserts.length, 3);
-	// Тринадцатый параметр — сам признак: true / false / «не знаю».
-	assert.equal(upserts[0].params[12], true);
-	assert.equal(upserts[1].params[12], false);
-	assert.equal(upserts[2].params[12], null);
+	assert.equal(upserts.length, 1);
+	assert.ok(upserts[0].sql.includes("unnest("));
+	// Ключи и признаки уходят массивами; «поля нет» — это null, а не false.
+	assert.deepEqual(upserts[0].params[2], ["aibek", "alfa", "beta"]);
+	assert.deepEqual(upserts[0].params[11], [true, false, null]);
 
-	// Положительный ответ помечает базу той же причиной, что и отказ команды.
-	assert.ok(upserts[0].sql.includes("'NO_DB'"));
-	// Отрицательный снимает ТОЛЬКО NO_DB: агент отвечал про данные, а не про учётные записи,
-	// и гасить им «не пускают» значило бы объявить базу рабочей по ответу на другой вопрос.
-	assert.ok(upserts[0].sql.includes("ib_unreachable_reason = 'NO_DB'"));
+	// Определённые ответы агента доводятся точечными запросами: положительный ставит
+	// причину NO_DB, отрицательный снимает ТОЛЬКО её — агент отвечал про данные в СУБД, а
+	// не про учётные записи, и гасить им «не пускают» значило бы соврать.
+	const setNoDb = seen.find((q) => q.sql.includes("SET ib_unreachable_at = COALESCE("));
+	assert.ok(setNoDb, "положительный ответ должен помечать базу");
+	assert.deepEqual(setNoDb?.params[1], ["aibek"]);
+
+	const clear = seen.find((q) => q.sql.includes("SET ib_unreachable_at = NULL"));
+	assert.ok(clear, "отрицательный ответ должен снимать отметку");
+	assert.deepEqual(clear?.params[1], ["alfa"]);
+	assert.ok(clear?.sql.includes("ib_unreachable_reason = 'NO_DB'"));
+
+	// База, про которую агент ничего не сказал, в точечные запросы не попадает вовсе.
+	assert.ok(!JSON.stringify(setNoDb?.params).includes("beta"));
+	assert.ok(!JSON.stringify(clear?.params).includes("beta"));
 });

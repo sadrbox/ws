@@ -66,12 +66,37 @@ export class BatchService {
 		await this.db.query(`UPDATE commands SET batch_id = $1 WHERE id = $2`, [batchId, commandId]);
 	}
 
+	/**
+	 * Отчёт по ОДНОМУ заданию.
+	 *
+	 * Тонкая обёртка над `reports`: логика сборки одна на список и на одиночный отчёт —
+	 * иначе экран «Задания» и карточка задания рано или поздно начали бы считать по-разному.
+	 */
 	async progress(id: string): Promise<BatchProgress | null> {
-		// Просроченные команды закрываем перед чтением отчёта: иначе задание, чьи команды
-		// никто не забрал, вечно показывает «выполняется».
+		const [only] = await this.reports([id]);
+		return only ?? null;
+	}
+
+	/**
+	 * Отчёты по НЕСКОЛЬКИМ заданиям — ПОСТОЯННЫМ числом запросов, а не по запросу на каждое.
+	 *
+	 * ЗАЧЕМ. Экран «Задания» опрашивается раз в три секунды, пока хоть что-то выполняется.
+	 * Прежняя сборка звала отчёт в цикле, и каждый отчёт делал четыре запроса, первый из
+	 * которых — UPDATE. Замерено на живой базе: двадцать заданий = 81 запрос и 73 мс, то
+	 * есть около двадцати семи запросов и семи ЗАПИСЕЙ в секунду на ровном месте — за то,
+	 * что человек смотрит на экран.
+	 *
+	 * Теперь запросов пять независимо от числа заданий: закрыть просроченные, взять шапки,
+	 * взять команды, узнать про учётные записи баз и про способность агента их применять.
+	 */
+	async reports(ids: string[]): Promise<BatchProgress[]> {
+		if (!ids.length) return [];
+
+		// Просроченные команды закрываем ПЕРЕД чтением отчёта: иначе задание, чьи команды
+		// никто не забрал, вечно показывает «выполняется». Причину пишем здесь же — после
+		// перевода в expired уже не отличить «не забрал» (это про связь) от «забрал и не
+		// ответил» (это про базу).
 		await this.db.query(
-			// Причину пишем здесь же: после перевода в expired уже не отличить «не забрал»
-			// (это про связь) от «забрал и не ответил» (это про базу).
 			`UPDATE commands
 			    SET state = 'expired', finished_at = now(),
 			        error = COALESCE(error, jsonb_build_object(
@@ -80,30 +105,31 @@ export class BatchService {
 			            THEN 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'
 			            ELSE 'Агент забрал команду, но не ответил за отведённое ей время. Проверьте базу и журнал агента.'
 			          END))
-			  WHERE batch_id = $1 AND state IN ('queued','dispatched') AND expires_at < now()`, [id],
+			  WHERE batch_id = ANY($1::uuid[]) AND state IN ('queued','dispatched') AND expires_at < now()`,
+			[ids],
 		);
-		const b = await this.db.query<{ id: string; type: string; total: number; created_at: Date }>(
-			`SELECT id, type, total, created_at FROM command_batches WHERE id = $1`, [id],
-		);
-		const head = b.rows[0];
-		if (!head) return null;
 
-		const c = await this.db.query<{
-			id: string;
-			base_key: string | null; state: string; error: { code: string; message: string } | null; outcome: string | null;
+		const heads = await this.db.query<{ id: string; type: string; total: number; created_at: Date }>(
+			`SELECT id, type, total, created_at FROM command_batches WHERE id = ANY($1::uuid[])`, [ids],
+		);
+		if (!heads.rows.length) return [];
+
+		const cmds = await this.db.query<{
+			batch_id: string; id: string; base_key: string | null; state: string;
+			error: { code: string; message: string } | null; outcome: string | null;
 		}>(
 			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
-			`SELECT id, base_key, state, error, COALESCE(result->>'path', result->>'url') AS outcome
-			   FROM commands WHERE batch_id = $1 ORDER BY created_at`, [id],
+			`SELECT batch_id, id, base_key, state, error, COALESCE(result->>'path', result->>'url') AS outcome
+			   FROM commands WHERE batch_id = ANY($1::uuid[]) ORDER BY batch_id, created_at`,
+			[ids],
 		);
-		// Ошибку 1С/COM дополняем подсказкой «что чинить»: сырой HRESULT в отчёте задания
-		// не говорит пользователю ничего, а искать его в логах на Windows-машине дорого.
+
 		// Контекст входа в базу: у каких баз задана своя учётная запись и умеет ли её
 		// применять хоть один админ-агент. Без этого отказ «проверьте служебного
 		// администратора» выглядит одинаково и когда учётная запись неверна, и когда её
 		// просто не применили — а это разные дела: во втором случае чинят агента.
-		const keys = [...new Set(c.rows.map((r) => r.base_key).filter((k): k is string => !!k))];
+		const keys = [...new Set(cmds.rows.map((r) => r.base_key).filter((k): k is string => !!k))];
 		const authUsers = keys.length
 			? (await this.db.query<{ key: string; user_name: string }>(
 				`SELECT b.key, c.user_name FROM base_credentials c JOIN bases b ON b.id = c.base_id
@@ -117,41 +143,57 @@ export class BatchService {
 			 ) AS ok`,
 		)).rows[0]?.ok === true;
 
-		const items: BatchProgress["items"] = c.rows.map((r) => ({
-			commandId: r.id as string | null,
-			baseKey: r.base_key,
-			state: r.state,
-			error: humanizeAgentError(r.error, r.base_key
-				? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
-				: {}),
-			outcome: r.outcome,
-		}));
-		// Команд может НЕ ХВАТАТЬ: они живут час и вычищаются, а задание остаётся. Без этого
-		// такое задание вечно показывало «выполняется 1 из 1» — хотя ждать уже некого.
-		const ageMs = Date.now() - head.created_at.getTime();
-		const missing = head.total - items.length;
-		if (missing > 0 && ageMs > LOST_AFTER_MS) {
-			for (let i = 0; i < missing; i++) {
-				items.push({
-					commandId: null,
-					baseKey: null, state: "expired", outcome: null,
-					error: { code: "COMMAND_LOST", message: "Команда не найдена: срок её жизни истёк. Повторите операцию." },
-				});
-			}
+		const byBatch = new Map<string, typeof cmds.rows>();
+		for (const r of cmds.rows) {
+			const list = byBatch.get(r.batch_id);
+			if (list) list.push(r); else byBatch.set(r.batch_id, [r]);
 		}
 
-		const done = items.filter((i) => i.state === "done").length;
-		// expired и canceled считаем неуспехом: команда не выполнена, и если она нужна —
-		// повторять её придётся так же. Отмену при этом видно отдельной подписью строки.
-		const failed = items.filter((i) =>
-			i.state === "failed" || i.state === "expired" || i.state === "canceled").length;
-		return {
-			id: head.id, type: head.type, total: head.total,
-			done, failed, pending: Math.max(0, head.total - done - failed),
-			// Отменить можно только не начатое: см. queue.cancel.
-			cancelable: items.filter((i) => i.state === "queued").length,
-			createdAt: head.created_at.toISOString(), items,
-		};
+		const order = new Map(ids.map((id, i) => [id, i]));
+		return heads.rows
+			.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+			.map((head) => {
+				const items: BatchProgress["items"] = (byBatch.get(head.id) ?? []).map((r) => ({
+					commandId: r.id as string | null,
+					baseKey: r.base_key,
+					state: r.state,
+					// Ошибку 1С/COM дополняем подсказкой «что чинить»: сырой HRESULT в отчёте
+					// задания не говорит пользователю ничего, а искать его в логах на
+					// Windows-машине дорого.
+					error: humanizeAgentError(r.error, r.base_key
+						? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
+						: {}),
+					outcome: r.outcome,
+				}));
+
+				// Команд может НЕ ХВАТАТЬ: они живут час и вычищаются, а задание остаётся. Без
+				// этого такое задание вечно показывало «выполняется 1 из 1» — хотя ждать уже
+				// некого.
+				const ageMs = Date.now() - head.created_at.getTime();
+				const missing = head.total - items.length;
+				if (missing > 0 && ageMs > LOST_AFTER_MS) {
+					for (let i = 0; i < missing; i++) {
+						items.push({
+							commandId: null,
+							baseKey: null, state: "expired", outcome: null,
+							error: { code: "COMMAND_LOST", message: "Команда не найдена: срок её жизни истёк. Повторите операцию." },
+						});
+					}
+				}
+
+				const done = items.filter((i) => i.state === "done").length;
+				// expired и canceled считаем неуспехом: команда не выполнена, и если она нужна —
+				// повторять её придётся так же. Отмену при этом видно отдельной подписью строки.
+				const failed = items.filter((i) =>
+					i.state === "failed" || i.state === "expired" || i.state === "canceled").length;
+				return {
+					id: head.id, type: head.type, total: head.total,
+					done, failed, pending: Math.max(0, head.total - done - failed),
+					// Отменить можно только не начатое: см. queue.cancel.
+					cancelable: items.filter((i) => i.state === "queued").length,
+					createdAt: head.created_at.toISOString(), items,
+				};
+			});
 	}
 
 	/**
@@ -177,17 +219,12 @@ export class BatchService {
 		return r.rows;
 	}
 
-	/** Последние задания организации — для вкладки «Задания». */
+	/** Последние задания организации — для вкладки «Задания». Шесть запросов на любой размер. */
 	async list(organizationUuid: string, limit = 20): Promise<BatchProgress[]> {
 		const r = await this.db.query<{ id: string }>(
 			`SELECT id FROM command_batches WHERE organization_uuid = $1 ORDER BY created_at DESC LIMIT $2`,
 			[organizationUuid, limit],
 		);
-		const out: BatchProgress[] = [];
-		for (const row of r.rows) {
-			const p = await this.progress(row.id);
-			if (p) out.push(p);
-		}
-		return out;
+		return this.reports(r.rows.map((row) => row.id));
 	}
 }

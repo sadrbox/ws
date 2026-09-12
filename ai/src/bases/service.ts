@@ -391,28 +391,50 @@ export class BaseService {
 	 * это видно в панели и не мешает вернуть базу обратно.
 	 */
 	async sync(serverId: string, states: BaseState[], opts: { complete: boolean; authoritative: boolean }): Promise<void> {
-		for (const s of states) {
-			const key = s.key.trim();
-			if (!key) continue;
-			// Имя с «?» — след транскодирования через CP1251 на стороне агента: русские
-			// буквы выживают, казахские (ә ғ қ ң ө ұ ү һ і) превращаются в «?» безвозвратно.
-			// Таким именем НЕ затираем уже сохранённое целое: иначе старый агент, запущенный
-			// после исправленного, снова испортит реестр. Битое имя принимается только
-			// когда своего ещё нет.
-			const mangled = !!s.name && s.name.includes("?");
+		const rows = states
+			.map((s) => ({ ...s, key: s.key.trim() }))
+			.filter((s) => !!s.key);
+		if (rows.length) {
+			/*
+			 * ОДИН ЗАПРОС НА ВЕСЬ СРЕЗ, а не по запросу на базу.
+			 *
+			 * Раньше здесь был цикл: сто одиннадцать баз — сто одиннадцать round-trip'ов, и
+			 * так на каждый полный срез (heartbeat и кнопка «Обновить»). Семантика при этом
+			 * тонкая и её нельзя потерять: «поля нет» значит «агент не знает», а не «пусто»,
+			 * — поэтому колонки по-прежнему обновляются через COALESCE, а признаки публикации
+			 * и отсутствия базы в СУБД остаются трёхзначными.
+			 *
+			 * Имя с «?» — след транскодирования через CP1251 на стороне агента: русские буквы
+			 * выживают, казахские (ә ғ қ ң ө ұ ү һ і) превращаются в «?» безвозвратно. Таким
+			 * именем НЕ затираем уже сохранённое целое — иначе старый агент, запущенный после
+			 * исправленного, снова испортит реестр. Признак считается в самом запросе
+			 * (position('?' in EXCLUDED.name)), а не приезжает отдельным массивом.
+			 */
 			await this.db.query(
-				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version, sessions_count, infobase_id, last_seen_at, published, publish_url, publish_seen_at, ib_unreachable_at, ib_unreachable_reason)
-				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, 'UNKNOWN'), $6, $7, $8, $10, now(), $11, $12,
-				         CASE WHEN $11::boolean IS NULL THEN NULL ELSE now() END,
-				         CASE WHEN $13::boolean IS TRUE THEN now() ELSE NULL END,
-				         CASE WHEN $13::boolean IS TRUE THEN 'NO_DB' ELSE NULL END)
+				`INSERT INTO bases (id, server_id, key, name, status, onec_version, ext_version,
+				                    sessions_count, infobase_id, last_seen_at, published, publish_url,
+				                    publish_seen_at, ib_unreachable_at, ib_unreachable_reason)
+				 SELECT x.id, $1, x.key, COALESCE(x.name, ''), COALESCE(x.status, 'UNKNOWN'),
+				        x.onec_version, x.ext_version, x.sessions_count, x.infobase_id, now(),
+				        x.published, x.publish_url,
+				        CASE WHEN x.published IS NULL THEN NULL ELSE now() END,
+				        CASE WHEN x.db_missing IS TRUE THEN now() ELSE NULL END,
+				        CASE WHEN x.db_missing IS TRUE THEN 'NO_DB' ELSE NULL END
+				   FROM unnest($2::uuid[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[],
+				               $8::integer[], $9::text[], $10::boolean[], $11::text[], $12::boolean[])
+				     AS x(id, key, name, status, onec_version, ext_version,
+				          sessions_count, infobase_id, published, publish_url, db_missing)
 				 ON CONFLICT (server_id, key) DO UPDATE
 				    SET name           = CASE
 				                           WHEN EXCLUDED.name = '' THEN bases.name
-				                           WHEN $9::boolean AND bases.name <> '' AND position('?' in bases.name) = 0 THEN bases.name
+				                           WHEN position('?' in EXCLUDED.name) > 0
+				                                AND bases.name <> '' AND position('?' in bases.name) = 0 THEN bases.name
 				                           ELSE EXCLUDED.name
 				                         END,
-				        status         = COALESCE($5, bases.status),
+				        -- «UNKNOWN» — это «агент не знает» (или не прислал поле вовсе, и мы
+				        -- подставили умолчание при вставке): прежнее состояние в обоих случаях
+				        -- честнее выдуманного.
+				        status         = COALESCE(NULLIF(EXCLUDED.status, 'UNKNOWN'), bases.status),
 				        onec_version   = COALESCE(EXCLUDED.onec_version, bases.onec_version),
 				        ext_version    = COALESCE(EXCLUDED.ext_version, bases.ext_version),
 				        sessions_count = COALESCE(EXCLUDED.sessions_count, bases.sessions_count),
@@ -423,55 +445,61 @@ export class BaseService {
 				        publish_url    = CASE WHEN EXCLUDED.published IS FALSE THEN NULL
 				                              ELSE COALESCE(EXCLUDED.publish_url, bases.publish_url) END,
 				        publish_seen_at = COALESCE(EXCLUDED.publish_seen_at, bases.publish_seen_at),
-				        /*
-				         * «БАЗЫ НЕТ В СУБД» ИЗ СРЕЗА — тот же признак, что ставит неудавшаяся
-				         * команда внутрь базы, только добытый дешевле и заранее.
-				         *
-				         * Время отметки не сдвигаем на каждый срез: важно, С КАКОГО МОМЕНТА
-				         * не войти, а не когда об этом сказали в последний раз.
-				         *
-				         * Отрицательный ответ снимает ТОЛЬКО отметку NO_DB. Агент проверил
-				         * СУБД — он ответил про данные, а не про учётные записи: гасить им
-				         * «не пускают» (NO_ACCESS) значило бы объявить базу рабочей по
-				         * ответу на другой вопрос.
-				         */
-				        ib_unreachable_at = CASE
-				                              WHEN $13::boolean IS TRUE THEN COALESCE(bases.ib_unreachable_at, now())
-				                              WHEN $13::boolean IS FALSE AND bases.ib_unreachable_reason = 'NO_DB' THEN NULL
-				                              ELSE bases.ib_unreachable_at
-				                            END,
-				        ib_unreachable_reason = CASE
-				                              WHEN $13::boolean IS TRUE THEN 'NO_DB'
-				                              WHEN $13::boolean IS FALSE AND bases.ib_unreachable_reason = 'NO_DB' THEN NULL
-				                              ELSE bases.ib_unreachable_reason
-				                            END,
+				        -- Признак «нет в СУБД» здесь НЕ трогаем: у него три значения, и в одной
+				        -- ветке UPSERT их не выразить, не запутав «поля нет вовсе». Его ставят и
+				        -- снимают два коротких запроса ниже — по спискам баз, о которых агент
+				        -- сказал определённо.
 				        last_seen_at   = now()`,
-				[randomUUID(), serverId, key, s.name ?? null, s.status ?? null,
-					s.onecVersion ?? null, s.extVersion ?? null, s.sessionsCount ?? null, mangled, s.id ?? null,
-					// ПУБЛИКАЦИЯ ИЗ СРЕЗА БАЗ — ТРЁХЗНАЧНАЯ, и различать состояния обязан агент.
-					//
-					// Контракт: нашёл — `true` с адресом; не нашёл ПРИ ПОЛНОМ просмотре
-					// веб-сервера — `false`; не нашёл при неполном — поля нет вовсе, и
-					// прежнее значение сохраняется (COALESCE выше).
-					//
-					// Раньше здесь принималось только положительное: сборка агента присылала
-					// `false` там, где на самом деле не сумела прочитать веб-сервер, и
-					// очередной срез затирал `true`, поставленный нашей же командой
-					// IB_PUBLISH. Защита была верной для ТОГО агента, но у неё была цена:
-					// базу, опубликованную мимо панели и потом снятую мимо панели, реестр
-					// считал бы опубликованной вечно — отрицательный ответ отбрасывался.
-					//
-					// Проверено на живом сервере перед снятием защиты: сборка, которая ещё
-					// не умеет различать три состояния, признака в срезе баз НЕ ШЛЁТ вовсе
-					// (0 записей из 110) — то есть попадает в ветку «не знаю» и ничего не
-					// затирает. Различать берёмся только там, где агент сам взялся отвечать.
-					s.published ?? null, s.publishUrl ?? null, s.dbMissing ?? null],
+				[
+					serverId,
+					rows.map(() => randomUUID()),
+					rows.map((s) => s.key),
+					rows.map((s) => s.name ?? null),
+					rows.map((s) => s.status ?? null),
+					rows.map((s) => s.onecVersion ?? null),
+					rows.map((s) => s.extVersion ?? null),
+					rows.map((s) => s.sessionsCount ?? null),
+					rows.map((s) => s.id ?? null),
+					/*
+					 * ПУБЛИКАЦИЯ ИЗ СРЕЗА БАЗ — ТРЁХЗНАЧНАЯ, и различать состояния обязан агент.
+					 * Контракт: нашёл — `true` с адресом; не нашёл ПРИ ПОЛНОМ просмотре
+					 * веб-сервера — `false`; не нашёл при неполном — поля нет вовсе, и прежнее
+					 * значение сохраняется (COALESCE выше). Проверено на живом сервере: сборка,
+					 * которая ещё не умеет различать три состояния, признака не шлёт вовсе и
+					 * потому ничего не затирает.
+					 */
+					rows.map((s) => s.published ?? null),
+					rows.map((s) => s.publishUrl ?? null),
+					rows.map((s) => s.dbMissing ?? null),
+				],
 			);
+			// Снятие отметки «нет в СУБД» — отдельным запросом: в UPSERT его не выразить,
+			// не запутав ветку «поля нет вовсе». Задевает только те базы, что помечены NO_DB,
+			// и только те, про которые агент сказал `false`.
+			const alive = rows.filter((s) => s.dbMissing === false).map((s) => s.key);
+			if (alive.length) {
+				await this.db.query(
+					`UPDATE bases SET ib_unreachable_at = NULL, ib_unreachable_reason = NULL
+					  WHERE server_id = $1 AND key = ANY($2::text[]) AND ib_unreachable_reason = 'NO_DB'`,
+					[serverId, alive],
+				);
+			}
+			// Положительный ответ ставит причину: в UPSERT она попадает только при вставке.
+			const dead = rows.filter((s) => s.dbMissing === true).map((s) => s.key);
+			if (dead.length) {
+				await this.db.query(
+					`UPDATE bases
+					    SET ib_unreachable_at = COALESCE(ib_unreachable_at, now()), ib_unreachable_reason = 'NO_DB'
+					  WHERE server_id = $1 AND key = ANY($2::text[])
+					    AND ib_unreachable_reason IS DISTINCT FROM 'NO_DB'`,
+					[serverId, dead],
+				);
+			}
 		}
 
 		// Полный срез от того, кто владеет списком (админ-агент), закрывает пропавшие базы.
 		if (opts.complete && opts.authoritative) {
-			const keys = states.map((s) => s.key.trim()).filter(Boolean);
+			const keys = rows.map((s) => s.key);
 			await this.db.query(
 				`UPDATE bases SET status = 'MISSING'
 				  WHERE server_id = $1 AND NOT (key = ANY($2::text[])) AND status <> 'MISSING'`,
@@ -635,26 +663,59 @@ export class BaseService {
 		 */
 		if (!publicationReport(items, complete, evidence).accepted) return { marked: 0, cleared: 0, matched: 0 };
 
-		let marked = 0;
-		let matched = 0;
+		/*
+		 * СЛОВАРЬ ОДНИМ ЗАПРОСОМ, ЗАПИСЬ — ВТОРЫМ.
+		 *
+		 * Раньше на каждую строку ответа шли два запроса: поиск базы и запись состояния.
+		 * Последний живой срез — 135 строк, то есть 270 round-trip'ов на одно нажатие
+		 * «Проверить публикации». Теперь имена читаются разом, а состояние пишется одним
+		 * UPDATE ... FROM (unnest).
+		 *
+		 * Агент называет базу то ключом, то ИМЕНЕМ («Карамурт-Газ ТОО» вместо karamurt_gaz),
+		 * поэтому словарь строится по обоим — иначе ответ целиком уходит в никуда, а мы
+		 * считаем, что применили его.
+		 */
+		const known = await this.db.query<{ key: string; name: string }>(
+			`SELECT key, name FROM bases WHERE server_id = $1`, [serverId],
+		);
+		const byLabel = new Map<string, string>();
+		for (const b of known.rows) {
+			byLabel.set(b.key, b.key);
+			if (b.name) byLabel.set(b.name, b.key);
+		}
+
+		const keys: string[] = [];
+		const flags: boolean[] = [];
+		const urls: (string | null)[] = [];
+		const seen = new Set<string>();
 		for (const it of items) {
 			const label = (it.key ?? "").trim();
 			if (!label) continue;
-			// Агент называет базу то ключом, то ИМЕНЕМ («Карамурт-Газ ТОО» вместо
-			// karamurt_gaz). Ищем по обоим: иначе ответ целиком уходит в никуда, а мы
-			// считаем, что применили его.
-			const hit = await this.db.query<{ key: string }>(
-				`SELECT key FROM bases WHERE server_id = $1 AND (key = $2 OR name = $2) LIMIT 1`,
-				[serverId, label],
-			);
-			const key = hit.rows[0]?.key;
-			if (!key) continue;
-			matched += 1;
+			const key = byLabel.get(label);
+			if (!key || seen.has(key)) continue;
+			seen.add(key);
+			keys.push(key);
 			// `published !== false` считало опубликованной запись БЕЗ признака вовсе:
 			// отсутствие поля — это незнание агента, а не «да». Единственный критерий —
 			// isPublished (явное true либо адрес публикации при умолчанном признаке).
-			await this.setPublication(serverId, key, isPublished(it), it.url ?? null);
-			marked += 1;
+			flags.push(isPublished(it));
+			urls.push(it.url ?? null);
+		}
+		const matched = keys.length;
+		let marked = 0;
+		if (keys.length) {
+			const upd = await this.db.query(
+				// «Не опубликована» СТИРАЕТ адрес — та же логика, что в setPublication:
+				// ссылка на страницу, которой нет, хуже её отсутствия.
+				`UPDATE bases b
+				    SET published = x.published,
+				        publish_url = CASE WHEN x.published THEN x.url ELSE NULL END,
+				        publish_seen_at = now()
+				   FROM unnest($2::text[], $3::boolean[], $4::text[]) AS x(key, published, url)
+				  WHERE b.server_id = $1 AND b.key = x.key`,
+				[serverId, keys, flags, urls],
+			);
+			marked = upd.rowCount ?? 0;
 		}
 		/*
 		 * НИ ОДНА СТРОКА НЕ УЗНАНА — ответ в чужом словаре, и верить ему нельзя.
