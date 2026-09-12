@@ -1598,7 +1598,7 @@
   "onecBatchCancelQueued": "Отменить в очереди",
   "onecBatchPickFirst": "Отметьте задания в списке",
   "onecBatchNothingToRetry": "Неуспешных нет — повторять нечего",
-  "onecBatchSkipped": "Пропущено",
+  "onecBatchSkipped": "Не поставлена",
   "onecBatchesHint": "Групповые операции по базам: щёлкните задание, чтобы увидеть результат по каждой базе",
   "onecBatchByBase": "Результат по базам",
   "onecBackToSummary": "Назад к сводке",
@@ -2026,5 +2026,7 @@
   "techMsgErrorsOnlyHint": "Показывать только ошибки и предупреждения о сбоях",
   "techMsgNothingFound": "Ничего не нашлось: снимите отбор или измените запрос",
   "onecProcAgentOffline": "Агента нет на связи: список процессов — снимок прошлого, снимать по нему нечего",
-  "onecProcSnapshotStale": "Снимок процессов устарел — нажмите «Обновить», чтобы спросить агента живьём"
+  "onecProcSnapshotStale": "Снимок процессов устарел — нажмите «Обновить», чтобы спросить агента живьём",
+  "onecBatchNotQueued": "Не поставлено",
+  "onecBatchNothingQueued": "Ни одна команда не поставлена в очередь"
 }

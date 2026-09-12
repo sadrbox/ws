@@ -12,7 +12,8 @@ import type { NoticeItem } from "src/components/Notice";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import {
-	fetchBaseExtensions, fetchBaseUsers, fetchAgents, fetchServers, hasCapability, type OnecBase,
+	fetchBaseExtensions, fetchBaseUsers, fetchAgents, fetchServers, hasCapability,
+	type BatchStart, type OnecBase,
 } from "src/services/onec/api";
 import { previewUrl } from "./ServerParams";
 import { finishOp, progressOp, startOp } from "./progress";
@@ -145,6 +146,39 @@ export function usePublishAddressHint(serverName?: string | null): NoticeItem {
 	return host
 		? { type: "info", text: `${translate("onecPublishAddress")}: ${previewUrl(host)}` }
 		: { type: "warning", text: translate("onecPublishNoPublicHost") };
+}
+
+/**
+ * ИТОГ ПОСТАНОВКИ ЗАДАНИЯ — словами, и без «успеха» там, где ничего не поставили.
+ *
+ * ЖИВОЙ СЛУЧАЙ (12.09). Операцию запустили при остановленном агенте: ни одна команда не
+ * встала в очередь, а панель сказала «Поставлено в очередь: 0/1» жёлтым — как будто
+ * что-то произошло. Человек ушёл ждать, задание два часа показывало «В работе: 1» без
+ * единой строки, а на деле работы не начиналось вовсе.
+ *
+ * Правило: поставили всё — успех; поставили часть — предупреждение с числом; не поставили
+ * ничего — ОШИБКА, и называем причину, которую вернул сервис («нет агента на связи»).
+ */
+export function reportBatchStart(r: BatchStart, source?: string): void {
+	const reason = r.skipped[0]?.reason ?? "";
+	if (!r.queued) {
+		const text = `${translate("onecBatchNothingQueued")}${reason ? `: ${reason}` : ""}`;
+		showToast(text, "error");
+		noteNotice(source ?? translate("onecCommands"), { type: "error", text });
+		return;
+	}
+	if (r.skipped.length) {
+		const text = `${translate("onecBatchQueued")}: ${r.queued}/${r.total}`
+			+ ` · ${translate("onecBatchNotQueued")}: ${r.skipped.length}${reason ? ` (${reason})` : ""}`;
+		showToast(text, "warning");
+		// Отсеянных может быть десяток, а в тост влезает одна причина — остальное в журнал.
+		noteNotice(source ?? translate("onecCommands"), {
+			type: "warning",
+			text: r.skipped.map((x) => `${x.baseKey} — ${x.reason}`).join("\n"),
+		});
+		return;
+	}
+	showToast(`${translate("onecBatchQueued")}: ${r.queued}/${r.total}`, "success");
 }
 
 /** Что читаем у базы: её пользователей или её расширения. */

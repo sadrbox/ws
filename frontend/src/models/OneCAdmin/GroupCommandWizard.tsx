@@ -30,7 +30,6 @@ import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { FormArea, GroupRow } from "src/components/UI";
-import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -39,7 +38,9 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
 import { fetchBases, runBatch, type BatchType, type OnecBase } from "src/services/onec/api";
-import { isApplicable, unreachableReason, usePublishAddressHint, type OnecOperation } from "./shared";
+import {
+	isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation,
+} from "./shared";
 import { estimateSecs, formatDuration, useQueueStats } from "./queueStats";
 import { attachBatch, finishOp, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
@@ -196,10 +197,10 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 			}
 		},
 		onSuccess: (r) => {
-			const tail = r.skipped.length ? ` ${translate("onecBatchSkipped")}: ${r.skipped.length}` : "";
-			showToast(`${translate("onecBatchQueued")}: ${r.queued}/${r.total}.${tail}`,
-				r.skipped.length ? "warning" : "success");
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			// Итог до закрытия помощника: если ни одна команда не встала в очередь, человек
+			// должен узнать это сейчас, а не через два часа по пустому заданию.
+			reportBatchStart(r, translate(spec.title));
 			if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 		},
 		onError: (e) => reportError(e, { source: translate(spec.title) }),

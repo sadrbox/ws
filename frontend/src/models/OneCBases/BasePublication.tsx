@@ -22,10 +22,9 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
-import { showToast } from "src/components/UIToast";
 import { getFormatDate } from "src/utils/datetime";
 import { runBatch, type BatchType } from "src/services/onec/api";
-import { publishLabel, usePublishAddressHint } from "src/models/OneCAdmin/shared";
+import { publishLabel, reportBatchStart, usePublishAddressHint } from "src/models/OneCAdmin/shared";
 import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
 import { useNoticeScope } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
@@ -79,7 +78,7 @@ export const BasePublication: FC<{
 		},
 		onSuccess: (r) => {
 			setConfirm(null);
-			showToast(`${translate("onecBatchQueued")}: ${r.queued}/${r.total}`, r.skipped.length ? "warning" : "success");
+			reportBatchStart(r, translate("onecPublication"));
 			// Реестр перечитает наблюдатель заданий, когда команда выполнится (см.
 			// useBatchWatch): сразу после постановки в очередь в нём ещё прежнее состояние.
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });

@@ -27,7 +27,6 @@ import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import Notice, { type NoticeItem } from "src/components/Notice";
-import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
@@ -42,7 +41,7 @@ import {
 } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { useOpenOnecBase } from "src/models/OneCBases";
-import { QueryError, isApplicable, publishLabel } from "./shared";
+import { QueryError, isApplicable, publishLabel, reportBatchStart } from "./shared";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
@@ -162,10 +161,10 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 			return runBatch(type, picked, payload);
 		},
 		onSuccess: (d) => {
-			const tail = d.skipped.length ? ` ${translate("onecBatchSkipped")}: ${d.skipped.length}` : "";
-			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}.${tail}`, d.skipped.length ? "warning" : "success");
 			void qc.invalidateQueries({ queryKey: ["onec"] });
 			setDialog(null);
+			// Итог называет то, что есть: поставили всё / часть / ничего — и почему.
+			reportBatchStart(d, isUser ? translate("onecUser") : translate("onecExtension"));
 		},
 		onError: (e) => reportError(e, { source: isUser ? translate("onecUser") : translate("onecExtension") }),
 	});

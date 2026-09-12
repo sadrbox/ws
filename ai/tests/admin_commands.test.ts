@@ -6,6 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ADMIN_COMMANDS, agentCanRun, buildAdminPayload, findAdminCommand, isAdminCommand } from "../src/commands/admin.ts";
+import type { Db } from "../src/db/pool.ts";
+import { BatchService } from "../src/onec/batches.ts";
 
 const adminAgent = { role: "admin" as const, capabilities: ["CLUSTER_LIST_SESSIONS", "cluster.admin"] };
 const businessAgent = { role: "business" as const, capabilities: ["CREATE_SALE", "onec.business"] };
@@ -235,4 +237,45 @@ test("загрузка и обновление требуют путь к фай
 		const built = buildAdminPayload(findAdminCommand(type)!, { baseKey: "buh" });
 		assert.equal(built.ok, false, type);
 	}
+});
+
+// ── Задание без единой поставленной команды не должно выглядеть работающим ──
+//
+// ЖИВОЙ СЛУЧАЙ (12.09). Операцию запустили при остановленном агенте: задание завели на одну
+// базу, команду поставить не смогли («нет агента на связи»), а `total` остался равен
+// единице. Отчёт считал pending = total − done − failed и два часа показывал «В работе: 1» —
+// задание без единой строки, без имени базы и без всякой работы.
+//
+// Теперь отсеянные базы хранятся в самом задании и приходят строками «не поставлена»:
+// pending становится нулём, а человек видит базу и причину.
+
+test("отсеянные базы приходят строками и обнуляют «в работе»", async () => {
+	const batchId = "b1";
+	const db = {
+		query: async (sql: string) => {
+			if (sql.includes("FROM command_batches WHERE id = ANY")) {
+				return {
+					rows: [{
+						id: batchId, type: "IB_UPDATE_USER", total: 1,
+						created_at: new Date(),
+						payload: { skipped: [{ baseKey: "akacapital", reason: "нет агента на связи" }] },
+					}],
+					rowCount: 1,
+				};
+			}
+			// Команд у задания нет вовсе: их не ставили.
+			return { rows: [], rowCount: 0 };
+		},
+		connect: async () => { throw new Error("не нужен"); },
+	} as unknown as Db;
+
+	const [report] = await new BatchService(db).reports([batchId]);
+	assert.equal(report.pending, 0, "работы нет — и «в работе» быть не должно");
+	assert.equal(report.failed, 1);
+	assert.equal(report.items.length, 1);
+	assert.equal(report.items[0].state, "skipped");
+	assert.equal(report.items[0].baseKey, "akacapital");
+	assert.equal(report.items[0].commandId, null);
+	assert.equal(report.items[0].error?.code, "NOT_QUEUED");
+	assert.match(report.items[0].error?.message ?? "", /нет агента/);
 });

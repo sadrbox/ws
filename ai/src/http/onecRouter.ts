@@ -770,6 +770,11 @@ export function onecRouter(deps: Deps) {
 			queued += 1;
 		}
 
+		// Отсеянные базы остаются В САМОМ ЗАДАНИИ: иначе оно показывает «в работе» там, где
+		// работы нет вовсе, — задание без строк, без базы и без команды (живой случай 12.09,
+		// когда операцию запустили при остановленном агенте).
+		await batches.noteSkipped(batchId, skipped);
+
 		await audit.write({
 			event: "onec.batch", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
 			details: { type, total: keys.length, queued, skipped: skipped.length, title: spec.title },
@@ -910,6 +915,7 @@ export function onecRouter(deps: Deps) {
 			await batches.attach(batchId, fresh.id);
 			queued += 1;
 		}
+		await batches.noteSkipped(batchId, skipped.map((x) => ({ baseKey: x.baseKey, reason: x.reason })));
 		await audit.write({ event: "onec.batch.retry", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
 			details: { type: src.type, retryOf: req.params.id, total: failed.length, queued, skipped: skipped.length } });
 

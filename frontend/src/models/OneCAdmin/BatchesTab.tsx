@@ -36,6 +36,7 @@ import { asText } from "src/utils/asText";
 import { cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
+import { reportBatchStart } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -86,9 +87,16 @@ const stateLabel = (state: string): string => translate(
 		: state === "failed" ? "onecOpFailed"
 			: state === "expired" ? "onecBatchExpired"
 				: state === "canceled" ? "onecBatchCanceled"
-					: state === "dispatched" ? "onecBatchRunning"
-						: "onecBatchQueuedState",
+					// Команду не ставили вовсе: некому, нечем или незачем. Это не «ждёт» и не
+					// «не удалось» — работы по этой базе не начиналось.
+					: state === "skipped" ? "onecBatchSkipped"
+						: state === "dispatched" ? "onecBatchRunning"
+							: "onecBatchQueuedState",
 );
+
+/** Сколько баз задания остались без команды: их не ставили вовсе. */
+const notQueued = (b: { items: { state: string }[] }): number =>
+	b.items.filter((i) => i.state === "skipped").length;
 
 export const BatchesTab: FC = () => {
 	const qc = useQueryClient();
@@ -121,7 +129,7 @@ export const BatchesTab: FC = () => {
 		mutationFn: (t: { batchId: string; baseKeys: string[] }) => retryBatch(t.batchId, t.baseKeys),
 		onSuccess: (d) => {
 			void after();
-			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}`, d.queued ? "success" : "warning");
+			reportBatchStart(d, translate("onecTabBatches"));
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabBatches") }),
 	});
@@ -155,9 +163,17 @@ export const BatchesTab: FC = () => {
 		title: b.type,
 		progress: `${b.done + b.failed} / ${b.total}`,
 		failedCount: b.failed ? String(b.failed) : "—",
+		/*
+		 * ИТОГ НАЗЫВАЕТ ТО, ЧТО ЕСТЬ. «В работе» пишем, только когда работа действительно
+		 * идёт: задание, у которого ни одной команды не поставили (агента не было на связи),
+		 * два часа показывало «В работе: 1» — без строк, без базы и без работы. Теперь такие
+		 * базы приходят строками «не поставлена», а итог говорит, сколько их.
+		 */
 		outcome: b.pending
 			? `${translate("onecBatchPending")}: ${b.pending}`
-			: (b.failed ? `${translate("onecOpFailed")}: ${b.failed}` : translate("onecBatchDone")),
+			: notQueued(b) === b.total
+				? `${translate("onecBatchNotQueued")}: ${notQueued(b)}`
+				: (b.failed ? `${translate("onecOpFailed")}: ${b.failed}` : translate("onecBatchDone")),
 		createdAt: b.createdAt,
 		__cancelable: b.cancelable,
 		/*

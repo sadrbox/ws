@@ -22,7 +22,12 @@ export type BatchProgress = {
 	pending: number;
 	createdAt: string;
 	items: {
-		/** Идентификатор команды — по нему её отменяют, пока она не начата. */
+		/**
+		 * Идентификатор команды — по нему её отменяют, пока она не начата.
+		 *
+		 * `null` бывает у двух РАЗНЫХ строк, и различает их `state`: `skipped` — команду не
+		 * ставили вовсе (некому или нечего), `expired` — ставили, но её след уже вычищен.
+		 */
 		commandId: string | null;
 		baseKey: string | null; state: string; error: { code: string; message: string } | null;
 		/** Итог операции одной строкой: путь к выгрузке, адрес публикации. */
@@ -60,6 +65,28 @@ export class BatchService {
 			[id, input.organizationUuid, input.userUuid, input.type, JSON.stringify(input.payload), input.total],
 		);
 		return id;
+	}
+
+	/**
+	 * ЗАПОМНИТЬ БАЗЫ, ДЛЯ КОТОРЫХ КОМАНДУ НЕ ПОСТАВИЛИ, — иначе задание врёт.
+	 *
+	 * ЖИВОЙ СЛУЧАЙ (12.09). Операцию запустили при остановленном агенте: задание завели на
+	 * одну базу, команду поставить не смогли («нет агента на связи»), и `total` остался
+	 * равен единице. Отчёт считал `pending = total − done − failed` и два часа показывал
+	 * «В работе: 1» — задание без единой строки, без имени базы и без всякой работы. Хуже
+	 * ошибки: ошибка называет себя.
+	 *
+	 * Теперь отсеянные базы остаются в самом задании — с причиной, по которой их отсеяли, —
+	 * и попадают в отчёт строками «не поставлена». Ничего «в работе» у такого задания нет.
+	 */
+	async noteSkipped(batchId: string, skipped: { baseKey: string; reason: string }[]): Promise<void> {
+		if (!skipped.length) return;
+		await this.db.query(
+			`UPDATE command_batches
+			    SET payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{skipped}', $2::jsonb, true)
+			  WHERE id = $1`,
+			[batchId, JSON.stringify(skipped)],
+		);
 	}
 
 	async attach(batchId: string, commandId: string): Promise<void> {
@@ -109,8 +136,11 @@ export class BatchService {
 			[ids],
 		);
 
-		const heads = await this.db.query<{ id: string; type: string; total: number; created_at: Date }>(
-			`SELECT id, type, total, created_at FROM command_batches WHERE id = ANY($1::uuid[])`, [ids],
+		const heads = await this.db.query<{
+			id: string; type: string; total: number; created_at: Date;
+			payload: { skipped?: { baseKey?: string; reason?: string }[] } | null;
+		}>(
+			`SELECT id, type, total, created_at, payload FROM command_batches WHERE id = ANY($1::uuid[])`, [ids],
 		);
 		if (!heads.rows.length) return [];
 
@@ -166,17 +196,45 @@ export class BatchService {
 					outcome: r.outcome,
 				}));
 
+				/*
+				 * ОТСЕЯННЫЕ БАЗЫ — ОТДЕЛЬНЫЕ СТРОКИ, а не молчаливая разница в счётчике.
+				 * Команду для них не ставили вовсе: некому (агента нет на связи), нечем (нет
+				 * способности) или незачем (база не годится). Каждая такая строка называет
+				 * базу и причину — задание перестаёт выглядеть «работающим» без работы.
+				 */
+				for (const sk of head.payload?.skipped ?? []) {
+					items.push({
+						commandId: null,
+						baseKey: sk.baseKey ?? null,
+						state: "skipped",
+						outcome: null,
+						error: { code: "NOT_QUEUED", message: sk.reason || "Команда не поставлена" },
+					});
+				}
+
 				// Команд может НЕ ХВАТАТЬ: они живут час и вычищаются, а задание остаётся. Без
 				// этого такое задание вечно показывало «выполняется 1 из 1» — хотя ждать уже
 				// некого.
 				const ageMs = Date.now() - head.created_at.getTime();
 				const missing = head.total - items.length;
 				if (missing > 0 && ageMs > LOST_AFTER_MS) {
+					/*
+					 * ДВЕ РАЗНЫЕ ПРИЧИНЫ, и путать их нельзя. Если у задания есть хоть одна
+					 * команда, недостающие когда-то были и вычищены по сроку. Если команд нет
+					 * НИ ОДНОЙ — их, скорее всего, и не ставили: так выглядят задания, начатые
+					 * при остановленном агенте до того, как отсеянные базы стали записываться
+					 * (живой случай 12.09; пять таких записей осталось в базе).
+					 */
+					const neverQueued = (byBatch.get(head.id) ?? []).length === 0;
 					for (let i = 0; i < missing; i++) {
 						items.push({
 							commandId: null,
-							baseKey: null, state: "expired", outcome: null,
-							error: { code: "COMMAND_LOST", message: "Команда не найдена: срок её жизни истёк. Повторите операцию." },
+							baseKey: null,
+							state: neverQueued ? "skipped" : "expired",
+							outcome: null,
+							error: neverQueued
+								? { code: "NOT_QUEUED", message: "Команда не была поставлена в очередь: сведений о ней нет." }
+								: { code: "COMMAND_LOST", message: "Команда не найдена: срок её жизни истёк. Повторите операцию." },
 						});
 					}
 				}
@@ -185,7 +243,8 @@ export class BatchService {
 				// expired и canceled считаем неуспехом: команда не выполнена, и если она нужна —
 				// повторять её придётся так же. Отмену при этом видно отдельной подписью строки.
 				const failed = items.filter((i) =>
-					i.state === "failed" || i.state === "expired" || i.state === "canceled").length;
+					i.state === "failed" || i.state === "expired"
+					|| i.state === "canceled" || i.state === "skipped").length;
 				return {
 					id: head.id, type: head.type, total: head.total,
 					done, failed, pending: Math.max(0, head.total - done - failed),
