@@ -7,16 +7,21 @@
 // том же флекс-ряду, раскрытая — своя доля ширины; пейны сжимаются, а не оказываются под
 // панелью.
 
+// Долю ширины задаёт рабочее пространство через --tech-width: её тянут разделителем
+// (VSplitBar между пейнами и этой областью). Запасное значение — прежний clamp: он нужен
+// там, где область показывают вне рабочего пространства, и в первый миг до применения
+// переменной. Нижняя граница в пикселях страхует узкое окно: при 15% на ноутбуке в
+// область не поместилась бы и кнопка.
 .Dock {
-	flex: 0 0 clamp(260px, 24%, 420px);
-	min-width: 0;
+	flex: 0 0 var(--tech-width, clamp(260px, 24%, 420px));
+	min-width: 220px;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
 	gap: 6px;
 	padding: 6px;
 	border-left: 1px solid $color34;
-	background: var(--sv-color60);
+	// background: var(--sv-color60);
 }
 
 // Свёрнутая полоса: кнопка раскрытия, счётчик актуальных и вертикальная подпись.
@@ -30,6 +35,7 @@
 	padding: 6px 3px;
 	border-left: 1px solid $color34;
 	background: var(--sv-color60);
+
 	// Стрелка раскрытия смотрит влево: область выезжает оттуда.
 	svg {
 		transform: rotate(90deg);
@@ -85,18 +91,20 @@
 	flex-direction: column;
 }
 
-// ── Вид списка: ОДНА КОЛОНКА, НО ЯЗЫК <Table /> ─────────────────────────────
+// ── Вид списка: ЖУРНАЛ СО ШКАЛОЙ ВРЕМЕНИ ────────────────────────────────────
 //
-// Колоночной сетки здесь нет и не будет: сетка требует, чтобы у всех строк были одни и те
-// же колонки одной ширины, а строки тут разной природы — заголовок объекта в одну строку и
-// сообщение на три-четыре. Дата и состояние отдельными колонками отнимали ширину у
-// главного, у самого текста.
+// Строка — три полосы: узкая колонка времени, вертикальная линия с точкой палитры и текст
+// во всю оставшуюся ширину. Колоночной сетки на все реквизиты здесь нет и не будет: дата,
+// состояние и источник отдельными колонками отнимали ширину у главного — у самого текста,
+// и он всё равно не помещался. Уточнения стоят ПОД текстом мелкой строкой.
 //
-// А вот ОФОРМЛЕНИЕ взято у таблицы, и намеренно: человек весь день работает со списками
-// приложения, и список сообщений не должен выглядеть чужим. Отсюда рамка с внутренней
-// тенью вместо карточек, липкая шапка и подвал с итогами, серая полоса строки-группы,
-// зебра, подсветка строки под курсором, разделители в один пиксель — ровно те же токены,
-// что и в <Table /> (см. Table/_table.base.scss, _table.frame.scss).
+// ОФОРМЛЕНИЕ — язык <Table />: рамка с внутренней тенью, липкий заголовок группы серой
+// полосой, подсветка строки под курсором, разделители в один пиксель, подвал с итогами —
+// те же токены, что и в таблице (см. Table/_table.base.scss, _table.frame.scss).
+//
+// ЕДИНИЦА ВЫСОТЫ — $heightFieldInput. Заголовок группы, строка в одну строку текста и
+// подвал ростом ровно с поле ввода: список стоит рядом с формами, и его ритм должен быть
+// их ритмом. Отклонения — только на пару пикселей и только там, где иначе не сходится.
 .View {
 	display: flex;
 	flex-direction: column;
@@ -105,7 +113,7 @@
 	gap: 6px;
 }
 
-// Командная панель — НАД рамкой, как тулбар таблицы: это команды всего списка.
+// Командные панели — НАД рамкой, как тулбар таблицы: это команды всего списка.
 .ViewTools {
 	flex: 0 0 auto;
 	display: flex;
@@ -114,8 +122,33 @@
 	gap: 6px;
 }
 
+// Вторая строка команд — как разложен список. Отделена линией, потому что отвечает не за
+// то же, что первая: там «чьи сообщения», здесь «в каком порядке».
+.ViewGroupBar {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding-top: 6px;
+	border-top: 1px dashed $color34;
+}
+
+.GroupBarLabel {
+	color: $color51;
+	font-size: $fontsize - 1px;
+	margin-right: 2px;
+}
+
+// «Свернуть все» отжата вправо: это не режим, а разовое действие, и стоять в одном ряду
+// с переключателем режимов ей нельзя — иначе читается как четвёртый режим.
+.GroupBarAll {
+	margin-left: auto;
+	display: inline-flex;
+}
+
 // Рамка списка — аналог .TableScrollWrapper: та же граница, тот же радиус, та же
-// внутренняя тень. Прокрутка живёт здесь, поэтому шапка и подвал могут быть липкими.
+// внутренняя тень. Прокрутка живёт здесь, поэтому заголовки групп и подвал могут липнуть.
 .Frame {
 	flex: 1 1 auto;
 	min-height: 0;
@@ -128,38 +161,6 @@
 	overflow: auto;
 }
 
-// Шапка — как <thead>: подложка $color31, высота поля, нейтральная тень снизу (тень
-// цветом текста давала бы в тёмной теме светлый ореол).
-.ListHead {
-	position: sticky;
-	top: 0;
-	z-index: 2;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	min-height: $heightFieldInput;
-	padding: 0 6px;
-	background: $color31;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-	font-weight: 500;
-	font-size: $fontsize;
-	color: $color6;
-	user-select: none;
-}
-
-.ListHeadTitle {
-	margin-right: auto;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.ListHeadCount {
-	color: $color51;
-	font-weight: 400;
-	white-space: nowrap;
-}
-
 .Rows {
 	flex: 1 1 auto;
 	display: flex;
@@ -170,7 +171,7 @@
 .ListFoot {
 	position: sticky;
 	bottom: 0;
-	z-index: 2;
+	z-index: 3;
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
@@ -194,19 +195,22 @@
 	text-align: center;
 }
 
-// ── Объект ──────────────────────────────────────────────────────────────────
+// ── Группа ──────────────────────────────────────────────────────────────────
 // Не карточка: карточки с рамками и радиусами внутри рамки списка распадались на
-// коробочки. Объект — это строка-заголовок и строки под ней, как группа в таблице.
-.Obj {
+// коробочки. Группа — это строка-заголовок и строки под ней, как группа в таблице.
+.Group {
 	display: flex;
 	flex-direction: column;
 }
 
-// Строка-заголовок объекта — как .GroupHeaderRow: подложка $color30, полужирное
-// начертание, ФИКСИРОВАННАЯ высота в одну строку поля. По ней ведут взглядом сверху вниз,
-// и прыгающая высота мешала бы этому больше, чем помогала. Кликабельна вся строка, а не
-// одна стрелка: попадать курсором в иконку 10×10 — работа, а не действие.
-.ObjHead {
+// Строка-заголовок группы — как .GroupHeaderRow: подложка $color30, ФИКСИРОВАННАЯ высота
+// в одно поле ввода. Кликабельна вся строка, а не одна стрелка: попадать курсором в иконку
+// 10×10 — работа, а не действие. Липкая: при прокрутке важно не терять, к чему относятся
+// строки; липнет в пределах своей группы, поэтому заголовки не накапливаются стопкой.
+.GroupHead {
+	position: sticky;
+	top: 0;
+	z-index: 2;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -239,9 +243,17 @@
 		display: block;
 		flex: 0 0 auto;
 	}
+
+	// День — это не имя объекта: его не набирают полужирным и не кричат заглавными,
+	// он просто отмечает, где начинается новый день.
+	&[data-kind="date"] {
+		font-weight: 500;
+		color: $color51;
+		font-variant-numeric: tabular-nums;
+	}
 }
 
-.ObjTitle {
+.GroupTitle {
 	margin-right: auto;
 	white-space: nowrap;
 	overflow: hidden;
@@ -249,8 +261,8 @@
 	min-width: 0;
 }
 
-// Сколько у объекта АКТУАЛЬНЫХ сообщений — то, ради чего в список и смотрят.
-.ObjActive {
+// Сколько у группы АКТУАЛЬНЫХ сообщений — то, ради чего в список и смотрят.
+.GroupActive {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -266,35 +278,28 @@
 }
 
 // Всего записей, включая прошедшие: даёт понять объём, не крича.
-.ObjTotal {
+.GroupTotal {
 	color: $color51;
 	font-size: $fontsize - 1px;
 	font-weight: 400;
 	font-variant-numeric: tabular-nums;
 }
 
-.ObjBody {
+.GroupBody {
 	display: flex;
 	flex-direction: column;
 }
 
-// ── Строка сообщения: высота ПО СОДЕРЖИМОМУ ─────────────────────────────────
-// Разделитель, зебра и подсветка — те же, что у строк таблицы. Отличие одно: строка не
-// обрезает текст многоточием, а растёт, потому что обрезанное сообщение прячет ровно то,
-// ради чего в список и смотрят.
-.Msg {
-	display: flex;
+// ── Строка сообщения: три полосы, высота ПО СОДЕРЖИМОМУ ─────────────────────
+// Минимум — высота поля ввода, дальше строка растёт от самого текста: обрезанное
+// сообщение прячет ровно то, ради чего в список и смотрят.
+.Row {
+	display: grid;
+	grid-template-columns: auto 14px minmax(0, 1fr);
+	gap: 0 6px;
+	min-height: $heightFieldInput;
+	padding: 4px 6px 4px 0;
 	border-bottom: 1px solid $color34;
-	// Слева — полоса палитры сообщения: цвет виден, даже когда текста много, и не спорит
-	// с читаемостью, как крашеный текст целого абзаца.
-	border-left: 3px solid transparent;
-
-	// Зебра — доля цвета ТЕКСТА поверх фона, а не фиксированный серый: $color6 всегда
-	// контрастен подложке, поэтому в светлой теме полоса чуть темнее, в тёмной — чуть
-	// светлее, и обе темы работают одним правилом.
-	&[data-zebra="odd"] {
-		background-color: color-mix(in srgb, #{$color6} 4%, transparent);
-	}
 
 	&:hover {
 		background-color: $accentBlueHover;
@@ -307,57 +312,88 @@
 		box-shadow: inset 0 0 0 1px $color1;
 	}
 
-	&[data-type="error"],
-	&[data-type="attention"] {
-		border-left-color: var(--sv-attention, #b91c1c);
-	}
-
-	&[data-type="warning"] {
-		border-left-color: var(--sv-warningText, #7a4d12);
-	}
-
-	&[data-type="success"] {
-		border-left-color: var(--sv-successText, #145523);
-	}
-
-	&[data-type="info"] {
-		border-left-color: $color34;
-	}
-
 	// Прошедшее — бледнее: оно уже не требует действия, но и прятать его незачем.
 	&[data-past] {
 		opacity: 0.7;
 	}
 }
 
-// Ячейка строки — аналог .TableBodyCell: те же отступы по бокам (6px) и та же
-// минимальная высота, но с переносом вместо многоточия.
-.MsgCell {
+// Колонка времени: моноширинные цифры выстраиваются в столбик, и взгляд ведёт по ним, не
+// читая текста. Ширину задаёт содержимое (auto): под заголовком дня здесь «чч:мм», а в
+// остальных режимах ещё и дата — колонка сама подстраивается, без второго правила.
+.RowTime {
 	display: flex;
 	flex-direction: column;
-	gap: 3px;
-	flex: 1 1 auto;
-	min-width: 0;
-	min-height: $heightFieldInput;
+	align-items: flex-end;
+	padding-left: 6px;
+	color: $color5;
+	font-size: $fontsize - 2px;
+	line-height: 16px;
+	font-variant-numeric: tabular-nums;
+	font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.RowDay {
+	color: $color51;
+}
+
+// Шкала: линия сквозь строку и точка палитры на ней. Линия уходит на 10px ниже строки,
+// чтобы у соседних строк она смыкалась и читалась как одна.
+.RowRail {
+	position: relative;
+	display: flex;
 	justify-content: center;
-	padding: 3px 6px;
+
+	&::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: -10px;
+		width: 1px;
+		background: $color34;
+	}
+}
+
+// Точка обведена подложкой списка, чтобы линия не просвечивала сквозь неё.
+.RowDot {
+	position: relative;
+	width: 7px;
+	height: 7px;
+	margin-top: 5px;
+	border-radius: 50%;
+	background: $color34;
+	box-shadow: 0 0 0 2px var(--sv-color60);
+}
+
+.Row[data-type="error"] .RowDot,
+.Row[data-type="attention"] .RowDot {
+	background: var(--sv-attention, #b91c1c);
+}
+
+.Row[data-type="warning"] .RowDot {
+	background: var(--sv-warningText, #7a4d12);
+}
+
+.Row[data-type="success"] .RowDot {
+	background: var(--sv-successText, #145523);
+}
+
+.RowBody {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	justify-content: center;
 }
 
 .MsgText {
 	white-space: pre-wrap;
 	word-break: break-word;
 	overflow-wrap: anywhere;
-	line-height: 17px;
+	line-height: 16px;
 	color: $color6;
-}
-
-// Подстрочник: слева уточнения (тип, источник, когда, актуальность), справа действия.
-// Одна линия вместо двух — строка не растёт там, где могла бы не расти.
-.MsgFoot {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
 }
 
 // Уточнения отвечают на вопросы, которые возникают ПОСЛЕ прочтения, а не вместо него, —
@@ -367,7 +403,6 @@
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 6px;
-	margin-right: auto;
 	color: $color51;
 	font-size: $fontsize - 1px;
 
@@ -384,11 +419,15 @@
 }
 
 // Действия — в самой строке: в общей панели они относились бы к «выбранной строке», и
-// пришлось бы держать в голове, какая выбрана.
+// пришлось бы держать в голове, какая выбрана. Пустой ряд места не занимает.
 .MsgActions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 6px;
+	gap: 4px;
+
+	&:not(:empty) {
+		padding-top: 2px;
+	}
 }
 
 // Раскрытая группа: та же стрелка, перевёрнутая.

@@ -557,9 +557,17 @@ export const setBaseHidden = (key: string, hidden: boolean) =>
 export const hasCapability = (agents: OnecAgent[] | undefined, capability: string): boolean =>
 	(agents ?? []).some((a) => a.role === "admin" && a.online && !a.disabled && a.capabilities.includes(capability));
 
-/** Повторить только неуспешные базы задания — создаётся новое задание. */
-export const retryBatch = (id: string) =>
-	aiFetch<BatchStart>(`/v1/onec/batches/${encodeURIComponent(id)}/retry`, { method: "POST" });
+/**
+ * Повторить неуспешные базы задания — создаётся новое задание.
+ *
+ * `baseKeys` сужает повтор до отмеченных баз: в «Заданиях» отмечают конкретные строки, и
+ * повтор обязан касаться их. Без списка повторяются все неуспешные базы задания.
+ */
+export const retryBatch = (id: string, baseKeys?: string[]) =>
+	aiFetch<BatchStart>(`/v1/onec/batches/${encodeURIComponent(id)}/retry`, {
+		method: "POST",
+		body: JSON.stringify({ ...(baseKeys?.length ? { baseKeys } : {}) }),
+	});
 
 // ── Управление агентами ─────────────────────────────────────────────────────
 // Токен возвращается ОДИН раз при создании и при ротации: в БД лежит только его

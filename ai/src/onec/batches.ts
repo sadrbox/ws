@@ -157,12 +157,22 @@ export class BatchService {
 	/**
 	 * Команды задания, которые не удались. `expired` считаем неуспехом наравне с `failed`:
 	 * команда не выполнена, и повторять её нужно так же.
+	 *
+	 * `baseKeys` СУЖАЕТ повтор до названных баз. Это не оптимизация, а честность: в панели
+	 * отмечают КОНКРЕТНЫЕ базы задания, и повтор обязан касаться их, а не всех неуспешных
+	 * заодно. Раньше отметка на повтор не влияла вовсе — человек отмечал одну базу из
+	 * десяти, а команда уходила во все десять. Без списка поведение прежнее: повторить всё.
 	 */
-	async failedCommands(batchId: string): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown> }[]> {
+	async failedCommands(
+		batchId: string, baseKeys?: string[],
+	): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown> }[]> {
+		const narrow = baseKeys?.length ? baseKeys : null;
 		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown> }>(
 			`SELECT base_key, type, payload FROM commands
-			  WHERE batch_id = $1 AND state IN ('failed', 'expired') ORDER BY created_at`,
-			[batchId],
+			  WHERE batch_id = $1 AND state IN ('failed', 'expired')
+			    AND ($2::text[] IS NULL OR base_key = ANY($2::text[]))
+			  ORDER BY created_at`,
+			[batchId, narrow],
 		);
 		return r.rows;
 	}

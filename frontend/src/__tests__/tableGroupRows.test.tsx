@@ -332,3 +332,30 @@ describe("Table: неотмечаемая вложенная строка не �
     expect(onChildToggle.mock.calls.map((c) => c[1].uuid)).toEqual(["role-a|BASE1", "role-a|BASE2"]);
   });
 });
+
+// ── Строка, объявленная неотмечаемой (`__inert`) ────────────────────────────
+//
+// Так «Задания» помечают задание, от которого не осталось ни одной команды: отменять
+// нечего, повторять нечего. Чекбокс, который щёлкается и ничего не делает, обещает
+// действие, которого нет, — вместо него прочерк.
+
+describe("Table: строка, объявленная неотмечаемой", () => {
+  it("вместо чекбокса — прочерк, клетка на месте", () => {
+    const { container } = render(
+      <TestWrapper>
+        <Table {...buildStaticTableProps({
+          componentName: "TestInertTable",
+          rows: [{ id: 1, uuid: "lost", name: "Задание", note: "", __inert: true }],
+          columns: columns(), setColumns: () => { },
+          selectable: true,
+          disableActiveRow: true,
+        })} />
+      </TestWrapper>,
+    );
+    const row = bodyRows(container)[0];
+    expect(row.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(row.textContent).toContain("—");
+    // Ячейка под отметку осталась: иначе колонки разъедутся относительно соседних строк.
+    expect(row.querySelectorAll("td").length).toBe(columns().length + 1);
+  });
+});

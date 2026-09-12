@@ -27,6 +27,14 @@
 	}
 }
 
+/* Прочерк вместо чекбокса: строка, над которой действовать нечем (поясняющая строка
+   группы). Пустая клетка читалась бы как «чекбокс пропал», а это отдельный ответ. */
+.InertMark {
+	color: $color5;
+	user-select: none;
+	line-height: 1;
+}
+
 .CenterContent {
 	display: flex;
 	align-items: center;

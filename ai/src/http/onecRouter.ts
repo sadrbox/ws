@@ -838,8 +838,24 @@ export function onecRouter(deps: Deps) {
 		const src = await batches.progress(req.params.id);
 		if (!src) { send(res, fail(404, "NOT_FOUND", "Задание не найдено")); return; }
 
-		const failed = await batches.failedCommands(req.params.id);
-		if (!failed.length) { send(res, fail(409, "NOTHING_TO_RETRY", "В задании нет неуспешных баз")); return; }
+		/*
+		 * ПОВТОРЯЕМ ТО, ЧТО ОТМЕТИЛИ. Панель отмечает конкретные базы задания, и повтор
+		 * обязан касаться их: без списка человек отмечал одну базу из десяти, а команда
+		 * уходила во все десять — отметка была украшением. Пустой список означает «все
+		 * неуспешные» (так работает кнопка, когда отмечено само задание целиком).
+		 */
+		const asked = (req.body as { baseKeys?: unknown } | undefined)?.baseKeys;
+		const baseKeys = Array.isArray(asked)
+			? asked.filter((k): k is string => typeof k === "string" && !!k.trim())
+			: undefined;
+
+		const failed = await batches.failedCommands(req.params.id, baseKeys);
+		if (!failed.length) {
+			send(res, fail(409, "NOTHING_TO_RETRY", baseKeys?.length
+				? "Среди отмеченных баз нет неуспешных — повторять нечего"
+				: "В задании нет неуспешных баз"));
+			return;
+		}
 
 		const spec = findAdminCommand(src.type);
 		if (!spec) { send(res, fail(400, "UNKNOWN_COMMAND", `Команда ${src.type} больше не поддерживается`)); return; }

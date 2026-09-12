@@ -4,27 +4,33 @@ import MessagesView from "src/components/TechMessages/MessagesView";
 import {
 	APP_SCOPE, addMessage, clearNoticeHistory, clearScope, getMessages, useScopedNotices,
 } from "src/components/TechMessages/store";
+import { groupMessages } from "src/components/TechMessages/grouping";
+import { translate } from "src/i18";
 import { TestWrapper } from "./utils/TestWrapper";
 
-// Вид «Технических сообщений»: ОДНА ВЕРТИКАЛЬНАЯ КОЛОНКА, без колоночной сетки.
+// Вид «Технических сообщений»: ЖУРНАЛ СО ШКАЛОЙ ВРЕМЕНИ (вариант «B», выбран 2026-09-12).
 //
-// Сетка требует, чтобы у всех строк были одни и те же колонки одной ширины, — а здесь
-// строки разной природы: заголовок объекта в одну строку и сообщение на три-четыре. Дата
-// и состояние в отдельных колонках отнимали ширину у главного, у самого текста.
+// Колонка времени слева, линия с точкой палитры, текст во всю оставшуюся ширину. Полной
+// колоночной сетки нет: дата, состояние и источник отдельными колонками отнимали ширину у
+// главного — у самого текста, — и он всё равно не помещался.
 //
 // Договорённости, которые тест держит:
-//   1) заголовок объекта — ОДИН на группу, сообщения раскрываются под ним;
-//   2) уточнения (тип, источник, когда, актуальность) стоят ПОД текстом, в его же строке,
+//   1) заголовок группы — ОДИН на группу, сообщения раскрываются под ним и сворачиваются;
+//   2) уточнения (тип, объект, источник, актуальность) стоят ПОД текстом, в его же строке,
 //      а не в соседних колонках;
 //   3) действия — внутри самого сообщения, а не в общей панели «по выбранной строке»;
-//   4) текст сообщения доходит до разметки ЦЕЛИКОМ: обрезанное прячет то, ради чего смотрят.
+//   4) текст сообщения доходит до разметки ЦЕЛИКОМ: обрезанное прячет то, ради чего смотрят;
+//   5) группировка переключается: по объекту, по дате, без группировки — и запоминается.
 
 const long = "ibcmd extension list по базе «almaz67» не ответил за 180 с — процесс снят. "
 	+ "Обычно это занятый рабочий каталог или блокировка в самой базе";
 
-describe("Технические сообщения: вид одной колонкой", () => {
+describe("Технические сообщения: журнал со шкалой времени", () => {
 	beforeEach(() => {
 		act(() => { clearScope("pane-1"); clearScope("pane-2"); clearNoticeHistory(APP_SCOPE); });
+		// Режим группировки — настройка рабочего места и переживает перезагрузку: между
+		// тестами её нужно возвращать к умолчанию, иначе они зависели бы от порядка.
+		localStorage.setItem("tech_messages_group", "object");
 	});
 
 	/**
@@ -91,5 +97,57 @@ describe("Технические сообщения: вид одной коло�
 		expect(screen.queryByText("Прошлое")).toBeNull();
 		fireEvent.click(screen.getByRole("button", { name: /Базы 1С/ }));
 		expect(screen.getByText("Прошлое")).toBeTruthy();
+	});
+
+	it("группировку переключают: по дате записи разных дней расходятся", () => {
+		act(() => {
+			addMessage({ scope: "pane-1", type: "error", text: "Сегодняшнее", source: "Базы 1С" });
+			addMessage({ scope: "pane-1", type: "error", text: "Вчерашнее", source: "Базы 1С" });
+		});
+		// Состарим одну запись на сутки — так же, как её состарила бы сама жизнь.
+		act(() => {
+			const old = getMessages().find((m) => m.text === "Вчерашнее")!;
+			(old as { firstAt: number }).firstAt = Date.now() - 24 * 60 * 60 * 1000;
+		});
+
+		// По объекту обе записи в одной группе, по дате — в двух.
+		expect(groupMessages(getMessages(), "object")).toHaveLength(1);
+		const byDate = groupMessages(getMessages(), "date");
+		expect(byDate).toHaveLength(2);
+		// Дни идут от свежего к старому: здесь спрашивают о ходе событий.
+		expect(byDate[0].items[0].text).toBe("Сегодняшнее");
+		// Без группировки — одна пачка: сплошная лента, свежие сверху.
+		expect(groupMessages(getMessages(), "none")).toHaveLength(1);
+	});
+
+	it("«Без группировки» показывает сообщения без заголовка группы", () => {
+		act(() => {
+			addMessage({ scope: "pane-1", type: "error", text: "Сбой", source: "Базы 1С" });
+		});
+		show();
+		expect(screen.getAllByRole("button", { name: /Базы 1С/ })).toHaveLength(1);
+
+		fireEvent.click(screen.getByRole("button", { name: translate("techMsgGroupNone") }));
+		// Заголовка больше нет — одна пачка не нуждается в имени, а текст на месте.
+		expect(screen.queryByRole("button", { name: /Базы 1С/ })).toBeNull();
+		expect(screen.getByText("Сбой")).toBeTruthy();
+	});
+
+	it("группа сворачивается и разворачивается по своему заголовку", () => {
+		act(() => {
+			addMessage({ scope: "pane-1", type: "error", text: "Агент не на связи", source: "Базы 1С" });
+		});
+		show();
+		// Группа с актуальным сообщением раскрыта сразу: она про «сейчас».
+		const head = screen.getByRole("button", { name: /Базы 1С/ });
+		expect(head.getAttribute("aria-expanded")).toBe("true");
+		expect(screen.getByText("Агент не на связи")).toBeTruthy();
+
+		fireEvent.click(head);
+		expect(head.getAttribute("aria-expanded")).toBe("false");
+		expect(screen.queryByText("Агент не на связи")).toBeNull();
+
+		fireEvent.click(head);
+		expect(screen.getByText("Агент не на связи")).toBeTruthy();
 	});
 });

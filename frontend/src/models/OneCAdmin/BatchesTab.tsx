@@ -51,6 +51,34 @@ const batchColumns = (): TColumn[] => ([
 	{ identifier: "createdAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
+/**
+ * ЧТО ПОВТОРЯТЬ — по отмеченным строкам, а не по заданиям целиком.
+ *
+ * Отмечают базы; значит, и повторяться должны отмеченные базы. Пока повтор шёл «по
+ * заданию», отметка на него не влияла вовсе: человек отмечал одну базу из десяти, а
+ * команда уходила во все десять — и это выглядело как «переключатель срабатывает, но
+ * делает не то».
+ *
+ * СЧИТАЕМ ТОЛЬКО failed и expired — ровно то, что повторяет сервис. Отменённую команду он
+ * не повторяет (её остановили намеренно), и обещать её повтор кнопкой было бы враньём.
+ */
+const RETRIABLE = new Set(["failed", "expired"]);
+
+export function retryTargets(
+	items: { id: string; items: { commandId: string | null; baseKey: string | null; state: string }[] }[],
+	picked: Set<string>,
+): { batchId: string; baseKeys: string[] }[] {
+	const out: { batchId: string; baseKeys: string[] }[] = [];
+	for (const b of items) {
+		const keys = b.items
+			.filter((it) => it.commandId && picked.has(it.commandId) && RETRIABLE.has(it.state))
+			.map((it) => it.baseKey)
+			.filter((k): k is string => !!k);
+		if (keys.length) out.push({ batchId: b.id, baseKeys: [...new Set(keys)] });
+	}
+	return out;
+}
+
 /** Состояние команды словами: коды состояний — внутренняя кухня очереди. */
 const stateLabel = (state: string): string => translate(
 	state === "done" ? "onecBatchDone"
@@ -89,7 +117,7 @@ export const BatchesTab: FC = () => {
 
 	// Повтор только неуспешных: при ста базах пересобрать десяток отказов руками нереально.
 	const retry = useMutation({
-		mutationFn: retryBatch,
+		mutationFn: (t: { batchId: string; baseKeys: string[] }) => retryBatch(t.batchId, t.baseKeys),
 		onSuccess: (d) => {
 			void after();
 			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}`, d.queued ? "success" : "warning");
@@ -131,6 +159,14 @@ export const BatchesTab: FC = () => {
 			: (b.failed ? `${translate("onecOpFailed")}: ${b.failed}` : translate("onecBatchDone")),
 		createdAt: b.createdAt,
 		__cancelable: b.cancelable,
+		/*
+		 * ЗАДАНИЕ, С КОТОРЫМ УЖЕ НИЧЕГО НЕ СДЕЛАТЬ, чекбокса не получает. Команды живут час
+		 * и вычищаются, а задание остаётся навсегда: от такого задания не осталось ни одной
+		 * команды — ни отменить, ни повторить (сервис повторяет по существующим командам, а
+		 * их нет). Раньше его строка щёлкалась и не значила ничего — чекбокс обещал действие,
+		 * которого нет.
+		 */
+		__inert: !b.items.some((it) => it.commandId),
 	})), [items]);
 	const view = useStaticTableView(rowsRaw, { createdAt: "desc" });
 
@@ -189,10 +225,9 @@ export const BatchesTab: FC = () => {
 		return ids;
 	}, [items, picked]);
 
-	/** Задания, которых коснулась отметка, — цель повтора неуспешных. */
-	const touchedBatches = useMemo(() => items.filter(
-		(b) => b.items.some((it) => it.commandId && picked.has(it.commandId)),
-	), [items, picked]);
+	/** Что именно повторится: отмеченные базы, чьи команды не удались. */
+	const targets = useMemo(() => retryTargets(items, picked), [items, picked]);
+	const retryCount = useMemo(() => targets.reduce((n, t) => n + t.baseKeys.length, 0), [targets]);
 
 	return (
 		<>
@@ -232,12 +267,13 @@ export const BatchesTab: FC = () => {
 							{cancelable.length ? ` (${cancelable.length})` : ""}
 						</Button>
 						<Button variant="secondary"
-							disabled={!touchedBatches.some((b) => b.failed > 0) || retry.isPending}
-							title={touchedBatches.some((b) => b.failed > 0)
-								? translate("onecBatchRetryFailed")
+							disabled={!retryCount || retry.isPending}
+							title={retryCount
+								? `${translate("onecBatchRetryFailed")}: ${retryCount}`
 								: translate("onecBatchNothingToRetry")}
-							onClick={() => touchedBatches.filter((b) => b.failed > 0).forEach((b) => retry.mutate(b.id))}>
+							onClick={() => targets.forEach((t) => retry.mutate(t))}>
 							<Icon name="restore" /> {translate("onecBatchRetryFailed")}
+							{retryCount ? ` (${retryCount})` : ""}
 						</Button>
 					</>
 				),

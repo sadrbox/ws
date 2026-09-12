@@ -12,7 +12,8 @@ import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import TechMessages from 'src/components/TechMessages/TechMessages';
-import { NoticeScope } from 'src/components/TechMessages/store';
+import { NoticeScope, useTechMessagesOpen } from 'src/components/TechMessages/store';
+import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
 // Статические импорты моделей убраны: иначе они все попадали в основной бандл и
@@ -100,18 +101,51 @@ export const HorizontalLine = () => {
 export const Container: FC = () => {
   const context = useAppContext();
   const isPaneShow = context.windows.panes.length > 0;
+  const techOpen = useTechMessagesOpen();
+
+  /*
+   * Ширина области сообщений — тем же разделителем, что и везде в приложении
+   * (VSplitBar): у людей разные задачи, и «сколько места отдать сообщениям» —
+   * их решение, а не наше. Доля хранится в процентах: панель MDI меняет ширину,
+   * и пиксельная величина при сужении окна съедала бы пейны целиком.
+   */
+  const split = useSplitResize({
+    storageKey: "tech_messages_width",
+    side: "right",
+    defaultPercent: 24,
+    min: 15,
+    max: 60,
+  });
 
   /*
    * Рабочее пространство — ряд из двух областей: слева пейны, справа «Технические
    * сообщения». Область сворачивается ШИРИНОЙ, оставаясь в том же ряду: накладка
    * (position: absolute) закрывала бы содержимое формы ровно там, где с ним работают.
+   *
+   * Разделитель стоит между ними и только при РАСКРЫТОЙ области: у свёрнутой полосы
+   * ширины нет, и тянуть там нечего — разделитель предлагал бы действие без смысла.
+   * Долю область читает переменной --tech-width: так ширину задаёт рабочее
+   * пространство (оно одно знает про обе области), а открыта область или свёрнута —
+   * по-прежнему знает она сама.
    */
   return (
     <>
       {isPaneShow && (
         <>
-          <div className={styles.Workspace}>
+          <div
+            className={styles.Workspace}
+            ref={split.containerRef}
+            style={{ "--tech-width": `${split.percent}%` } as CSSProperties}
+          >
             <Panes />
+            {techOpen && (
+              <VSplitBar
+                onPointerDown={split.startResize}
+                onDoubleClick={split.reset}
+                onNudge={split.nudge}
+                title={translate("resizePanels")}
+              />
+            )}
             <TechMessages />
           </div>
           <PanesTabs />

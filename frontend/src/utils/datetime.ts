@@ -108,6 +108,21 @@ export const getFormatDate = (dateString?: string): string => {
 	return `${formatShiftedDate(shifted)} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 };
 
+/**
+ * Форматирует момент в «чч:мм» с учётом настроенного UTC-смещения.
+ *
+ * Зачем отдельно от `getFormatDate`: в журнале технических сообщений время стоит УЗКОЙ
+ * КОЛОНКОЙ слева, а день — заголовком группы, и повторять дату в каждой строке значило бы
+ * отнимать ширину у самого сообщения.
+ */
+export const getFormatTimeOnly = (dateString?: string | null): string => {
+	if (!dateString) return "";
+	const d = new Date(dateString);
+	if (isNaN(d.getTime())) return "";
+	const shifted = shiftToConfiguredTz(d.getTime());
+	return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
+};
+
 // ── ISO ↔ <input type="datetime-local"> ──────────────────────────────────────
 // Сервер хранит дату в UTC. Форма использует <input type="datetime-local">,
 // который оперирует значениями без TZ-суффикса. Функции переводят между
