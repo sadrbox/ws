@@ -7,6 +7,7 @@
  * иначе граница снова разъедется по месту вызова.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { translate } from "src/i18";
 import { errorStatus, errorText, isSystemError, routeError } from "src/services/errors/route";
 import { APP_SCOPE, clearNoticeHistory, getMessages } from "src/components/TechMessages/store";
 
@@ -46,9 +47,15 @@ describe("маршрутизация ошибок: канал по вопрос�
 		expect(getMessages()[0].source).toBe("Реализация");
 	});
 
-	it("нет ответа вовсе (сеть) — это системное", () => {
+	it("нет ответа вовсе (сеть) — это системное, и сказано об этом по-человечески", () => {
 		routeError(new Error("Network Error"));
-		expect(toasts).toEqual(["Network Error"]);
+		/*
+		 * «Network Error» и «Failed to fetch» — слова браузера, а не ответ человеку: по ним
+		 * не понять ни что случилось, ни что делать. Подменяем только такие, заведомо не
+		 * предметные: отказ сервиса («сначала отключите агента») приходит уже написанным
+		 * для человека и передаётся дословно — см. соседние проверки.
+		 */
+		expect(toasts).toEqual([translate("netNoConnection")]);
 	});
 
 	it("403 системное, хотя формально 4xx: правкой полей его не исправить", () => {

@@ -30,7 +30,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchBases, fetchExtensionSummary } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
-import { CapabilityGuard, QueryError, isApplicable, useBaseContentCheck } from "./shared";
+import { CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseContentCheck } from "./shared";
 import { useOpenGroupCommand } from "./GroupCommandWizard";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import styles from "./OneCAdmin.module.scss";
@@ -108,6 +108,8 @@ export const ExtensionsTab: FC = () => {
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
+			{/* Установка и удаление расширения обновят сводку сразу или с задержкой. */}
+			<EchoDelayNotice />
 
 			<div className={styles.UsersLayout}>
 				<div className={styles.UsersList}>

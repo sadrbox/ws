@@ -12,6 +12,9 @@ import express from "express";
 import { checkVerifyRequest, checkSignature, extractEvents } from "../../services/wa/webhookVerify.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { saveIncoming } from "../../services/wa/conversations.js";
+import { logger } from "../../services/logger.js";
+
+const log = logger("wa");
 
 const router = express.Router();
 
@@ -19,10 +22,10 @@ const router = express.Router();
 router.get("/wa/webhook", (req, res) => {
 	const challenge = checkVerifyRequest(req.query, process.env.WA_VERIFY_TOKEN);
 	if (!challenge) {
-		console.warn("[wa] верификация вебхука отклонена (mode/token)");
+		log.warn("верификация вебхука отклонена (mode/token)");
 		return res.sendStatus(403);
 	}
-	console.log("[wa] вебхук подтверждён (subscribe)");
+	log.info("вебхук подтверждён (subscribe)");
 	return res.status(200).type("text/plain").send(challenge);
 });
 
@@ -71,7 +74,7 @@ async function ingest(events) {
 				mediaType: m.type && m.type !== "text" ? m.type : null,
 				at: m.timestamp ? new Date(Number(m.timestamp) * 1000) : null,
 			});
-			console.log(`[wa] входящее ${m.id} → диалог ${r.conversation?.uuid}${r.duplicate ? " (дубль, пропущено)" : ""}`);
+			log.info(`входящее ${m.id} → диалог ${r.conversation?.uuid}${r.duplicate ? " (дубль, пропущено)" : ""}`);
 		}
 		for (const st of ev.statuses) {
 			// Статус доставки исходящего: обновляем по wamid, если сообщение наше.

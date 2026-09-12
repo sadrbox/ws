@@ -31,6 +31,7 @@ import { runBatch, type BatchType } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { attachBatch, finishOp, startOp, type OpKind } from "./progress";
 import { useOpenBaseUser } from "./BaseUserForm";
+import { useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 export const BaseUserCommands: FC<{
@@ -40,6 +41,7 @@ export const BaseUserCommands: FC<{
 	/** Список прочитан — можно перечитать после команды. */
 	onDone?: () => void;
 }> = ({ baseKey, activeUser, onDone }) => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const openCard = useOpenBaseUser();
 	const [dialog, setDialog] = useState<null | "create" | "delete">(null);
@@ -96,21 +98,27 @@ export const BaseUserCommands: FC<{
 
 	return (
 		<>
-			<Button variant="secondary" disabled={!baseKey || busy}
-				title={baseKey ? translate("onecUserCreate") : translate("onecPickBaseFirst")}
-				onClick={() => setDialog("create")}>
-				<Icon name="plus" /> {translate("onecUserCreate")}
-			</Button>
+			{/* Создание и удаление пользователя ИБ — разрушающее (F5). «Изменить» открывает
+			    карточку: смотреть права правом «просмотр» можно, записывать — нет. */}
+			{canWrite && (
+				<Button variant="secondary" disabled={!baseKey || busy}
+					title={baseKey ? translate("onecUserCreate") : translate("onecPickBaseFirst")}
+					onClick={() => setDialog("create")}>
+					<Icon name="plus" /> {translate("onecUserCreate")}
+				</Button>
+			)}
 			<Button variant="secondary" disabled={!activeUser || busy}
 				title={activeUser ? `${translate("onecOpenCard")}: ${activeUser}` : translate("onecPickUserFirst")}
 				onClick={() => openCard(activeUser, baseKey)}>
 				<Icon name="open" /> {translate("onecUserEdit")}
 			</Button>
-			<Button variant="secondary" disabled={!activeUser || busy}
-				title={activeUser ? `${translate("onecUserDelete")}: ${activeUser}` : translate("onecPickUserFirst")}
-				onClick={() => setDialog("delete")}>
-				<Icon name="trash" /> {translate("onecUserDelete")}
-			</Button>
+			{canWrite && (
+				<Button variant="secondary" disabled={!activeUser || busy}
+					title={activeUser ? `${translate("onecUserDelete")}: ${activeUser}` : translate("onecPickUserFirst")}
+					onClick={() => setDialog("delete")}>
+					<Icon name="trash" /> {translate("onecUserDelete")}
+				</Button>
+			)}
 
 			{dialog === "create" && (
 				<Modal title={`${translate("onecUserCreate")}: ${baseKey}`} onClose={close}

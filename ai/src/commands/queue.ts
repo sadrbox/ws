@@ -156,11 +156,12 @@ export class CommandQueue {
 	 * Выдаёт агенту все ожидающие команды, при пустой очереди ждёт до waitSecs.
 	 * Выдача атомарна: UPDATE ... WHERE state='queued' — два инстанса не отдадут одну команду дважды.
 	 */
-	async take(agentId: string, waitSecs: number): Promise<WireCommand[]> {
+	/** `instanceId` — процесс агента, забирающий команды: по нему потом видно, чей ответ пропал. */
+	async take(agentId: string, waitSecs: number, instanceId?: string | null): Promise<WireCommand[]> {
 		const deadline = Date.now() + waitSecs * 1000;
 		for (;;) {
 			if (this.closed) return [];
-			const batch = await this.dispatchQueued(agentId);
+			const batch = await this.dispatchQueued(agentId, instanceId ?? null);
 			if (batch.length) return batch;
 			const remaining = deadline - Date.now();
 			if (remaining <= 0 || this.closed) return [];
@@ -205,6 +206,44 @@ export class CommandQueue {
 			[silentSecs],
 		);
 		return r.rowCount ?? 0;
+	}
+
+	/**
+	 * Команды, забранные ПРЕЖНИМ процессом агента, — закрываем сразу при регистрации нового.
+	 *
+	 * ЖИВОЙ СЛУЧАЙ 12.09 (23:14). Службу агента обновили. Забранная ею за десять секунд до
+	 * остановки `IB_LIST_USERS` по базе `abdali` осталась без ответа: в spool попадают готовые
+	 * РЕЗУЛЬТАТЫ, а прерванная посреди работы команда не оставляет ничего. При
+	 * `AGENT_IB_PARALLEL = 1` эта одна мёртвая команда заняла единственное место внутрибазовых
+	 * операций — и следующие двенадцать минут панель показывала «Выполняется» там, где не
+	 * выполнялось ничего, пока не истёк пятнадцатиминутный срок.
+	 *
+	 * ПОЧЕМУ ПО ЭКЗЕМПЛЯРУ, А НЕ ПРОСТО ПО ФАКТУ РЕГИСТРАЦИИ. Агент регистрируется не только
+	 * при старте: он повторяет регистрацию, когда отозвали токен и когда впервые получился
+	 * вход в базу (`needs_register`). Закрывать по самому факту регистрации значило бы убивать
+	 * СВОИ ЖЕ идущие команды — выгрузку базы, которая честно работает третий час. Разные
+	 * процессы различает идентификатор экземпляра, который агент присылает сам.
+	 *
+	 * NULL в `dispatched_instance` — «не знаем, кто забрал» (команда выдана до миграции 021 или
+	 * сборкой без заголовка). Такие не трогаем: догадка здесь хуже ожидания, их закроет срок.
+	 */
+	async failLostByRestart(agentId: string, instanceId: string): Promise<{ id: string; type: string; baseKey: string | null }[]> {
+		if (!instanceId) return [];
+		const r = await this.db.query<{ id: string; type: string; base_key: string | null }>(
+			`UPDATE commands
+			    SET state = 'expired', finished_at = now(),
+			        error = COALESCE(error, jsonb_build_object(
+			          'code', 'AGENT_RESTARTED',
+			          'message', 'Служба 1С-агента перезапустилась, не ответив на команду. '
+			            || 'Результат потерян — повторите операцию.'))
+			  WHERE agent_id = $1 AND state = 'dispatched'
+			    AND dispatched_instance IS NOT NULL AND dispatched_instance <> $2
+			  RETURNING id, type, base_key`,
+			[agentId, instanceId],
+		);
+		// Место в очереди освободилось — будим опрос, чтобы следующая команда ушла сразу.
+		if (r.rowCount) this.bell.emit(agentId);
+		return r.rows.map((x) => ({ id: x.id, type: x.type, baseKey: x.base_key }));
 	}
 
 	async expireOverdue(): Promise<number> {
@@ -263,7 +302,7 @@ export class CommandQueue {
 		return this.cancel(r.rows.map((x) => x.id), by);
 	}
 
-	private async dispatchQueued(agentId: string): Promise<WireCommand[]> {
+	private async dispatchQueued(agentId: string, instanceId: string | null = null): Promise<WireCommand[]> {
 		// Просроченные — в expired, чтобы агент не выполнял то, чего уже никто не ждёт.
 		// Причина пишется тут же (см. expireOverdue): здесь это всегда «не забрал».
 		await this.db.query(
@@ -331,7 +370,9 @@ export class CommandQueue {
 			        FROM candidates
 			       WHERE rn = 1 AND base_key IS NOT NULL
 			 )
-			 UPDATE commands SET state = 'dispatched', dispatched_at = now()
+			 -- Запоминаем ПРОЦЕСС, который забрал команду: по нему при регистрации нового
+			 -- процесса видно, чей ответ уже не придёт (см. failLostByRestart).
+			 UPDATE commands SET state = 'dispatched', dispatched_at = now(), dispatched_instance = $3
 			  WHERE id IN (
 			    -- Кластерные — все, они дешёвые и независимые.
 			    SELECT id FROM candidates WHERE rn = 1 AND base_key IS NULL
@@ -340,7 +381,7 @@ export class CommandQueue {
 			    SELECT id FROM ranked WHERE ib_rank <= $2
 			  )
 			  RETURNING *`,
-			[agentId, slots],
+			[agentId, slots, instanceId],
 		);
 		const wire = r.rows.map((c) => ({
 			id: c.id,

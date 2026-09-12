@@ -110,6 +110,35 @@ test("IB_CREATE_USER: база и имя обязательны, лишние п
 	assert.equal(ok.ok && ok.baseKey, "buh", "ключ базы достаётся для маршрутизации");
 });
 
+test("IB_UPDATE_USER: «выдать все роли» — штатная операция, а не «слишком много»", () => {
+	const spec = findAdminCommand("IB_UPDATE_USER")!;
+	/*
+	 * ЖИВОЙ СЛУЧАЙ. В карточке отметили все доступные роли — команда не собралась:
+	 * «addRoles: Too big: expected array to have <=100 items». Сотня ролей — это меньше,
+	 * чем есть в типовой конфигурации: в «Бухгалтерии» их под две сотни, в «ERP» — за
+	 * полторы тысячи. Предел нужен как защита от бессмысленно большого тела команды, а
+	 * отметка «выбрать все» к таким не относится.
+	 */
+	const many = Array.from({ length: 500 }, (_, i) => `Роль${i}`);
+	assert.equal(buildAdminPayload(spec, { baseKey: "b", name: "ivanov", addRoles: many }).ok, true);
+
+	// Предел всё же есть, и отказ по нему читается человеком, а не разбирается по коду.
+	const tooMany = Array.from({ length: 2001 }, (_, i) => `Роль${i}`);
+	const denied = buildAdminPayload(spec, { baseKey: "b", name: "ivanov", addRoles: tooMany });
+	assert.equal(denied.ok, false);
+	assert.equal(denied.ok === false && denied.message.includes("добавляемые роли"), true, denied.ok === false ? denied.message : "");
+	assert.equal(denied.ok === false && /слишком длинный список/.test(denied.message), true);
+});
+
+test("отказ по схеме объясняется словами: «не заполнено», а не кодом библиотеки", () => {
+	const spec = findAdminCommand("IB_UPDATE_USER")!;
+	const noName = buildAdminPayload(spec, { baseKey: "b", name: "" });
+	assert.equal(noName.ok, false);
+	// Поле названо по-человечески, и сказано, что с ним не так.
+	assert.equal(noName.ok === false && noName.message.includes("имя пользователя"), true);
+	assert.equal(noName.ok === false && !/expected|Too big|Invalid/i.test(noName.message), true, noName.ok === false ? noName.message : "");
+});
+
 test("IB_INSTALL_EXTENSION: без содержимого файла команда не собирается", () => {
 	const spec = findAdminCommand("IB_INSTALL_EXTENSION")!;
 	assert.equal(buildAdminPayload(spec, { baseKey: "buh", name: "bpapi" }).ok, false);

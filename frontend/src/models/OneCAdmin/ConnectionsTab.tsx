@@ -23,7 +23,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { disconnectConnection, fetchConnections, fetchLocks, type ClusterRow } from "src/services/onec/api";
-import { QueryError, VSplit } from "./shared";
+import { QueryError, VSplit, useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const connColumns = (): TColumn[] => ([
@@ -45,6 +45,7 @@ const toRows = (items: ClusterRow[], key: string) =>
 	items.map((x, i) => ({ id: i + 1, uuid: String(x[key] ?? i), ...x }));
 
 export const ConnectionsTab: FC = () => {
+	const canWrite = useOnecWrite();
 	const connections = useQuery({ queryKey: ["onec", "connections"], queryFn: () => fetchConnections() });
 	const locks = useQuery({ queryKey: ["onec", "locks"], queryFn: () => fetchLocks() });
 
@@ -88,7 +89,8 @@ export const ConnectionsTab: FC = () => {
 				selectable: true,
 				onSelectionChange: (sel, all) =>
 					setPicked(all.filter((r: TDataItem) => sel.has(Number(r.id))).map((r) => asText(r.uuid))),
-				extraButtons: picked.length > 0
+				// Разрыв соединения — вмешательство в работу базы: только полный доступ.
+				extraButtons: canWrite && picked.length > 0
 					? <Button variant="danger" onClick={() => setConfirm(true)}>
 						<Icon name="close" /> {translate("onecDisconnect")} ({picked.length})
 					</Button>

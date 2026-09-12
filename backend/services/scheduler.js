@@ -13,6 +13,11 @@
 // или на Postgres advisory-lock, чтобы не дублировать.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { logger } from "./logger.js";
+
+/** Логгер планировщика по умолчанию: уровень и формат — общие для бэкенда. */
+const defaultLog = logger("scheduler");
+
 const tasks = [];
 
 /**
@@ -45,9 +50,12 @@ export function _reset() {
  * @param {{ log?: { info?: Function, warn?: Function, error?: Function } }} [opts]
  * @returns {string[]} имена запущенных задач
  */
-export function startScheduler({ log = console } = {}) {
-	const info = (m) => (log.info ? log.info(m) : console.log(m));
-	const error = (m, e) => (log.error ? log.error(m, e) : console.error(m, e));
+export function startScheduler({ log = defaultLog } = {}) {
+	// Запасные варианты через `console` убраны: логгер у планировщика есть всегда (см.
+	// defaultLog), а подменённый в тестах объект может знать не все уровни — тогда молчим,
+	// а не пишем в stdout мимо уровня.
+	const info = (m) => log.info?.(m);
+	const error = (m, e) => log.error?.(m, e);
 	for (const t of tasks) {
 		const tick = async () => {
 			if (t.running) return; // предыдущий прогон ещё идёт
@@ -55,9 +63,9 @@ export function startScheduler({ log = console } = {}) {
 			t.running = true;
 			try {
 				const r = await t.run();
-				if (r) info(`[scheduler] ${t.name}: ${r}`);
+				if (r) info(`${t.name}: ${r}`);
 			} catch (e) {
-				error(`[scheduler] ${t.name} error:`, e?.message || e);
+				error(`${t.name}: ошибка`, e?.message || e);
 			} finally {
 				t.running = false;
 				t.lastRun = Date.now();
@@ -67,7 +75,7 @@ export function startScheduler({ log = console } = {}) {
 		setTimeout(tick, t.initialDelayMs).unref?.();
 		setInterval(tick, Math.min(t.intervalMs, 3_600_000)).unref?.();
 	}
-	if (tasks.length) info(`[scheduler] запущено задач: ${tasks.map((t) => t.name).join(", ")}`);
+	if (tasks.length) info(`запущено задач: ${tasks.map((t) => t.name).join(", ")}`);
 	return tasks.map((t) => t.name);
 }
 

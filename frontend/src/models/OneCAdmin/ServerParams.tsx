@@ -31,6 +31,7 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import { useOnecWrite } from "./shared";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { updateServer, type OnecServer } from "src/services/onec/api";
@@ -48,6 +49,7 @@ export const previewUrl = (host: string): string => {
 };
 
 export const ServerParams: FC<{ server: OnecServer; showName?: boolean }> = ({ server, showName = true }) => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const [name, setName] = useState(server.name);
 	const [host, setHost] = useState(server.publicHost ?? "");
@@ -122,14 +124,16 @@ export const ServerParams: FC<{ server: OnecServer; showName?: boolean }> = ({ s
 				</GroupRow>
 			</FormArea>
 
-			<GroupRow>
+			{/* Настройки сервера правит только полный доступ (F5): от них зависит, куда
+			    панель публикует базы и через какой rac говорит с кластером. */}
+			{canWrite && <GroupRow>
 				<Button variant="primary" disabled={!dirty || portBad || save.isPending}
 					title={portBad ? translate("onecSettingsPortInvalid")
 						: dirty ? translate("save") : translate("onecNoChanges")}
 					onClick={() => save.mutate()}>
 					<Icon name="save" /> {translate("save")}
 				</Button>
-			</GroupRow>
+			</GroupRow>}
 
 			{portBad && <Notice inline items={[{ type: "error", text: translate("onecSettingsPortInvalid") }]} />}
 		</GroupCol>

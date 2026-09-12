@@ -34,7 +34,7 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchAgentProcesses, killAgentProcess } from "src/services/onec/api";
-import { CapabilityGuard, QueryError, useAgents } from "./shared";
+import { CapabilityGuard, QueryError, useAgents, useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
@@ -55,6 +55,7 @@ const age = (secs?: number): string => {
 };
 
 export const ProcessesTab: FC = () => {
+	const canWrite = useOnecWrite();
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_procs"));
 	const [active, setActive] = useState<number | null>(null);
 	const [confirm, setConfirm] = useState<null | { pid: number; force: boolean; note?: string }>(null);
@@ -149,7 +150,9 @@ export const ProcessesTab: FC = () => {
 				onReload: () => live.mutate(),
 				reloadTitle: translate("onecProcRefreshLive"),
 				onActiveRowChange: (r) => setActive(r ? Number(asText(r.pid)) : null),
-				extraButtons: (
+				// Снятие процесса на сервере 1С — разрушающее действие: правом «только
+				// просмотр» список процессов видно, а снимать их нельзя.
+				extraButtons: !canWrite ? undefined : (
 					// Пока агента нет на связи, снимать нечего: команда уйдёт в очередь и умрёт
 					// по сроку, а список всё равно принадлежит прошлому.
 					<Button variant="danger" disabled={!active || kill.isPending || offline}

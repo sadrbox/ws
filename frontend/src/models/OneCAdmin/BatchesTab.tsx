@@ -36,7 +36,7 @@ import { asText } from "src/utils/asText";
 import { cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { reportBatchStart } from "./shared";
+import { reportBatchStart, useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -99,6 +99,7 @@ const notQueued = (b: { items: { state: string }[] }): number =>
 	b.items.filter((i) => i.state === "skipped").length;
 
 export const BatchesTab: FC = () => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
 	/**
@@ -271,7 +272,9 @@ export const BatchesTab: FC = () => {
 				}),
 				childRows,
 				onChildToggle: (_parent, child, next) => toggleChild(child, next),
-				extraButtons: (
+				// Отмена и повтор управляют работой в 1С: повтор ставит те же изменяющие
+				// команды заново. Праву «только просмотр» журнал заданий виден целиком (F5).
+				extraButtons: !canWrite ? undefined : (
 					<>
 						<Button variant="danger" disabled={!cancelable.length || cancel.isPending}
 							title={picked.size

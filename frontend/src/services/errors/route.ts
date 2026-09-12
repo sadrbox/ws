@@ -25,6 +25,7 @@
 import { showToast } from "src/components/UIToast";
 import { noteNotice } from "src/components/TechMessages/store";
 import { translate } from "src/i18";
+import { humanErrorText } from "src/utils/errorText";
 import type { NoticeItem } from "src/components/Notice";
 
 /** Разбор любой ошибки до двух фактов: статус и текст для человека. */
@@ -37,13 +38,23 @@ export function errorStatus(e: unknown): number | undefined {
 	return undefined;
 }
 
+/**
+ * Текст ошибки — ЗДЕСЬ ЖЕ И ПО-ЧЕЛОВЕЧЕСКИ.
+ *
+ * Отказ сервиса приходит написанным для человека, и его передаём дословно. А вот браузер
+ * на неушедший запрос бросает «Failed to fetch» — по этим словам нельзя ни понять, что
+ * случилось, ни решить, что делать; в журнале они выглядели как «Операция завершилась с
+ * ошибками · Failed to fetch». Подменяем только такие, заведомо не предметные (см.
+ * humanErrorText), и делаем это в одном месте — через него проходят все три канала:
+ * тост, журнал и сообщение формы.
+ */
 export function errorText(e: unknown, fallback = translate("unknownError")): string {
-	if (typeof e === "string" && e.trim()) return e;
+	if (typeof e === "string" && e.trim()) return humanErrorText(e);
 	if (e && typeof e === "object") {
 		const o = e as { response?: { data?: { message?: unknown } }; message?: unknown };
 		const server = o.response?.data?.message;
-		if (typeof server === "string" && server.trim()) return server;
-		if (typeof o.message === "string" && o.message.trim()) return o.message;
+		if (typeof server === "string" && server.trim()) return humanErrorText(server);
+		if (typeof o.message === "string" && o.message.trim()) return humanErrorText(o.message);
 	}
 	return fallback;
 }

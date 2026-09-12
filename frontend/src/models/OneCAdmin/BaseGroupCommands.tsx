@@ -23,6 +23,7 @@ import { refreshPublications } from "src/services/onec/api";
 import { withOp } from "./progress";
 import { noteNotice } from "src/components/TechMessages/store";
 import { useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
+import { useOnecWrite } from "./shared";
 
 export type CommandGroup = "publication" | "maintenance" | "users" | "extensions";
 
@@ -40,6 +41,7 @@ export const BaseGroupCommands: FC<{
 	/** Имя объекта, подставляемое в помощник: экран расширений знает его заранее. */
 	presetName?: string;
 }> = ({ selected, groups = ["publication", "maintenance"], presetName }) => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
@@ -101,6 +103,10 @@ export const BaseGroupCommands: FC<{
 		installExt: "onecExtInstall", deleteExt: "onecExtRemove",
 		backup: "onecBackup", checkBase: "onecMaintCheck",
 	};
+
+	// Групповые команды — только изменения (публикация, пользователи, расширения,
+	// выгрузка): правом «только просмотр» их не показываем вовсе (F5).
+	if (!canWrite) return null;
 
 	return (
 		<>

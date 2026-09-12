@@ -60,12 +60,14 @@ import ExtensionsTab from "./ExtensionsTab";
 import UsersTab from "./UsersTab";
 import BatchesTab from "./BatchesTab";
 import AgentsTab from "./AgentsTab";
+import SchedulesTab from "./SchedulesTab";
 import ProcessesTab from "./ProcessesTab";
 import ProgressTab from "./ProgressTab";
 import { useBatchWatch } from "./progress";
 import main from "src/styles/main.module.scss";
+import { ReadonlyNotice } from "./shared";
 
-type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "progress";
+type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "schedules" | "progress";
 
 /**
  * «Кластер» — живое состояние сервера 1С одним разделом.
@@ -166,6 +168,14 @@ export const OneCAdminList: FC = () => {
 			component: tab === "agents" ? <AgentsTab /> : null,
 		},
 		{
+			// Обслуживание по расписанию — рядом с агентами: и то и другое про то, как
+			// панель работает САМА, без человека за экраном. Прогоны при этом видны в
+			// «Заданиях», как и всё остальное.
+			id: "schedules",
+			label: translate("onecTabSchedules"),
+			component: tab === "schedules" ? <SchedulesTab /> : null,
+		},
+		{
 			// Наблюдение — В ОБЩЕМ РЯДУ ВКЛАДОК, после «Агентов». Счётчик говорит, идёт ли
 			// что-то, и этого довольно, чтобы решить, заглядывать ли: само наблюдение от
 			// переключения вкладок не прерывается (см. useBatchWatch выше).
@@ -177,6 +187,9 @@ export const OneCAdminList: FC = () => {
 
 	return (
 		<div className={main.PaneFill}>
+			{/* «Доступ только на просмотр» — один раз на панель, а не на каждой вкладке:
+			    иначе одно и то же сообщение приходило бы на доску от пяти экранов. */}
+			<ReadonlyNotice />
 			<Tabs tabs={tabs} activeTab={tab} onTabChange={(id) => setTab(id as Tab)} />
 		</div>
 	);

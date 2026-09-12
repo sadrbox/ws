@@ -31,7 +31,9 @@ import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
+import {
+	CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseUsersCheck, useOnecWrite,
+} from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import { useOpenBaseUserWizard } from "./BaseUserWizard";
 import BaseGroupCommands from "./BaseGroupCommands";
@@ -60,6 +62,7 @@ const userColumns = (): TColumn[] => ([
  * исполнял.
  */
 export const UsersTab: FC = () => {
+	const canWrite = useOnecWrite();
 	/** Что слева: базы (по умолчанию) или пользователи. Правая таблица — связанная. */
 	const [primary, setPrimary] = useState<"bases" | "users">("bases");
 	const [activeBase, setActiveBase] = useState("");
@@ -272,11 +275,13 @@ export const UsersTab: FC = () => {
 					  * базы выбирают явным шагом, расхождения видно до применения. Карточка
 					  * пары правит ОДНУ базу и в чужие не лезет.
 					  */}
-					<Button variant="secondary" disabled={!activeUser}
-						title={activeUser ? `${translate("onecUserGroupEdit")}: ${activeUser}` : translate("onecPickUserFirst")}
-						onClick={() => openWizard(activeUser)}>
-						<Icon name="editInline" /> {translate("onecUserGroupEdit")}
-					</Button>
+					{canWrite && (
+						<Button variant="secondary" disabled={!activeUser}
+							title={activeUser ? `${translate("onecUserGroupEdit")}: ${activeUser}` : translate("onecPickUserFirst")}
+							onClick={() => openWizard(activeUser)}>
+							<Icon name="editInline" /> {translate("onecUserGroupEdit")}
+						</Button>
+					)}
 				</span>
 			</div>
 		</div>
@@ -290,6 +295,8 @@ export const UsersTab: FC = () => {
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
+			{/* Изменение прав обновит таблицу сразу или с задержкой — это зависит от агента. */}
+			<EchoDelayNotice />
 			{screen}
 		</>
 	);

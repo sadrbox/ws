@@ -64,6 +64,20 @@ const baseKey = z.string().min(1).max(200);
 // Имя пользователя ИБ и имя расширения — то, чем 1С их адресует.
 const ibName = z.string().min(1).max(200);
 
+/**
+ * СПИСОК РОЛЕЙ БАЗЫ.
+ *
+ * Предел здесь отвечает не на вопрос «сколько ролей бывает у человека», а на вопрос
+ * «сколько их всего в конфигурации»: отметка «выбрать все» в панели шлёт весь список.
+ * В типовой «Бухгалтерии» ролей под две сотни, в «ERP» — за полторы тысячи, а прежние сто
+ * отвергали обычную операцию «выдать всё» — причём отвечали на неё так, что понять было
+ * нечего: «addRoles: Too big: expected array to have <=100 items».
+ *
+ * Ограничение остаётся, но как защита от бессмысленно большого тела команды, а не от
+ * штатной работы: две тысячи ролей — это больше, чем есть в любой известной конфигурации.
+ */
+const roleList = z.array(z.string().max(200)).max(2000);
+
 export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 	{
 		type: "CLUSTER_LIST_INFOBASES",
@@ -180,7 +194,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			fullName: z.string().max(200).optional(),
 			// Пароль не логируется и не возвращается; пустой — вход без пароля (как в 1С).
 			password: z.string().max(200).optional(),
-			roles: z.array(z.string().max(200)).max(100).optional(),
+			roles: roleList.optional(),
 			// Аутентификация ОС и признак «показывать в списке выбора».
 			osUser: z.string().max(200).optional(),
 			showInList: z.boolean().optional(),
@@ -262,9 +276,9 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			 * базы с другими наборами молча выравнивались по первой. Разница между
 			 * «добавить» и «заменить» существует ровно для того, чтобы этого не случалось.
 			 */
-			addRoles: z.array(z.string().max(200)).max(100).optional(),
-			removeRoles: z.array(z.string().max(200)).max(100).optional(),
-			roles: z.array(z.string().max(200)).max(100).optional(),
+			addRoles: roleList.optional(),
+			removeRoles: roleList.optional(),
+			roles: roleList.optional(),
 			disabled: z.boolean().optional(),
 			showInList: z.boolean().optional(),
 		}).strict(),
@@ -523,12 +537,61 @@ export type AdminPayloadResult =
 	| { ok: true; payload: Record<string, unknown>; baseKey: string | null }
 	| { ok: false; message: string };
 
+/**
+ * КАК ПОЛЕ КОМАНДЫ НАЗЫВАЕТСЯ ПО-ЧЕЛОВЕЧЕСКИ.
+ *
+ * Имена полей придуманы для агента, а отказ по схеме читает человек в панели: «addRoles»
+ * не говорит ему ничего, «добавляемые роли» — говорит всё. Поля, которых здесь нет,
+ * называются как есть: выдуманное название хуже технического.
+ */
+const FIELD_TITLE: Record<string, string> = {
+	baseKey: "база",
+	name: "имя пользователя",
+	newName: "новое имя пользователя",
+	fullName: "полное имя",
+	password: "пароль",
+	roles: "список ролей",
+	addRoles: "добавляемые роли",
+	removeRoles: "снимаемые роли",
+	disabled: "признак «отключён»",
+	showInList: "признак «показывать в списке выбора»",
+	osUser: "пользователь ОС",
+	alias: "псевдоним",
+};
+
+/**
+ * ОТКАЗ ПО СХЕМЕ — СЛОВАМИ, А НЕ КОДОМ БИБЛИОТЕКИ.
+ *
+ * Zod объясняется по-английски и терминами структуры: «Too big: expected array to have
+ * <=100 items». В панели это выглядело как сбой неизвестной природы, хотя речь о простом:
+ * список длиннее допустимого. Переводим то, что действительно встречается, — длину,
+ * пустоту и тип; остальное отдаём как есть, потому что выдумывать формулировку для
+ * неизвестного случая опаснее, чем показать оригинал.
+ */
+function describeIssue(issue: z.core.$ZodIssue): string {
+	const path = issue.path.join(".");
+	const field = FIELD_TITLE[path] ?? path ?? "";
+	const head = field ? `${field}: ` : "";
+
+	if (issue.code === "too_big") {
+		const max = issue.maximum;
+		return issue.origin === "array"
+			? `${head}слишком длинный список — не больше ${max}`
+			: `${head}слишком длинное значение — не больше ${max} символов`;
+	}
+	if (issue.code === "too_small") {
+		return Number(issue.minimum) <= 1 ? `${head}не заполнено` : `${head}слишком короткое значение`;
+	}
+	if (issue.code === "invalid_type") return `${head}неверное значение`;
+	if (issue.code === "unrecognized_keys") return `команда не знает полей: ${issue.keys.join(", ")}`;
+	return `${head}${issue.message}`;
+}
+
 /** Проверяет payload по схеме команды и достаёт из него ключ базы для маршрутизации. */
 export function buildAdminPayload(spec: AdminCommandSpec, input: unknown): AdminPayloadResult {
 	const parsed = spec.schema.safeParse(input ?? {});
 	if (!parsed.success) {
-		const issue = parsed.error.issues[0];
-		return { ok: false, message: `${issue.path.join(".") || "payload"}: ${issue.message}` };
+		return { ok: false, message: describeIssue(parsed.error.issues[0]) };
 	}
 	const payload = parsed.data as Record<string, unknown>;
 	const key = typeof payload.baseKey === "string" ? payload.baseKey : null;

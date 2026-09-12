@@ -19,6 +19,13 @@ import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand } from "../commands/admin.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
+import { checkRoleIntent, parseEcho, roleVerdictMessage } from "../onec/echo.ts";
+import { listItems } from "../onec/listShape.ts";
+import { writeBackOf } from "../onec/writeBack.ts";
+
+/** Объект, а не массив и не скаляр: только у такого результата есть поле items. */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+	typeof v === "object" && v !== null && !Array.isArray(v);
 import {
 	ibFailureReason, needsFullBases, publicationReport,
 	type BaseService, type BaseState, type PublicationItem,
@@ -186,6 +193,18 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 	const ownAgent = (bodyAgentId: string, req: { agent?: { agentId: string } }) =>
 		bodyAgentId.toLowerCase() === req.agent?.agentId;
 
+	/**
+	 * Какой ПРОЦЕСС агента с нами говорит. Заголовок надёжнее тела: его шлют на каждом
+	 * запросе, включая опрос команд, а `instanceId` есть только в register/heartbeat.
+	 * Пусто — сборка старая и себя не называет; тогда всё работает по срокам, как раньше.
+	 */
+	const agentInstance = (req: { headers: Record<string, unknown>; body?: unknown }): string | null => {
+		const head = String(req.headers["x-agent-instance"] ?? "").trim().slice(0, 200);
+		if (head) return head;
+		const fromBody = (req.body as { instanceId?: unknown } | undefined)?.instanceId;
+		return typeof fromBody === "string" && fromBody.trim() ? fromBody.trim().slice(0, 200) : null;
+	};
+
 	r.post("/register", async (req, res) => {
 		const p = registerSchema.safeParse(req.body);
 		if (!p.success || !ownAgent(p.data.agentId, req)) {
@@ -210,6 +229,23 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			name: p.data.agentName, version: p.data.version, os: p.data.os, capabilities: p.data.capabilities,
 			role, serverId: server.id,
 		});
+		/**
+		 * НОВЫЙ ПРОЦЕСС — ЗНАЧИТ, ЗАБРАННОЕ ПРЕЖНИМ УЖЕ НЕ ВЕРНЁТСЯ.
+		 *
+		 * Обновили службу — и команда, забранная за секунду до остановки, висит `dispatched`
+		 * до своего срока: в spool агента попадают готовые результаты, а прерванная работа не
+		 * оставляет ничего. При `AGENT_IB_PARALLEL = 1` такая команда занимает единственное
+		 * место, и все внутрибазовые операции стоят четверть часа (живой случай 12.09, 23:14).
+		 *
+		 * Закрываем только команды ЧУЖОГО экземпляра: агент регистрируется повторно и без
+		 * перезапуска (перевыпуск токена, появившийся вход в базу), и трогать свои же идущие
+		 * команды нельзя — выгрузка базы идёт часами.
+		 */
+		const lost = await queue.failLostByRestart(req.agent!.agentId, agentInstance(req) ?? "");
+		if (lost.length) {
+			log.warn({ agentId: req.agent!.agentId, count: lost.length, commands: lost },
+				"агент перезапустился — команды прежнего процесса закрыты, очередь освобождена");
+		}
 		if (p.data.bases?.length) {
 			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
 			await agents.markBasesSynced(req.agent!.agentId);
@@ -295,7 +331,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		agents.notePollOpen(req.agent!.agentId);
 		let handedBusyMs = 0;
 		try {
-			const commands = await queue.take(req.agent!.agentId, wait);
+			const commands = await queue.take(req.agent!.agentId, wait, agentInstance(req));
 			if (closed && commands.length) {
 				await db.query(`UPDATE commands SET state = 'queued', dispatched_at = NULL WHERE id = ANY($1) AND state = 'dispatched'`,
 					[commands.map((c) => c.id)]);
@@ -321,7 +357,92 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Некорректный результат" } });
 			return;
 		}
-		const row = await queue.complete(req.agent!.agentId, p.data);
+		/**
+		 * ЭХО СОСТОЯНИЯ — разбираем ДО записи результата.
+		 *
+		 * Агент со способностью `ib.echo` прикладывает к изменяющей команде новое содержимое
+		 * базы, прочитанное тем же открытым соединением. Применённое в командную запись не
+		 * ложится (см. onec/echo.ts): в реестре оно уже есть, а задание на сто баз положило бы
+		 * в журнал сто списков.
+		 */
+		/**
+		 * ФОРМУ СПИСКА ПОПРАВЛЯЕМ НА ВХОДЕ, А НЕ В КАЖДОМ ЧИТАТЕЛЕ.
+		 *
+		 * Сборка агента начала отвечать вложенным списком — `{"items": [[{…}, {…}]]}` вместо
+		 * `{"items": [{…}, {…}]}` (12.09, 21:38 местного). Разворачиваем здесь, у самой
+		 * границы: дальше результат ложится в командную запись, из неё же его читает панель
+		 * при опросе и вкладки карточки — иначе лишнюю пару скобок пришлось бы помнить в
+		 * пяти местах, а забыть — в одном. Подробности и цена ошибки — в onec/listShape.ts.
+		 */
+		const shape = p.data.status === "SUCCESS" ? listItems(p.data.result) : null;
+		if (shape?.unwrapped && isRecord(p.data.result)) {
+			log.warn({
+				commandId: p.data.commandId, items: shape.items.length,
+			}, "список в ответе агента пришёл вложенным (items: [[…]]) — развернули; сборке агента нужна правка");
+			p.data.result = { ...p.data.result, items: shape.items };
+		}
+
+		const echo = p.data.status === "SUCCESS" ? parseEcho(p.data.result) : null;
+
+		/**
+		 * КОМАНДА, НЕ СДЕЛАВШАЯ СКАЗАННОГО, НЕ ОТЧИТЫВАЕТСЯ УСПЕХОМ.
+		 *
+		 * Живой случай 12.09: `IB_UPDATE_USER` с `addRoles` возвращала `{"ok": true}`, а в
+		 * приложенном к ней же списке пользователей роли оставались прежними — сборка агента
+		 * эти поля не применяет. Панель показывала «Выполнено», и человек уходил, считая
+		 * права выданными. Эхо позволяет сличить намерение с результатом сразу же (см.
+		 * onec/echo.ts), и если роли не изменились — это отказ, а не успех.
+		 *
+		 * Состояние базы из эха при этом ВСЁ РАВНО применяется ниже: оно правдиво, каким бы
+		 * ни был приговор команде.
+		 */
+		let wire = echo ? { ...p.data, result: echo.result } : p.data;
+		// Запись команды читаем ДО её завершения: из неё известно, что именно приказали —
+		// это нужно и для сверки ролей ниже, и для запоминания непрочитываемых реквизитов.
+		const pending = p.data.status === "SUCCESS" ? await queue.get(p.data.commandId) : null;
+		if (echo?.state.users) {
+			const verdict = pending ? checkRoleIntent(pending.payload, echo.state.users) : { ok: true as const };
+			if (!verdict.ok) {
+				const message = roleVerdictMessage(verdict);
+				wire = {
+					...wire,
+					status: "ERROR",
+					error: { code: "AGENT_ROLES_NOT_APPLIED", message, details: verdict },
+				};
+				log.warn({
+					commandId: p.data.commandId, type: pending?.type, baseKey: pending?.base_key,
+					notAdded: verdict.notAdded, notRemoved: verdict.notRemoved,
+				}, "агент доложил об успехе, но роли не изменились");
+			}
+		}
+		/**
+		 * ЗАПОМИНАЕМ ТО, ЧЕГО НЕ ПРОЧИТАТЬ, — по факту своей же успешной записи, и ДО того,
+		 * как команда станет «выполнена».
+		 *
+		 * «Показывать в списке выбора» 1С в списке пользователей не отдаёт. Пока записанное
+		 * никто не запоминал, выходило так: человек включает тумблер, команда выполняется
+		 * успешно, панель перечитывает базу — и показывает «выключено», потому что значения
+		 * не знает. Со стороны это и есть «не записывается» (жалоба 12.09, дважды за вечер).
+		 *
+		 * Порядок важен: панель узнаёт о завершении по состоянию команды и сразу перечитывает
+		 * реестр — значение обязано быть там уже к этому моменту.
+		 */
+		if (pending?.base_key && wire.status === "SUCCESS") {
+			const remember = writeBackOf(pending.type, pending.payload);
+			if (remember) {
+				const base = await bases.findByKeyGlobal(pending.base_key);
+				if (base) {
+					const saved = await registry.rememberShowInList(base.id, remember.name, remember.showInList);
+					if (!saved) {
+						log.warn({
+							commandId: p.data.commandId, baseKey: pending.base_key, name: remember.name,
+						}, "признак «показывать в списке» запомнить не удалось: пользователя нет в реестре");
+					}
+				}
+			}
+		}
+
+		const row = await queue.complete(req.agent!.agentId, wire);
 		if (!row) {
 			// Неизвестная команда: возможно, очищена по сроку. Отвечаем 200, иначе агент будет
 			// вечно досылать её из spool.
@@ -396,8 +517,33 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			IB_INSTALL_EXTENSION: "IB_LIST_EXTENSIONS",
 			IB_DELETE_EXTENSION: "IB_LIST_EXTENSIONS",
 		};
+		/**
+		 * Состояние из ответа кладём в реестр СРАЗУ: он становится актуальным в тот же миг,
+		 * когда команда стала `done`. Панель читает содержимое базы из реестра
+		 * (`/bases/:key/users/cached`), поэтому больше ей ждать нечего и спрашивать нечего.
+		 */
+		const applied = { users: false, extensions: false };
+		if (echo && row.base_key) {
+			const base = await bases.findByKeyGlobal(row.base_key);
+			// Базы нет в реестре — применять некуда; тогда ниже отработает обычное чтение.
+			if (base) {
+				if (echo.state.users) { await registry.syncUsers(base.id, echo.state.users); applied.users = true; }
+				if (echo.state.extensions) {
+					await registry.syncExtensions(base.id, echo.state.extensions);
+					applied.extensions = true;
+				}
+				log.info({
+					commandId: row.id, type: row.type, baseKey: row.base_key,
+					users: echo.state.users?.length ?? null, extensions: echo.state.extensions?.length ?? null,
+				}, "состояние базы применено из ответа команды — читающая команда не нужна");
+			}
+		}
 		const refreshType = REFRESH_AFTER[row.type];
-		if (p.data.status === "SUCCESS" && refreshType && row.base_key) {
+		// Эхо уже принесло ровно то, что прочитала бы эта команда, — второй вход в базу не нужен.
+		const alreadyFresh = refreshType === "IB_LIST_USERS" ? applied.users
+			: refreshType === "IB_LIST_EXTENSIONS" ? applied.extensions
+				: false;
+		if (p.data.status === "SUCCESS" && refreshType && row.base_key && !alreadyFresh) {
 			await queue.enqueue({
 				agentId: req.agent!.agentId,
 				organizationUuid: row.organization_uuid,
@@ -443,12 +589,22 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
 		// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.
 		if (p.data.status === "SUCCESS" && row.base_key && (row.type === "IB_LIST_USERS" || row.type === "IB_LIST_EXTENSIONS")) {
-			const items = (p.data.result as { items?: unknown[] } | null)?.items;
-			if (Array.isArray(items)) {
+			/*
+			 * НЕУЗНАННУЮ ФОРМУ НЕ СЧИТАЕМ ПУСТЫМ СРЕЗОМ. Прежний код видел непустой массив,
+			 * не находил в нём ни одной записи и удалял из кэша ВСЕХ: полный срез,
+			 * разобранный неправильно, выглядит как «пользователей больше нет». Именно так
+			 * 12.09 опустели `_transition` и `abdali` (см. onec/listShape.ts).
+			 */
+			const list = listItems(p.data.result);
+			if (!list) {
+				log.warn({
+					commandId: row.id, type: row.type, baseKey: row.base_key,
+				}, "список в ответе агента неузнанной формы — кэш базы не трогаем");
+			} else {
 				const base = await bases.findByKeyGlobal(row.base_key);
 				if (base) {
-					if (row.type === "IB_LIST_USERS") await registry.syncUsers(base.id, items as IbUser[]);
-					else await registry.syncExtensions(base.id, items as IbExtension[]);
+					if (row.type === "IB_LIST_USERS") await registry.syncUsers(base.id, list.items as IbUser[]);
+					else await registry.syncExtensions(base.id, list.items as IbExtension[]);
 				}
 			}
 		}

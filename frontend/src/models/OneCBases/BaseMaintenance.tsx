@@ -26,7 +26,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
-import { CapabilityGuard } from "src/models/OneCAdmin/shared";
+import { CapabilityGuard, ReadonlyNotice, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { attachBatch, finishOp, startOp } from "src/models/OneCAdmin/progress";
 import {
 	applyBaseUpdate, checkBase, planText, restoreBase, runBatch,
@@ -41,6 +41,7 @@ type Job = "check" | "backup" | "restore" | "update";
 type Confirm = { job: Job; plan: string };
 
 export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
+	const canWrite = useOnecWrite();
 	const [check, setCheck] = useState({ reindex: true, logicalIntegrity: true, recalcTotals: false, repair: false });
 	const [backupDir, setBackupDir] = useState("");
 	const [restorePath, setRestorePath] = useState("");
@@ -123,6 +124,9 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	return (
 		<div className={main.FormContainer}>
 			<CapabilityGuard capability="ib.admin" />
+			{/* Обслуживание — самое разрушающее в панели: загрузка базы поверх существующей
+			    и обновление конфигурации. Праву «только просмотр» здесь остаётся проверка. */}
+			<ReadonlyNotice />
 			<div className={main.FormWrapper}>
 				<GroupCol className={main.Form}>
 					<FormArea title={translate("onecMaintCheck")}>
@@ -136,9 +140,12 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 									disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, recalcTotals: v }))} />
 							</GroupRow>
 							<GroupRow>
-								{/* Исправление — отдельный флаг и отдельное подтверждение: оно меняет данные. */}
-								<FieldToggle name="mnt_repair" label={translate("onecMaintRepair")} value={check.repair}
-									disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, repair: v }))} />
+								{/* Исправление — отдельный флаг и отдельное подтверждение: оно меняет данные,
+								    поэтому праву «только просмотр» его не показываем вовсе. */}
+								{canWrite && (
+									<FieldToggle name="mnt_repair" label={translate("onecMaintRepair")} value={check.repair}
+										disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, repair: v }))} />
+								)}
 								<Button variant="primary" disabled={busy} title={translate("onecMaintCheck")} onClick={runCheck}>
 									<Icon name="recalc" /> {translate("onecMaintCheck")}
 								</Button>
@@ -146,54 +153,59 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 						</GroupCol>
 					</FormArea>
 
-					<FormArea title={translate("onecBackup")}>
-						<GroupRow>
-							<Field name="mnt_dir" label={translate("onecBackupDir")} value={backupDir} noAutofill width={FIELD_WIDTH.lg}
-								disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackupDir(e.target.value)} />
-							<Button variant="secondary" disabled={busy} title={translate("onecBackup")}
-								onClick={() => apply.mutate("backup")}>
-								<Icon name="download" /> {translate("onecBackup")}
-							</Button>
-						</GroupRow>
-					</FormArea>
-
-					<FormArea title={translate("onecMaintRestore")}>
-						<GroupCol>
+					{/* Выгрузка, загрузка и обновление конфигурации меняют саму базу — их
+					    показываем только полному доступу (F5). */}
+					{canWrite && (<>
+						<FormArea title={translate("onecBackup")}>
 							<GroupRow>
-								<Field name="mnt_path" label={translate("onecMaintFileDt")} value={restorePath} noAutofill width={FIELD_WIDTH.lg}
-									disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRestorePath(e.target.value)} />
-								<FieldToggle name="mnt_lock" label={translate("onecMaintLockSessions")} value={restoreLock}
-									disabled={busy} onChange={setRestoreLock} />
-							</GroupRow>
-							<GroupRow>
-								<Button variant="danger" disabled={busy || !restorePath.trim()}
-									title={restorePath.trim() ? translate("onecMaintRestore") : translate("onecMaintNeedFile")}
-									onClick={() => plan.mutate("restore")}>
-									<Icon name="restore" /> {translate("onecMaintRestore")}
+								<Field name="mnt_dir" label={translate("onecBackupDir")} value={backupDir} noAutofill width={FIELD_WIDTH.lg}
+									disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackupDir(e.target.value)} />
+								<Button variant="secondary" disabled={busy} title={translate("onecBackup")}
+									onClick={() => apply.mutate("backup")}>
+									<Icon name="download" /> {translate("onecBackup")}
 								</Button>
 							</GroupRow>
-						</GroupCol>
-					</FormArea>
+						</FormArea>
 
-					<FormArea title={translate("onecMaintUpdate")}>
-						<GroupCol>
-							<GroupRow>
-								<Field name="mnt_cfu" label={translate("onecMaintFileCfu")} value={updatePath} noAutofill width={FIELD_WIDTH.lg}
-									disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpdatePath(e.target.value)} />
-								<FieldToggle name="mnt_backup" label={translate("onecMaintBackupFirst")} value={updateBackup}
-									disabled={busy} onChange={setUpdateBackup} />
-								<FieldToggle name="mnt_ulock" label={translate("onecMaintLockSessions")} value={updateLock}
-									disabled={busy} onChange={setUpdateLock} />
-							</GroupRow>
-							<GroupRow>
-								<Button variant="danger" disabled={busy || !updatePath.trim()}
-									title={updatePath.trim() ? translate("onecMaintUpdate") : translate("onecMaintNeedFile")}
-									onClick={() => plan.mutate("update")}>
-									<Icon name="editInline" /> {translate("onecMaintUpdate")}
-								</Button>
-							</GroupRow>
-						</GroupCol>
-					</FormArea>
+						<FormArea title={translate("onecMaintRestore")}>
+							<GroupCol>
+								<GroupRow>
+									<Field name="mnt_path" label={translate("onecMaintFileDt")} value={restorePath} noAutofill width={FIELD_WIDTH.lg}
+										disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRestorePath(e.target.value)} />
+									<FieldToggle name="mnt_lock" label={translate("onecMaintLockSessions")} value={restoreLock}
+										disabled={busy} onChange={setRestoreLock} />
+								</GroupRow>
+								<GroupRow>
+									<Button variant="danger" disabled={busy || !restorePath.trim()}
+										title={restorePath.trim() ? translate("onecMaintRestore") : translate("onecMaintNeedFile")}
+										onClick={() => plan.mutate("restore")}>
+										<Icon name="restore" /> {translate("onecMaintRestore")}
+									</Button>
+								</GroupRow>
+							</GroupCol>
+						</FormArea>
+
+						<FormArea title={translate("onecMaintUpdate")}>
+							<GroupCol>
+								<GroupRow>
+									<Field name="mnt_cfu" label={translate("onecMaintFileCfu")} value={updatePath} noAutofill width={FIELD_WIDTH.lg}
+										disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpdatePath(e.target.value)} />
+									<FieldToggle name="mnt_backup" label={translate("onecMaintBackupFirst")} value={updateBackup}
+										disabled={busy} onChange={setUpdateBackup} />
+									<FieldToggle name="mnt_ulock" label={translate("onecMaintLockSessions")} value={updateLock}
+										disabled={busy} onChange={setUpdateLock} />
+								</GroupRow>
+								<GroupRow>
+									<Button variant="danger" disabled={busy || !updatePath.trim()}
+										title={updatePath.trim() ? translate("onecMaintUpdate") : translate("onecMaintNeedFile")}
+										onClick={() => plan.mutate("update")}>
+										<Icon name="editInline" /> {translate("onecMaintUpdate")}
+									</Button>
+								</GroupRow>
+							</GroupCol>
+						</FormArea>
+					</>)}
+
 				</GroupCol>
 
 				<GroupCol className={main.FormNotice}>

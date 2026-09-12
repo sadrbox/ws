@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client'
-import App from './app'
+import { loadTranslations } from './i18'
 // Глобальные keyframes эффектов панелей/вкладок (имена не хешируются — нужны для
 // подстановки через CSS-переменные --pane-*-name; см. styles/paneEffects.css).
 import './styles/paneEffects.css'
@@ -42,7 +42,20 @@ async function waitForFonts() {
   await document.fonts.ready;
 }
 
-waitForFonts().then(() => {
+// ── Запуск: сначала словарь активного языка, потом само приложение ────────
+// Словари (178 кБ русский, 138 кБ казахский) грузятся отдельными файлами, а не лежат в
+// главном чанке: русскому пользователю казахский не нужен вовсе. translate() остаётся
+// синхронным, поэтому словарь обязан быть на месте ДО первого рендера — отсюда порядок.
+// Само приложение тоже импортируется здесь: раньше оно тянулось статически, и главный
+// чанк включал и его, и оба словаря.
+async function boot() {
+  // ПОРЯДОК ВАЖЕН: словарь ложится ДО того, как вычислятся модули приложения. Часть их
+  // вычисляет подписи на месте (например, кнопки тулбара — const ... = translate(...)),
+  // и запущенный параллельно import('./app') мог опередить словарь: подписи навсегда
+  // остались бы сырыми ключами. Шрифты грузятся рядом — они ни от чего не зависят.
+  await Promise.all([loadTranslations(), waitForFonts()]);
+  const { default: App } = await import('./app');
+
   const rootEl = document.getElementById('root')!;
   rootEl.style.opacity = '0';
 
@@ -56,4 +69,6 @@ waitForFonts().then(() => {
       rootEl.style.opacity = '1';
     });
   });
-}).catch(console.error);
+}
+
+boot().catch(console.error);

@@ -16,7 +16,7 @@ import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
-import { GroupCol } from "src/components/UI";
+import { FormArea, GroupCol } from "src/components/UI";
 import Notice from "src/components/Notice";
 import { ValueList, ValueRow } from "src/components/ValueList";
 import { StateChip, StateChips } from "src/components/StateChip";
@@ -35,7 +35,8 @@ import {
 	type IbExtension, type IbUser, type OnecBase,
 } from "src/services/onec/api";
 import {
-	QueryError, publishLabel, unreachableReason, unreachableShort, useAgents, useBaseContentCheck,
+	EchoDelayNotice, QueryError, ReadonlyNotice, publishLabel, unreachableReason, unreachableShort,
+	useAgents, useBaseContentCheck,
 } from "src/models/OneCAdmin/shared";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
@@ -247,6 +248,9 @@ const useBaseTabs = (row: TDataItem) => {
 			component: (
 				<>
 					<QueryError error={users.error} noticeKey="base-users" source={translate("onecTabUsers")} />
+					{/* Создание, правка и удаление идут отсюда: если агент не умеет приносить
+					    состояние ответом, таблица обновится с задержкой — и об этом лучше знать. */}
+					<EchoDelayNotice />
 					<Table {...buildStaticTableProps({
 						componentName: "OneCBases_users", rows: userView.rows, columns: userCols, setColumns: setUserCols,
 						emptyText: usersEmptyText,
@@ -402,25 +406,27 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									  * приходилось прочитать семь строк. Слово в метке говорит то же, что и
 									  * цвет, — цвет лишь помогает найти её взглядом.
 									  */}
-									<StateChips>
-										<StateChip
-											tone={row.disabled === true ? "unknown" : row.ibUnreachableAt ? "bad" : "ok"}
-											title={unreachableTitle}>
-											{row.disabled === true
-												? translate("onecBaseDisabled")
-												: row.ibUnreachableAt
-													? unreachableShort(reasonCode)
-													: statusLabel(asText(row.status))}
-										</StateChip>
-										<StateChip tone={row.published === true ? "ok" : row.published === false ? "bad" : "unknown"}>
-											{publishLabel(row.published as boolean | null)}
-										</StateChip>
-										<StateChip tone={row.extensionsCount == null ? "unknown" : "neutral"}>
-											{row.extensionsCount == null
-												? translate("onecExtNotChecked")
-												: `${translate("extensionsCount")}: ${asText(row.extensionsCount)}`}
-										</StateChip>
-									</StateChips>
+									<FormArea title={translate("state")}>
+										<StateChips>
+											<StateChip
+												tone={row.disabled === true ? "unknown" : row.ibUnreachableAt ? "bad" : "ok"}
+												title={unreachableTitle}>
+												{row.disabled === true
+													? translate("onecBaseDisabled")
+													: row.ibUnreachableAt
+														? unreachableShort(reasonCode)
+														: statusLabel(asText(row.status))}
+											</StateChip>
+											<StateChip tone={row.published === true ? "ok" : row.published === false ? "bad" : "unknown"}>
+												{publishLabel(row.published as boolean | null)}
+											</StateChip>
+											<StateChip tone={row.extensionsCount == null ? "unknown" : "neutral"}>
+												{row.extensionsCount == null
+													? translate("onecExtNotChecked")
+													: `${translate("extensionsCount")}: ${asText(row.extensionsCount)}`}
+											</StateChip>
+										</StateChips>
+									</FormArea>
 
 									{/*
 									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение», а
@@ -432,18 +438,20 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									  * правая половина ширины пустовала — публикация уезжала за нижний край.
 									  * Порядок в разметке и есть порядок чтения: слева направо, сверху вниз.
 									  */}
-									<ValueList columns={2}>
-										<ValueRow label={translate("baseKey")} value={asText(row.baseKey)} />
-										<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
-										<ValueRow label={translate("name")} value={asText(row.name)} />
-										<ValueRow label={translate("onecVersion")} value={platform} />
-										<ValueRow label={translate("status")} title={unreachableTitle}
-											value={row.ibUnreachableAt
-												? unreachableShort(reasonCode)
-												: statusLabel(asText(row.status))} />
-										<ValueRow label={translate("lastSeenAt")}
-											value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
-									</ValueList>
+									<FormArea title={translate("props")}>
+										<ValueList columns={2}>
+											<ValueRow label={translate("baseKey")} value={asText(row.baseKey)} />
+											<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
+											<ValueRow label={translate("name")} value={asText(row.name)} />
+											<ValueRow label={translate("onecVersion")} value={platform} />
+											<ValueRow label={translate("status")} title={unreachableTitle}
+												value={row.ibUnreachableAt
+													? unreachableShort(reasonCode)
+													: statusLabel(asText(row.status))} />
+											<ValueRow label={translate("lastSeenAt")}
+												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
+										</ValueList>
+									</FormArea>
 
 									{/* Доступность: почему в базу не войти и что панель может с этим
 									    сделать. Молчит, пока всё в порядке. */}
@@ -467,6 +475,9 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									{/* Реестр наполняют кластер и агент: править здесь нечего, и это
 									    должно быть сказано, а не додумано по серым полям. */}
 									<Notice inline items={[{ type: "info", text: translate("onecBaseCardReadonly") }]} />
+									{/* А если и команд карточки не видно — причина в правах, и сказать
+									    об этом надо в самой карточке: её вкладки живут своей доской. */}
+									<ReadonlyNotice />
 								</GroupCol>
 							</div>
 						</div>

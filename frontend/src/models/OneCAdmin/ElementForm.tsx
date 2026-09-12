@@ -41,7 +41,9 @@ import {
 } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { useOpenOnecBase } from "src/models/OneCBases";
-import { QueryError, isApplicable, publishLabel, reportBatchStart } from "./shared";
+import {
+	QueryError, isApplicable, publishLabel, reportBatchStart, useOnecWrite,
+} from "./shared";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
@@ -65,6 +67,7 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 type Op = "create" | "update" | "delete";
 
 export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
+	const canWrite = useOnecWrite();
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const kind: ElementKind = asText(row.kind) === "user" ? "user" : "extension";
 	const isUser = kind === "user";
@@ -285,11 +288,16 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 										{translate("onecBatchTargets")}: {picked.length}
 										{picked.length ? ` (${picked.slice(0, 3).join(", ")}${picked.length > 3 ? "…" : ""})` : ""}
 									</span>
-									<Button variant="primary" disabled={!picked.length || !elementName}
-										onClick={() => setDialog("update")}>
-										{translate("onecUserUpdate")}
-									</Button>
-									{!picked.length && <span className={styles.Hint}>{translate("onecPickBasesFirst")}</span>}
+									{/* Раскатка прав по базам — изменение 1С: только полный доступ (F5). */}
+									{canWrite && (
+										<Button variant="primary" disabled={!picked.length || !elementName}
+											onClick={() => setDialog("update")}>
+											{translate("onecUserUpdate")}
+										</Button>
+									)}
+									{canWrite && !picked.length && (
+										<span className={styles.Hint}>{translate("onecPickBasesFirst")}</span>
+									)}
 								</GroupRow>
 								{rolesFrom && (
 									<div className={styles.Hint}>{translate("onecRolesTakenFrom")}: {rolesFrom}</div>
@@ -331,19 +339,23 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 									onRowClick: (r) => openBase(asText(r.baseKey)),
 									extraButtons: (
 										<>
-											<Button variant="secondary" disabled={!picked.length} onClick={() => setDialog("create")}>
-												{isUser ? translate("onecUserCreate") : translate("onecExtInstall")}
-											</Button>
-											{isUser && (
-												<Button variant="secondary" disabled={!picked.length || !elementName}
-													onClick={() => setDialog("update")}>
-													{translate("onecUserUpdate")}
+											{/* Создание, правка и удаление элемента в отмеченных базах — изменения 1С:
+											    правом «только просмотр» видно, где элемент есть, но не меняют (F5). */}
+											{canWrite && (<>
+												<Button variant="secondary" disabled={!picked.length} onClick={() => setDialog("create")}>
+													{isUser ? translate("onecUserCreate") : translate("onecExtInstall")}
 												</Button>
-											)}
-											<Button variant="danger" disabled={!picked.length || !elementName}
-												onClick={() => setDialog("delete")}>
-												{isUser ? translate("onecUserDelete") : translate("onecExtRemove")}
-											</Button>
+												{isUser && (
+													<Button variant="secondary" disabled={!picked.length || !elementName}
+														onClick={() => setDialog("update")}>
+														{translate("onecUserUpdate")}
+													</Button>
+												)}
+												<Button variant="danger" disabled={!picked.length || !elementName}
+													onClick={() => setDialog("delete")}>
+													{isUser ? translate("onecUserDelete") : translate("onecExtRemove")}
+												</Button>
+											</>)}
 											{(hidden > 0 || showAll) && (
 												<Button variant="secondary" active={showAll} onClick={() => setShowAll((v) => !v)}>
 													{translate("onecShowInapplicable")}{hidden > 0 && !showAll ? ` (${hidden})` : ""}

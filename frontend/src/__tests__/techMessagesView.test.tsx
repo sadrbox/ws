@@ -65,11 +65,12 @@ describe("Технические сообщения: журнал со шкал�
 		const text = screen.getByText(long);
 		expect(text.textContent).toContain("блокировка в самой базе");
 
-		// Уточнения — в СОСЕДНЕМ узле внутри того же сообщения, а не в другой колонке.
-		const message = text.parentElement!;
-		expect(message.textContent).toContain("Базы 1С");
-		// Тип сообщения назван словом: цвет — подспорье, а читают текст.
-		expect(message.textContent).toContain("Ошибка");
+		// Уточнения — в той же строке, а не в другой колонке таблицы.
+		const row = text.closest("article")!;
+		expect(row.textContent).toContain("Базы 1С");
+		// Род сообщения назван словом — под датой и временем, в левой колонке: цвет точки
+		// подсказывает то же самое, но читают всё-таки текст.
+		expect(row.textContent).toContain("Ошибка");
 		// Полоса палитры — на самом сообщении: цвет виден и когда текста много.
 		expect(container.querySelector('[data-type="error"]')).toBeTruthy();
 	});
@@ -90,16 +91,62 @@ describe("Технические сообщения: журнал со шкал�
 			addMessage({ scope: "pane-1", type: "error", text: "Сбой", source: "Базы 1С" });
 		});
 		show();
-		const message = screen.getByText("Сбой").parentElement!;
+		const row = screen.getByText("Сбой").closest("article")!;
 		// «Скрыть» — у самого сообщения, а не в панели «по выбранной строке». Ищем по имени
 		// кнопки, а не по её тексту: подпись повторялась бы в каждой строке и отнимала место
 		// у сообщения, поэтому кнопка стала иконкой — имя осталось в aria-label и подсказке.
-		const hide = Array.from(message.querySelectorAll("button"))
+		const hide = Array.from(row.querySelectorAll("button"))
 			.find((b) => /Скрыть/.test(b.getAttribute("aria-label") ?? ""));
 		expect(hide).toBeTruthy();
 
 		fireEvent.click(hide!);
 		expect(screen.queryByText("Сбой")).toBeNull();
+	});
+
+	it("представление объекта — само по себе ссылка, отдельной кнопки нет", () => {
+		/*
+		 * Раньше строка называла объект трижды: видом («Реализация»), представлением
+		 * («Реализация ТМЗ и услуг: № 3 - 05.03.2026») и подписью кнопки «Открыть». Вид
+		 * ничего не добавляет к представлению, с которого он и начинается, а кнопка
+		 * повторяла написанное рядом и занимала целый ряд под текстом.
+		 */
+		act(() => {
+			addMessage({
+				scope: "pane-1", type: "error", text: "Недостаточно остатка для проведения",
+				source: "Реализация ТМЗ и услуг: № 3 - 05.03.2026",
+				ref: { endpoint: "sales", uuid: "s1", label: "№ 3" },
+			});
+		});
+		show();
+		fireEvent.click(screen.getByRole("button", { name: translate("techMsgGroupNone") }));
+
+		// Открывают по самому представлению: оно и есть ссылка.
+		const link = screen.getByRole("button", { name: "Реализация ТМЗ и услуг: № 3 - 05.03.2026" });
+		expect(link.getAttribute("title")).toContain(translate("open"));
+		// Вид объекта отдельной подписью не повторяется.
+		expect(screen.queryByText(translate("sale"))).toBeNull();
+		// И отдельной кнопки «Открыть» больше нет.
+		expect(screen.queryByRole("button", { name: translate("open") })).toBeNull();
+	});
+
+	it("«Скрыть» стоит в углу строки, а род сообщения — под временем", () => {
+		act(() => {
+			addMessage({ scope: "pane-1", type: "error", text: "Сбой", source: "Базы 1С" });
+		});
+		show();
+		const text = screen.getByText("Сбой");
+		const row = text.closest("article")!;
+
+		// Уборка строки — НЕ в теле сообщения: она закрывает строку целиком, а не относится
+		// к тексту, и у длинного сообщения не должна уезжать вниз вместе с ним.
+		expect(text.parentElement!.querySelector("button")).toBeNull();
+		const hide = Array.from(row.querySelectorAll("button"))
+			.find((b) => b.getAttribute("aria-label") === translate("hide"));
+		expect(hide).toBeTruthy();
+
+		// Род сообщения — в колонке времени, рядом с «чч:мм», и обычным словом, не капителью.
+		const type = screen.getByText(translate("techMsgError"));
+		expect(type.parentElement!.textContent).toMatch(/\d{2}:\d{2}/);
 	});
 
 	it("группа без актуальных сообщений свёрнута, пока её не откроют", () => {

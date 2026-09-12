@@ -31,9 +31,11 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { queryClient } from "src/app/queryClient";
 import { getFormatDateOnly, getFormatTimeOnly } from "src/utils/datetime";
+import { humanErrorText } from "src/utils/errorText";
 import { showToast } from "src/components/UIToast";
 import {
-	abandonOp, cancelOp, opDuration, opKindLabel, opPercent, opStateLabel, useOnecOps, type Op,
+	abandonOp, cancelOp, opDuration, opKindLabel, opPercent, opStateLabel, opSucceeded,
+	useOnecOps, type Op,
 } from "src/models/OneCAdmin/progress";
 import type { GroupMode } from "./grouping";
 import styles from "./TechMessages.module.scss";
@@ -137,9 +139,12 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 	return (
 		<article className={styles.Row} data-type={type} data-run={running || undefined}
 			data-past={!running || undefined}>
+			{/* Вид работы — под временем, там же, где у сообщения стоит его род: левая
+			    колонка отвечает на вопрос «что это», а тело — «о чём». */}
 			<div className={styles.RowTime}>
 				{withDate && <span className={styles.RowDay}>{getFormatDateOnly(at)}</span>}
 				<span>{getFormatTimeOnly(at)}</span>
+				<span className={styles.MsgType}>{opKindLabel(op.kind)}</span>
 			</div>
 
 			<div className={styles.RowRail} aria-hidden="true">
@@ -147,19 +152,27 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 			</div>
 
 			<div className={styles.RowBody}>
-				<div className={styles.MsgText}>{op.title}{op.target ? ` — ${op.target}` : ""}</div>
+				{/*
+				  * ЧТО ДЕЛАЕМ — строкой, НАД ЧЕМ — в подстрочнике. Раньше это была одна склейка
+				  * через тире: «Изменить пользователя — Оператор бухгалтер — _transition», где
+				  * три разные вещи разделены одинаково и не разобрать, где кончается действие и
+				  * начинается объект.
+				  */}
+				<div className={styles.MsgText}>{op.title}</div>
 
+				{/*
+				  * ПОЛОСА — У ЛЮБОЙ РАБОТЫ, ОБЪЁМ КОТОРОЙ ИЗВЕСТЕН, в том числе по одной базе.
+				  * Спиннер вместо неё пробовали: он отвечает только «идёт», а полоса отвечает
+				  * ещё и «сколько сделано» — и делает это одинаково для одной базы и для ста,
+				  * так что взглядом не приходится различать два разных индикатора в одном
+				  * списке. Неопределённый индикатор остаётся там, где доли действительно нет
+				  * (`percent === null`): у работы без объёма и у медленного запроса ниже.
+				  */}
+				{/* Счёт — по УДАВШЕМУСЯ, как и полоса: «1 из 1» у провалившейся команды спорило
+				    с «Не выполнено» в той же строке. */}
 				<Progress percent={percent} state={op.state}
-					value={op.total ? `${op.done} / ${op.total}` : ""} />
+					value={op.total > 0 ? `${opSucceeded(op)} ${translate("onecOpOutOf")} ${op.total}` : ""} />
 
-				<div className={styles.MsgMeta}>
-					<span className={styles.MsgType}>{opKindLabel(op.kind)}</span>
-					{/* Сколько отказало — при самом состоянии: «С ошибками» и отдельное
-					    «С ошибками: 1» в одной строке повторяли бы друг друга. */}
-					<span>{opStateLabel(op)}{op.failed > 0 ? `: ${op.failed}` : ""}</span>
-					<span>{opDuration(op)}</span>
-					{op.note && <span>{op.note}</span>}
-				</div>
 
 				<div className={styles.MsgActions}>
 					{/*
@@ -174,18 +187,43 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 							<Icon name="close" /> {translate("onecOpCancel")} ({op.cancelable})
 						</Button>
 					)}
-					{/*
-					  * «Скрыть» убирает запись с экрана и НИЧЕГО не останавливает — то же, что
-					  * «Прекратить наблюдение» на вкладке. У завершённой это просто уборка, у
-					  * зависшей — способ вернуть форме право на правку.
-					  */}
-					<IconButton size="sm"
-						title={running ? translate("onecOpAbandonHint") : translate("hide")}
-						aria-label={translate("hide")}
-						onClick={() => abandonOp(op.id)}>
-						<Icon name="clear" />
-					</IconButton>
 				</div>
+
+
+				<div className={styles.MsgMeta}>
+					{op.target && <span>{op.target}</span>}
+					{/*
+					  * У работы по одной базе число отказов не добавляет ничего: «Не удалось: 1»
+					  * при единственной команде — это просто «Не выполнено». Счёт нужен там, где
+					  * баз много и важно, сколько именно не прошло.
+					  */}
+					<span>
+						{op.failed > 0
+							? (op.total > 1
+								? `${translate("onecOpFailedCount")}: ${op.failed}`
+								: translate("onecOpFinishedFailed"))
+							: opStateLabel(op)}
+					</span>
+					{/* «12 с» само по себе не говорит, что это: подписываем. */}
+					<span>{translate("onecOpElapsed")}: {opDuration(op)}</span>
+					{/* Причина — человеческими словами: «Failed to fetch» не объясняет ничего. */}
+					{op.note && <span>{humanErrorText(op.note)}</span>}
+				</div>
+			</div>
+
+			{/*
+			  * «Скрыть» убирает запись с экрана и НИЧЕГО не останавливает — то же, что
+			  * «Прекратить наблюдение» на вкладке. У завершённой это просто уборка, у
+			  * зависшей — способ вернуть форме право на правку. Стоит в том же углу, что и
+			  * у сообщения: список один, и уборка строки в нём делается одним жестом.
+			  */}
+			<div className={styles.RowClose}>
+				<IconButton size="sm"
+					title={running ? translate("onecOpAbandonHint") : translate("hide")}
+					aria-label={translate("hide")}
+					onClick={() => abandonOp(op.id)}>
+					<Icon name="clear" />
+				</IconButton>
 			</div>
 		</article>
 	);
@@ -240,6 +278,7 @@ export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
 									</span>
 								)}
 								<span>{getFormatTimeOnly(new Date(slow.since).toISOString())}</span>
+								<span className={styles.MsgType}>{translate("techMsgRequestsHint")}</span>
 							</div>
 							<div className={styles.RowRail} aria-hidden="true">
 								<span className={styles.RowDot} />
@@ -251,7 +290,6 @@ export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
 								{/* Сколько осталось, сервер не сообщает — значит, спиннер, а не полоса. */}
 								<Progress percent={null} />
 								<div className={styles.MsgMeta}>
-									<span className={styles.MsgType}>{translate("techMsgRequestsHint")}</span>
 									<span>
 										{Math.max(Math.round((Date.now() - slow.since) / 1000), 0)} {translate("secShort")}
 									</span>

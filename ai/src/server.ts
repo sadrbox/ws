@@ -28,6 +28,8 @@ import { agentRouter } from "./http/agentRouter.ts";
 import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
 import { purgeOldData } from "./retention.ts";
+import { ScheduleStore } from "./onec/schedules.ts";
+import { runDueSchedules } from "./onec/maintenanceRunner.ts";
 import { AnthropicProvider } from "./llm/anthropic.ts";
 import { OpenAIProvider } from "./llm/openai.ts";
 import { OpenAIBankExtractor } from "./bank/extract_openai.ts";
@@ -95,6 +97,8 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Учётные записи отдельных баз: ключ шифрования выводится из секрета сервиса, своей
 	// переменной окружения не заводим — лишний секрет в .env это лишний способ потерять доступ.
 	const credentials = new CredentialsStore(db, cfg.JWT_SECRET);
+	const batches = new BatchService(db);
+	const schedules = new ScheduleStore(db);
 	// Пароль базы подставляется в команду ровно в момент выдачи агенту (см. queue.setAuthResolver).
 	queue.setAuthResolver(async (agentId, baseKeys) => {
 		const agent = await agents.findById(agentId);
@@ -126,6 +130,16 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		.catch((e) => log.warn({ err: e }, "очистка старых данных"));
 	void retention();
 	setInterval(retention, 86_400_000).unref();
+
+	// ── Обслуживание по расписанию (F2) ──────────────────────────────────────
+	// Раз в минуту: окно назначают с точностью до минуты, а тик стоит одного запроса к
+	// своей же БД. Решение «пора» и защита от двойного прогона — в onec/schedules.ts.
+	// Первый проход НЕ на старте: сервис перезапускают днём, и отложенный на минуту тик
+	// не отличим от обычного, зато не делает работу в момент запуска.
+	const maintenance = () => runDueSchedules({ agents, queue, batches, schedules, audit, log })
+		.then((r) => { if (r.started || r.failed) log.info(r, "расписание обслуживания: проход"); })
+		.catch((e) => log.warn({ err: e }, "расписание обслуживания"));
+	setInterval(maintenance, 60_000).unref();
 
 	const app = express();
 	app.disable("x-powered-by");
@@ -166,7 +180,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
-		batches: new BatchService(db), registry: onecRegistry, credentials,
+		batches, registry: onecRegistry, credentials, schedules,
 	}));
 	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit, registry: onecRegistry }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));

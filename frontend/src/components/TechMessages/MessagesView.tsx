@@ -81,16 +81,33 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 	 */
 	const objectTitle = groupTitleOf(m).title;
 	const sameTitle = objectTitle === m.source;
-	// Заголовком группы объект назван и так — в строке он нужен в остальных режимах.
-	const showObject = mode !== "object" && !sameTitle;
 	// В режиме объектов источник, равный заголовку группы, повторял бы её в каждой строке.
 	const showSource = !!m.source && !(mode === "object" && sameTitle);
+	/*
+	 * ПРЕДСТАВЛЕНИЕ ОБЪЕКТА И ЕСТЬ ССЫЛКА НА НЕГО.
+	 *
+	 * Раньше строка называла объект трижды: видом («Реализация»), представлением
+	 * («Реализация ТМЗ и услуг: № 3 - 05.03.2026») и ещё раз — подписью кнопки «Открыть».
+	 * Вид ничего не добавляет к представлению, с которого он и начинается, а кнопка
+	 * повторяла уже написанное рядом и занимала целый ряд под текстом. Осталось одно:
+	 * представление, по которому и открывают.
+	 */
+	const linkText = m.source || m.ref?.label || "";
 
 	return (
 		<article className={styles.Row} data-type={m.type} data-past={!m.active || undefined}>
+			{/*
+			  * ЧТО ЭТО ЗА СООБЩЕНИЕ — под датой и временем, а не в подстрочнике.
+			  *
+			  * Род сообщения («Ошибка», «Сведения») отвечает на тот же вопрос, что и цвет
+			  * точки на шкале: насколько это важно. Читают его вместе со временем — взглядом
+			  * по левой колонке, — а не после текста, где он стоял первым среди уточнений и
+			  * отодвигал то, что действительно уточняет: объект и источник.
+			  */}
 			<div className={styles.RowTime}>
 				{withDate && <span className={styles.RowDay}>{getFormatDateOnly(at)}</span>}
 				<span>{getFormatTimeOnly(at)}</span>
+				<span className={styles.MsgType}>{translate(TYPE_LABEL[m.type])}</span>
 			</div>
 
 			{/* Линия со точкой — шкала времени: по ней видно, что за чем шло. */}
@@ -101,28 +118,7 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 			<div className={styles.RowBody}>
 				<div className={styles.MsgText}>{m.text}</div>
 
-				<div className={styles.MsgMeta}>
-					<span className={styles.MsgType}>{translate(TYPE_LABEL[m.type])}</span>
-					{showObject && <span>{objectTitle}</span>}
-					{showSource && <span>{m.source}</span>}
-					{!m.active && <span>{translate("techMsgPast")}</span>}
-					{/*
-					  * ЧЬЁ ЭТО СООБЩЕНИЕ. Запись живого источника — текущее состояние открытой
-					  * формы, а не запись в журнале: она держится, пока форма так считает, и
-					  * очистка её не берёт. Без этой пометки «Очистить историю» выглядела
-					  * сломанной: нажал — а сообщения остались.
-					  */}
-					{m.fromSource && m.active && <span>{translate("techMsgFromForm")}</span>}
-				</div>
-
 				<div className={styles.MsgActions}>
-					{canOpen && (
-						<Button size="sm" variant="secondary"
-							title={`${translate("open")}: ${m.ref?.label ?? ""}`.trim()}
-							onClick={() => void openFormByRef(m.ref!, addPane, m.source)}>
-							<Icon name="open" /> {m.ref?.label || translate("open")}
-						</Button>
-					)}
 					{/* Действия гаснут, когда повод исчерпан (форму сохранили): нажимать их
 					    уже не по чему, но сама запись остаётся — что было, то было. */}
 					{m.actions?.map((a, i) => (
@@ -132,23 +128,58 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 							{a.label}
 						</Button>
 					))}
-					{/*
-					  * «Скрыть» — кнопкой-иконкой: подпись одна и та же на каждом сообщении, а
-					  * строк десятки, и повторённое слово отнимает место у текста.
-					  *
-					  * У ЖИВОГО СООБЩЕНИЯ КНОПКИ НЕТ ВОВСЕ. Скрыть его нельзя: форма сообщает
-					  * своё состояние заново, и запись возвращается через секунду — проверено.
-					  * Кнопка, обещающая то, чего не может, хуже отсутствующей; вместо неё в
-					  * подстрочнике сказано, кто это сообщает.
-					  */}
-					{!(m.fromSource && m.active) && (
-						<IconButton size="sm" title={translate("hide")}
-							aria-label={translate("hide")}
-							onClick={() => dismissMessage(m.id)}>
-							<Icon name="clear" />
-						</IconButton>
-					)}
 				</div>
+				<div className={styles.MsgMeta}>
+					{showSource && (canOpen ? (
+						<button type="button" className={styles.MsgLink}
+							title={`${translate("open")}: ${linkText}`}
+							onClick={() => void openFormByRef(m.ref!, addPane, m.source)}>
+							{linkText}
+						</button>
+					) : <span>{linkText}</span>)}
+					{/*
+					  * «Неактуально» здесь больше не пишется, и вот почему. Пометка имела смысл,
+					  * пока сообщение формы, перестав звучать, оставалось в списке историей: она
+					  * отличала «так сейчас» от «так было». Теперь состояние, которого больше
+					  * нет, из списка уходит (см. reportNotices), и все оставшиеся записи без
+					  * признака «актуально» — это разовые СОБЫТИЯ: «операция выполнена», «нет
+					  * связи». Событие не бывает неактуальным — оно случилось, и пометка о
+					  * неактуальности сообщала о нём неправду.
+					  */}
+					{/*
+					  * ЧЬЁ ЭТО СООБЩЕНИЕ. Запись живого источника — текущее состояние открытой
+					  * формы, а не запись в журнале: она держится, пока форма так считает, и
+					  * очистка её не берёт. Без этой пометки «Очистить историю» выглядела
+					  * сломанной: нажал — а сообщения остались.
+					  */}
+					{m.fromSource && m.active && <span>{translate("techMsgFromForm")}</span>}
+				</div>
+
+
+			</div>
+
+			{/*
+			  * «СКРЫТЬ» — В ПРАВОМ ВЕРХНЕМ УГЛУ СТРОКИ, а не в ряду действий.
+			  *
+			  * Это не действие по сообщению, а уборка самой строки, и место у неё то же, что
+			  * у крестика любого закрываемого блока, — угол. В ряду с «Открыть» и «Повторить»
+			  * она читалась как равная им, а у длинного текста уезжала вниз, под абзац, и
+			  * искать её приходилось глазами. Подпись одна и та же на каждой строке, поэтому
+			  * кнопка-иконка: повторённое сорок раз слово отнимает место у текста.
+			  *
+			  * У ЖИВОГО СООБЩЕНИЯ КНОПКИ НЕТ ВОВСЕ. Скрыть его нельзя: форма сообщает своё
+			  * состояние заново, и запись возвращается через секунду. Кнопка, обещающая то,
+			  * чего не может, хуже отсутствующей; вместо неё в подстрочнике сказано, кто это
+			  * сообщает.
+			  */}
+			<div className={styles.RowClose}>
+				{!(m.fromSource && m.active) && (
+					<IconButton size="sm" title={translate("hide")}
+						aria-label={translate("hide")}
+						onClick={() => dismissMessage(m.id)}>
+						<Icon name="clear" />
+					</IconButton>
+				)}
 			</div>
 		</article>
 	);
@@ -254,7 +285,7 @@ export const MessagesView: FC<{
 				))}
 				{mode !== "none" && groups.length > 1 && (
 					/* Обёртка, а не класс на кнопке: <Button /> расстилает props поверх своего
-					   className, и переданный класс стёр бы оформление кнопки целиком. */
+						 className, и переданный класс стёр бы оформление кнопки целиком. */
 					<span className={styles.GroupBarAll}>
 						<Button size="sm" variant="secondary" onClick={() => setAll(!anyOpen)}>
 							{translate(anyOpen ? "techMsgCollapseAll" : "techMsgExpandAll")}

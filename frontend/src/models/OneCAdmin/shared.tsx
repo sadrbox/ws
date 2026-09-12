@@ -8,6 +8,7 @@
 import { FC, useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { useAccessPermission } from "src/hooks/useAccessPermission";
 import type { NoticeItem } from "src/components/Notice";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
@@ -18,6 +19,7 @@ import {
 import { previewUrl } from "./ServerParams";
 import { finishOp, progressOp, startOp } from "./progress";
 import { noteNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
+import { errorText } from "src/services/errors/route";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -367,6 +369,59 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
 };
 
 /**
+ * ДВА ПРАВА НА ПАНЕЛЬ 1С (F5): просмотр и изменение.
+ *
+ * Право «Администрирование 1С» бывает двух уровней, и раньше разницы между ними не было:
+ * тот, кому дали просмотр, мог удалить регистрацию базы, снять публикацию и переписать
+ * пользователей ИБ. Сервис теперь различает уровни (см. ai/src/onec/access.ts), а панель
+ * обязана показывать ровно то, что человек может сделать: кнопка, отвечающая отказом по
+ * правам, — это обещание, которого она не держит.
+ *
+ * Уровень берётся из того же права, что открывает панель, поэтому отдельного запроса нет.
+ */
+export const useOnecWrite = (): boolean => useAccessPermission("OneCAdmin").canWrite;
+
+/**
+ * ПОЧЕМУ КОМАНД НЕ ВИДНО — сказать один раз на экран, а не молчать.
+ *
+ * Спрятанные кнопки без объяснения читаются как поломка: «у меня нет кнопки «Создать», а у
+ * коллеги есть». Сообщение называет причину — прав хватает на просмотр, — и человек идёт к
+ * тому, кто выдаёт права, а не в поддержку искать пропавшую кнопку.
+ */
+export const ReadonlyNotice: FC = () => {
+	const canWrite = useOnecWrite();
+	const scope = useNoticeScope();
+	useNoticeReport(scope, "onec_readonly", translate("onecAdmin"),
+		canWrite ? [] : [{ type: "info", text: translate("onecReadonlyHint") }]);
+	return null;
+};
+
+/**
+ * «ОБНОВИТСЯ С ЗАДЕРЖКОЙ» — сказать заранее, а не оставить человека с догадкой.
+ *
+ * Агент со способностью `ib.echo` приносит новое содержимое базы своим же ответом, и таблица
+ * показывает изменение сразу. Агент без неё обновляет реестр ВТОРОЙ командой — тем же входом
+ * в базу на секунды, — и после «Выполнено» список ещё несколько секунд прежний. Без
+ * объяснения это выглядит случайностью: «у одних обновляется сразу, у других нет», и человек
+ * жмёт «Обновить» или повторяет команду, решив, что она не сработала.
+ *
+ * Это НЕ отказ: операция выполняется полностью, поэтому тип сообщения — `info`, а не
+ * предупреждение (ср. CapabilityGuard, где способности нет и часть экрана не работает).
+ * Пока агента вообще нет на связи, молчим: об этом скажет CapabilityGuard, и два сообщения
+ * об одном и том же спорили бы, какое главное.
+ */
+export const EchoDelayNotice: FC = () => {
+	const agents = useAgents();
+	const scope = useNoticeScope();
+	const online = (agents.data?.items ?? []).filter((a) => a.role === "admin" && a.online && !a.disabled);
+	const show = !agents.isLoading && online.length > 0 && !hasCapability(agents.data?.items, "ib.echo");
+
+	useNoticeReport(scope, "capability_ib_echo", translate("onecAgentCapability"),
+		show ? [{ type: "info", text: translate("onecEchoMissingHint") }] : []);
+	return null;
+};
+
+/**
  * Причина, по которой таблица пуста. Ошибку запроса react-query по умолчанию НИКУДА не
  * показывает: пользователь видел пустой список и ни слова о том, что 1С ответила отказом.
  * Текст приходит от сервиса и написан для человека — передаём как есть.
@@ -378,7 +433,8 @@ export const QueryError: FC<{ error: unknown; source?: string; noticeKey?: strin
 	const scope = useNoticeScope();
 	// Только Error даёт осмысленный текст; всё прочее — неизвестная ошибка, а не
 	// «[object Object]» в лицо пользователю.
-	const text = !error ? "" : error instanceof Error ? error.message : translate("unknownError");
+	// Текст — через общий разбор: он же превращает «Failed to fetch» в «Нет связи с сервером».
+	const text = !error ? "" : errorText(error);
 	// Ключ по умолчанию — по тексту: у экрана может быть несколько запросов, и без своего
 	// ключа второй затирал бы сообщение первого.
 	const key = noticeKey ?? `query_${text.slice(0, 40)}`;

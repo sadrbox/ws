@@ -24,7 +24,9 @@ import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
 import { getFormatDate } from "src/utils/datetime";
 import { runBatch, type BatchType } from "src/services/onec/api";
-import { publishLabel, reportBatchStart, usePublishAddressHint } from "src/models/OneCAdmin/shared";
+import {
+	publishLabel, reportBatchStart, useOnecWrite, usePublishAddressHint,
+} from "src/models/OneCAdmin/shared";
 import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
 import { useNoticeScope } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
@@ -52,6 +54,7 @@ export const BasePublication: FC<{
 	/** Сервер базы — по нему берётся «Адрес сервера» для предпросмотра ссылки. */
 	serverName?: string | null;
 }> = ({ baseKey, published, publishUrl, publishUrlPublic, seenAt, serverName }) => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const scope = useNoticeScope();
 	const [confirm, setConfirm] = useState<Job | null>(null);
@@ -107,18 +110,23 @@ export const BasePublication: FC<{
 						<ValueRow label={translate("onecPublishUrlAgent")} value={publishUrl} />
 					)}
 				</ValueList>
-				<GroupRow>
-					<Button variant="secondary" disabled={run.isPending}
-						title={`${translate("onecPublish")}: ${baseKey}`}
-						onClick={() => setConfirm("publish")}>
-						<Icon name="open" /> {translate("onecPublish")}
-					</Button>
-					<Button variant="danger" disabled={run.isPending}
-						title={`${translate("onecUnpublish")}: ${baseKey}`}
-						onClick={() => setConfirm("unpublish")}>
-						<Icon name="clear" /> {translate("onecUnpublish")}
-					</Button>
-				</GroupRow>
+				{/* Состояние публикации видно всем, кому открыта панель; публиковать и снимать
+				    публикацию — только полному доступу (F5): снятая публикация отключает работу
+				    людей в базе через веб-клиент. */}
+				{canWrite && (
+					<GroupRow>
+						<Button variant="secondary" disabled={run.isPending}
+							title={`${translate("onecPublish")}: ${baseKey}`}
+							onClick={() => setConfirm("publish")}>
+							<Icon name="open" /> {translate("onecPublish")}
+						</Button>
+						<Button variant="danger" disabled={run.isPending}
+							title={`${translate("onecUnpublish")}: ${baseKey}`}
+							onClick={() => setConfirm("unpublish")}>
+							<Icon name="clear" /> {translate("onecUnpublish")}
+						</Button>
+					</GroupRow>
+				)}
 			</GroupCol>
 
 			{confirm && (

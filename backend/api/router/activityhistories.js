@@ -6,6 +6,9 @@ import { tenantFilter } from "../../utils/auth.js";
 import { pruneAuditLog, retentionDays } from "../../services/auditLog.js";
 import { parse1cDate } from "../../utils/parse1cDate.js";
 import { resolveActors } from "../../services/pipeActor.js";
+import { logger } from "../../services/logger.js";
+
+const log = logger("pipe");
 // import { success } from "zod";
 const router = express.Router();
 
@@ -49,7 +52,9 @@ router.post("/", async (req, res) => {
 		// В журнал — ПРИЗНАКИ события, а не всё тело. Полный дамп писался на КАЖДОЕ событие
 		// 1С: в логах оседали реквизиты документов и имена пользователей, а искать в этом
 		// потоке нужное было нечем. Для разбора довольно того, что здесь.
-		console.log(`[pipe] ${body.actionType || "create"} ${body.objectType || "?"} ${body.objectUuid || ""}`.trim());
+		// Уровень debug: на потоке событий 1С это строка на каждое обращение — в обычной
+		// работе она не нужна, а при разборе включается LOG_LEVEL=debug без правки кода.
+		log.debug(`${body.actionType || "create"} ${body.objectType || "?"} ${body.objectUuid || ""}`.trim());
 
 		const actionType = body.actionType ? String(body.actionType) : "create";
 		// 1С шлёт «13.07.2026 23:22:04» — new Date() такое не парсит (Invalid Date →

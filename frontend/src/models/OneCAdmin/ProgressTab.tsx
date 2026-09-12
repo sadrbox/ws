@@ -26,9 +26,10 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
+import { humanErrorText } from "src/utils/errorText";
 import {
 	abandonOp, cancelOp, clearFinished, opDuration, opKindLabel, opPercent, opStateLabel,
-	useOnecOps,
+	opSucceeded, useOnecOps,
 } from "./progress";
 import { formatDuration, queueReason, useQueueStats } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";
@@ -60,11 +61,14 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		opKind: opKindLabel(o.kind),
 		opTarget: o.target,
 		// Значение колонки — текст для поиска и сортировки; полосу рисует renderCell.
-		opProgress: o.total ? `${o.done} / ${o.total}` : (o.state === "running" ? "…" : "—"),
+		// Счёт — по удавшемуся, как и полоса рядом: «перебрано» и «получилось» это разные
+		// числа, и колонка «Прогресс» отвечает на второй вопрос.
+		opProgress: o.total ? `${opSucceeded(o)} / ${o.total}` : (o.state === "running" ? "…" : "—"),
 		opState: opStateLabel(o),
 		// Дату рисует таблица: колонка типа datetime, значение — как есть.
 		opStartedAt: new Date(o.startedAt).toISOString(),
-		opNote: o.note || opDuration(o),
+		// Причина — человеческими словами: «Failed to fetch» в колонке ничего не объясняет.
+		opNote: humanErrorText(o.note) || opDuration(o),
 		// Неизвестной доли не бывает: у работы без известного объёма полоса стоит на нуле,
 		// а «сколько уже идёт» говорит колонка примечания.
 		__percent: opPercent(o) ?? 0,

@@ -26,7 +26,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { createAgent } from "src/services/onec/api";
 import { stateLabel, useOpenAgent } from "./AgentForm";
-import { QueryError, useAgents } from "./shared";
+import { QueryError, useAgents, useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
@@ -41,6 +41,7 @@ const columns = (): TColumn[] => ([
 ] as unknown as TColumn[]);
 
 export const AgentsTab: FC = () => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const agents = useAgents();
 	const limits = agents.data?.limits;
@@ -129,7 +130,8 @@ export const AgentsTab: FC = () => {
 				isLoading: agents.isLoading, onReload: () => void agents.refetch(),
 				// Двойной щелчок открывает форму агента — тот же жест, что во всех списках.
 				onRowClick: openAgent,
-				extraButtons: (
+				// Регистрация агента — это выдача доступа к серверу 1С: только полный доступ (F5).
+				extraButtons: !canWrite ? undefined : (
 					<Button variant="secondary" onClick={() => { setName(""); setDialog("create"); }}>
 						<Icon name="plus" /> {translate("onecAgentCreate")}
 					</Button>

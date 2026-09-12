@@ -33,6 +33,7 @@ import {
 } from "src/services/onec/api";
 import { errorNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { finishOp, startOp } from "./progress";
+import { useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
 const sessionsColumns = (): TColumn[] => ([
@@ -50,6 +51,7 @@ const sessionsColumns = (): TColumn[] => ([
 /** Дата от rac → формат приложения. Нераспознанное показываем как пришло: лучше сырая
  *  строка, чем «—» вместо реального значения (у разных версий платформы формат разный). */
 export const SessionsTab: FC = () => {
+	const canWrite = useOnecWrite();
 	const [baseFilter, setBaseFilter] = useState<string>("");
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(sessionsColumns(), "OneCAdmin_sessions"));
 	const [confirm, setConfirm] = useState<
@@ -236,7 +238,9 @@ export const SessionsTab: FC = () => {
 					// а не в отдельную полосу над ней: свой ряд контролов ломал ритм списка.
 					extraButtons: (
 						<>
-							{pickedSessions.length > 0 && (
+							{/* Снятие сеансов и блокировка входа — вмешательство в работу людей в
+							    базе: правом «только просмотр» их не делают (см. useOnecWrite). */}
+							{canWrite && pickedSessions.length > 0 && (
 								<Button variant="danger"
 									onClick={() => setConfirm({ kind: "terminateMany", ids: pickedSessions })}>
 									{translate("onecTerminateMany")} ({pickedSessions.length})
@@ -254,13 +258,13 @@ export const SessionsTab: FC = () => {
 								// держит одну высоту элементов.
 								style={{ width: "200px" }}
 							/>
-							{selectedBase && (
+							{canWrite && selectedBase && (
 								<Button variant="secondary"
 									onClick={() => { setLockMessage(""); setConfirm({ kind: "lock", base: selectedBase, enabled: true }); }}>
 									{translate("onecLockSessions")}
 								</Button>
 							)}
-							{selectedBase && (
+							{canWrite && selectedBase && (
 								<Button variant="secondary"
 									onClick={() => setConfirm({ kind: "lock", base: selectedBase, enabled: false })}>
 									{translate("onecUnlockSessions")}

@@ -26,7 +26,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
-import { reportError } from "src/services/errors/route";
+import { errorText, reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -42,10 +42,12 @@ import {
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
-import { QueryError } from "./shared";
+import { QueryError, useOnecWrite } from "./shared";
 import { useOpenOnecBase } from "src/models/OneCBases";
-import { attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps } from "./progress";
-import { buildUserUpdate } from "./userUpdate";
+import {
+	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps, withOp,
+} from "./progress";
+import { buildSavePlan, buildUserUpdate, roleCatalog } from "./userUpdate";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
@@ -65,6 +67,7 @@ type Draft = Map<string, boolean>;
 const draftKey = (baseKey: string, role: string) => `${baseKey.toLowerCase()}|${role}`;
 
 export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
+	const canWrite = useOnecWrite();
 	const row = (paneProps.data ?? {}) as TDataItem;
 	/**
 	 * ИМЯ ВХОДА — ИДЕНТИЧНОСТЬ КАРТОЧКИ, и она может смениться.
@@ -116,7 +119,26 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		queryFn: () => fetchBaseUsersCached(baseKey),
 		enabled: !!baseKey,
 	});
-	const roles = useQuery({ queryKey: ["onec", "roles", ""], queryFn: () => fetchRoles(), staleTime: 5 * 60_000 });
+	/**
+	 * СПРАВОЧНИК РОЛЕЙ — ЭТОЙ БАЗЫ, А НЕ ОБЩИЙ ПО ВСЕМ.
+	 *
+	 * ЖИВОЙ СЛУЧАЙ (12.09, 23:43). Карточка предлагала роли из ОБЩЕГО справочника —
+	 * объединения по всем базам панели, — и запись ролей закончилась отказом агента: «в базе
+	 * «_transition» нет ролей: ДобавлениеИзменениеКорректировкаПоступления, …». И правильно:
+	 * набор ролей задаёт КОНФИГУРАЦИЯ, у «Бухгалтерии» и «ERP» он разный, а команда уходит в
+	 * одну базу. Роли чужой конфигурации в ней не существуют.
+	 *
+	 * Спрашиваем по ключу базы: сервис отдаёт то, что известно о ней из реестра, без
+	 * обращения в 1С. Полный справочник конфигурации читается живьём — кнопкой «Обновить» в
+	 * таблице прав (`?live=1`), это вход в базу на десятки секунд.
+	 */
+	const [rolesLive, setRolesLive] = useState(false);
+	const roles = useQuery({
+		queryKey: ["onec", "roles", baseKey, rolesLive],
+		queryFn: () => fetchRoles(baseKey || undefined, rolesLive),
+		enabled: !!baseKey,
+		staleTime: 5 * 60_000,
+	});
 
 	/**
 	 * ПОКА ПО ОБЪЕКТУ ИДЁТ ОПЕРАЦИЯ, КАРТОЧКА ТОЛЬКО ЧИТАЕТСЯ.
@@ -162,19 +184,26 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		[baseUsers.data, userName],
 	);
 
+	/**
+	 * ИСХОДНОЕ СОСТОЯНИЕ РЕКВИЗИТОВ — то, что записано в базе.
+	 *
+	 * Оно нужно дважды: им заполняется форма при смене базы и к нему же возвращает
+	 * «Отменить правки». Раньше вторая половина отсутствовала: кнопка сбрасывала только
+	 * отметки ролей, а переключённый тумблер «Отключен» откатить было НЕЧЕМ — оставалось
+	 * закрыть карточку и открыть заново. Одно место на оба случая, чтобы они не разошлись.
+	 *
+	 * ПОЛНОЕ ИМЯ ПОКАЗЫВАЕМ ТО, ЧТО ЕСТЬ: поле стояло пустым, хотя реестр знает значение, и
+	 * «пусто — не трогать» превращалось в «не видно». Пустым остаётся только то, чего мы
+	 * знать не можем (пароль), а «показывать в списке» при неизвестном значении — «не менять».
+	 */
+	const baseline = useMemo(() => ({
+		name: userName, fullName: here?.fullName ?? "", password: "",
+		disabled: here?.disabled ?? false,
+		showInList: here?.showInList ?? null,
+	}), [here, userName]);
+
 	// Реквизиты следуют за выбранной базой: в другой базе у человека своё полное имя.
-	useEffect(() => {
-		setForm({
-			// ПОЛНОЕ ИМЯ ПОКАЗЫВАЕМ ТО, ЧТО ЕСТЬ. Поле стояло пустым, хотя реестр знает
-			// значение: человек не видел, что записано в базе, и «пусто — не трогать»
-			// превращалось в «не видно». Пустым остаётся только то, чего мы знать не можем
-			// (пароль).
-			name: userName, fullName: here?.fullName ?? "", password: "",
-			disabled: here?.disabled ?? false,
-			// Значение известно — показываем его; неизвестно — «не менять» (см. выше).
-			showInList: here?.showInList ?? null,
-		});
-	}, [here, userName]);
+	useEffect(() => { setForm(baseline); }, [baseline]);
 
 	/**
 	 * База карточки всегда есть в списке — даже когда реестр про неё ещё не знает.
@@ -192,11 +221,24 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		return items;
 	}, [occ, baseKey]);
 
+	/*
+	 * РОЛИ СВОЕЙ БАЗЫ — ИЗ СПИСКА ЭТОЙ БАЗЫ, а не из сводки по всем базам.
+	 *
+	 * Сводка «в каких базах есть этот человек» наполняется отдельно и отстаёт: у только что
+	 * созданного пользователя она пуста вовсе, а после записи ролей обновляется позже, чем
+	 * список пользователей самой базы (его приносит эхо той же команды). Пока отметки
+	 * читались из сводки, карточка показывала прошлое — и выданная роль выглядела
+	 * непринятой, хотя в базе она уже была.
+	 *
+	 * Про ЧУЖИЕ базы сводка остаётся единственным источником — их списков карточка не
+	 * читает и читать не должна: это вход в каждую из них.
+	 */
 	const rolesByBase = useMemo(() => {
 		const m = new Map<string, string[]>();
 		for (const o of occ) m.set(o.baseKey.toLowerCase(), o.roles ?? []);
+		if (baseKey && here?.roles) m.set(baseKey.toLowerCase(), here.roles);
 		return m;
-	}, [occ]);
+	}, [occ, baseKey, here]);
 
 	/** Есть ли роль в базе с учётом черновика. */
 	const isOn = useCallback((base: string, role: string) => {
@@ -229,11 +271,12 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 * Групповая правка никуда не делась — она переехала туда, где ей и место: в помощник
 	 * группового редактирования, где базы выбирают явным шагом (см. BaseUserWizard).
 	 */
-	const allRoles = useMemo(() => {
-		const own = [...new Set(occ.flatMap((o) => o.roles ?? []))];
-		const known = (roles.data?.items ?? []).map((r) => r.name);
-		return [...new Set([...own, ...known])].sort((a, b) => a.localeCompare(b, "ru"));
-	}, [occ, roles.data]);
+	// Справочник ЭТОЙ базы плюс выданное в ней. Правило и его цена — в roleCatalog:
+	// роль чужой конфигурации отвергает всю правку целиком (живой случай 12.09).
+	const allRoles = useMemo(
+		() => roleCatalog((roles.data?.items ?? []).map((r) => r.name), here?.roles ?? []),
+		[roles.data, here],
+	);
 
 	const [rightsCols, setRightsCols] = useState<TColumn[]>(() => getModelColumns(rightsColumns(), "OneCAdmin_bufRights"));
 	const rightsRows = useMemo(() => allRoles.map((role, i) => ({
@@ -342,20 +385,51 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 */
 	const save = useMutation({
 		mutationFn: async () => {
-			const known = new Set(occ.map((o) => o.baseKey.toLowerCase()));
-			/** База → что в ней изменить. Одна запись — одна команда. */
-			const plan = new Map<string, Record<string, unknown>>();
-
-			if (profileUpdate && baseKey) plan.set(baseKey, profileUpdate);
-			for (const [base, { add, remove }] of changedByBase) {
-				const entry = plan.get(base) ?? { name: userName };
-				if (add.length) entry.addRoles = add;
-				if (remove.length) entry.removeRoles = remove;
-				plan.set(base, entry);
+			/*
+			 * РОЛИ УХОДЯТ ПОЛНЫМ НАБОРОМ, И НАБОР СЧИТАЕТСЯ ПО СВЕЖЕМУ ЧТЕНИЮ.
+			 *
+			 * Сборка агента не применяет поправки `addRoles`/`removeRoles`: отвечает успехом и
+			 * не меняет ничего (поймано 12.09 по эху команды — docs/
+			 * TASK_AGENT_UPDATE_USER_ROLES.md). Второй способ того же контракта — полный набор
+			 * `roles`; им и пользуемся, пока агента не обновят.
+			 *
+			 * Но «эталон» опасен по кэшу: роль, выданную в конфигураторе после последнего
+			 * чтения, он молча снял бы. Поэтому перед записью список пользователей ЭТОЙ базы
+			 * перечитывается у 1С — один вход в базу на правку ролей, зато набор считается по
+			 * тому, что в базе сейчас. Не удалось прочитать — шлём поправки, как прежде: пусть
+			 * лучше агент их не применит (и скажет об этом), чем мы снимем чужую роль.
+			 */
+			const ownRoleChanges = [...changedByBase.entries()]
+				.find(([base]) => base.toLowerCase() === baseKey.toLowerCase())?.[1];
+			let ownCurrentRoles: string[] | null = null;
+			if (ownRoleChanges && (ownRoleChanges.add.length || ownRoleChanges.remove.length)) {
+				try {
+					const live = await withOp(
+						{ kind: "read", title: translate("onecUsersCheck"), target: baseKey, scope: { bases: [baseKey] } },
+						() => fetchBaseUsers(baseKey),
+					);
+					const fresh = (live.items ?? []).find((u) => u.name.toLowerCase() === userName.toLowerCase());
+					ownCurrentRoles = fresh?.roles ?? null;
+					// Пользователя в свежем списке нет — набор считать не по чему.
+					if (!ownCurrentRoles) showToast(translate("onecRolesLiveMissing"), "warning");
+				} catch (e) {
+					// Чтение отказало (база недоступна, агент занят) — не выдумываем эталон.
+					showToast(`${translate("onecRolesLiveFailed")}: ${errorText(e)}`, "warning");
+				}
 			}
 
-			const skipped = [...plan.keys()].filter((b) => !known.has(b.toLowerCase()));
-			for (const b of skipped) plan.delete(b);
+			/*
+			 * План записи считает общий расчёт (userUpdate.buildSavePlan): база карточки в
+			 * него попадает ВСЕГДА, а отсев «человека там нет» остаётся для остальных баз.
+			 * Раньше отсев шёл по сводке реестра и съедал саму базу карточки, когда сводка
+			 * отставала, — правка тихо не применялась (см. комментарий к buildSavePlan).
+			 */
+			const { plan, skipped } = buildSavePlan({
+				baseKey, userName, profileUpdate,
+				rolesByBase: changedByBase,
+				knownBases: occ.map((o) => o.baseKey),
+				ownCurrentRoles,
+			});
 			if (skipped.length) {
 				showToast(`${translate("onecUserNotInBases")}: ${skipped.join(", ")}`, "warning");
 			}
@@ -376,6 +450,12 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			return results;
 		},
 		onSuccess: (r) => {
+			// «Задание поставлено: 0» — это не успех, а молчаливое ничего: так выглядела
+			// правка, у которой все базы отсеялись. Называем это тем, что произошло.
+			if (!r.length) {
+				showToast(translate("onecNothingToApply"), "warning");
+				return;
+			}
 			showToast(`${translate("onecBatchQueued")}: ${r.length}`, "success");
 			setDraft(new Map());
 			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
@@ -518,9 +598,17 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 												<FieldToggle name="buf_show" label={translate("onecShowInList")}
 													value={form.showInList ?? here?.showInList ?? false}
 													disabled={locked}
-													title={here?.showInList == null && form.showInList === null
-														? translate("onecShowInListUnknown")
-														: undefined}
+													/*
+													 * Откуда взято показанное — говорим прямо. Значение, которое
+													 * помнит реестр, записала САМА ПАНЕЛЬ (сервис запоминает его
+													 * по успешной команде): из 1С этот признак не читается, и
+													 * выдавать его за прочитанное нельзя.
+													 */
+													title={here?.showInList != null
+														? translate("onecShowInListRemembered")
+														: form.showInList === null
+															? translate("onecShowInListUnknown")
+															: undefined}
 													onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
 												<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
 													disabled={locked}
@@ -553,10 +641,18 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 													: translate("onecObjectBusyWait")),
 										}] : []),
 										...(!baseKey ? [{ type: "info" as const, text: translate("onecPickBaseInHeader") }] : []),
-										/* «Не записано изменений: 1» читалось наоборот — как «изменений нет».
-										   Речь о правках, которые ещё не ушли в базу, и о том, чем их туда
-										   отправить, — поэтому счёт и указание на кнопку. */
-										...(changedCount > 0 ? [{ type: "info" as const, text: `${translate("onecUnsavedChanges")}: ${changedCount}. ${translate("onecUnsavedChangesHint")}` }] : []),
+										/*
+										 * НЕСОХРАНЁННЫХ ПРАВОК ЗДЕСЬ НЕТ И НЕ БУДЕТ.
+										 *
+										 * «Не применено правок: N» — не сообщение, а состояние кнопки
+										 * «Применить»: оно возникало на каждое переключение отметки и
+										 * висело в общем списке, пока правки не применят или не отменят,
+										 * — а убрать его оттуда нельзя, живое сообщение очистка щадит.
+										 * Получалась строка, которая не уходит по требованию человека и
+										 * ничего ему не сообщает: что он сам только что изменил, он знает.
+										 * Поэтому число стоит на самой кнопке, рядом с действием, как это
+										 * сделано и в других формах панели (см. ServerParams).
+										 */
 									]} />
 								</GroupCol>
 							</div>
@@ -569,10 +665,16 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 						<Table {...buildStaticTableProps({
 							componentName: "OneCAdmin_bufRights", rows: rightsView.rows, columns: rightsCols,
 							setColumns: setRightsCols, sorting: rightsView.sorting, search: rightsView.search,
-							isLoading: occurrences.isLoading,
-							reloading: occurrences.isFetching,
-							onReload: () => void occurrences.refetch(),
-							reloadTitle: translate("onecReloadCached"),
+							isLoading: roles.isLoading,
+							reloading: roles.isFetching,
+							/*
+							 * «ОБНОВИТЬ» ЗДЕСЬ — ЭТО ПОЛНЫЙ СПРАВОЧНИК КОНФИГУРАЦИИ у самой 1С.
+							 * Из реестра известны только роли, кому-то в этой базе выданные, —
+							 * выдать новую по такому списку нельзя, её в нём нет. Живое чтение
+							 * стоит входа в базу, поэтому идёт по кнопке, а не само.
+							 */
+							onReload: () => { setRolesLive(true); if (rolesLive) void roles.refetch(); },
+							reloadTitle: translate("onecRolesReadLive"),
 							// Активной строки здесь нет: строка — не «текущая запись», а отметка.
 							disableActiveRow: true,
 							/*
@@ -592,17 +694,27 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									if (now !== isOn(baseKey, role)) toggle(baseKey, role);
 								}
 							},
-							extraButtons: (
+							// Права смотрят и правом «просмотр»; записывать их в 1С — только полному
+							// доступу (F5). Без кнопок карточка остаётся тем, чем и была: сводкой.
+							extraButtons: !canWrite ? undefined : (
 								<>
-									<Button variant="secondary" disabled={!draft.size || locked}
-										title={draft.size ? translate("onecResetDraft") : translate("onecNoChanges")}
-										onClick={() => setDraft(new Map())}>
+									{/*
+									  * Отменяет ВСЁ несохранённое карточки — и отметки ролей, и реквизиты
+									  * с соседней вкладки. Пока она сбрасывала только роли, переключённый
+									  * тумблер «Отключен» нельзя было вернуть иначе как закрыв карточку,
+									  * и «Применить» оставалось зажжённым по правке, которой человек уже
+									  * не хотел.
+									  */}
+									<Button variant="secondary" disabled={!changedCount || locked}
+										title={changedCount ? translate("onecResetDraft") : translate("onecNoChanges")}
+										onClick={() => { setDraft(new Map()); setForm(baseline); }}>
 										<Icon name="restore" /> {translate("onecResetDraft")}
 									</Button>
 									<Button variant="primary" disabled={!changedCount || save.isPending || locked}
 										title={changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNothingToApply")}
 										onClick={() => save.mutate()}>
-										<Icon name="save" /> {translate("apply")}
+										{/* Счёт правок — на кнопке: он про неё и есть. */}
+										<Icon name="save" /> {translate("apply")}{changedCount ? ` (${changedCount})` : ""}
 									</Button>
 								</>
 							),

@@ -579,6 +579,56 @@ export type OnecQueueStats = {
 
 export const fetchQueueStats = () => aiFetch<OnecQueueStats>("/v1/onec/queue-stats");
 
+// ── Обслуживание по расписанию (F2) ─────────────────────────────────────────
+// Расписание — НАСТРОЙКА: что делать, по каким базам и в каком окне. Его прогоны
+// становятся обычными заданиями, поэтому своей истории у него нет — последний прогон
+// смотрят в «Заданиях» по `lastBatchId`.
+
+export type OnecSchedule = {
+	id: string;
+	name: string;
+	/** Тип команды 1С: IB_BACKUP (выгрузка) или IB_CHECK (проверка). */
+	type: string;
+	baseKeys: string[];
+	payload: Record<string, unknown>;
+	/** Время запуска «ЧЧ:ММ» в зоне сервера 1С. */
+	atTime: string;
+	/** Дни недели (0 — воскресенье). Пустой массив — каждый день. */
+	weekdays: number[];
+	enabled: boolean;
+	lastRunAt: string | null;
+	lastBatchId: string | null;
+	/** Окно наступило прямо сейчас — считает сервис тем же правилом, что и ночной тик. */
+	due?: boolean;
+};
+
+export type ScheduleInput = {
+	name: string;
+	type: string;
+	baseKeys: string[];
+	atTime: string;
+	weekdays?: number[];
+	payload?: Record<string, unknown>;
+	enabled?: boolean;
+};
+
+export const fetchSchedules = () => aiFetch<{ items: OnecSchedule[] }>("/v1/onec/schedules");
+
+export const createSchedule = (input: ScheduleInput) =>
+	aiFetch<OnecSchedule>("/v1/onec/schedules", { method: "POST", body: JSON.stringify(input) });
+
+export const updateSchedule = (id: string, patch: Partial<ScheduleInput>) =>
+	aiFetch<OnecSchedule>(`/v1/onec/schedules/${encodeURIComponent(id)}`, {
+		method: "PATCH", body: JSON.stringify(patch),
+	});
+
+export const deleteSchedule = (id: string) =>
+	aiFetch<{ id: string }>(`/v1/onec/schedules/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+/** Запустить расписание сейчас — проверка того, что ночью пойдёт то же самое. */
+export const runSchedule = (id: string) =>
+	aiFetch<BatchStart>(`/v1/onec/schedules/${encodeURIComponent(id)}/run`, { method: "POST" });
+
 /** Есть ли на связи админ-агент с нужной способностью. */
 export const hasCapability = (agents: OnecAgent[] | undefined, capability: string): boolean =>
 	(agents ?? []).some((a) => a.role === "admin" && a.online && !a.disabled && a.capabilities.includes(capability));

@@ -23,8 +23,20 @@ export type ErpUser = {
 	 * Право «Администрирование 1С» (AccessPermission.modelName = 'OneCAdmin') хотя бы в
 	 * одной организации. Сервер 1С один на всю установку и организации ERP не принадлежит,
 	 * поэтому доступ к нему даёт именно право, а не совпадение активной организации.
+	 *
+	 * Это право на ЧТЕНИЕ: списки баз и агентов, сеансы, состояние, журнал заданий.
 	 */
 	canOnecAdmin: boolean;
+	/**
+	 * ПРАВО НА РАЗРУШАЮЩИЕ ДЕЙСТВИЯ — уровень доступа `full` (или суперадмин).
+	 *
+	 * ЗАЧЕМ ОТДЕЛЬНО. Права было одно: посмотреть сеансы базы и удалить её регистрацию
+	 * требовали ровно того же. А это разные вещи и разные люди: смотреть состояние нужно
+	 * всем, кто обслуживает клиентов, а снимать публикацию, править пользователей ИБ и
+	 * загружать базу поверх существующей — единицам. Уровень `readonly` у права OneCAdmin
+	 * существовал и раньше, но ничего не значил: сервис его не различал.
+	 */
+	canOnecWrite: boolean;
 };
 
 export type AgentIdentity = { agentId: string; organizationUuid: string };
@@ -161,8 +173,14 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 
 	// Право на администрирование 1С — в любой из организаций пользователя: активная
 	// организация к серверу 1С отношения не имеет.
-	const onec = await erp.query<{ n: string }>(
-		`SELECT count(*)::text AS n FROM access_permissions
+	//
+	// Уровни СЧИТАЕМ ПОРОЗНЬ: `readonly` даёт чтение, `full` — ещё и разрушающие действия.
+	// Берём максимум по организациям: право в одной из них — это право на сервер 1С, а
+	// сервер один, и делить его по организациям нечем.
+	const onec = await erp.query<{ full: string; any: string }>(
+		`SELECT count(*) FILTER (WHERE "accessLevel" = 'full')::text AS full,
+		        count(*)::text AS any
+		   FROM access_permissions
 		  WHERE "userUuid" = $1 AND "modelName" = 'OneCAdmin'
 		    AND "accessLevel" IN ('full', 'readonly') AND "deletedAt" IS NULL`,
 		[uuid],
@@ -177,6 +195,7 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 		organizationUuid: active,
 		allowedOrgUuids: allowed,
 		isOrgAdmin: activeRole === "admin",
-		canOnecAdmin: row.is_super_admin || Number(onec.rows[0]?.n ?? 0) > 0,
+		canOnecAdmin: row.is_super_admin || Number(onec.rows[0]?.any ?? 0) > 0,
+		canOnecWrite: row.is_super_admin || Number(onec.rows[0]?.full ?? 0) > 0,
 	};
 }

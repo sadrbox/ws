@@ -45,11 +45,23 @@ describe("Технические сообщения: прогресс запро
 
 		const bar = screen.getByRole("progressbar");
 		expect(bar.getAttribute("aria-valuenow")).toBe("25");
-		// Цифры рядом с полосой: доля словами и процентом — «1 / 4 · 25%».
-		expect(screen.getByText(/1 \/ 4/)).toBeTruthy();
+		// Цифры рядом с полосой: доля словами и процентом — «1 из 4 · 25%».
+		expect(screen.getByText(new RegExp(`1 ${translate("onecOpOutOf")} 4`))).toBeTruthy();
 
 		act(() => { progressOp(getOps()[0].id, 3); });
 		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("75");
+	});
+
+	it("работа по ОДНОЙ базе тоже показывает полосу, а не спиннер", () => {
+		// Пробовали наоборот — спиннер при total=1: он отвечает только «идёт», и в одном
+		// списке оказывались два разных индикатора одной и той же работы. Полоса отвечает
+		// и «сколько сделано», поэтому она у любой работы с известным объёмом.
+		act(() => { startOp({ kind: "update", title: "Записать права", target: "almaz67", total: 1 }); });
+		show();
+		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("0");
+
+		act(() => { progressOp(getOps()[0].id, 1); });
+		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
 	});
 
 	it("объём неизвестен — индикатор без процента, а не полоса на нуле", () => {
@@ -72,8 +84,33 @@ describe("Технические сообщения: прогресс запро
 		const hide = screen.getAllByRole("button")
 			.find((b) => b.getAttribute("aria-label") === translate("hide"));
 		fireEvent.click(hide!);
-		expect(screen.queryByText(/Проверить пользователей/)).toBeNull();
 		expect(getOps()).toHaveLength(0);
+		/*
+		 * Секции больше нет: наблюдать нечего. Запись о самой работе при этом не пропадает
+		 * бесследно — её итог остаётся СОБЫТИЕМ в журнале (noteOutcome), и именно поэтому
+		 * здесь проверяется исчезновение полосы и секции, а не любого упоминания операции.
+		 */
+		expect(screen.queryByRole("progressbar")).toBeNull();
+		expect(screen.queryByText(translate("techMsgProgress"))).toBeNull();
+	});
+
+	it("провалившаяся команда по одной базе не выглядит выполненной", () => {
+		/*
+		 * ЖИВОЙ СЛУЧАЙ. «Изменить пользователя · 1 из 1 · 100% · Не удалось: 1» — строка
+		 * спорила сама с собой: полоса говорила «сделано всё», подпись — «не вышло ничего».
+		 * Считать надо удавшееся, а у единственной команды число отказов лишнее: это просто
+		 * «Не выполнено».
+		 */
+		act(() => {
+			const id = startOp({ kind: "update", title: "Изменить пользователя", target: "Оператор — _transition", total: 1 });
+			finishOp(id, { failed: 1, note: "добавляемые роли: слишком длинный список — не больше 2000" });
+		});
+		show();
+		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("0");
+		expect(screen.getByText(translate("onecOpFinishedFailed"))).toBeTruthy();
+		expect(screen.queryByText(`${translate("onecOpFailedCount")}: 1`)).toBeNull();
+		// Причина видна там же, словами, а не кодом библиотеки.
+		expect(screen.getByText(/слишком длинный список/)).toBeTruthy();
 	});
 
 	it("состояние задания переносится в строку: отказ виден и цифрами, и состоянием", () => {
@@ -86,9 +123,14 @@ describe("Технические сообщения: прогресс запро
 			} as unknown as Parameters<typeof mergeBatch>[0]);
 		});
 		show();
-		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
-		// Состояние называет и то, сколько именно отказало: «С ошибками: 1».
-		expect(screen.getByText(`${translate("onecOpFailed")}: 1`)).toBeTruthy();
+		/*
+		 * Полоса считает УДАВШЕЕСЯ: две базы из трёх — 67 %, а не «всё сделано». Раньше в
+		 * счёт шли и отказавшие, и провалившаяся работа выглядела заполненной до конца:
+		 * «1 из 1 · 100%» стояло рядом с «Не удалось: 1».
+		 */
+		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("67");
+		// Баз несколько — сказано, сколько именно не прошло.
+		expect(screen.getByText(`${translate("onecOpFailedCount")}: 1`)).toBeTruthy();
 		// Причина отказа названа поимённо: «где встало» — половина ответа.
 		expect(screen.getByText(/almaz67: нет связи/)).toBeTruthy();
 	});

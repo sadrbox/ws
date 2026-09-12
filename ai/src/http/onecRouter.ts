@@ -16,6 +16,9 @@
 // заводится в ERP вместе с панелью (A5) — тогда проверка переедет на него.
 
 import { humanizeAgentError } from "../onec/errorHints.ts";
+import { isDestructive } from "../onec/access.ts";
+import { BATCHABLE, isBatchError, startBatch } from "../onec/batchRunner.ts";
+import { isDue, type MaintenanceSchedule, type ScheduleStore } from "../onec/schedules.ts";
 import { Router, type Request, type Response } from "express";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
@@ -44,6 +47,7 @@ type Deps = {
 	batches: BatchService;
 	registry: OnecRegistry;
 	credentials: CredentialsStore;
+	schedules: ScheduleStore;
 };
 
 /** Итог админ-команды: HTTP-статус и тело в общем конверте {success, data|error}. */
@@ -56,7 +60,7 @@ const fail = (status: number, code: string, message: string): Outcome =>
 const CAP_BASE_AUTH = "ib.auth";
 
 export function onecRouter(deps: Deps) {
-	const { erp, cfg, log, agents, bases, queue, audit, batches, registry, credentials } = deps;
+	const { erp, cfg, log, agents, bases, queue, audit, batches, registry, credentials, schedules } = deps;
 	const r = Router();
 
 	/**
@@ -122,6 +126,30 @@ export function onecRouter(deps: Deps) {
 		const u = req.erpUser!;
 		if (!u.isSuperAdmin && !u.canOnecAdmin) {
 			res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Нужно право «Администрирование 1С»" } });
+			return;
+		}
+		next();
+	});
+
+	/**
+	 * ГЕЙТ РАЗРУШАЮЩИХ ДЕЙСТВИЙ (F5): уровень доступа `full`, а не просто наличие права.
+	 *
+	 * `readonly` видит состояние — списки, сеансы, задания, журнал, — а менять 1С может
+	 * только `full`. Что именно считается изменением, перечислено в onec/access.ts: список
+	 * описывает политику доступа, и его читают и проверяют отдельно от роутера.
+	 *
+	 * Отдельный код ошибки `FORBIDDEN_READONLY`: панель по нему отличает «права нет вовсе»
+	 * от «права хватает только на просмотр» — это разные сообщения человеку.
+	 */
+	r.use((req, res, next) => {
+		if (isDestructive(req.method, req.path) && !req.erpUser!.canOnecWrite) {
+			res.status(403).json({
+				success: false,
+				error: {
+					code: "FORBIDDEN_READONLY",
+					message: "Доступ только на просмотр: для этого действия нужно право «Администрирование 1С» с полным доступом",
+				},
+			});
 			return;
 		}
 		next();
@@ -702,86 +730,199 @@ export function onecRouter(deps: Deps) {
 	// ── Пакетные операции по выбранным базам (A4) ───────────────────────────────
 	// Отвечаем СРАЗУ идентификатором задания, а не ждём сто подключений к 1С: панель
 	// показывает прогресс опросом. Ждать здесь означало бы держать HTTP-запрос минуты.
-	// Задание — только для ИЗМЕНЯЮЩИХ операций: их результат по каждой базе нужно хранить
-	// и к нему возвращаться. Чтение (IB_LIST_*) идёт обычными запросами по выбранным базам:
-	// нажал — увидел, заводить ради этого сущность и уходить на другую вкладку незачем.
-	const BATCHABLE = new Set([
-		"IB_CREATE_USER", "IB_UPDATE_USER", "IB_DELETE_USER", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION",
-		// Публикация — первый шаг раскатки: опубликовать → поставить расширение → перейти
-		// на HTTP. Делать это по одной базе из ста бессмысленно.
-		"IB_PUBLISH", "IB_UNPUBLISH",
-		// Выгрузка: по одной базе из ста её не делают, а результат по каждой нужен отдельно
-		// (путь к файлу, ошибка занятой базы) — это ровно то, что даёт задание.
-		"IB_BACKUP",
-	]);
-
+	//
+	// Сама постановка — в onec/batchRunner.ts: тем же кодом задание ставит расписание
+	// обслуживания (F2), и двух расходящихся реализаций одного действия быть не должно.
 	r.post("/batch", async (req, res) => {
 		const u = req.erpUser!;
 		const body = (req.body ?? {}) as { type?: string; baseKeys?: unknown; payload?: Record<string, unknown> };
 		const type = String(body.type ?? "").toUpperCase();
 		const keys = Array.isArray(body.baseKeys) ? body.baseKeys.filter((k): k is string => typeof k === "string" && !!k) : [];
 
-		if (!BATCHABLE.has(type)) {
-			send(res, fail(400, "UNKNOWN_COMMAND", `Пакетно выполняется только: ${[...BATCHABLE].join(", ")}`));
-			return;
-		}
-		if (!keys.length) {
-			send(res, fail(400, "VALIDATION_ERROR", "baseKeys: не выбрано ни одной базы"));
-			return;
-		}
-		const spec = findAdminCommand(type)!;
-
-		// Проверяем вход ОДИН раз на первой базе: payload у всех команд одинаков, кроме
-		// ключа базы. Иначе сто одинаковых сообщений об одной и той же ошибке.
-		const probe = buildAdminPayload(spec, { ...(body.payload ?? {}), baseKey: keys[0] });
-		if (!probe.ok) {
-			send(res, fail(400, "VALIDATION_ERROR", probe.message));
-			return;
-		}
-
-		const batchId = await batches.create({
-			organizationUuid: u.organizationUuid ?? "",
-			userUuid: u.uuid,
-			type,
-			// Пароль в задание не пишем: оно живёт в БД и попадает в журнал.
-			payload: Object.fromEntries(Object.entries(body.payload ?? {}).filter(([k]) => k !== "password" && k !== "contentBase64")),
-			total: keys.length,
+		const started = await startBatch({ agents, queue, batches }, {
+			type, baseKeys: keys, payload: body.payload ?? {},
+			organizationUuid: u.organizationUuid ?? "", userUuid: u.uuid,
 		});
-
-		let queued = 0;
-		const skipped: { baseKey: string; reason: string }[] = [];
-		for (const key of keys) {
-			const built = buildAdminPayload(spec, { ...(body.payload ?? {}), baseKey: key });
-			if (!built.ok) { skipped.push({ baseKey: key, reason: built.message }); continue; }
-			const agent = await agents.pickAdminAgent(key);
-			if (!agent || !agentCanRun(agent, spec)) {
-				skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });
-				continue;
-			}
-			const cmd = await queue.enqueue({
-				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: key,
-				type: spec.type, payload: built.payload, userUuid: u.uuid,
-				ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
-				// Пачку по многим базам запускают и уходят: она не должна загораживать
-				// одиночный запрос человека, который ждёт ответа на экране.
-				priority: 10,
-			});
-			await batches.attach(batchId, cmd.id);
-			queued += 1;
+		if (isBatchError(started)) {
+			// Неизвестная команда и негодный вход — разные отказы, и панель их различает:
+			// первый значит «так не бывает», второй — «поправьте поле».
+			const code = BATCHABLE.has(type) ? "VALIDATION_ERROR" : "UNKNOWN_COMMAND";
+			send(res, fail(400, code, started.error));
+			return;
 		}
 
-		// Отсеянные базы остаются В САМОМ ЗАДАНИИ: иначе оно показывает «в работе» там, где
-		// работы нет вовсе, — задание без строк, без базы и без команды (живой случай 12.09,
-		// когда операцию запустили при остановленном агенте).
-		await batches.noteSkipped(batchId, skipped);
-
+		const spec = findAdminCommand(type)!;
 		await audit.write({
 			event: "onec.batch", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
-			details: { type, total: keys.length, queued, skipped: skipped.length, title: spec.title },
+			details: {
+				type, total: started.total, queued: started.queued,
+				skipped: started.skipped.length, title: spec.title,
+			},
 		});
-		log.info({ type, total: keys.length, queued, skipped: skipped.length, userUuid: u.uuid }, "пакетная команда 1С");
+		log.info({
+			type, total: started.total, queued: started.queued,
+			skipped: started.skipped.length, userUuid: u.uuid,
+		}, "пакетная команда 1С");
 
-		res.status(202).json({ success: true, data: { batchId, total: keys.length, queued, skipped } });
+		res.status(202).json({ success: true, data: started });
+	});
+
+	// ── Обслуживание по расписанию (F2) ─────────────────────────────────────────
+	//
+	// Расписание — НАСТРОЙКА обслуживания: что делать, по каким базам и в каком окне. Его
+	// прогоны становятся обычными заданиями, поэтому своего журнала здесь нет: итог по
+	// каждой базе смотрят в «Заданиях», как и у ручных операций.
+	//
+	// Смотреть расписание может всякий, кому открыта панель; менять — только полный доступ
+	// (см. onec/access.ts): ночная выгрузка занимает сервер часами.
+
+	/** Разбор тела расписания: одно место на создание и на правку. */
+	const parseSchedule = (
+		body: Record<string, unknown>, partial: boolean,
+	): { ok: true; value: Partial<MaintenanceSchedule> } | { ok: false; message: string } => {
+		const out: Partial<MaintenanceSchedule> = {};
+
+		if (body.name !== undefined || !partial) {
+			const name = String(body.name ?? "").trim();
+			if (!name) return { ok: false, message: "name: укажите название расписания" };
+			out.name = name;
+		}
+		if (body.type !== undefined || !partial) {
+			const type = String(body.type ?? "").toUpperCase();
+			// Пускаем только то, что бывает пакетным: расписание ставит ровно такое же
+			// задание, как кнопка в панели.
+			if (!BATCHABLE.has(type)) return { ok: false, message: `type: так не бывает (${[...BATCHABLE].join(", ")})` };
+			out.type = type;
+		}
+		if (body.baseKeys !== undefined || !partial) {
+			const keys = Array.isArray(body.baseKeys)
+				? body.baseKeys.filter((k): k is string => typeof k === "string" && !!k.trim()).map((k) => k.trim())
+				: [];
+			if (!keys.length) return { ok: false, message: "baseKeys: не выбрано ни одной базы" };
+			out.baseKeys = keys;
+		}
+		if (body.atTime !== undefined || !partial) {
+			const at = String(body.atTime ?? "").trim();
+			// Время — «ЧЧ:ММ» и ничего больше: секунды в окне обслуживания не значат ничего,
+			// а свободный формат пришлось бы угадывать.
+			if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) return { ok: false, message: "atTime: время в виде ЧЧ:ММ" };
+			out.atTime = at;
+		}
+		if (body.weekdays !== undefined) {
+			const days = Array.isArray(body.weekdays)
+				? [...new Set(body.weekdays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))]
+				: [];
+			out.weekdays = days.sort();
+		} else if (!partial) {
+			out.weekdays = [];
+		}
+		if (body.payload !== undefined) {
+			out.payload = (body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+				? body.payload : {}) as Record<string, unknown>;
+		} else if (!partial) {
+			out.payload = {};
+		}
+		if (body.enabled !== undefined) out.enabled = body.enabled !== false;
+		else if (!partial) out.enabled = true;
+
+		return { ok: true, value: out };
+	};
+
+	r.get("/schedules", async (req, res) => {
+		const u = req.erpUser!;
+		const items = await schedules.list(u.organizationUuid ?? "");
+		// «Пора» считается тем же правилом, что и в тике: панель показывает следующее окно
+		// и не расходится с сервисом в том, запустится ли расписание сейчас.
+		const now = new Date();
+		res.json({
+			success: true,
+			data: { items: items.map((s) => ({ ...s, due: isDue(s, now) })) },
+		});
+	});
+
+	r.post("/schedules", async (req, res) => {
+		const u = req.erpUser!;
+		const parsed = parseSchedule((req.body ?? {}) as Record<string, unknown>, false);
+		if (!parsed.ok) { send(res, fail(400, "VALIDATION_ERROR", parsed.message)); return; }
+
+		const created = await schedules.create({
+			organizationUuid: u.organizationUuid ?? "",
+			userUuid: u.uuid,
+			name: parsed.value.name!,
+			type: parsed.value.type!,
+			baseKeys: parsed.value.baseKeys!,
+			payload: parsed.value.payload ?? {},
+			atTime: parsed.value.atTime!,
+			weekdays: parsed.value.weekdays ?? [],
+			enabled: parsed.value.enabled ?? true,
+		});
+		await audit.write({
+			event: "onec.schedule.create", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
+			details: { id: created.id, name: created.name, type: created.type, bases: created.baseKeys.length, atTime: created.atTime },
+		});
+		res.status(201).json({ success: true, data: created });
+	});
+
+	r.patch("/schedules/:id", async (req, res) => {
+		const u = req.erpUser!;
+		const existing = await schedules.get(req.params.id);
+		// Чужая организация — «не найдено»: сообщать о существовании чужой настройки незачем.
+		if (!existing || existing.organizationUuid !== (u.organizationUuid ?? "")) {
+			send(res, fail(404, "NOT_FOUND", "Расписание не найдено")); return;
+		}
+		const parsed = parseSchedule((req.body ?? {}) as Record<string, unknown>, true);
+		if (!parsed.ok) { send(res, fail(400, "VALIDATION_ERROR", parsed.message)); return; }
+
+		const saved = await schedules.update(existing.id, parsed.value);
+		await audit.write({
+			event: "onec.schedule.update", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
+			details: { id: existing.id, changed: Object.keys(parsed.value) },
+		});
+		res.json({ success: true, data: saved });
+	});
+
+	r.delete("/schedules/:id", async (req, res) => {
+		const u = req.erpUser!;
+		const existing = await schedules.get(req.params.id);
+		if (!existing || existing.organizationUuid !== (u.organizationUuid ?? "")) {
+			send(res, fail(404, "NOT_FOUND", "Расписание не найдено")); return;
+		}
+		await schedules.remove(existing.id);
+		await audit.write({
+			event: "onec.schedule.delete", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
+			details: { id: existing.id, name: existing.name },
+		});
+		res.json({ success: true, data: { id: existing.id } });
+	});
+
+	/**
+	 * Запустить расписание СЕЙЧАС — не дожидаясь окна.
+	 *
+	 * Нужно ровно затем, зачем нужна проверка любой автоматики: убедиться, что ночью
+	 * запустится то же самое и по тем же базам. Прогон настоящий: задание такое же, как
+	 * ночное, и отметка прогона ставится — иначе запуск руками в окне обслуживания
+	 * привёл бы ко второму, ночному прогону поверх первого.
+	 */
+	r.post("/schedules/:id/run", async (req, res) => {
+		const u = req.erpUser!;
+		const existing = await schedules.get(req.params.id);
+		if (!existing || existing.organizationUuid !== (u.organizationUuid ?? "")) {
+			send(res, fail(404, "NOT_FOUND", "Расписание не найдено")); return;
+		}
+
+		const started = await startBatch({ agents, queue, batches }, {
+			type: existing.type, baseKeys: existing.baseKeys, payload: existing.payload,
+			organizationUuid: existing.organizationUuid, userUuid: u.uuid,
+		});
+		if (isBatchError(started)) { send(res, fail(400, "VALIDATION_ERROR", started.error)); return; }
+
+		await schedules.markRun(existing.id, started.batchId);
+		await audit.write({
+			event: "onec.schedule.run", organizationUuid: u.organizationUuid ?? undefined, userUuid: u.uuid,
+			details: { id: existing.id, name: existing.name, type: existing.type, batchId: started.batchId, total: started.total },
+		});
+		log.info({ scheduleId: existing.id, name: existing.name, batchId: started.batchId }, "обслуживание запущено вручную");
+		res.status(202).json({ success: true, data: started });
 	});
 
 	/**

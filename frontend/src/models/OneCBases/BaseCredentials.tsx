@@ -27,13 +27,14 @@ import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
-import { QueryError, useAgents } from "src/models/OneCAdmin/shared";
+import { QueryError, useAgents, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { withOp } from "src/models/OneCAdmin/progress";
 import {
 	clearBaseCredentials, fetchBaseCredentials, hasCapability, saveBaseCredentials,
 } from "src/services/onec/api";
 
 export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const key = ["onec", "base-credentials", baseKey];
 	const creds = useQuery({ queryKey: key, queryFn: () => fetchBaseCredentials(baseKey), enabled: !!baseKey });
@@ -103,18 +104,22 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 									value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
 									disabled width={FIELD_WIDTH.date} onChange={() => {}} />
 							</GroupRow>
-							<GroupRow>
-								<Button variant="primary" disabled={busy || !user.trim()}
-									title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
-									onClick={() => save.mutate()}>
-									<Icon name="save" /> {translate("save")}
-								</Button>
-								<Button variant="secondary" disabled={busy || !isSet}
-									title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
-									onClick={() => drop.mutate()}>
-									<Icon name="clear" /> {translate("onecCredsClear")}
-								</Button>
-							</GroupRow>
+							{/* Пара «имя + пароль» — это вход агента в базу: правом «только просмотр»
+							    видно, задана ли она и когда менялась, но не переписывают (F5). */}
+							{canWrite && (
+								<GroupRow>
+									<Button variant="primary" disabled={busy || !user.trim()}
+										title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
+										onClick={() => save.mutate()}>
+										<Icon name="save" /> {translate("save")}
+									</Button>
+									<Button variant="secondary" disabled={busy || !isSet}
+										title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
+										onClick={() => drop.mutate()}>
+										<Icon name="clear" /> {translate("onecCredsClear")}
+									</Button>
+								</GroupRow>
+							)}
 						</GroupCol>
 					</FormArea>
 				</GroupCol>

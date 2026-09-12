@@ -39,8 +39,21 @@ export class OnecRegistry {
 		this.db = db;
 	}
 
-	/** Полный срез пользователей базы: пропавшие удаляем — иначе сводка врёт. */
+	/**
+	 * Полный срез пользователей базы: пропавшие удаляем — иначе сводка врёт.
+	 *
+	 * НО НЕ ПО СРЕЗУ, В КОТОРОМ НЕ РАЗОБРАНО НИ ОДНОЙ ЗАПИСИ. «Пусто» и «не разобрали» —
+	 * разные ответы, и второй стирает знание: 12.09 сборка агента ответила вложенным
+	 * списком, записей в нём не нашлось, и кэш баз `_transition` и `abdali` опустел —
+	 * панель перестала показывать пользователей вовсе. Форму чинит onec/listShape.ts, а
+	 * этот гард — последняя преграда: срез из непустого списка без единого имени не
+	 * применяется никак.
+	 */
 	async syncUsers(baseId: string, users: IbUser[]): Promise<void> {
+		const named = users.filter((u) => (u?.name ?? "").trim());
+		if (users.length && !named.length) {
+			throw new Error(`Срез пользователей базы не разобран: ${users.length} записей без имени — кэш не тронут`);
+		}
 		for (const u of users) {
 			const name = (u.name ?? "").trim();
 			if (!name) continue;
@@ -65,7 +78,34 @@ export class OnecRegistry {
 		);
 	}
 
+	/**
+	 * Запомнить непрочитываемый признак по факту нашей же успешной записи.
+	 *
+	 * «Показывать в списке выбора» 1С в списке пользователей не отдаёт, поэтому после
+	 * успешной команды это единственный источник знания о нём. Полный срез пользователей
+	 * такое значение не затирает: там стоит COALESCE — «поля нет» значит «агент не
+	 * сообщил», а не «выключено» (см. syncUsers).
+	 *
+	 * Строки может не быть вовсе: пользователя только что создали, а список базы ещё не
+	 * читали. Тогда ничего не делаем — значение придёт с первым чтением... которого для
+	 * этого признака не бывает, поэтому вызывающий делает запись ПОСЛЕ применения эха, где
+	 * строка уже появилась.
+	 */
+	async rememberShowInList(baseId: string, name: string, value: boolean): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE base_users SET show_in_list = $3
+			  WHERE base_id = $1 AND lower(name) = lower($2)`,
+			[baseId, name.trim(), value],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	async syncExtensions(baseId: string, items: IbExtension[]): Promise<void> {
+		// То же правило, что и у пользователей: неразобранный срез не стирает кэш.
+		const named = items.filter((e) => (e?.name ?? "").trim());
+		if (items.length && !named.length) {
+			throw new Error(`Срез расширений базы не разобран: ${items.length} записей без имени — кэш не тронут`);
+		}
 		for (const e of items) {
 			const name = (e.name ?? "").trim();
 			if (!name) continue;

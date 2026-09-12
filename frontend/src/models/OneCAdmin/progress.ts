@@ -19,8 +19,11 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 import { queryClient } from "src/app/queryClient";
-import { cancelBatch, fetchBatches, type BatchProgress } from "src/services/onec/api";
+import {
+	cancelBatch, fetchBatches, hasCapability, type BatchProgress, type OnecAgent,
+} from "src/services/onec/api";
 import { translate } from "src/i18";
+import { humanErrorText } from "src/utils/errorText";
 import { noteNotice } from "src/components/TechMessages/store";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
@@ -75,12 +78,25 @@ export const opStateLabel = (o: Op): string => (
 			: translate("onecOpDone")
 );
 
-/** Длительность словами: «сколько уже идёт» важнее точной секунды старта. */
+/**
+ * Длительность словами: «сколько уже идёт» важнее точной секунды старта.
+ *
+ * «0 с» не говорит ничего — ни что работа была мгновенной, ни что счёт вообще идёт;
+ * выглядело это как несчитанное поле. Про меньшее секунды так и сказано.
+ */
 export const opDuration = (o: Op, now = Date.now()): string => {
 	const ms = (o.finishedAt ?? now) - o.startedAt;
 	const s = Math.max(Math.round(ms / 1000), 0);
+	if (s < 1) return translate("onecOpUnderSec");
 	return s < 60 ? `${s} ${translate("secShort")}` : `${Math.floor(s / 60)} ${translate("minShort")} ${s % 60} ${translate("secShort")}`;
 };
+
+/**
+ * Сколько частей работы ВЫШЛО. `done` считает обработанные — и удавшиеся, и отказавшие;
+ * само по себе это число обманывает: у команды по одной базе, которая не прошла, оно
+ * равно единице, и полоса показывала «1 из 1 · 100%» рядом с «Не удалось: 1».
+ */
+export const opSucceeded = (o: Op): number => Math.max(o.done - o.failed, 0);
 
 /**
  * Доля выполненного, 0–100.
@@ -91,8 +107,10 @@ export const opDuration = (o: Op, now = Date.now()): string => {
  * а не полосой. Поэтому здесь `null`, а не ноль.
  */
 export const opPercent = (o: Op): number | null => {
-	if (o.total > 0) return Math.min(Math.round((o.done / o.total) * 100), 100);
-	return o.state === "running" ? null : 100;
+	// Доля — от УДАВШЕГОСЯ: полоса отвечает на вопрос «сколько получилось», а не «сколько
+	// перебрали». Иначе провалившаяся работа выглядела заполненной до конца.
+	if (o.total > 0) return Math.min(Math.round((opSucceeded(o) / o.total) * 100), 100);
+	return o.state === "running" ? null : (o.failed > 0 ? 0 : 100);
 };
 
 /**
@@ -151,6 +169,21 @@ const REFRESH_KEYS = [
 ];
 
 /**
+ * Приносит ли агент состояние базы своим ответом (способность `ib.echo`).
+ *
+ * Читаем ИЗ КЭША, а не запросом: перечитывание случается после каждой операции, и новое
+ * обращение к сервису ради него заменило бы одно лишнее обращение другим. Список агентов в
+ * кэше уже есть — панель обновляет его каждые 15 с (см. useAgents).
+ *
+ * Кэша ещё нет (первая операция в свежей вкладке) — считаем, что эха нет: запоздалый повтор
+ * дешевле, чем показать старое значение как новое.
+ */
+const echoReady = (): boolean => {
+	const agents = queryClient.getQueryData<{ items?: OnecAgent[] }>(["onec", "agents"]);
+	return hasCapability(agents?.items, "ib.echo");
+};
+
+/**
  * Перечитать данные во ВСЕХ открытых формах, а не только там, откуда запускали.
  *
  * Так и просили: «после выполнения команд, операций, запросов обновлять данные в открытых
@@ -158,10 +191,12 @@ const REFRESH_KEYS = [
  * пока вкладка открыта. Карточка базы, открытая отдельным пейном, после публикации
  * показывала прежнее состояние до перезагрузки страницы.
  *
- * ПЕРЕЧИТЫВАЕМ ДВАЖДЫ. Сервис обновляет свой кэш содержимого базы отдельной командой
- * (IB_LIST_USERS ставится следом за изменяющей), и в момент, когда наша команда уже
- * «выполнена», свежие данные ещё едут. Один запоздалый повтор дешевле, чем показать старое
- * значение как новое.
+ * ПОВТОР — ТОЛЬКО ДЛЯ СТАРОГО АГЕНТА. Агент со способностью `ib.echo` приносит новое
+ * содержимое базы своим же ответом, и сервис кладёт его в реестр ДО того, как команда
+ * станет «выполнена» (см. docs/TASK_FRESH_STATE_AFTER_COMMAND.md): к моменту перечитывания
+ * свежее уже лежит, ждать нечего. Агент без этой способности по-прежнему обновляет реестр
+ * второй командой, и в момент «выполнено» данные ещё едут — там один запоздалый повтор
+ * дешевле, чем показать старое значение как новое.
  */
 export function refreshAfterWork(): void {
 	const once = () => {
@@ -170,7 +205,7 @@ export function refreshAfterWork(): void {
 		void queryClient.invalidateQueries({ queryKey: ["onec-bases"] });
 	};
 	once();
-	window.setTimeout(once, 5000);
+	if (!echoReady()) window.setTimeout(once, 5000);
 }
 
 let ops: Op[] = [];
@@ -202,17 +237,31 @@ const replace = (id: string, patch: (op: Op) => Op) => {
  */
 function noteOutcome(op: Op): void {
 	const secs = Math.max(0, Math.round(((op.finishedAt ?? Date.now()) - op.startedAt) / 1000));
-	const head = `${op.title}${op.target ? ` — ${op.target}` : ""}`;
 	const failed = op.failed > 0;
-	const tail = [
-		op.total > 1 ? `${op.done - op.failed} / ${op.total}` : "",
-		failed ? `${translate("onecOpFailed")}: ${op.failed}` : "",
-		op.note,
-		secs ? `${secs} ${translate("secShort")}` : "",
-	].filter(Boolean).join(" · ");
-	noteNotice(head, {
+	const ok = op.done - op.failed;
+	const why = humanErrorText(op.note);
+
+	/*
+	 * ЧИТАЕТСЯ КАК ФРАЗА, А НЕ КАК СТРОКА ЖУРНАЛА.
+	 *
+	 * Было: «Операция завершилась с ошибками. С ошибками: 1 · Failed to fetch · 4 с» —
+	 * четыре обрывка через точки, где «операция» безымянна, «с ошибками» сказано дважды, а
+	 * причина написана по-английски и не для человека. Теперь по порядку: ЧТО делали, ЧЕМ
+	 * кончилось, ПОЧЕМУ (если не вышло) и СКОЛЬКО заняло. Над чем работали — подписью
+	 * записи: по этому же объекту она встаёт в свою группу.
+	 */
+	const result = failed && ok === 0
+		? `${translate("onecOpFinishedFailed")}${why ? `: ${why}` : ""}`
+		: op.total > 1
+			? [
+				`${translate("onecOpFinishedOk")}: ${ok} ${translate("onecOpOutOf")} ${op.total}`,
+				failed ? `${translate("onecOpFailedCount")}: ${op.failed}${why ? ` — ${why}` : ""}` : "",
+			].filter(Boolean).join(". ")
+			: translate("onecOpFinishedOk");
+
+	noteNotice(op.target || op.title, {
 		type: failed ? "error" : "success",
-		text: `${translate(failed ? "onecOpFinishedFailed" : "onecOpFinishedOk")}${tail ? `. ${tail}` : ""}`,
+		text: `${op.title}. ${result}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
 	});
 }
 

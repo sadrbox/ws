@@ -28,7 +28,7 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { dropBaseRegistration, setBaseHidden } from "src/services/onec/api";
-import { unreachableReason } from "src/models/OneCAdmin/shared";
+import { unreachableReason, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { withOp } from "src/models/OneCAdmin/progress";
 
 export const BaseAvailability: FC<{
@@ -39,6 +39,7 @@ export const BaseAvailability: FC<{
 	ibUnreachableAt: string | null;
 	ibUnreachableReason: string | null;
 }> = ({ baseKey, status, hidden, ibUnreachableAt, ibUnreachableReason }) => {
+	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const [confirmDrop, setConfirmDrop] = useState(false);
 
@@ -96,7 +97,9 @@ export const BaseAvailability: FC<{
 				{hidden && (
 					<Notice inline items={[{ type: "info", text: translate("onecBaseHiddenHint") }]} />
 				)}
-				<GroupRow>
+				{/* Спрятать базу и удалить её регистрацию — разрушающее: правом «только
+				    просмотр» видно причину недоступности, но не трогают саму запись (F5). */}
+				{canWrite && <GroupRow>
 					<Button variant={hidden ? "secondary" : "danger"} disabled={hide.isPending}
 						title={translate(hidden ? "onecBaseUnhideHint" : "onecBaseHideHint")}
 						onClick={() => hide.mutate(!hidden)}>
@@ -112,7 +115,7 @@ export const BaseAvailability: FC<{
 							<Icon name="trash" /> {translate("onecBaseDropRegistration")}
 						</Button>
 					)}
-				</GroupRow>
+				</GroupRow>}
 			</GroupCol>
 
 			{confirmDrop && (
