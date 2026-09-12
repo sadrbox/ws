@@ -121,10 +121,19 @@ export const TableHeader = memo(() => {
     const colEls = colGroup.slice(colOffset);
     // Ширины берём ИЗМЕРЕННЫЕ, а не из настроек: последняя колонка живёт с width: auto, и
     // её настроечная ширина ничего не говорит о том, сколько места она занимает сейчас.
-    const start: ResizeColumn[] = visibleColumns.map((c, i) => ({
-      width: ths[i]?.getBoundingClientRect().width ?? 0,
-      min: parseInt(c.minWidth ?? '50', 10),
-    }));
+    //
+    // `base` — куда колонку возвращать при расширении: запомненная ширина до того, как её
+    // ужала цепочка (TColumn.baseWidth). Памяти нет — значит колонку никто не ужимал, и
+    // возвращать ей нечего: base равен текущей ширине.
+    const start: ResizeColumn[] = visibleColumns.map((c, i) => {
+      const width = ths[i]?.getBoundingClientRect().width ?? 0;
+      const remembered = parseFloat(c.baseWidth ?? '');
+      return {
+        width,
+        min: parseInt(c.minWidth ?? '50', 10),
+        base: Number.isFinite(remembered) && remembered > width ? remembered : width,
+      };
+    });
 
     resizingRef.current = {
       colIndex, startX: e.clientX, start,
@@ -159,12 +168,31 @@ export const TableHeader = memo(() => {
       const r = resizingRef.current;
       if (!r) return;
       const next = apply(ev.clientX);
-      // Сохраняем ВСЕ колонки, которых коснулась цепочка, а не одну перетаскиваемую.
-      const byId = new Map<string, string>();
+      /*
+       * Сохраняем ВСЕ колонки, которых коснулась цепочка, а не одну перетаскиваемую, — и
+       * вместе с шириной помним, КУДА ВОЗВРАЩАТЬ ужатую.
+       *
+       * Без этой памяти обратный ход был бы невозможен: ужатая ширина сохранялась бы как
+       * обычная, «сколько тут было раньше» не знал бы никто, и колонки навсегда оставались
+       * бы на минимумах. Память старше сегодняшнего движения: если колонку ужимали и
+       * вчера, целью остаётся та, первая ширина. Снимается она, как только колонка
+       * вернулась к ней или стала шире.
+       */
+      const byId = new Map<string, { width: string; base?: string }>();
       visibleColumns.forEach((c, i) => {
-        if (next[i] !== r.start[i].width) byId.set(c.identifier, `${next[i]}px`);
+        if (next[i] === r.start[i].width) return;
+        const stillNarrow = next[i] < r.start[i].base;
+        byId.set(c.identifier, {
+          width: `${next[i]}px`,
+          ...(stillNarrow ? { base: `${r.start[i].base}px` } : {}),
+        });
       });
-      const mapped = columns.map(c => (byId.has(c.identifier) ? { ...c, width: byId.get(c.identifier)! } : c));
+      const mapped = columns.map(c => {
+        const hit = byId.get(c.identifier);
+        if (!hit) return c;
+        const { baseWidth: _forgotten, ...rest } = c;
+        return hit.base ? { ...rest, width: hit.width, baseWidth: hit.base } : { ...rest, width: hit.width };
+      });
       // Последняя колонка: сохраняем явную ширину, не сбрасываем в auto
       const updatedColumns = r.isLastCol ? mapped : normalizeLastColumnWidth(mapped);
       actions.setColumns(updatedColumns);
