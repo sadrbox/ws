@@ -12,7 +12,7 @@ import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import TechMessages from 'src/components/TechMessages/TechMessages';
-import { NoticeScope, useTechMessagesOpen } from 'src/components/TechMessages/store';
+import { NoticeScope, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
 import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
@@ -102,24 +102,39 @@ export const Container: FC = () => {
   const context = useAppContext();
   const isPaneShow = context.windows.panes.length > 0;
   const techOpen = useTechMessagesOpen();
+  const techPlace = useTechMessagesPlacement();
+  const techBottom = techPlace === "bottom";
 
   /*
-   * Ширина области сообщений — тем же разделителем, что и везде в приложении
-   * (VSplitBar): у людей разные задачи, и «сколько места отдать сообщениям» —
-   * их решение, а не наше. Доля хранится в процентах: панель MDI меняет ширину,
-   * и пиксельная величина при сужении окна съедала бы пейны целиком.
+   * Размер области сообщений — тем же разделителем, что и везде в приложении: у людей
+   * разные задачи, и «сколько места отдать сообщениям» — их решение, а не наше. Доля
+   * хранится в процентах: панель MDI меняет размеры, и пиксельная величина при сужении
+   * окна съедала бы пейны целиком.
+   *
+   * ДВА РАЗМЕРА, А НЕ ОДИН. Справа область делит ширину, внизу — высоту, и это разные
+   * величины: доля, удобная для колонки сбоку, полосой внизу закрыла бы полэкрана. Хуки
+   * зовём оба (условных хуков не бывает), а пользуемся тем, что отвечает месту области.
    */
-  const split = useSplitResize({
+  const splitSide = useSplitResize({
     storageKey: "tech_messages_width",
     side: "right",
     defaultPercent: 24,
     min: 15,
     max: 60,
   });
+  const splitBottom = useSplitResize({
+    storageKey: "tech_messages_height",
+    side: "bottom",
+    defaultPercent: 30,
+    min: 15,
+    max: 70,
+  });
+  const split = techBottom ? splitBottom : splitSide;
 
   /*
-   * Рабочее пространство — ряд из двух областей: слева пейны, справа «Технические
-   * сообщения». Область сворачивается ШИРИНОЙ, оставаясь в том же ряду: накладка
+   * Рабочее пространство — две области: пейны и «Технические сообщения». Обычно они
+   * стоят рядом (сообщения справа), но область можно перенести ВНИЗ — тогда это столбец,
+   * и делится высота. Сворачивается область своим размером, оставаясь на месте: накладка
    * (position: absolute) закрывала бы содержимое формы ровно там, где с ним работают.
    *
    * Разделитель стоит между ними и только при РАСКРЫТОЙ области: у свёрнутой полосы
@@ -134,12 +149,16 @@ export const Container: FC = () => {
         <>
           <div
             className={styles.Workspace}
+            data-tech={techPlace}
             ref={split.containerRef}
-            style={{ "--tech-width": `${split.percent}%` } as CSSProperties}
+            style={{
+              [techBottom ? "--tech-height" : "--tech-width"]: `${split.percent}%`,
+            } as CSSProperties}
           >
             <Panes />
             {techOpen && (
               <VSplitBar
+                orientation={techBottom ? "horizontal" : "vertical"}
                 onPointerDown={split.startResize}
                 onDoubleClick={split.reset}
                 onNudge={split.nudge}

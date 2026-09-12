@@ -357,6 +357,22 @@ export const NoteIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Область справа — рамка экрана с залитой правой долей. */
+export const DockRightIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M2 3h12v10H2V3Zm1 1v8h10V4H3Z" />
+    <path d="M10 4.5h3.2v7H10v-7Z" />
+  </svg>
+);
+
+/** Область внизу — та же рамка, залита нижняя доля. */
+export const DockBottomIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M2 3h12v10H2V3Zm1 1v8h10V4H3Z" />
+    <path d="M3.2 9.5h9.6v2.7H3.2V9.5Z" />
+  </svg>
+);
+
 export const ICONS = {
   recalc: RecalcIcon,
   note: NoteIcon,
@@ -380,6 +396,8 @@ export const ICONS = {
   list: ListIcon,
   tree: TreeIcon,
   viewSplit: ViewSplitIcon,
+  dockRight: DockRightIcon,
+  dockBottom: DockBottomIcon,
   viewSingle: ViewSingleIcon,
   documentChain: DocumentChainIcon,
   document: DocumentIcon,

@@ -42,9 +42,29 @@
 	&:focus-visible { background: $primary; background-clip: content-box; outline: none; }
 }
 
+// Тот же разделитель для областей, стоящих ОДНА ПОД ДРУГОЙ: делит высоту, а не ширину.
+// Правила те же — тонкая полоса, широкая зона захвата, воздух внутренним отступом.
+.HSplitBar {
+	flex: 0 0 18px;
+	box-sizing: border-box;
+	padding: 6px 0;
+	align-self: stretch;
+	cursor: row-resize;
+	background: $color34;
+	background-clip: content-box;
+	border-radius: var(--radius-3, 3px);
+	touch-action: none;
+	transition: background 0.12s;
+
+	&:hover,
+	&:focus-visible { background: $primary; background-clip: content-box; outline: none; }
+}
+
 // В печать разделитель не идёт — это элемент управления.
 @media print {
-	.VSplitBar {
+
+	.VSplitBar,
+	.HSplitBar {
 		display: none !important;
 	}
 }

@@ -29,7 +29,8 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { useAppContext } from "src/app/context";
 import {
-	APP_SCOPE, clearNoticeHistory, setTechMessagesOpen, useScopedNotices, useTechMessagesOpen,
+	APP_SCOPE, clearNoticeHistory, setTechMessagesOpen, setTechMessagesPlacement,
+	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement,
 } from "./store";
 import MessagesView from "./MessagesView";
 import styles from "./TechMessages.module.scss";
@@ -44,6 +45,12 @@ const readAll = (): boolean => {
 export const TechMessages: FC = () => {
 	const { activePane } = useAppContext().windows;
 	const open = useTechMessagesOpen();
+	/*
+	 * ГДЕ СТОИТ ОБЛАСТЬ — справа или внизу. Разметку задаёт рабочее пространство (оно одно
+	 * знает про обе области), а области нужно знать только своё место: у правой колонки
+	 * граница слева и подпись боком, у нижней полосы — граница сверху и подпись как обычно.
+	 */
+	const placement = useTechMessagesPlacement();
 	const [showAll, setShowAll] = useState(readAll);
 
 	const scope = showAll ? APP_SCOPE : (activePane || APP_SCOPE);
@@ -59,7 +66,7 @@ export const TechMessages: FC = () => {
 
 	if (!open) {
 		return (
-			<aside className={styles.Rail} aria-label={translate("techMessages")}>
+			<aside className={styles.Rail} data-place={placement} aria-label={translate("techMessages")}>
 				<IconButton
 					size="md"
 					title={`${translate("techMessages")}${active ? `: ${active}` : ""}`}
@@ -75,9 +82,33 @@ export const TechMessages: FC = () => {
 	}
 
 	return (
-		<aside className={styles.Dock} aria-label={translate("techMessages")}>
+		<aside className={styles.Dock} data-place={placement} aria-label={translate("techMessages")}>
 			<div className={styles.Head}>
 				<span className={styles.Title}>{translate("techMessages")}</span>
+				{/*
+				  * ГДЕ ДЕРЖАТЬ ОБЛАСТЬ — решает тот, кто работает. Длинной ошибке нужна
+				  * ширина: в узкой колонке справа абзац превращается в лесенку из двух слов.
+				  * Широкой форме, наоборот, жалко четверти экрана вбок — ей область уместнее
+				  * внизу полосой. Два состояния — две кнопки: нажатая показывает текущее.
+				  */}
+				<IconButton
+					size="md"
+					active={placement === "right"}
+					title={translate("techMessagesDockRight")}
+					aria-label={translate("techMessagesDockRight")}
+					onClick={() => setTechMessagesPlacement("right")}
+				>
+					<Icon name="dockRight" />
+				</IconButton>
+				<IconButton
+					size="md"
+					active={placement === "bottom"}
+					title={translate("techMessagesDockBottom")}
+					aria-label={translate("techMessagesDockBottom")}
+					onClick={() => setTechMessagesPlacement("bottom")}
+				>
+					<Icon name="dockBottom" />
+				</IconButton>
 				<IconButton
 					size="md"
 					title={translate("techMessagesClose")}

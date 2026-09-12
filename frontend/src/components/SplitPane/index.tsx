@@ -22,8 +22,15 @@ import styles from "./SplitPane.module.scss";
 export interface UseSplitResizeOptions {
   /** Ключ localStorage для запоминания размера (per-list / per-report). */
   storageKey: string;
-  /** С какой стороны находится панель, размером которой управляем. */
-  side: "left" | "right";
+  /**
+   * С какой стороны находится панель, размером которой управляем.
+   *
+   * "right"/"left" — области стоят в РЯД и делят ширину; "bottom"/"top" — стоят СТОЛБЦОМ и
+   * делят высоту. Вертикальное деление понадобилось «Техническим сообщениям»: длинный текст
+   * ошибки в узкой колонке справа превращается в лесенку из двух слов, и его уместнее
+   * положить полосой внизу.
+   */
+  side: "left" | "right" | "top" | "bottom";
   /** Размер по умолчанию, % от контейнера. */
   defaultPercent: number;
   /** Границы, % — обе области обязаны оставаться видимыми. */
@@ -66,14 +73,19 @@ export function useSplitResize({
       e.preventDefault();
       // ДЕЛЬТА, а не абсолют: двигаем от стартовой позиции/процента, поэтому граница
       // не «прыгает» под курсор при клике не ровно по разделителю (offset схвата).
-      const startClientX = e.clientX;
+      const vertical = side === "top" || side === "bottom";
+      const startClient = vertical ? e.clientY : e.clientX;
       const startPercent = percentRef.current;
       const move = (ev: PointerEvent) => {
         const box = containerRef.current?.getBoundingClientRect();
-        if (!box || box.width === 0) return;
-        const dxPercent = ((ev.clientX - startClientX) / box.width) * 100;
-        // side "right": движение вправо сужает правую панель; "left": расширяет левую.
-        const raw = side === "right" ? startPercent - dxPercent : startPercent + dxPercent;
+        const size = vertical ? box?.height : box?.width;
+        if (!box || !size) return;
+        const deltaPercent = (((vertical ? ev.clientY : ev.clientX) - startClient) / size) * 100;
+        // Панель у дальнего края (right/bottom) от движения «к себе» сужается, у ближнего
+        // (left/top) — расширяется: знак дельты зависит только от этого.
+        const raw = side === "right" || side === "bottom"
+          ? startPercent - deltaPercent
+          : startPercent + deltaPercent;
         setPercent(Math.min(max, Math.max(min, raw)));
       };
       const up = () => {
@@ -85,7 +97,7 @@ export function useSplitResize({
       // Пока тянем — гасим выделение текста и держим курсор col-resize,
       // иначе он мигает при уходе указателя с узкой полоски разделителя.
       document.body.style.userSelect = "none";
-      document.body.style.cursor = "col-resize";
+      document.body.style.cursor = vertical ? "row-resize" : "col-resize";
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
     },
@@ -116,22 +128,35 @@ export interface VSplitBarProps {
    * с клавиатуры; не передан — остаётся чисто мышиным, как был.
    */
   onNudge?: (deltaPercent: number) => void;
+  /** Как стоят области: "vertical" — рядом, "horizontal" — одна под другой. */
+  orientation?: "vertical" | "horizontal";
 }
 
-/** Полоска-разделитель: одна на все раздвоенные области приложения. */
-export const VSplitBar: FC<VSplitBarProps> = ({ onPointerDown, onDoubleClick, title, onNudge }) => (
+/**
+ * Полоска-разделитель: одна на все раздвоенные области приложения.
+ *
+ * `orientation` — как СТОЯТ ОБЛАСТИ, а не сама полоса: "vertical" делит экран на левую и
+ * правую (полоса вертикальная), "horizontal" — на верхнюю и нижнюю. Зазор вокруг полосы
+ * задаёт она сама (см. SplitPane.module.scss): области к ней не прилипают и своих отступов
+ * не держат.
+ */
+export const VSplitBar: FC<VSplitBarProps> = ({
+  onPointerDown, onDoubleClick, title, onNudge, orientation = "vertical",
+}) => (
   <div
-    className={styles.VSplitBar}
+    className={orientation === "horizontal" ? styles.HSplitBar : styles.VSplitBar}
     role="separator"
-    aria-orientation="vertical"
+    aria-orientation={orientation}
     title={title ?? translate("resizePanels")}
     onPointerDown={onPointerDown}
     onDoubleClick={onDoubleClick}
     {...(onNudge ? {
       tabIndex: 0,
       onKeyDown: (e: React.KeyboardEvent) => {
-        if (e.key === "ArrowLeft") onNudge(-2);
-        else if (e.key === "ArrowRight") onNudge(2);
+        const back = orientation === "horizontal" ? "ArrowUp" : "ArrowLeft";
+        const fwd = orientation === "horizontal" ? "ArrowDown" : "ArrowRight";
+        if (e.key === back) onNudge(-2);
+        else if (e.key === fwd) onNudge(2);
         else return;
         e.preventDefault();
       },

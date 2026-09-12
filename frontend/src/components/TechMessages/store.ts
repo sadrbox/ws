@@ -295,6 +295,39 @@ export const useTechMessagesOpen = (): boolean => useSyncExternalStore(
 	() => false,
 );
 
+/**
+ * ГДЕ СТОИТ ОБЛАСТЬ — справа от пейнов или под ними.
+ *
+ * ЗАЧЕМ ВЫБОР. Сообщения бывают разной формы. Ошибка проверки базы — это абзац текста, и
+ * ему нужна ширина: в узкой колонке справа он превращается в лесенку из двух слов. А вот
+ * широкой форме документа отдавать четверть экрана вбок жалко — там дороже ширина самой
+ * формы, и область уместнее внизу, полосой. Что дороже в конкретной работе, знает только
+ * тот, кто работает, — поэтому это настройка, а не наше решение.
+ *
+ * Выбор общий для приложения и переживает перезагрузку: место области — привычка рабочего
+ * места, а не свойство текущего экрана.
+ */
+export type TechPlacement = "right" | "bottom";
+
+const PLACE_KEY = "tech_messages_placement";
+let placement: TechPlacement = (() => {
+	try { return localStorage.getItem(PLACE_KEY) === "bottom" ? "bottom" : "right"; } catch { return "right"; }
+})();
+const placeListeners = new Set<() => void>();
+
+export function setTechMessagesPlacement(v: TechPlacement): void {
+	if (placement === v) return;
+	placement = v;
+	try { localStorage.setItem(PLACE_KEY, v); } catch { /* не беда */ }
+	for (const l of placeListeners) l();
+}
+
+export const useTechMessagesPlacement = (): TechPlacement => useSyncExternalStore(
+	(l) => { placeListeners.add(l); return () => { placeListeners.delete(l); }; },
+	() => placement,
+	() => "right" as TechPlacement,
+);
+
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const snapshot = () => notices;
 
