@@ -54,7 +54,12 @@ describe("Технические сообщения: журнал со шкал�
 
 	it("текст сообщения не обрезан, а уточнения стоят под ним в той же строке", () => {
 		act(() => {
-			addMessage({ scope: "pane-1", type: "error", text: long, source: "Базы 1С" });
+			// Со ссылкой на объект: группа называется видом объекта («База»), источник —
+			// заголовком пейна, и в строке они говорят разное.
+			addMessage({
+				scope: "pane-1", type: "error", text: long, source: "Базы 1С",
+				ref: { endpoint: "onec-bases", uuid: "b1", label: "almaz67" },
+			});
 		});
 		const { container } = show();
 		const text = screen.getByText(long);
@@ -67,6 +72,17 @@ describe("Технические сообщения: журнал со шкал�
 		expect(message.textContent).toContain("Ошибка");
 		// Полоса палитры — на самом сообщении: цвет виден и когда текста много.
 		expect(container.querySelector('[data-type="error"]')).toBeTruthy();
+	});
+
+	it("объект и источник не повторяют друг друга", () => {
+		// У записи без ссылки на объект заголовком объекта служит сам источник, и строка
+		// показывала одну и ту же подпись дважды подряд — заметнее всего без группировки.
+		act(() => {
+			addMessage({ scope: "pane-1", type: "error", text: "Сбой", source: "Пользователь базы: Иванов" });
+		});
+		show();
+		fireEvent.click(screen.getByRole("button", { name: translate("techMsgGroupNone") }));
+		expect(screen.getAllByText("Пользователь базы: Иванов")).toHaveLength(1);
 	});
 
 	it("действия живут внутри сообщения", () => {

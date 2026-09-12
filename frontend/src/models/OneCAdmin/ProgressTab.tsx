@@ -26,7 +26,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
-import { cancelOp, clearFinished, useOnecOps, type Op } from "./progress";
+import { abandonOp, cancelOp, clearFinished, useOnecOps, type Op } from "./progress";
 import { formatDuration, queueReason, useQueueStats } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";
 
@@ -91,7 +91,7 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 	const running = ops.filter((o) => o.state === "running").length;
 	const finished = ops.length - running;
 	/** Строка, выбранная щелчком: её и отменяют — кнопка действует на выбранное. */
-	const [active, setActive] = useState<{ id: string; cancelable: number } | null>(null);
+	const [active, setActive] = useState<{ id: string; cancelable: number; state: string } | null>(null);
 
 	const cancel = useCallback(async () => {
 		if (!active?.cancelable) return;
@@ -142,7 +142,7 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 				);
 			},
 			onActiveRowChange: (r) => setActive(r
-				? { id: asText(r.__id), cancelable: Number(r.__cancelable ?? 0) }
+				? { id: asText(r.__id), cancelable: Number(r.__cancelable ?? 0), state: asText(r.__state) }
 				: null),
 			extraButtons: (
 				<>
@@ -158,6 +158,20 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 						onClick={() => void cancel()}>
 						<Icon name="close" /> {translate("onecOpCancel")}
 						{active?.cancelable ? ` (${active.cancelable})` : ""}
+					</Button>
+					{/*
+					  * ПРЕКРАТИТЬ НАБЛЮДЕНИЕ — не то же, что отменить. Отмена останавливает
+					  * команду на сервере; это убирает запись с экрана. Нужно, когда запись
+					  * зависла и держит карточку запертой: команда давно выполнена, а панель
+					  * об этом не узнала (задание не отвечало). Подпись говорит прямо, что на
+					  * сервере ничего не изменится.
+					  */}
+					<Button variant="secondary" disabled={!active || active.state !== "running"}
+						title={active?.state === "running"
+							? translate("onecOpAbandonHint")
+							: translate("onecOpAbandonPick")}
+						onClick={() => { if (active) { abandonOp(active.id); setActive(null); } }}>
+						<Icon name="clear" /> {translate("onecOpAbandon")}
 					</Button>
 					<Button variant="secondary" disabled={!finished}
 						title={finished ? translate("onecOpsClear") : translate("onecOpsNothingToClear")}

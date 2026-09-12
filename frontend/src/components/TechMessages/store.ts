@@ -183,12 +183,24 @@ function persist(): void {
 
 const emit = () => { persist(); for (const l of listeners) l(); };
 
-const sameItems = (a: TechMessage[], b: NoticeItem[]): boolean =>
-	a.length === b.length && a.every((n, i) => n.type === b[i].type && n.text === b[i].text);
+/** Чем сообщение отличается от сообщения: тип и текст. Больше у `<Notice />` ничего нет. */
+const sigOf = (type: NoticeType, text: string): string => `${type}\n${text}`;
 
 /**
  * Сообщить состояние источника. Пустой список — источник замолчал: его активные записи
  * становятся историей.
+ *
+ * СЛИЧЕНИЕ ПОСТРОЧНОЕ, А НЕ СПИСКОМ ЦЕЛИКОМ. Форма шлёт СВОДКУ: «не заполнен склад» и
+ * «есть неприменённые правки» приходят одним списком под одним ключом. Раньше любое
+ * различие в этом списке гасило ВСЕ его записи и заводило все заново — и стоило появиться
+ * одному новому сообщению («идёт операция»), как соседние, ничуть не изменившиеся,
+ * уходили в историю копиями самих себя. Человек видел один и тот же текст трижды и
+ * справедливо считал это дублями: три записи о событии, которого не было.
+ *
+ * Поэтому сравниваем не списки, а строки: что звучит и сейчас — остаётся той же записью
+ * (со своим `firstAt`: «висит с утра» — это про утро), что перестало звучать — уходит в
+ * историю, что появилось — заводится. Повторы ВНУТРИ одного списка считаются поимённо,
+ * поэтому два одинаковых сообщения формы остаются двумя записями, а не схлопываются.
  */
 export function reportNotices(scope: string, rawKey: string, source: string, items: NoticeItem[]): void {
 	const now = Date.now();
@@ -204,26 +216,51 @@ export function reportNotices(scope: string, rawKey: string, source: string, ite
 		return;
 	}
 
-	// То же самое, что и было: только отмечаем, что оно всё ещё так, и не чаще раза
-	// в пять секунд — иначе опрос раз в три секунды перерисовывал бы доску вечно.
-	if (sameItems(mine, items)) {
-		if (now - mine[0].lastAt < 5000) return;
-		notices = notices.map((n) => (n.key === key && n.active ? { ...n, lastAt: now } : n));
-		emit();
-		return;
+	// Сколько раз каждое сообщение звучит сейчас: расход этого счётчика и решает судьбу
+	// прежних записей и надобность новых.
+	const want = new Map<string, number>();
+	for (const it of items) {
+		const sig = sigOf(it.type, it.text);
+		want.set(sig, (want.get(sig) ?? 0) + 1);
 	}
 
-	// Изменилось: прежние активные записи этого ключа — в историю, новые — активные.
-	const aged = notices.map((n) => (n.key === key && n.active ? { ...n, active: false } : n));
-	const fresh: TechMessage[] = items.map((it) => ({
-		id: `n${++seq}`, scope, key, type: it.type, text: it.text, source,
-		firstAt: now, lastAt: now, active: true,
-		// За этой записью стоит ЖИВОЙ ИСТОЧНИК: экран сообщает её заново, пока она верна.
-		// Её нельзя ни убрать историей, ни удалить насовсем — источник скажет то же самое
-		// снова, и «очистить» превращалось бы в мигание списка (см. clearNoticeHistory).
-		fromSource: true,
-	}));
-	notices = [...fresh, ...aged].slice(0, LIMIT);
+	let changed = false;
+	const kept = notices.map((n) => {
+		if (n.key !== key || !n.active) return n;
+		const sig = sigOf(n.type, n.text);
+		const left = want.get(sig) ?? 0;
+		if (left <= 0) {
+			// Источник этого больше не говорит — запись становится историей.
+			changed = true;
+			return { ...n, active: false };
+		}
+		want.set(sig, left - 1);
+		// Это всё ещё так: только отмечаем подтверждение, и не чаще раза в пять секунд —
+		// иначе опрос раз в три секунды перерисовывал бы доску вечно.
+		if (now - n.lastAt < 5000) return n;
+		changed = true;
+		return { ...n, lastAt: now };
+	});
+
+	// Осталось в счётчике — то, чего среди прежних записей не нашлось: это новое.
+	const fresh: TechMessage[] = [];
+	for (const it of items) {
+		const sig = sigOf(it.type, it.text);
+		const left = want.get(sig) ?? 0;
+		if (left <= 0) continue;
+		want.set(sig, left - 1);
+		fresh.push({
+			id: `n${++seq}`, scope, key, type: it.type, text: it.text, source,
+			firstAt: now, lastAt: now, active: true,
+			// За этой записью стоит ЖИВОЙ ИСТОЧНИК: экран сообщает её заново, пока она верна.
+			// Её нельзя ни убрать историей, ни удалить насовсем — источник скажет то же самое
+			// снова, и «очистить» превращалось бы в мигание списка (см. clearNoticeHistory).
+			fromSource: true,
+		});
+	}
+
+	if (!changed && !fresh.length) return;
+	notices = [...fresh, ...kept].slice(0, LIMIT);
 	emit();
 }
 

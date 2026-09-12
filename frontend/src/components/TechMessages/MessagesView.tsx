@@ -69,6 +69,21 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 	const at = new Date(m.firstAt).toISOString();
 	// Под заголовком дня дата известна и в строке не нужна; в остальных режимах — нужна.
 	const withDate = mode !== "date";
+	/*
+	 * ОБЪЕКТ И ИСТОЧНИК — РАЗНЫЕ ПОДПИСИ ТОЛЬКО ПОКА ОНИ РАЗНЫЕ.
+	 *
+	 * У записи без ссылки на объект заголовком объекта служит сам источник (groupTitleOf),
+	 * и строка получала две одинаковые подписи подряд: «Пользователь базы: Иванов —
+	 * Пользователь базы: Иванов». Заметнее всего это было без группировки, где объект
+	 * называется в каждой строке, — но повтор бессмысленен в любом режиме. Поэтому подпись
+	 * ставится один раз: совпали — показываем одну.
+	 */
+	const objectTitle = groupTitleOf(m).title;
+	const sameTitle = objectTitle === m.source;
+	// Заголовком группы объект назван и так — в строке он нужен в остальных режимах.
+	const showObject = mode !== "object" && !sameTitle;
+	// В режиме объектов источник, равный заголовку группы, повторял бы её в каждой строке.
+	const showSource = !!m.source && !(mode === "object" && sameTitle);
 
 	return (
 		<article className={styles.Row} data-type={m.type} data-past={!m.active || undefined}>
@@ -87,9 +102,8 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 
 				<div className={styles.MsgMeta}>
 					<span className={styles.MsgType}>{translate(TYPE_LABEL[m.type])}</span>
-					{/* Объект назван в строке, только если он не назван заголовком группы. */}
-					{mode !== "object" && <span>{groupTitleOf(m).title}</span>}
-					{m.source && <span>{m.source}</span>}
+					{showObject && <span>{objectTitle}</span>}
+					{showSource && <span>{m.source}</span>}
 					{!m.active && <span>{translate("techMsgPast")}</span>}
 				</div>
 

@@ -128,9 +128,16 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 						}]),
 						{
 							type: "info" as const,
+							/*
+							 * ДВА РАЗНЫХ ПОЛОЖЕНИЯ — ДВА РАЗНЫХ ТЕКСТА. Раньше в обоих стояла одна
+							 * подсказка про «эту запись», и когда записи нет, она говорила о том,
+							 * чего не существует: «используется администратор агента» и тут же
+							 * «берёт эту запись, если тот не подошёл». Пустой вкладке нужно сказать,
+							 * кем агент входит сейчас и зачем вообще заполнять поля.
+							 */
 							text: isSet
 								? `${translate("onecCredsHint")} ${stored?.hasPassword ? "" : translate("onecCredsNoPassword")}`.trim()
-								: `${translate("onecCredsNotSet")}. ${translate("onecCredsHint")}`,
+								: `${translate("onecCredsNotSet")}. ${translate("onecCredsNotSetHint")}`,
 						},
 					]} />
 				</GroupCol>

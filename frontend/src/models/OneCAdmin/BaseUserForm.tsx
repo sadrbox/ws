@@ -492,9 +492,29 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									<QueryError error={occurrences.error ?? baseUsers.error} />
 									<Notice items={[
 										...(renameTo ? [{ type: "warning" as const, text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }] : []),
-										...(busy ? [{ type: "info" as const, text: `${translate("onecObjectBusy")}: ${busy.title} — ${busy.target}` }] : []),
+										/* Название операции и объект — в кавычках и скобках: цепочка из трёх
+										   тире («заблокирована: Изменить пользователя — Иванов — база»)
+										   читалась как одна фраза, где не видно, что чем является. */
+										/*
+										 * Пока идёт операция по объекту, форма только читается: писать
+										 * поверх значений, которые прямо сейчас меняются в 1С, значило бы
+										 * отправить команду по данным, которых уже нет. Но если операция
+										 * идёт подозрительно долго, человек должен знать, что запись можно
+										 * снять, — иначе форма заперта навсегда (живой случай: команда
+										 * выполнена, а панель об этом не узнала).
+										 */
+										...(busy ? [{
+											type: "info" as const,
+											text: `${translate("onecObjectBusy")} «${busy.title}» (${busy.target}). `
+												+ (Date.now() - busy.startedAt > 5 * 60_000
+													? translate("onecObjectBusyStuck")
+													: translate("onecObjectBusyWait")),
+										}] : []),
 										...(!baseKey ? [{ type: "info" as const, text: translate("onecPickBaseInHeader") }] : []),
-										...(changedCount > 0 ? [{ type: "info" as const, text: `${translate("onecUnsavedChanges")}: ${changedCount}` }] : []),
+										/* «Не записано изменений: 1» читалось наоборот — как «изменений нет».
+										   Речь о правках, которые ещё не ушли в базу, и о том, чем их туда
+										   отправить, — поэтому счёт и указание на кнопку. */
+										...(changedCount > 0 ? [{ type: "info" as const, text: `${translate("onecUnsavedChanges")}: ${changedCount}. ${translate("onecUnsavedChangesHint")}` }] : []),
 									]} />
 								</GroupCol>
 							</div>
