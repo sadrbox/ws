@@ -2,8 +2,8 @@ import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import Notice from "src/components/Notice";
 import {
-	APP_SCOPE, NoticeScope, clearNoticeHistory, clearScope, getMessages, reportNotices,
-	useScopedNotices,
+	APP_SCOPE, NoticeScope, addMessage, clearNoticeHistory, clearScope, dismissMessage,
+	getMessages, isClearable, reportNotices, useScopedNotices,
 } from "src/components/TechMessages/store";
 import { groupMessages } from "src/components/TechMessages/grouping";
 import { addPaneNotification } from "src/hooks/paneNotifications";
@@ -165,5 +165,58 @@ describe("Технические сообщения — один механиз�
 		});
 		const groups = groupMessages(getMessages());
 		expect(groups[0].active).toBeGreaterThan(0);
+	});
+});
+
+// ── «Очистить историю»: что уходит и что обязано остаться ───────────────────
+//
+// ЖИВОЙ СЛУЧАЙ: кнопку нажимали, а часть сообщений оставалась. Оставались СОБЫТИЯ
+// (addMessage: «нет связи», отказ команды): они заводятся активными и ждут, что их уберут
+// руками, — а убирать их было некому, потому что очистка щадила всё активное. Они копились,
+// и кнопка выглядела сломанной.
+//
+// Правило теперь одно: уходит всё, КРОМЕ сказанного живым источником. Такую запись убирать
+// бессмысленно — экран сообщит её снова на следующем рендере, и «очистить» превратилось бы
+// в мигание списка.
+
+describe("Технические сообщения: очистка списка", () => {
+	beforeEach(() => {
+		act(() => {
+			reportNotices("pane-1", "k", "s", []);
+			reportNotices("pane-2", "k", "s", []);
+			clearNoticeHistory(APP_SCOPE);
+			getMessages().slice().forEach((m) => dismissMessage(m.id));
+		});
+	});
+
+	it("событие уходит, даже если его никто не отменял", () => {
+		act(() => { addMessage({ scope: APP_SCOPE, type: "error", text: "Нет связи", source: "Сеть" }); });
+		expect(getMessages()).toHaveLength(1);
+
+		act(() => { clearNoticeHistory(APP_SCOPE); });
+		expect(getMessages()).toHaveLength(0);
+	});
+
+	it("сказанное живым источником остаётся: удалять его бессмысленно", () => {
+		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
+		act(() => { clearNoticeHistory(APP_SCOPE); });
+		expect(getMessages().map((m) => m.text)).toEqual(["Не заполнен склад"]);
+	});
+
+	it("замолчавший источник уходит вместе с историей", () => {
+		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
+		// Источник замолчал — запись стала историей, а история и есть то, что чистят.
+		act(() => { reportNotices("pane-1", "k", "Реализация", []); });
+		act(() => { clearNoticeHistory(APP_SCOPE); });
+		expect(getMessages()).toHaveLength(0);
+	});
+
+	it("кнопка гаснет ровно тогда, когда чистить нечего", () => {
+		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
+		// В списке только живое — чистить нечего, и кнопка обязана это показать.
+		expect(isClearable(getMessages())).toBe(false);
+
+		act(() => { addMessage({ scope: APP_SCOPE, type: "info", text: "Готово", source: "Команда" }); });
+		expect(isClearable(getMessages())).toBe(true);
 	});
 });

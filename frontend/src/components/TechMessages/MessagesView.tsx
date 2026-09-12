@@ -33,6 +33,7 @@
 import { FC, ReactNode, useCallback, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
+import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDateOnly, getFormatTimeOnly } from "src/utils/datetime";
 import { useAppContext } from "src/app/context";
@@ -109,10 +110,17 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 							{a.label}
 						</Button>
 					))}
-					<Button size="sm" variant="secondary" title={translate("hide")}
+					{/*
+					  * «Скрыть» — кнопкой-иконкой. Подпись у неё одна и та же на каждом
+					  * сообщении, а строк в списке десятки: повторённое сорок раз слово
+					  * отнимает место у того, ради чего в список и смотрят, — у текста.
+					  * Название осталось подсказкой и именем кнопки для чтения с экрана.
+					  */}
+					<IconButton size="sm" title={translate("hide")}
+						aria-label={translate("hide")}
 						onClick={() => dismissMessage(m.id)}>
-						<Icon name="clear" /> {translate("hide")}
-					</Button>
+						<Icon name="clear" />
+					</IconButton>
 				</div>
 			</div>
 		</article>
@@ -153,7 +161,23 @@ export const MessagesView: FC<{
 
 	return (
 		<div className={styles.View}>
-			{toolbar && <div className={styles.ViewTools}>{toolbar}</div>}
+			{/*
+			  * СЧЁТЧИКИ — В КОМАНДНОЙ ПАНЕЛИ, а не подвалом списка. Подвал занимал целую
+			  * строку у самого низа области — там, где и так тесно, — и повторял то, что
+			  * рядом с кнопками читается заодно с ними: сколько всего и сколько сейчас. А
+			  * зависят от этих чисел именно кнопки («Очистить историю» гаснет, когда чистить
+			  * нечего), и стоять им лучше рядом.
+			  */}
+			{(toolbar || !!messages.length) && (
+				<div className={styles.ViewTools}>
+					{toolbar}
+					{!!messages.length && (
+						<span className={styles.ViewCount}>
+							{translate("techMsgActive")}: {active} · {translate("total")}: {messages.length}
+						</span>
+					)}
+				</div>
+			)}
 
 			{/* Как разложен список — команда всего списка, поэтому стоит над ним. */}
 			<div className={styles.ViewGroupBar}>
@@ -207,14 +231,6 @@ export const MessagesView: FC<{
 						);
 					})}
 				</div>
-
-				{/* Подвал — итоги, как <tfoot>: сколько записей всего и сколько из них актуальны. */}
-				{!!messages.length && (
-					<div className={styles.ListFoot}>
-						<span>{translate("techMsgActive")}: {active}</span>
-						<span>{translate("total")}: {messages.length}</span>
-					</div>
-				)}
 			</div>
 		</div>
 	);

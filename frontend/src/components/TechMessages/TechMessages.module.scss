@@ -20,7 +20,7 @@
 	min-height: 0;
 	gap: 6px;
 	padding: 6px;
-	border-left: 1px solid $color34;
+	// border-left: 1px solid $color34;
 	// background: var(--sv-color60);
 
 	/*
@@ -37,6 +37,17 @@
 		border-left: none;
 		border-top: 1px solid $color34;
 	}
+}
+
+// Стрелка «свернуть» у раскрытой области: смотрит туда, куда область уедет. Поворот, а не
+// отдельные иконки: это одна и та же стрелка, что и на свёрнутой полосе, только с другого
+// конца движения — и вид у них обязан быть один.
+.CollapseRight svg {
+	transform: rotate(-90deg);
+}
+
+.CollapseDown svg {
+	transform: none;
 }
 
 // Свёрнутая полоса: кнопка раскрытия, счётчик актуальных и вертикальная подпись.
@@ -157,6 +168,16 @@
 	gap: 6px;
 }
 
+// Счётчики — здесь же, справа от кнопок: они про тот самый список, которым эти кнопки
+// распоряжаются. Цифры читают, сравнивая, — моноширинные разряды не пляшут.
+.ViewCount {
+	margin-left: auto;
+	color: $color51;
+	font-size: $fontsize - 1px;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
 // Вторая строка команд — как разложен список. Отделена линией, потому что отвечает не за
 // то же, что первая: там «чьи сообщения», здесь «в каком порядке».
 .ViewGroupBar {
@@ -200,28 +221,6 @@
 	flex: 1 1 auto;
 	display: flex;
 	flex-direction: column;
-}
-
-// Подвал — как <tfoot>: итоги прижаты вправо, подложка шапки, линия сверху.
-.ListFoot {
-	position: sticky;
-	bottom: 0;
-	z-index: 3;
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 12px;
-	min-height: $heightFieldInput;
-	padding: 0 6px;
-	margin-top: auto;
-	background: $color31;
-	border-top: 1px solid $color34;
-	font-weight: 500;
-	font-size: $fontsize;
-	color: $color6;
-	user-select: none;
-	// Цифры в итогах читают, сравнивая: моноширинные разряды не пляшут.
-	font-variant-numeric: tabular-nums;
 }
 
 .Empty {

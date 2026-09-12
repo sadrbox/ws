@@ -29,7 +29,7 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { useAppContext } from "src/app/context";
 import {
-	APP_SCOPE, clearNoticeHistory, setTechMessagesOpen, setTechMessagesPlacement,
+	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
 	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement,
 } from "./store";
 import MessagesView from "./MessagesView";
@@ -109,13 +109,21 @@ export const TechMessages: FC = () => {
 				>
 					<Icon name="dockBottom" />
 				</IconButton>
+				{/*
+				  * СВЕРНУТЬ — НЕ ЗАКРЫТЬ. Крестик означает «убрать совсем», а область никуда
+				  * не девается: она складывается в полосу, из которой её тем же жестом
+				  * достают обратно. Поэтому стрелка — и смотрит она туда, куда область
+				  * уедет: вправо у боковой колонки, вниз у нижней полосы. Та же стрелка на
+				  * свёрнутой полосе смотрит обратно (см. .Rail): одно движение, два конца.
+				  */}
 				<IconButton
 					size="md"
+					className={placement === "bottom" ? styles.CollapseDown : styles.CollapseRight}
 					title={translate("techMessagesClose")}
 					aria-label={translate("techMessagesClose")}
 					onClick={() => setTechMessagesOpen(false)}
 				>
-					<Icon name="close" />
+					<Icon name="caretDown" />
 				</IconButton>
 			</div>
 
@@ -136,8 +144,10 @@ export const TechMessages: FC = () => {
 								onClick={() => toggleAll(true)}>
 								{translate("techMessagesAll")}
 							</Button>
+							{/* Гаснет ровно тогда, когда чистить нечего: остаются только записи
+							    живых источников, а их эта кнопка не трогает (см. isClearable). */}
 							<Button size="sm" variant="secondary"
-								disabled={messages.every((m) => m.active)}
+								disabled={!isClearable(messages)}
 								title={translate("techMessagesHistoryClear")}
 								onClick={() => clearNoticeHistory(scope)}>
 								<Icon name="clear" /> {translate("techMessagesHistoryClear")}

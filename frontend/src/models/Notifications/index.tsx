@@ -15,7 +15,7 @@ import { FC } from "react";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
-import { APP_SCOPE, clearNoticeHistory, useScopedNotices } from "src/components/TechMessages/store";
+import { APP_SCOPE, clearNoticeHistory, isClearable, useScopedNotices } from "src/components/TechMessages/store";
 import MessagesView from "src/components/TechMessages/MessagesView";
 import main from "src/styles/main.module.scss";
 import styles from "./Notifications.module.scss";
@@ -28,7 +28,9 @@ interface NotificationsListProps {
 const NotificationsList: FC<NotificationsListProps> = () => {
 	// Всё приложение: экран открывают именно затем, чтобы увидеть картину целиком.
 	const messages = useScopedNotices(APP_SCOPE);
-	const history = messages.filter((m) => !m.active).length;
+	// Чистить есть что, пока в списке есть хоть одна запись, не сказанная живым источником:
+	// события и завершённое уходят, а то, что экран сообщает прямо сейчас, остаётся.
+	const history = isClearable(messages);
 
 	return (
 		<div className={main.PaneFill}>

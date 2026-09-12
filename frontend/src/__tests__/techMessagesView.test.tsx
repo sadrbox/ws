@@ -75,9 +75,11 @@ describe("Технические сообщения: журнал со шкал�
 		});
 		show();
 		const message = screen.getByText("Сбой").parentElement!;
-		// «Скрыть» — у самого сообщения, а не в панели «по выбранной строке».
+		// «Скрыть» — у самого сообщения, а не в панели «по выбранной строке». Ищем по имени
+		// кнопки, а не по её тексту: подпись повторялась бы в каждой строке и отнимала место
+		// у сообщения, поэтому кнопка стала иконкой — имя осталось в aria-label и подсказке.
 		const hide = Array.from(message.querySelectorAll("button"))
-			.find((b) => /Скрыть/.test(b.textContent ?? ""));
+			.find((b) => /Скрыть/.test(b.getAttribute("aria-label") ?? ""));
 		expect(hide).toBeTruthy();
 
 		fireEvent.click(hide!);
