@@ -506,23 +506,22 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 											</GroupRow>
 											<GroupRow>
 												{/*
-												  * ТРИ ПОЛОЖЕНИЯ, А НЕ ДВА. Текущее значение прочитать неоткуда —
-												  * агент не возвращает его в списке пользователей, — и тумблер
-												  * в положении «включено» врал бы о состоянии 1С. «Не менять»
-												  * — честное значение по умолчанию: поле в команду не попадёт.
+												  * ТУМБЛЕР, НО НЕ ТРОГАЮЩИЙ ТОГО, ЧЕГО НЕ ЗНАЕТ.
+												  *
+												  * Текущее значение прочитать неоткуда: агент не возвращает его в
+												  * списке пользователей. Поэтому внутри поле трёхзначное — `null`
+												  * значит «не трогали», и в команду оно не попадает вовсе. Тумблер
+												  * показывает известное значение, а когда его нет — выключен, и
+												  * подсказка говорит прямо: значение не читается, переключите,
+												  * если нужно записать своё.
 												  */}
-												<FieldSelect name="buf_show" label={translate("onecShowInList")}
-													value={form.showInList === null ? "" : form.showInList ? "1" : "0"}
+												<FieldToggle name="buf_show" label={translate("onecShowInList")}
+													value={form.showInList ?? here?.showInList ?? false}
 													disabled={locked}
-													options={[
-														{ value: "", label: translate("onecKeepAsIs") },
-														{ value: "1", label: translate("yes") },
-														{ value: "0", label: translate("no") },
-													]}
-													onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm((f) => ({
-														...f,
-														showInList: e.target.value === "" ? null : e.target.value === "1",
-													}))} />
+													title={here?.showInList == null && form.showInList === null
+														? translate("onecShowInListUnknown")
+														: undefined}
+													onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
 												<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
 													disabled={locked}
 													onChange={(v) => setForm((f) => ({ ...f, disabled: v }))} />
