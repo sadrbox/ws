@@ -21,6 +21,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { queryClient } from "src/app/queryClient";
 import { cancelBatch, fetchBatches, type BatchProgress } from "src/services/onec/api";
 import { translate } from "src/i18";
+import { noteNotice } from "src/components/TechMessages/store";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
 export type OpKind = "read" | "create" | "update" | "delete";
@@ -185,6 +186,36 @@ const replace = (id: string, patch: (op: Op) => Op) => {
 	emit();
 };
 
+/**
+ * ИТОГ ОПЕРАЦИИ — СОБЫТИЕМ В ЖУРНАЛ, а не только строкой в «Прогрессе».
+ *
+ * ЗАЧЕМ. Пока операция шла, форма сообщала состояние: «идёт операция, дождитесь». Оно
+ * исчезает вместе с операцией — и правильно делает: состояние, которого больше нет, не
+ * оставляет следа. Но тогда от всей работы не остаётся НИЧЕГО: «Прогресс» — отдельный
+ * экран с отдельным списком, а человек смотрит в «Технические сообщения» и видит, что
+ * сообщение о работе пропало, будто её и не было. Отсюда и ощущение противоречия: строка
+ * «Выполнено» в одном месте и молчание в другом.
+ *
+ * Поэтому окончание операции пишется событием: что делали, над чем, чем кончилось и
+ * сколько заняло. Событие остаётся, пока его не уберут, — это и есть ответ на вопрос
+ * «что вообще происходило».
+ */
+function noteOutcome(op: Op): void {
+	const secs = Math.max(0, Math.round(((op.finishedAt ?? Date.now()) - op.startedAt) / 1000));
+	const head = `${op.title}${op.target ? ` — ${op.target}` : ""}`;
+	const failed = op.failed > 0;
+	const tail = [
+		op.total > 1 ? `${op.done - op.failed} / ${op.total}` : "",
+		failed ? `${translate("onecOpFailed")}: ${op.failed}` : "",
+		op.note,
+		secs ? `${secs} ${translate("secShort")}` : "",
+	].filter(Boolean).join(" · ");
+	noteNotice(head, {
+		type: failed ? "error" : "success",
+		text: `${translate(failed ? "onecOpFinishedFailed" : "onecOpFinishedOk")}${tail ? `. ${tail}` : ""}`,
+	});
+}
+
 /** Начать операцию. Возвращает идентификатор — по нему её потом двигают. */
 export function startOp(init: {
 	kind: OpKind; title: string; target: string; total: number;
@@ -228,6 +259,8 @@ export function finishOp(id: string, r: { failed?: number; note?: string } = {})
 	// Операция закончилась — данные в открытых формах устарели. Даже чтение: ответ 1С
 	// оседает в реестре сервиса, и карточка обязана показать то, что только что прочитали.
 	refreshAfterWork();
+	const done = ops.find((o) => o.id === id);
+	if (done) noteOutcome(done);
 }
 
 /**
@@ -243,7 +276,8 @@ export function mergeBatch(p: BatchProgress): void {
 	const running = p.pending > 0;
 	// Переход «шла → закончилась» — единственный момент, когда есть что перечитывать.
 	// На каждом опросе этого делать нельзя: опрос идёт раз в три секунды.
-	if (!running && target.state === "running") refreshAfterWork();
+	const justFinished = !running && target.state === "running";
+	if (justFinished) refreshAfterWork();
 	const failedItem = p.items.find((i) => i.error);
 	replace(target.id, (o) => ({
 		...o,
@@ -257,6 +291,12 @@ export function mergeBatch(p: BatchProgress): void {
 			? `${failedItem.baseKey ?? ""}: ${failedItem.error.message}`.trim()
 			: o.note,
 	}));
+	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к
+	// одному концу не должны оставлять разный след.
+	if (justFinished) {
+		const done = ops.find((o) => o.id === target.id);
+		if (done) noteOutcome(done);
+	}
 }
 
 /**
