@@ -253,7 +253,8 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 									<GroupCol className={main.FormNotice}>
 										<QueryError error={bases.error ?? occurrences.error}
 											noticeKey="element-card" source={isUser ? translate("onecUser") : translate("onecExtension")} />
-										<Notice items={[{ type: "info", text: translate("onecElementCardHint") }]} />
+										{/* Пояснение о работе карточки — на месте: оно не про состояние. */}
+										<Notice inline items={[{ type: "info", text: translate("onecElementCardHint") }]} />
 									</GroupCol>
 								</div>
 							</div>

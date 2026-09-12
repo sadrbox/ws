@@ -197,8 +197,15 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 				</GroupCol>
 
 				<GroupCol className={main.FormNotice}>
+					{/*
+					  * РАЗНОЕ ПО ПРИРОДЕ — И ПОКАЗЫВАЕТСЯ РАЗНО. Первое — пояснение о работе
+					  * экрана: оно верно всегда и никуда не девается, поэтому рисуется на
+					  * месте. Остальные два — про состояние: «выгрузка не заказана» меняется
+					  * переключателем, а план от агента приходит ответом на команду. Это
+					  * сообщения, и их место — в «Технических сообщениях».
+					  */}
+					<Notice inline items={[{ type: "info", text: translate("onecMaintHint") }]} />
 					<Notice items={[
-						{ type: "info", text: translate("onecMaintHint") },
 						...(updateBackup ? [] : [{ type: "warning" as const, text: translate("onecMaintNoBackupWarning") }]),
 						...(report ? [{ type: "info" as const, text: report }] : []),
 					]} />

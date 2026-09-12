@@ -429,7 +429,7 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 								<GroupCol className={main.FormNotice}>
 									{/* Реестр наполняют кластер и агент: править здесь нечего, и это
 									    должно быть сказано, а не додумано по серым полям. */}
-									<Notice items={[{ type: "info", text: translate("onecBaseCardReadonly") }]} />
+									<Notice inline items={[{ type: "info", text: translate("onecBaseCardReadonly") }]} />
 								</GroupCol>
 							</div>
 						</div>

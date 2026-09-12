@@ -232,7 +232,12 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 										    читался как «служебная надпись», хотя это ответ на вопрос
 										    «а что этот агент вообще умеет». */}
 										<QueryError error={agents.error} noticeKey="agent-card" source={translate("onecAgent")} />
-										<Notice items={[{
+										{/* ПОЯСНЕНИЕ, А НЕ СООБЩЕНИЕ: оно описывает объект на экране и верно,
+										    пока карточка открыта. В области «Технических сообщений» такие
+										    строки висели бы вечно и не убирались очисткой — она щадит то,
+										    что источник продолжает сообщать. Рисуем на месте: колонка под
+										    пояснения в форме и так отведена, разметка не двигается. */}
+										<Notice inline items={[{
 											type: "info",
 											text: `${translate("onecAgentCapabilities")}: ${agent?.capabilities.join(", ") || "—"}`,
 										}]} />
@@ -273,7 +278,8 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											)}
 									</GroupCol>
 									<GroupCol className={main.FormNotice}>
-										<Notice items={[{ type: "info", text: translate("onecSettingsPublicHostHint") }]} />
+										{/* Пояснение к полям — на месте: это текст интерфейса, а не событие. */}
+										<Notice inline items={[{ type: "info", text: translate("onecSettingsPublicHostHint") }]} />
 									</GroupCol>
 								</div>
 							</div>

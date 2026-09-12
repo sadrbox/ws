@@ -100,7 +100,7 @@ export const AgentsTab: FC = () => {
 			{/* Остаток общей квоты обращений к кластеру: когда он на исходе, отказ
 			    «слишком часто» приходит тому, кто нажал последним, — а причина общая. */}
 			{quota.low && (
-				<Notice wide items={[{
+				<Notice items={[{
 					type: "warning",
 					text: `${translate("onecClusterQuotaLow")}: ${quota.left} / ${quota.max}`,
 				}]} />
@@ -114,7 +114,7 @@ export const AgentsTab: FC = () => {
 				// Два процесса под одним токеном разбирают одну очередь: команды начинают
 				// отказывать через раз — это не предупреждение «на будущее», а поломка сейчас.
 				return (
-					<Notice key={a.id} wide items={[{
+					<Notice key={a.id} items={[{
 						type: "attention",
 						text: `${translate("onecAgentDoubled")}: ${a.name || a.id.slice(0, 8)} — ${live.length}`
 							+ (addrs.length > 1 ? ` (${translate("onecAgentFromHosts")}: ${addrs.join(", ")})` : "")

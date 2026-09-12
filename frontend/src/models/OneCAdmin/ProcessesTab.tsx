@@ -127,7 +127,7 @@ export const ProcessesTab: FC = () => {
 
 			<QueryError error={procs.error} noticeKey="agent-processes" source={translate("onecTabProcesses")} />
 			{orphans > 0 && (
-				<Notice wide items={[{ type: "warning", text: `${translate("onecProcOrphanHint")} (${orphans})` }]} />
+				<Notice items={[{ type: "warning", text: `${translate("onecProcOrphanHint")} (${orphans})` }]} />
 			)}
 
 			{confirm && (
