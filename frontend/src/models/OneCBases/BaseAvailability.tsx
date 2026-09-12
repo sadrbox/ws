@@ -26,6 +26,7 @@ import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { dropBaseRegistration, setBaseHidden } from "src/services/onec/api";
 import { unreachableReason } from "src/models/OneCAdmin/shared";
 import { withOp } from "src/models/OneCAdmin/progress";
@@ -51,7 +52,7 @@ export const BaseAvailability: FC<{
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+		onError: (e) => reportError(e, { source: translate("onecBase") }),
 	});
 
 	/**

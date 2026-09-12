@@ -1,0 +1,104 @@
+/**
+ * КУДА ПОКАЗАТЬ ОШИБКУ — одно решение на всё приложение.
+ *
+ * ЗАЧЕМ. Правило «Notice vs Toast» было памяткой, а исполнялось руками: семнадцать
+ * обработчиков `onError` звали `showToast`, и НИ ОДИН не различал системный сбой и отказ по
+ * существу. «Сначала отключите агента» (409) мигало и исчезало так же, как обрыв сети, — то
+ * есть ответ на вопрос человека пропадал вместе с ответом машины о своём нездоровье. А
+ * `isSystemError` жил двумя копиями в двух моделях и применялся только в них.
+ *
+ * ПРАВИЛО. Канал выбирается по вопросу, на который отвечает (docs/TASKS_MESSAGING):
+ *
+ *   ОТКАЗ ПО СУЩЕСТВУ (400, 409, 422, 423 …) — ответ ЭТОЙ форме на ЭТО действие:
+ *      «период закрыт», «серий меньше количества», «сначала отключите агента». Человек
+ *      смотрит на форму, и ответ обязан остаться на экране, а не мигнуть на четыре секунды.
+ *      → сообщение формы (`<Notice />`, показывает область «Технические сообщения»).
+ *
+ *   СИСТЕМНЫЙ СБОЙ (нет сети, 5xx, 403, таймаут) — про приложение, а не про данные:
+ *      → тост «сейчас» И запись в журнал «что происходило». Раньше был только тост: через
+ *      четыре секунды от отказа не оставалось ничего, и вопрос «почему полчаса назад ничего
+ *      не сохранялось» был неразрешим.
+ *
+ * ЧЕГО ЗДЕСЬ НЕТ. 401 не наш случай: сессию чистит перехватчик клиента, и показывать поверх
+ * этого сообщение о «неудаче» значит спорить с экраном входа, который уже открылся.
+ */
+import { showToast } from "src/components/UIToast";
+import { noteNotice } from "src/components/TechMessages/store";
+import { translate } from "src/i18";
+import type { NoticeItem } from "src/components/Notice";
+
+/** Разбор любой ошибки до двух фактов: статус и текст для человека. */
+export function errorStatus(e: unknown): number | undefined {
+	if (!e || typeof e !== "object") return undefined;
+	const withStatus = e as { status?: unknown; statusCode?: unknown; response?: { status?: unknown } };
+	for (const v of [withStatus.status, withStatus.statusCode, withStatus.response?.status]) {
+		if (typeof v === "number" && Number.isFinite(v)) return v;
+	}
+	return undefined;
+}
+
+export function errorText(e: unknown, fallback = translate("unknownError")): string {
+	if (typeof e === "string" && e.trim()) return e;
+	if (e && typeof e === "object") {
+		const o = e as { response?: { data?: { message?: unknown } }; message?: unknown };
+		const server = o.response?.data?.message;
+		if (typeof server === "string" && server.trim()) return server;
+		if (typeof o.message === "string" && o.message.trim()) return o.message;
+	}
+	return fallback;
+}
+
+/**
+ * СБОЙ ЭТО ИЛИ ОТКАЗ.
+ *
+ * Системное — всё, что не про данные: связи нет (статуса нет вовсе), сервер сломался (5xx),
+ * прав не дали (403), слишком часто (429), не дождались (408). Остальные 4xx — ответ по
+ * существу: их придумала предметная область, и адресованы они форме.
+ *
+ * 403 намеренно СИСТЕМНОЕ, хотя формально это 4xx: «недостаточно прав» не исправляется
+ * правкой полей — форму менять бессмысленно, идти нужно к администратору.
+ */
+export const isSystemError = (status?: number): boolean =>
+	!status || status >= 500 || status === 403 || status === 429 || status === 408;
+
+export interface RouteErrorOptions {
+	/** Чем подписать запись журнала: «Реализация № 12», «Базы 1С». */
+	source?: string;
+	/** Область записи журнала: по умолчанию общая (APP_SCOPE в store). */
+	scope?: string;
+	/** Что показать, если у ошибки нет текста. */
+	fallback?: string;
+	/** Тип сообщения формы: по умолчанию «ошибка». */
+	type?: NoticeItem["type"];
+}
+
+/**
+ * Показать ошибку там, где ей место. Возвращает сообщения ДЛЯ ФОРМЫ:
+ * пустой массив — значит показывать форме нечего, всё уже сказано тостом и журналом.
+ *
+ * Так вызывающий не решает, какой канал выбрать, — он лишь кладёт возвращённое в свой
+ * `<Notice />`. Забыть про отказ по существу становится нельзя: он приходит возвратом.
+ */
+export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem[] {
+	const status = errorStatus(e);
+	const text = errorText(e, opts.fallback);
+
+	if (!isSystemError(status)) return [{ type: opts.type ?? "error", text }];
+
+	showToast(text, "error");
+	// След в журнале: тост живёт четыре секунды, а вопрос «что это было» возникает позже.
+	noteNotice(opts.source ?? translate("system"), { type: "error", text }, opts.scope);
+	return [];
+}
+
+/**
+ * Тот же разбор для мест, где формы нет вовсе (кнопка в тулбаре, фоновое действие).
+ * Отказ по существу тоже попадает в журнал: показать его негде, а потерять нельзя.
+ */
+export function reportError(e: unknown, opts: RouteErrorOptions = {}): void {
+	const items = routeError(e, opts);
+	for (const it of items) {
+		showToast(it.text, "error");
+		noteNotice(opts.source ?? translate("system"), { type: it.type, text: it.text }, opts.scope);
+	}
+}

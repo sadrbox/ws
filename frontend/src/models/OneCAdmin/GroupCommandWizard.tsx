@@ -31,6 +31,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { FormArea, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -196,7 +197,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 			if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate(spec.title) }),
 	});
 
 	if (!spec) {

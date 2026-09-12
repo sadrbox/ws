@@ -32,22 +32,39 @@ export interface NoticeItem {
   text: string;
 }
 
-interface NoticeProps {
+/**
+ * ОФОРМЛЕНИЕ ЕСТЬ ТОЛЬКО У `inline`, и это выражено ТИПОМ, а не памяткой.
+ *
+ * `wide` и `className` управляют разметкой на месте вызова; у сообщаемого в общую область
+ * `<Notice />` рисовать нечего — ширину и вид задаёт она сама. Пока это было соглашением,
+ * пропы молча ничего не делали: три таких места нашлись в панели администрирования и
+ * выглядели как настройка, которая «почему-то не работает».
+ */
+type NoticeCommon = {
   items?: NoticeItem[];
-  className?: string;
-  /**
-   * Во всю ширину родителя вместо колонки 300px. Действует только при `inline`:
-   * в общей области ширину задаёт она сама.
-   */
-  wide?: boolean;
+  /** Чем подписать сообщение, если окружение не даёт подписи (пейна нет). */
+  source?: string;
+};
+
+type NoticeReported = NoticeCommon & {
+  /** Сообщается в область «Технические сообщения»; оформления на месте нет. */
+  inline?: false;
+  wide?: never;
+  className?: never;
+};
+
+type NoticeInline = NoticeCommon & {
   /**
    * Рисовать ЗДЕСЬ, а не сообщать в общую область. Только для случаев, где сообщение —
    * само содержимое места: тело модального окна подтверждения.
    */
-  inline?: boolean;
-  /** Чем подписать сообщение, если окружение не даёт подписи (пейна нет). */
-  source?: string;
-}
+  inline: true;
+  /** Во всю ширину родителя вместо колонки 300px. */
+  wide?: boolean;
+  className?: string;
+};
+
+type NoticeProps = NoticeReported | NoticeInline;
 
 const ICON: Record<NoticeType, string> = {
   info: "i",
@@ -74,7 +91,8 @@ export const NoticeItems: FC<{ items: NoticeItem[]; className?: string; wide?: b
     </div>
   );
 
-export const Notice: FC<NoticeProps> = ({ items, className, wide, inline, source }) => {
+export const Notice: FC<NoticeProps> = ({ items, inline, source, ...rest }) => {
+  const { wide, className } = rest as { wide?: boolean; className?: string };
   // Хук зовётся безусловно и в обоих режимах: правила хуков не терпят условного вызова.
   // При `inline` сообщаем пустой список — иначе одно и то же было бы видно дважды.
   useReportNotice(inline ? [] : items, source);

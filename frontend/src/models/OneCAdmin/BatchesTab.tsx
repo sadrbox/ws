@@ -35,6 +35,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -122,7 +123,7 @@ export const BatchesTab: FC = () => {
 			void after();
 			showToast(`${translate("onecBatchQueued")}: ${d.queued}/${d.total}`, d.queued ? "success" : "warning");
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabBatches") }),
 	});
 
 	/**
@@ -143,7 +144,7 @@ export const BatchesTab: FC = () => {
 				: translate("onecOpCancelTooLate"),
 				r.canceled ? "success" : "warning");
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabBatches") }),
 	});
 
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(batchColumns(), "OneCAdmin_batches"));

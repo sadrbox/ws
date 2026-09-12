@@ -26,6 +26,7 @@ import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { runBatch, type BatchType } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { attachBatch, finishOp, startOp, type OpKind } from "./progress";
@@ -82,13 +83,13 @@ export const BaseUserCommands: FC<{
 			showInList,
 		}),
 		onSuccess: done,
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecUser") }),
 	});
 
 	const remove = useMutation({
 		mutationFn: () => send("IB_DELETE_USER", "delete", translate("onecUserDelete"), activeUser, { name: activeUser }),
 		onSuccess: done,
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecUser") }),
 	});
 
 	const busy = create.isPending || remove.isPending;

@@ -19,7 +19,7 @@ import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
-import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -62,7 +62,7 @@ export const AgentsTab: FC = () => {
 	const create = useMutation({
 		mutationFn: () => createAgent(name.trim()),
 		onSuccess: (d) => { setDialog(null); setIssued({ token: d.token, name: d.agent.name || name }); void refresh(); },
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabAgents") }),
 	});
 
 	const rowsRaw = useMemo(() => (agents.data?.items ?? []).map((a, i) => ({

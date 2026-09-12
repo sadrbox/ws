@@ -28,7 +28,8 @@ import { getFormatDate } from "src/utils/datetime";
 import { runBatch, type BatchType } from "src/services/onec/api";
 import { publishLabel, usePublishAddressHint } from "src/models/OneCAdmin/shared";
 import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
-import { noteNotice, useNoticeScope } from "src/components/TechMessages/store";
+import { useNoticeScope } from "src/components/TechMessages/store";
+import { reportError } from "src/services/errors/route";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
 
 type Job = "publish" | "unpublish";
@@ -86,9 +87,9 @@ export const BasePublication: FC<{
 		},
 		onError: (e: unknown) => {
 			setConfirm(null);
-			const text = e instanceof Error ? e.message : translate("unknownError");
-			noteNotice(translate("onecPublication"), { type: "error", text }, scope);
-			showToast(text, "error");
+			// Один канал решает один раз: дословный дубль «тост + запись» человек читал
+			// дважды, а решение о канале принимает routeError.
+			reportError(e, { source: translate("onecPublication"), scope });
 		},
 	});
 

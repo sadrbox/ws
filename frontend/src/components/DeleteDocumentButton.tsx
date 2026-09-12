@@ -11,8 +11,10 @@ import { translate } from "src/i18";
 import { useQueryClient } from "@tanstack/react-query";
 import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app/context";
-import apiClient, { type RequestError } from "src/services/api/client";
+import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
+import { noteNotice } from "src/components/TechMessages/store";
+import { errorStatus, errorText, reportError } from "src/services/errors/route";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
 import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";
 
@@ -42,17 +44,26 @@ const DeleteDocumentButton: FC<{
       }
       // Обновляем открытый *List (если есть) — ключ react-query = [endpoint].
       void queryClient.invalidateQueries({ queryKey: [endpoint] });
-      showToast("Документ удалён", "success", 3000);
+      showToast(translate("documentDeleted"), "success", 3000);
       onDeleted?.();
       // Закрываем форму удалённого документа (force — сохранять нечего).
       if (paneId) await requestClose(paneId, { force: true });
     } catch (err: unknown) {
-      const data = (err as RequestError)?.response?.data;
-      const msg =
-        (err as RequestError)?.response?.status === 409 && typeof data?.message === "string"
-          ? data.message
-          : data?.message || "Не удалось удалить документ";
-      showToast(msg, "error", 8000);
+      /*
+       * ДЛИННОЕ — В ЖУРНАЛ, КОРОТКОЕ — ТОСТОМ. Отказ 409 перечисляет мешающие ссылки: за
+       * восемь секунд такой список не прочитать, а другого следа он не оставлял. Теперь
+       * подробности остаются в «Технических сообщениях», а тост говорит главное — что
+       * удалить нельзя и сколько ссылок мешает.
+       */
+      const status = errorStatus(err);
+      const text = errorText(err, translate("deleteFailed"));
+      if (status === 409) {
+        noteNotice(translate("delete"), { type: "error", text });
+        const refs = text.split(/[\n,;]/).filter((x) => x.trim()).length;
+        showToast(refs > 1 ? `${translate("deleteBlockedShort")}: ${refs}` : text, "error");
+      } else {
+        reportError(err, { source: translate("delete"), fallback: translate("deleteFailed") });
+      }
     }
   };
 

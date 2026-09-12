@@ -216,11 +216,13 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
 
   // ── Заполнить: парсинг файла в таблицу предпросмотра ──
   const handleFill = async () => {
-    if (!file) { showToast("Сначала выберите файл (.xlsx, .xls)", "warning"); return; }
+    // Кнопка «Заполнить» без файла выключена (см. disabled) — проверка осталась защитой
+    // кода: тост отвечал тому, кто нажать и не мог.
+    if (!file) return;
     setIsLoading(true);
     try {
       const raw = readWorkbookAoa(await file.arrayBuffer());
-      if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
+      if (!raw || raw.length === 0) { showToast(translate("fileEmpty"), "warning"); return; }
       const header = raw[0].map((h) => asText(h).trim());
       const headerL = header.map((h) => h.toLowerCase());
       const findIdx = (names: string[]) => {
@@ -256,7 +258,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         })
         .filter((r) => r.sku || r.name || r.barcodes || r.prices.length);
 
-      if (rows.length === 0) { showToast("В файле нет строк с данными", "warning"); return; }
+      if (rows.length === 0) { showToast(translate("fileNoRows"), "warning"); return; }
 
       // Сопоставление с существующей номенклатурой (#6): ШК → артикул+бренд → наименование.
       try {
@@ -278,7 +280,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       );
     } catch (err) {
       console.error(err);
-      showToast("Ошибка чтения файла", "error");
+      showToast(translate("fileReadError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -299,7 +301,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         barcodes: splitBarcodes(r.barcodes),
         prices: r.prices ?? [],
       }));
-    if (rows.length === 0) { showToast("Нет строк для загрузки", "warning"); return; }
+    if (rows.length === 0) { showToast(translate("nothingToUpload"), "warning"); return; }
     const noName = rows.filter((r) => !r.name && !r.productUuid).length;
     const msg = noName > 0
       ? `Загрузить ${rows.length} строк? ${noName} без наименования будут пропущены (если товар не найден).`
@@ -321,7 +323,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       setFillVersion((v) => v + 1);
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при импорте", "error");
+      showToast(translate("importError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -333,7 +335,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     try {
       const resp = await apiClient.get<{ items?: CatalogProduct[] }>(`/${ENDPOINT}/export-full`);
       const items = resp.data?.items ?? [];
-      if (items.length === 0) { showToast("Номенклатуры нет", "info"); return; }
+      if (items.length === 0) { showToast(translate("productsNone"), "info"); return; }
       const typeNames: string[] = [];
       const seen = new Set<string>();
       for (const p of items) for (const pp of p.productPrices ?? []) {
@@ -355,7 +357,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       showToast(`Выгружено позиций: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при выгрузке", "error");
+      showToast(translate("exportError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -374,7 +376,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       downloadAoa([header, sample], { sheetName: "template", fileName: "products_template.xlsx" });
     } catch (err) {
       console.error(err);
-      showToast("Не удалось сформировать шаблон", "error");
+      showToast(translate("templateError"), "error");
     }
   };
 
@@ -396,7 +398,8 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         <FieldFile key={`file-${fillVersion}`} name="pie_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
           buttonLabel="Выбрать файл" loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }} />
         <FieldDate label={translate("priceDate")} name="pie_priceDate" value={priceDate} onChange={(e) => setPriceDate(e.target.value)} disabled={isLoading} />
-        <Button variant="primary" onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
+        <Button variant="primary" onClick={handleFill} disabled={isLoading || !file}
+          title={file ? undefined : translate("validationNeedFile")}>{translate("fill")}</Button>
         <Button onClick={handleUpload} disabled={isLoading || !canWrite || !parsed}>{translate("upload")}</Button>
         <Button onClick={handleTemplate} type="button">{translate("downloadTemplate")}</Button>
         <Button onClick={handleExport} type="button" disabled={isLoading}>{translate("downloadBackup") || "Выгрузить номенклатуру"}</Button>

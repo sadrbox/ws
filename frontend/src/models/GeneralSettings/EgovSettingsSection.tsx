@@ -5,6 +5,7 @@ import { FC, useEffect, useState, useCallback } from "react";
 import { translate } from "src/i18";
 import { getCurrentUser } from "src/services/auth";
 import { showToast } from "src/components/UIToast";
+import { routeError } from "src/services/errors/route";
 import { getEgovConfig, saveEgovConfig, fetchEgovLegalEntity } from "src/services/egov/api";
 import styles from "./GeneralSettings.module.scss";
 
@@ -33,13 +34,16 @@ const EgovSettingsSection: FC = () => {
 			if (apiKey) { setHasApiKey(true); setApiKey(""); }
 			showToast(translate("saved"), "success");
 		} catch (e) {
-			const a = e as { response?: { data?: { message?: string } }; message?: string };
-			showToast(a?.response?.data?.message || "eGov", "error");
+			// Системный сбой — тостом и в журнал; отказ по существу останется здесь.
+			const own = routeError(e, { source: "eGov", fallback: "eGov" });
+			if (own.length) setResult({ err: true, text: own[0].text });
 		} finally { setBusy(false); }
 	}, [baseUrl, dataset, version, apiKey]);
 
 	const test = useCallback(async () => {
-		if (!/^\d{12}$/.test(testBin)) { showToast(translate("egovNeedBin"), "error"); return; }
+		// Ответ про поле — рядом с полем: у раздела есть своя область результата, и
+		// всплывающее сообщение уводило бы ответ туда, куда человек сейчас не смотрит.
+		if (!/^\d{12}$/.test(testBin)) { setResult({ err: true, text: translate("egovNeedBin") }); return; }
 		setBusy(true); setResult(null);
 		try {
 			const { data } = await fetchEgovLegalEntity(testBin);

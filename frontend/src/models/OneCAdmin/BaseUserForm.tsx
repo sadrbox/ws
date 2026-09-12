@@ -26,6 +26,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -352,7 +353,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
 			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecUser") }),
 	});
 
 	/**

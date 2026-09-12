@@ -16,6 +16,7 @@ import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -70,7 +71,7 @@ export const ConnectionsTab: FC = () => {
 			setPicked([]);
 			void connections.refetch();
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabConnections") }),
 	});
 
 	return (

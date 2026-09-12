@@ -32,6 +32,7 @@ import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { updateServer, type OnecServer } from "src/services/onec/api";
 
 /** Как будет выглядеть ссылка с этим именем — показываем до сохранения. */
@@ -78,7 +79,7 @@ export const ServerParams: FC<{ server: OnecServer; showName?: boolean }> = ({ s
 			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
 			showToast(translate("saved"), "success");
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecServer") }),
 	});
 
 	const dirty = (showName && name !== server.name)

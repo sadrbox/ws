@@ -26,6 +26,7 @@ import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { asText } from "src/utils/asText";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
@@ -67,7 +68,7 @@ export const ProcessesTab: FC = () => {
 	const live = useMutation({
 		mutationFn: () => fetchAgentProcesses(true),
 		onSuccess: () => void procs.refetch(),
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabProcesses") }),
 	});
 
 	const kill = useMutation({

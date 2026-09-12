@@ -5,6 +5,7 @@
 import { FC, useState, useCallback } from "react";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { fetchEgovLegalEntity, applyEgov } from "src/services/egov/api";
 import styles from "src/components/Toolbar/Toolbar.module.scss";
 
@@ -24,7 +25,10 @@ const EgovFillButton: FC<Props> = ({ ownerType, bin, uuid, disabled, onFillName,
 	const valid = !!bin && /^\d{12}$/.test(bin);
 
 	const run = useCallback(async () => {
-		if (!valid || !bin) { showToast(translate("egovNeedBin"), "error"); return; }
+		// Кнопка выключена, пока БИН не разобран (см. disabled ниже), поэтому сюда попасть
+		// нельзя: проверка осталась защитой кода, а не сообщением человеку. Тост «нужен БИН»
+		// отвечал тому, кто нажать и не мог, — причина названа подсказкой на самой кнопке.
+		if (!valid || !bin) return;
 		setBusy(true);
 		try {
 			if (uuid) {
@@ -38,14 +42,13 @@ const EgovFillButton: FC<Props> = ({ ownerType, bin, uuid, disabled, onFillName,
 				showToast(`${translate("egovFetched")}${data.status ? ` · ${data.status}` : ""}. ${translate("egovSaveForContacts")}`, "success", 6000);
 			}
 		} catch (e) {
-			const a = e as { response?: { data?: { message?: string } }; message?: string };
-			showToast(a?.response?.data?.message || a?.message || "eGov", "error", 6000);
+			reportError(e, { source: "eGov", fallback: "eGov" });
 		} finally { setBusy(false); }
 	}, [valid, bin, uuid, ownerType, onFillName, onReload]);
 
 	return (
 		<button type="button" className={styles.ActionsButton} disabled={busy || disabled || !valid}
-			title={translate("egovFillHint")} onClick={() => void run()}>
+			title={valid ? translate("egovFillHint") : translate("egovNeedBin")} onClick={() => void run()}>
 			{busy ? "…" : `⭳ ${translate("egovFill")}`}
 		</button>
 	);

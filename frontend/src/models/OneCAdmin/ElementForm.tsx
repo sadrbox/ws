@@ -26,8 +26,9 @@ import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
-import Notice from "src/components/Notice";
+import Notice, { type NoticeItem } from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -166,13 +167,26 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 			void qc.invalidateQueries({ queryKey: ["onec"] });
 			setDialog(null);
 		},
-		onError: (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: isUser ? translate("onecUser") : translate("onecExtension") }),
 	});
 
+	/**
+	 * Чего не хватает для применения — говорим В ОКНЕ, а не тостом: человек смотрит именно
+	 * сюда, и здесь же лежит поле, которого не хватает. Тост уводил ответ в угол экрана и
+	 * исчезал раньше, чем к полю возвращались.
+	 */
+	const missing: NoticeItem[] = [
+		...(picked.length ? [] : [{ type: "attention" as const, text: translate("onecBatchPickFirst") }]),
+		...(dialog !== "delete" && !name.trim()
+			? [{ type: "attention" as const, text: translate(isUser ? "onecUserName" : "onecExtName") }]
+			: []),
+		...(dialog === "create" && !isUser && !file
+			? [{ type: "attention" as const, text: translate("onecExtFileRequired") }]
+			: []),
+	];
+
 	const apply = () => {
-		if (!picked.length) return;
-		if (dialog !== "delete" && !name.trim()) return;
-		if (dialog === "create" && !isUser && !file) { showToast(translate("onecExtFileRequired"), "error"); return; }
+		if (missing.length) return;
 		batch.mutate();
 	};
 
@@ -383,6 +397,8 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 								: dialog === "update" ? translate("onecUserUpdateWarning")
 									: (isUser ? translate("onecUserCreateWarning") : translate("onecExtInstallWarning"))}
 						</div>
+						{/* В окне сообщение — часть его содержимого, поэтому inline. */}
+						<Notice inline wide items={missing} />
 					</div>
 				</Modal>
 			)}

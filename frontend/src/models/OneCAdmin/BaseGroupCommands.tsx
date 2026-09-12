@@ -16,6 +16,7 @@ import { translate } from "src/i18";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import type { IconName } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
 import { refreshPublications } from "src/services/onec/api";
@@ -90,7 +91,7 @@ export const BaseGroupCommands: FC<{
 			});
 			showToast(translate("onecPublicationsNoneFound"), "warning");
 		},
-		onError: (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabBases") }),
 	});
 
 	/** Подпись операции в списке группы — та же, что была на отдельной кнопке. */

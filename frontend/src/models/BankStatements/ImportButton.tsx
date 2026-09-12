@@ -2,6 +2,8 @@ import { FC, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "src/components/Button";
 import Modal from "src/components/Modal";
+import Notice, { type NoticeItem } from "src/components/Notice";
+import { routeError } from "src/services/errors/route";
 import LookupField from "src/components/Field/LookupField";
 import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
@@ -35,18 +37,29 @@ const BankStatementImportButton: FC = () => {
   const [accName, setAccName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
 
   const openModal = useCallback(() => {
     // Предзаполняем организацией по умолчанию (счёт пользователь выбирает сам).
     setOrgUuid(defaultOrg.organizationUuid ?? "");
     setOrgName(defaultOrg.organizationName ?? "");
-    setAccUuid(""); setAccName(""); setFile(null);
+    setAccUuid(""); setAccName(""); setFile(null); setNotices([]);
     setOpen(true);
   }, [defaultOrg.organizationUuid, defaultOrg.organizationName]);
 
   const doImport = useCallback(async () => {
-    if (!accUuid) { showToast(translate("bankImportNeedAccount"), "warning"); return; }
-    if (!file) { showToast(translate("bankImportNeedFile"), "warning"); return; }
+    /*
+     * ЧЕГО НЕ ХВАТАЕТ — ГОВОРИМ В ОКНЕ, а не тостом. Человек смотрит в это окно, здесь же
+     * и поля, которых не хватает; всплывающее сообщение уводило ответ туда, куда он в этот
+     * момент не смотрит, и исчезало раньше, чем он успевал вернуться к полю.
+     */
+    const missing: NoticeItem[] = [
+      ...(accUuid ? [] : [{ type: "attention" as const, text: translate("bankImportNeedAccount") }]),
+      ...(file ? [] : [{ type: "attention" as const, text: translate("bankImportNeedFile") }]),
+    ];
+    setNotices(missing);
+    // Проверка выше уже сказала, чего не хватает; здесь сужаем тип — дальше файл точно есть.
+    if (missing.length || !file) return;
     setBusy(true);
     try {
       const text = await file.text();
@@ -61,7 +74,8 @@ const BankStatementImportButton: FC = () => {
       await qc.invalidateQueries({ queryKey: ["bank-statements"] });
       setOpen(false);
     } catch (e) {
-      showToast((e as { message?: string })?.message || translate("bankImportError"), "error");
+      // Отказ по существу остаётся в окне, системный сбой уходит тостом и в журнал.
+      setNotices(routeError(e, { source: translate("bankImport"), fallback: translate("bankImportError") }));
     } finally {
       setBusy(false);
     }
@@ -101,6 +115,8 @@ const BankStatementImportButton: FC = () => {
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </label>
             <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{translate("bankImportHint")}</div>
+            {/* В окне сообщение — часть содержимого окна, поэтому inline. */}
+            <Notice inline wide items={notices} />
           </div>
         </Modal>
       )}

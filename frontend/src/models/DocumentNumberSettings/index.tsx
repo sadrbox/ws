@@ -7,8 +7,9 @@
 import { FC, useState, useMemo, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { api, type RequestError } from "src/services/api/client";
+import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
+import { routeError } from "src/services/errors/route";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import FieldActionButton from "src/components/Field/FieldActionButton";
@@ -29,8 +30,6 @@ interface Row {
   isOverridden: boolean;
 }
 
-/** 5xx / нет сети / нет прав — это не про поля формы: такие сбои идут в тост. */
-const isSystemError = (status?: number) => !status || status >= 500 || status === 403;
 
 const QKEY = (org?: string) => ["document-number-settings", org ?? "__global__"];
 
@@ -147,12 +146,9 @@ const DocumentNumberSettings: FC = () => {
       showToast(translate("saved"), "success");
       void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
     } catch (e: unknown) {
-      const status = (e as RequestError)?.response?.status;
-      const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
-      // Ошибка ДАННЫХ (префикс занят, номер конфликтует) → <Notice /> рядом с полями,
-      // которые её и вызвали. Системный сбой → <UIToast />.
-      if (isSystemError(status)) showToast(msg, "error", 7000);
-      else setNotices([{ type: "error", text: msg }]);
+      // Куда показывать — решает routeError: отказ по существу возвращается сюда
+      // сообщением формы, системный сбой уходит тостом и записью в журнал.
+      setNotices(routeError(e, { source: translate("documentNumbering"), fallback: translate("numberingSaveError") }));
     } finally {
       setBusy(false);
     }
@@ -188,10 +184,9 @@ const DocumentNumberSettings: FC = () => {
       void qc.invalidateQueries({ queryKey: QKEY(orgKey) });
       showToast(translate("resetDone"), "success");
     } catch (e: unknown) {
-      const status = (e as RequestError)?.response?.status;
-      const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
-      if (isSystemError(status)) showToast(msg, "error", 7000);
-      else setNotices([{ type: "error", text: msg }]);
+      // Куда показывать — решает routeError: отказ по существу возвращается сюда
+      // сообщением формы, системный сбой уходит тостом и записью в журнал.
+      setNotices(routeError(e, { source: translate("documentNumbering"), fallback: translate("numberingSaveError") }));
     } finally {
       setBusy(false);
     }
@@ -208,10 +203,9 @@ const DocumentNumberSettings: FC = () => {
       const n = res?.updated ?? 0;
       showToast(n > 0 ? `${translate("renumberDraftsDone")}: ${n}` : translate("renumberDraftsNone"), "success");
     } catch (e: unknown) {
-      const status = (e as RequestError)?.response?.status;
-      const msg = (e as RequestError)?.response?.data?.message || translate("numberingSaveError");
-      if (isSystemError(status)) showToast(msg, "error", 7000);
-      else setNotices([{ type: "error", text: msg }]);
+      // Куда показывать — решает routeError: отказ по существу возвращается сюда
+      // сообщением формы, системный сбой уходит тостом и записью в журнал.
+      setNotices(routeError(e, { source: translate("documentNumbering"), fallback: translate("numberingSaveError") }));
     } finally {
       setBusy(false);
     }

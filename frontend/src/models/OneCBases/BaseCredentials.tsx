@@ -24,6 +24,7 @@ import { Field } from "src/components/Field";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
 import { QueryError, useAgents } from "src/models/OneCAdmin/shared";
@@ -62,7 +63,7 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 			setPassword("");
 			void qc.invalidateQueries({ queryKey: key });
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabAccess") }),
 	});
 
 	const drop = useMutation({
@@ -75,7 +76,7 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 			setUser(""); setPassword("");
 			void qc.invalidateQueries({ queryKey: key });
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabAccess") }),
 	});
 
 	const stored = creds.data;

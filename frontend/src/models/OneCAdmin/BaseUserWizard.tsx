@@ -37,6 +37,7 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -328,7 +329,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
 			if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecUser") }),
 	});
 
 	// ── Шаги ────────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -30,7 +31,7 @@ import {
 	fetchBases, fetchSessions, setSessionsLock, terminateSession,
 	type ClusterRow, type OnecBase,
 } from "src/services/onec/api";
-import { errorNotice, noteNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
+import { errorNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { finishOp, startOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
@@ -73,12 +74,13 @@ export const SessionsTab: FC = () => {
 	useNoticeReport(useNoticeScope(), "sessions", translate("onecTabSessions"),
 		errorNotice(sessions.error, translate("unknownError")));
 
-	/** Ошибка команды — на доску сообщений и всплывающим: команда не молчит никогда. */
-	const failed = useCallback((e: unknown) => {
-		const text = e instanceof Error ? e.message : String(e);
-		noteNotice(translate("onecTabSessions"), { type: "error", text });
-		showToast(text, "error");
-	}, []);
+	/**
+	 * Ошибка команды — через общий маршрутизатор: он сам решает, тост это или запись в
+	 * журнал, и не показывает одно и то же дважды. Раньше здесь писалось и туда и туда
+	 * дословно, и человек читал один текст в двух местах.
+	 */
+	const failed = useCallback(
+		(e: unknown) => reportError(e, { source: translate("onecTabSessions") }), []);
 
 	const terminate = useMutation({
 		// sessionId здесь — UUID сеанса кластера (см. вызов ниже), а не его номер.

@@ -19,13 +19,12 @@ import { Button } from "src/components/Button";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import ModelForm from "src/components/ModelForm";
 import { showToast } from "src/components/UIToast";
+import { routeError } from "src/services/errors/route";
 import { api } from "src/services/api/client";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import styles from "src/styles/main.module.scss";
 
 interface Gap { stock: number; marked: number; gap: number }
-
-const isSystemError = (status?: number) => !status || status >= 500 || status === 403;
 
 const OpeningBalanceForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
@@ -81,12 +80,10 @@ const OpeningBalanceForm: FC<Partial<TPane>> = (paneProps) => {
       }
       await loadGap();
     } catch (e: unknown) {
-      const err = e as { response?: { status?: number; data?: { message?: string } } };
-      const status = err?.response?.status;
-      const msg = err?.response?.data?.message ?? translate("error");
-      // Системный сбой → тост; ошибка ДАННЫХ (422/400) → Notice внутри формы.
-      if (isSystemError(status)) showToast(msg, "error");
-      else setFormError(msg);
+      // Куда показывать — решает routeError: отказ по существу (422/400) возвращается
+      // сообщением формы, системный сбой уходит тостом и записью в журнал.
+      const own = routeError(e, { source: translate("openingBalance"), fallback: translate("error") });
+      setFormError(own[0]?.text ?? "");
     } finally {
       setBusy(false);
     }

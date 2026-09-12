@@ -30,6 +30,7 @@ import {
 import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { CapabilityGuard, QueryError, isApplicable, useBaseUsersCheck } from "./shared";
 import { useOpenBaseUser } from "./BaseUserForm";
 import { useOpenBaseUserWizard } from "./BaseUserWizard";
@@ -159,7 +160,7 @@ export const UsersTab: FC = () => {
 			qc.setQueryData(["onec", "bases"], d);
 			showToast(translate("onecBasesRefreshed"), "success");
 		},
-		onError: (e) => showToast(e instanceof Error ? e.message : String(e), "error"),
+		onError: (e) => reportError(e, { source: translate("onecTabUsers") }),
 	});
 
 	// ── Таблицы ─────────────────────────────────────────────────────────────

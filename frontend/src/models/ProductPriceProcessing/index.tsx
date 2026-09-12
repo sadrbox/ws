@@ -233,11 +233,11 @@ const PriceCorrectionPanel: FC<{
       });
       applyRows(rows);
       setFilled(true);
-      if (rows.length === 0) showToast("Цены не найдены (в базе нет записей по условиям)", "info");
+      if (rows.length === 0) showToast(translate("pricesNotFound"), "info");
       else showToast(`Загружено цен: ${rows.length}`, "success");
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при загрузке цен", "error");
+      showToast(translate("pricesLoadError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -256,10 +256,10 @@ const PriceCorrectionPanel: FC<{
   const applyMassOp = () => {
     if (currentRows.length === 0) return;
     const v = parseFloat(massVal.replace(",", "."));
-    if (Number.isNaN(v)) {
-      showToast("Укажите значение операции", "warning");
-      return;
-    }
+    // Кнопка выключена, пока значение не разобрано (см. disabled у «Применить»), поэтому
+    // сюда не попасть: причина названа подсказкой на самой кнопке, а не всплывающим
+    // сообщением в углу экрана — человек смотрит на поле, а не туда.
+    if (Number.isNaN(v)) return;
     const next = currentRows.map((r) => {
       const base = toNum(r.price);
       let p = base;
@@ -296,7 +296,7 @@ const PriceCorrectionPanel: FC<{
       showToast(`Подставлено из «${srcPriceTypeName}»: ${applied}`, applied ? "success" : "info");
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при подстановке из типа цены", "error");
+      showToast(translate("pricesFromTypeError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -351,7 +351,7 @@ const PriceCorrectionPanel: FC<{
   const handleWrite = async () => {
     if (!canWrite) return;
     const ops = buildOps();
-    if (ops.length === 0) { showToast("Нет изменений для записи", "info"); return; }
+    if (ops.length === 0) { showToast(translate("nothingToSave"), "info"); return; }
     const warnings = collectWarnings();
     const head = writeMode === "newDate"
       ? `Создать ${ops.length} цен на ${getFormatDateOnly(writeDate())}?`
@@ -368,7 +368,7 @@ const PriceCorrectionPanel: FC<{
       await handleFill();
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при записи", "error");
+      showToast(translate("pricesSaveError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -416,7 +416,11 @@ const PriceCorrectionPanel: FC<{
           <span className={styles.massOpsTitle}>{translate("bulkChange")}:</span>
           <FieldSelect label="" name="corr_massOp" value={massOp} options={MASS_OPS} onChange={(e) => setMassOp(e.target.value)} disabled={isLoading} variant="table" />
           <FieldNumber label="" name="corr_massVal" value={massVal} width="120px" variant="table" onChange={(e) => setMassVal(e.target.value)} disabled={isLoading} />
-          <Button onClick={applyMassOp} disabled={isLoading || currentRows.length === 0}>{translate("apply")}</Button>
+          <Button onClick={applyMassOp}
+            disabled={isLoading || currentRows.length === 0 || Number.isNaN(parseFloat(massVal.replace(",", ".")))}
+            title={Number.isNaN(parseFloat(massVal.replace(",", "."))) ? translate("validationNeedValue") : undefined}>
+            {translate("apply")}
+          </Button>
           <span className={styles.divider} />
           <LookupField
             label="" name="corr_srcType" value={srcPriceTypeUuid} displayValue={srcPriceTypeName}
@@ -555,14 +559,15 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
   };
 
   const handleFill = async () => {
-    if (!file) { showToast("Сначала выберите файл (.xlsx, .xls)", "warning"); return; }
+    // Кнопка «Заполнить» без файла выключена — проверка осталась защитой кода.
+    if (!file) return;
     setIsLoading(true);
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
-      if (!raw || raw.length === 0) { showToast("Файл пуст", "warning"); return; }
+      if (!raw || raw.length === 0) { showToast(translate("fileEmpty"), "warning"); return; }
       const header = raw[0].map((h) => asText(h).trim().toLowerCase());
       const col = (names: string[]) => {
         for (const n of names) {
@@ -591,7 +596,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
         })
         .filter((d) => d.sku || d.barcode || d.name || d.price != null);
 
-      if (data.length === 0) { showToast("В файле нет строк с данными", "warning"); return; }
+      if (data.length === 0) { showToast(translate("fileNoRows"), "warning"); return; }
 
       // Параллельно: серверное сопоставление товаров, карта типов цен, ключи существующих.
       const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean)));
@@ -640,7 +645,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       );
     } catch (err) {
       console.error(err);
-      showToast("Ошибка чтения файла", "error");
+      showToast(translate("fileReadError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -656,7 +661,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
     const ops = currentRows
       .filter((r) => r.productUuid && r.price != null)
       .map((r) => ({ action: "create", data: { productUuid: r.productUuid, priceTypeUuid: r.priceTypeUuid ?? priceTypeUuid ?? null, date: r.date ?? date ?? todayDateOnly(), price: r.price } }));
-    if (ops.length === 0) { showToast("Нет строк с сопоставленной номенклатурой и ценой", "warning"); return; }
+    if (ops.length === 0) { showToast(translate("noMatchedRows"), "warning"); return; }
     const unmatched = currentRows.filter((r) => !r.productUuid).length;
     const msg = unmatched > 0
       ? `Загрузить ${ops.length} цен? ${unmatched} строк без сопоставления будут пропущены.`
@@ -676,7 +681,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       setFillVersion((v) => v + 1);
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при загрузке", "error");
+      showToast(translate("importError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -684,7 +689,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
 
   const handleExportUnmatched = () => {
     const rows = allRows.filter((r) => !r.productUuid);
-    if (rows.length === 0) { showToast("Несопоставленных строк нет", "info"); return; }
+    if (rows.length === 0) { showToast(translate("noUnmatchedRows"), "info"); return; }
     const aoa = [["sku", "barcode", "name", "price"], ...rows.map((r) => [r.sku ?? "", r.barcode ?? "", r.product?.name ?? "", r.price ?? ""])];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -698,7 +703,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
     try {
       const resp = await apiClient.get<{ items?: PriceEntry[] }>(`/${ENDPOINT}/export`);
       const items = resp.data?.items ?? [];
-      if (items.length === 0) { showToast("Цен для бэкапа нет", "info"); return; }
+      if (items.length === 0) { showToast(translate("pricesNoneForBackup"), "info"); return; }
       const aoa = [
         ["sku", "barcode", "name", "brand", "priceType", "date", "price"],
         ...items.map((e) => [
@@ -718,7 +723,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       showToast(`${translate("downloadBackup")}: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
-      showToast("Ошибка при выгрузке бэкапа", "error");
+      showToast(translate("backupExportError"), "error");
     } finally {
       setIsLoading(false);
     }
@@ -734,7 +739,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       XLSX.writeFile(wb, "product_prices_template.xlsx");
     } catch (err) {
       console.error("download template error", err);
-      showToast("Не удалось сформировать шаблон", "error");
+      showToast(translate("templateError"), "error");
     }
   };
 
@@ -762,7 +767,8 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
               key={`file-${fillVersion}`} name="imp_file" accept=".xls,.xlsx" disabled={isLoading || !canWrite}
               loading={isLoading} onSelect={(f) => { setFile(f); setParsed(false); }}
             />
-            <Button onClick={handleFill} disabled={isLoading || !file}>{translate("fill")}</Button>
+            <Button onClick={handleFill} disabled={isLoading || !file}
+              title={file ? undefined : translate("validationNeedFile")}>{translate("fill")}</Button>
 
 
             <label className={styles.checkbox}>

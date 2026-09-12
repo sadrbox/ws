@@ -202,9 +202,14 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 		if (!targets.length) {
 			// Ничего не осталось — не заводим операцию вовсе: работы нет, есть объяснение.
 			const first = skipped[0];
-			noteNotice(translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
-				{ type: "warning", text: `${first.baseKey} — ${first.message}` });
-			showToast(`${first.baseKey} — ${first.message}`, "warning");
+			// Тост говорит КОРОТКО и о факте, журнал — подробности, которые переживут четыре
+			// секунды: при десятке отсеянных баз в тосте помещается только первая, а
+			// остальные нужны, чтобы понять, чинить одну базу или все сразу.
+			const details = skipped.map((x) => `${x.baseKey} — ${x.message}`).join("\n");
+			noteNotice(translate(isUsers ? "onecUsersCheck" : "onecExtCheck"), { type: "warning", text: details });
+			showToast(skipped.length > 1
+				? `${translate("onecNothingToCheck")}: ${skipped.length}`
+				: `${first.baseKey} — ${first.message}`, "warning");
 			return;
 		}
 
