@@ -24,7 +24,6 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { getFormatDate } from "src/utils/datetime";
 import { createAgent } from "src/services/onec/api";
 import { stateLabel, useOpenAgent } from "./AgentForm";
 import { QueryError, useAgents } from "./shared";
@@ -34,7 +33,7 @@ const columns = (): TColumn[] => ([
 	{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "role", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "onlineLabel", type: "string", width: "130px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "lastSeenAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "lastSeenAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "capabilitiesCount", type: "number", width: "130px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
 	{ identifier: "instancesCount", type: "number", width: "140px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
 	// Владелец токена: под ним и работает агент; остальные экземпляры получают отказ.
@@ -90,8 +89,10 @@ export const AgentsTab: FC = () => {
 		[agents.data],
 	);
 
+	// Дату форматирует сама таблица (колонка типа datetime): один формат на приложение и
+	// сортировка по значению, а не по тексту.
 	const view = useStaticTableView(rowsRaw, { name: "asc" });
-	const rows = view.rows.map((r) => ({ ...r, lastSeenAt: r.lastSeenAt ? getFormatDate(String(r.lastSeenAt)) : "—" }));
+	const rows = view.rows;
 
 	return (
 		<>

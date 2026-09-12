@@ -35,6 +35,7 @@ export type BaseRow = {
 	publish_url: string | null;
 	publish_seen_at: Date | null;
 	ib_unreachable_at: Date | null;
+	ib_unreachable_reason: string | null;
 	public_host?: string | null;
 	extensions_count: number | null;
 	extensions_seen_at: Date | null;
@@ -81,6 +82,12 @@ export type BaseView = {
 	 * другой источник — тот, который входит в базу, а не перечисляет их (см. миграцию 016).
 	 */
 	ibUnreachableAt: string | null;
+	/**
+	 * ПОЧЕМУ не войти — кодом (см. миграцию 018 и `ibFailureReason`). «Базы нет в СУБД» и
+	 * «не пускают» требуют разных действий, а одинаковое «недоступна» заставляет человека
+	 * выяснять это самому — по тексту ошибки, который он уже один раз прочитал и не понял.
+	 */
+	ibUnreachableReason: IbUnreachableReason | null;
 	extensionsCount: number | null;
 	extensionsSeenAt: string | null;
 	extensionNames: string[];
@@ -143,6 +150,53 @@ export type ServerParams = {
 };
 
 /** Одна строка среза публикаций, как её присылает агент (CLUSTER_LIST_PUBLICATIONS). */
+/**
+ * ПОЧЕМУ в базу не войти — кодом, а не пересказом ошибки.
+ *
+ * ЗАЧЕМ. Команда внутрь базы отказывает по-разному, и разница решает, что делать дальше.
+ * «Занят рабочий каталог» лечится повтором; «базы нет в СУБД» повтором не лечится НИКОГДА,
+ * и повторять её — значит каждый раз тратить минуты ожидания на заведомый отказ. Живой
+ * случай: `aibek` числится в кластере как ONLINE, а ibcmd отвечает «База данных
+ * отсутствует в сервере баз данных. Не найдена база данных 'aibek' в SQL-сервере
+ * 'localhost'». Код ошибки при этом общий — IB_ERROR, — поэтому разбираем текст.
+ *
+ * ПОЧЕМУ ПО ТЕКСТУ. Коды агент даёт крупными мазками (IB_ERROR на всё, что ответила
+ * утилита), а различие живёт в сообщении 1С. Разбор намеренно узкий: не узнали — вернём
+ * null, и база останется «в порядке». Ошибиться в сторону «всё хорошо» здесь дешевле:
+ * ложная отметка «базы нет» исключила бы рабочую базу из всех групповых операций.
+ */
+export type IbUnreachableReason = "NO_DB" | "NO_INFOBASE" | "NO_ACCESS" | "UNKNOWN";
+
+export function ibFailureReason(
+	error?: { code?: string | null; message?: string | null } | null,
+): IbUnreachableReason | null {
+	if (!error) return null;
+	const code = (error.code ?? "").toUpperCase();
+	const text = (error.message ?? "").toLowerCase();
+
+	// Агент научился называть это прямо (сборка от 2026-09-12): код означает «в базу войти
+	// нельзя и повтор не поможет». Разбор текста ниже остаётся для старых сборок.
+	if (code === "IB_DB_MISSING") return "NO_DB";
+
+	// Нет регистрации в кластере: база исчезла целиком, а не только её данные.
+	if (code === "INFOBASE_NOT_FOUND") return "NO_INFOBASE";
+	if (/не найдена на сервере|infobase .* not found|информационная база не найдена/.test(text)) {
+		return "NO_INFOBASE";
+	}
+
+	// Регистрация есть, данных нет: самый частый и самый непонятный для человека случай.
+	if (/база данных отсутствует|не найдена база данных|database .* does not exist|cannot open database/.test(text)) {
+		return "NO_DB";
+	}
+
+	// Не пускают: учётные данные или права. Это чинится настройкой, а не восстановлением.
+	if (/идентификация пользователя не выполнена|неверн\w* (логин|пароль|имя пользователя)|доступ запрещ|access denied|authentication failed|недостаточно прав/.test(text)) {
+		return "NO_ACCESS";
+	}
+
+	return null;
+}
+
 export type PublicationItem = { key: string; name?: string; published?: boolean; url?: string | null };
 
 /**
@@ -218,6 +272,7 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ — ext_version заполняет только heartbeat
 	-- бизнес-агента, и то лишь про своё расширение bpapi.
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
+	b.ib_unreachable_reason,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -471,12 +526,30 @@ export class BaseService {
 	 * снова выглядела рабочей, человек жал «Обновить», ждал и получал ту же ошибку. Теперь
 	 * признак ставит и снимает только тот, кто в базу заходит.
 	 */
-	async markIbReachable(serverId: string, key: string, reachable: boolean): Promise<void> {
+	async markIbReachable(
+		serverId: string, key: string, reachable: boolean,
+		reason: IbUnreachableReason = "UNKNOWN",
+	): Promise<void> {
+		if (reachable) {
+			await this.db.query(
+				`UPDATE bases SET ib_unreachable_at = NULL, ib_unreachable_reason = NULL
+				  WHERE server_id = $1 AND key = $2 AND ib_unreachable_at IS NOT NULL`,
+				[serverId, key],
+			);
+			return;
+		}
+		/*
+		 * Время отметки не сдвигаем на каждый повтор — «с какого момента не войти» важнее,
+		 * чем «когда пробовали в последний раз». А вот ПРИЧИНУ обновляем всегда: она могла
+		 * уточниться (сперва «не пускают», после проверки — «базы нет в СУБД»).
+		 */
 		await this.db.query(
-			`UPDATE bases SET ib_unreachable_at = ${reachable ? "NULL" : "now()"}
+			`UPDATE bases
+			    SET ib_unreachable_at = COALESCE(ib_unreachable_at, now()),
+			        ib_unreachable_reason = $3
 			  WHERE server_id = $1 AND key = $2
-			    AND ib_unreachable_at IS ${reachable ? "NOT NULL" : "NULL"}`,
-			[serverId, key],
+			    AND (ib_unreachable_at IS NULL OR ib_unreachable_reason IS DISTINCT FROM $3)`,
+			[serverId, key, reason],
 		);
 	}
 
@@ -591,6 +664,7 @@ export class BaseService {
 			publishUrlPublic: publicUrl(r.publish_url, r.public_host ?? null),
 			publishSeenAt: r.publish_seen_at?.toISOString() ?? null,
 			ibUnreachableAt: r.ib_unreachable_at?.toISOString() ?? null,
+			ibUnreachableReason: (r.ib_unreachable_reason as IbUnreachableReason | null) ?? null,
 			extensionsCount: r.extensions_count,
 			// Имена нужны панели, чтобы отобрать базы БЕЗ нужного расширения: иначе их
 			// пришлось бы выискивать глазами среди ста строк.

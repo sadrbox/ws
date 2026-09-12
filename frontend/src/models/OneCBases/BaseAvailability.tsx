@@ -1,0 +1,132 @@
+/**
+ * Доступность базы — и что делать, когда её нет.
+ *
+ * ПРО ЧТО ЭТО. Кластер перечисляет РЕГИСТРАЦИИ баз, а не сами базы. Бывает, что база из
+ * СУБД удалена, а запись в кластере осталась: `rac` честно отвечает ONLINE, и база выглядит
+ * рабочей ровно до первой команды внутрь, которая отвечает «База данных отсутствует в
+ * сервере баз данных. Не найдена база данных 'aibek' в SQL-сервере 'localhost'». Дальше по
+ * кругу: нажали «Обновить», подождали минуту, получили то же самое.
+ *
+ * ЧТО ЗДЕСЬ ДЕЛАЕТСЯ. Во-первых, называется причина — по коду, который сервис разобрал из
+ * ответа (см. ibFailureReason): «нет в СУБД», «нет в кластере», «не пускают». Во-вторых,
+ * даётся действие, доступное панели.
+ *
+ * ПОЧЕМУ НЕ «УДАЛИТЬ БАЗУ». Удалять регистрацию в кластере панель не будет: это разрушающее
+ * действие над чужой системой, и делает его администратор на самом сервере 1С — осознанно и
+ * зная, что данные восстановить неоткуда. Панель умеет другое: перестать считать базу
+ * рабочей. Скрытая база уходит из групповых операций и из отборов, а решение обратимо —
+ * восстановили базу из копии, вернули в работу.
+ */
+import { FC, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { translate } from "src/i18";
+import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
+import Modal from "src/components/Modal";
+import Notice from "src/components/Notice";
+import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import { showToast } from "src/components/UIToast";
+import { dropBaseRegistration, setBaseHidden } from "src/services/onec/api";
+import { unreachableReason } from "src/models/OneCAdmin/shared";
+import { withOp } from "src/models/OneCAdmin/progress";
+
+export const BaseAvailability: FC<{
+	baseKey: string;
+	status: string;
+	/** Скрыта ли база в реестре: решение администратора, а не состояние сервера. */
+	hidden: boolean;
+	ibUnreachableAt: string | null;
+	ibUnreachableReason: string | null;
+}> = ({ baseKey, status, hidden, ibUnreachableAt, ibUnreachableReason }) => {
+	const qc = useQueryClient();
+	const [confirmDrop, setConfirmDrop] = useState(false);
+
+	const hide = useMutation({
+		mutationFn: (next: boolean) => withOp(
+			{ kind: "update", title: translate(next ? "onecBaseHide" : "onecBaseUnhide"), target: baseKey },
+			() => setBaseHidden(baseKey, next),
+		),
+		onSuccess: () => {
+			showToast(translate("saved"), "success");
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+		},
+		onError: (e) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error"),
+	});
+
+	/**
+	 * Удаление мёртвой регистрации — единственное настоящее лечение фантома: скрытие лишь
+	 * убирает базу с глаз панели, а запись в кластере продолжает жить и мешать всем
+	 * остальным инструментам. Данные не трогаются — их нет; что база действительно мертва,
+	 * проверяет САМ АГЕНТ через СУБД и у живой базы отказывает.
+	 */
+	const drop = useMutation({
+		mutationFn: () => withOp(
+			{ kind: "delete", title: translate("onecBaseDropRegistration"), target: baseKey },
+			() => dropBaseRegistration(baseKey),
+		),
+		onSuccess: (r) => {
+			setConfirmDrop(false);
+			// Ответ агента говорит, что именно он сделал, — он точнее любого нашего пересказа.
+			showToast(r.note || translate("saved"), "success");
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+		},
+		onError: (e) => {
+			setConfirmDrop(false);
+			showToast(e instanceof Error ? e.message : translate("unknownError"), "error");
+		},
+	});
+
+	// Пока с базой всё в порядке и её никто не прятал, раздел молчит: место на экране
+	// стоит дороже, чем сообщение «проблем нет».
+	if (!ibUnreachableAt && !hidden) return null;
+
+	return (
+		<FormArea title={translate("onecBaseAvailability")}>
+			<GroupCol>
+				{ibUnreachableAt && (
+					<Notice inline items={[{
+						type: ibUnreachableReason === "NO_DB" || ibUnreachableReason === "NO_INFOBASE"
+							? "attention" : "warning",
+						text: unreachableReason({ status, disabled: hidden, ibUnreachableAt, ibUnreachableReason }),
+					}]} />
+				)}
+				{hidden && (
+					<Notice inline items={[{ type: "info", text: translate("onecBaseHiddenHint") }]} />
+				)}
+				<GroupRow>
+					<Button variant={hidden ? "secondary" : "danger"} disabled={hide.isPending}
+						title={translate(hidden ? "onecBaseUnhideHint" : "onecBaseHideHint")}
+						onClick={() => hide.mutate(!hidden)}>
+						<Icon name={hidden ? "restore" : "clear"} />
+						{" "}{translate(hidden ? "onecBaseUnhide" : "onecBaseHide")}
+					</Button>
+					{/* Кнопка только у базы, в которую не войти: у рабочей агент всё равно
+					    откажет, и предлагать её значило бы звать на отказ. */}
+					{ibUnreachableAt && (
+						<Button variant="danger" disabled={drop.isPending}
+							title={translate("onecBaseDropRegistrationHint")}
+							onClick={() => setConfirmDrop(true)}>
+							<Icon name="trash" /> {translate("onecBaseDropRegistration")}
+						</Button>
+					)}
+				</GroupRow>
+			</GroupCol>
+
+			{confirmDrop && (
+				<Modal title={translate("onecBaseDropRegistration")}
+					onClose={() => setConfirmDrop(false)} onApply={() => drop.mutate()}>
+					<GroupCol>
+						<div>{translate("onecBase")}: {baseKey}</div>
+						{/* Прямым текстом, без смягчений: восстановить запись можно только
+						    вручную, со всеми параметрами подключения. */}
+						<Notice inline items={[{ type: "attention", text: translate("onecBaseDropRegistrationWarning") }]} />
+					</GroupCol>
+				</Modal>
+			)}
+		</FormArea>
+	);
+};
+
+export default BaseAvailability;

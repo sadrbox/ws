@@ -8,7 +8,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Db } from "../src/db/pool.ts";
 import { AgentService, type AgentRole } from "../src/agents/service.ts";
-import { isPublished, needsFullBases, publicUrl, publicationReport } from "../src/bases/service.ts";
+import {
+	ibFailureReason, isPublished, needsFullBases, publicUrl, publicationReport,
+} from "../src/bases/service.ts";
 
 type FakeAgent = {
 	id: string;
@@ -237,4 +239,51 @@ test("публичный адрес: без настройки и при мус�
 	assert.equal(publicUrl("http://localhost/buh", "://"), "http://localhost/buh");
 	// Нет адреса — нечего и подменять: база не опубликована.
 	assert.equal(publicUrl(null, "1c.buhprof.kz"), null);
+});
+
+// ── ПОЧЕМУ в базу не войти: разбор ответа агента ────────────────────────────
+//
+// Код у агента крупный — IB_ERROR на всё, что ответила утилита, — и различие живёт в
+// тексте 1С. Живой случай: база `aibek` числится в кластере как ONLINE, а ibcmd отвечает
+// «База данных отсутствует в сервере баз данных». Пока это не отличали от занятого
+// каталога, отметка «войти нельзя» не ставилась вовсе: база выглядела рабочей, её снова и
+// снова звали командами, и каждая ждала минуту ради одного и того же отказа.
+//
+// Разбор намеренно узкий: не узнали — возвращаем null и ничего не помечаем. Ошибка в
+// сторону «всё хорошо» дешевле: ложная отметка исключила бы рабочую базу из всех
+// групповых операций.
+
+test("ibFailureReason: «нет базы в СУБД» отличается от «нет в кластере» и от отказа входа", () => {
+	assert.equal(
+		ibFailureReason({
+			code: "IB_ERROR",
+			message: "ibcmd: База данных отсутствует в сервере баз данных\r\n"
+				+ "Не найдена база данных 'aibek' в SQL-сервере 'localhost'",
+		}),
+		"NO_DB",
+	);
+
+	// Регистрации нет вовсе — это другая беда и другое решение.
+	assert.equal(ibFailureReason({ code: "INFOBASE_NOT_FOUND", message: "" }), "NO_INFOBASE");
+	assert.equal(
+		ibFailureReason({ code: "IB_ERROR", message: "база «shahs_backup» не найдена на сервере SERVER" }),
+		"NO_INFOBASE",
+	);
+
+	// Не пускают: чинится учётными данными, а не восстановлением из копии.
+	assert.equal(
+		ibFailureReason({ code: "IB_ERROR", message: "Идентификация пользователя не выполнена" }),
+		"NO_ACCESS",
+	);
+});
+
+test("ibFailureReason: временный отказ не объявляется отсутствием базы", () => {
+	// Занятый каталог и таймаут лечатся повтором — помечать базу «недоступной» из-за них
+	// значит убрать её из работы по недоразумению.
+	assert.equal(
+		ibFailureReason({ code: "IB_ERROR", message: "ibcmd extension list не ответил за 180 с — процесс снят" }),
+		null,
+	);
+	assert.equal(ibFailureReason(null), null);
+	assert.equal(ibFailureReason({ code: "IB_ERROR", message: "" }), null);
 });

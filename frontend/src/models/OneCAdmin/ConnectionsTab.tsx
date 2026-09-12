@@ -30,7 +30,7 @@ const connColumns = (): TColumn[] => ([
 	{ identifier: "application", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "host", type: "string", width: "160px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "sessionNumber", type: "string", width: "110px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "connectedAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "connectedAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 const lockColumns = (): TColumn[] => ([

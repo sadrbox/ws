@@ -33,7 +33,6 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
-import { getFormatDate } from "src/utils/datetime";
 import { cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
 import { showToast } from "src/components/UIToast";
 import styles from "./OneCAdmin.module.scss";
@@ -47,7 +46,9 @@ const batchColumns = (): TColumn[] => ([
 	{ identifier: "progress", type: "string", width: "150px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "failedCount", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "outcome", type: "string", width: "420px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "createdAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	// Тип datetime, а не строка: дату форматирует таблица (общая настройка формата), и
+	// сортировка идёт по самому значению, а не по «12.09.2026» как по тексту.
+	{ identifier: "createdAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 /** Состояние команды словами: коды состояний — внутренняя кухня очереди. */
@@ -128,7 +129,7 @@ export const BatchesTab: FC = () => {
 		outcome: b.pending
 			? `${translate("onecBatchPending")}: ${b.pending}`
 			: (b.failed ? `${translate("onecOpFailed")}: ${b.failed}` : translate("onecBatchDone")),
-		createdAt: getFormatDate(b.createdAt),
+		createdAt: b.createdAt,
 		__cancelable: b.cancelable,
 	})), [items]);
 	const view = useStaticTableView(rowsRaw, { createdAt: "desc" });
@@ -152,9 +153,17 @@ export const BatchesTab: FC = () => {
 			__commandId: it.commandId ?? "",
 			// Отменить можно только не начатое: агент ещё не забирал эту команду.
 			__cancelable: it.state === "queued" ? 1 : 0,
-			// Отметка живёт в данных потомка — по ней же считается отметка задания
-			// (см. TableBodyRow: группа = «отмечены все вложенные»).
-			__selected: !!it.commandId && picked.has(it.commandId),
+			/*
+			 * Отметка живёт в данных потомка — по ней же считается отметка задания
+			 * (см. TableBodyRow: группа = «отмечены все вложенные»).
+			 *
+			 * У базы, для которой команды не создалось вовсе (её отсеяли при постановке —
+			 * например, в базу не войти), отмечать НЕЧЕГО, и отметки у неё нет совсем:
+			 * `undefined` вместо `false`. Разница не косметическая — строка с `false`
+			 * попадала в знаменатель «отмечено всё», которого поэтому нельзя было достичь,
+			 * и чекбокс в шапке переставал переключаться.
+			 */
+			...(it.commandId ? { __selected: picked.has(it.commandId) } : {}),
 			__batchId: b.id,
 		}));
 	}, [items, picked]);

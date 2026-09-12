@@ -38,7 +38,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
 import { fetchBases, runBatch, type BatchType, type OnecBase } from "src/services/onec/api";
-import { isApplicable, unreachableReason, type OnecOperation } from "./shared";
+import { isApplicable, unreachableReason, usePublishAddressHint, type OnecOperation } from "./shared";
 import { attachBatch, finishOp, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
@@ -101,12 +101,18 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	const items = useMemo(() => bases.data?.items ?? [], [bases.data]);
-
 	// Отметки из списка — ЗАГОТОВКА, а не приговор: здесь их видно целиком и можно поправить.
 	const preset = useMemo(() => new Set(
 		(Array.isArray(data.baseKeys) ? (data.baseKeys as string[]) : []).map((k) => k.toLowerCase()),
 	), [data.baseKeys]);
 	const [picked, setPicked] = useState<Set<string>>(preset);
+
+	/*
+	 * Какой получится ссылка после публикации. Групповая публикация идёт на ОДИН сервер —
+	 * тот, где живут отмеченные базы, — поэтому имя сервера берём у первой отмеченной, а
+	 * когда сервер в реестре один, оно и не требуется.
+	 */
+	const address = usePublishAddressHint(items.find((b) => picked.has(b.key.toLowerCase()))?.serverName);
 
 	const [name, setName] = useState(asText(data.name));
 	const [fullName, setFullName] = useState("");
@@ -276,7 +282,16 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 			// Тот же каркас, что и у шага параметров: шаги одного помощника не должны
 			// выглядеть как страницы из разных программ.
 			body: (
-				<WizardForm aside={<Notice inline items={[{ type: "attention", text: translate(spec.warning) }]} />}>
+				<WizardForm aside={<Notice inline items={[
+					{ type: "attention", text: translate(spec.warning) },
+					/*
+					 * Публикация — единственная операция, у которой есть АДРЕС, и он решает,
+					 * будет ли от неё толк: агент отдаёт то, что записано в привязке сайта
+					 * IIS (обычно localhost), а полезной ссылку делает «Адрес сервера» из
+					 * параметров агента. Называем адрес до нажатия, а не после.
+					 */
+					...(spec.type === "IB_PUBLISH" ? [address] : []),
+				]} />}>
 					<>
 						<GroupRow>
 							<Field name="gcw_plan_op" label={translate("onecWhatHappens")}

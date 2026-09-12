@@ -545,7 +545,25 @@ export function onecRouter(deps: Deps) {
 				+ "а незавершённые команды оборвутся."));
 			return;
 		}
-		await agents.remove(req.params.id);
+		try {
+			await agents.remove(req.params.id);
+		} catch (e) {
+			/*
+			 * ССЫЛКА ИЗ ТАБЛИЦЫ, ПРО КОТОРУЮ ЗАБЫЛИ, — НЕ «ВНУТРЕННЯЯ ОШИБКА».
+			 *
+			 * Так оно и случилось: `conversations.agent_id` не отвязывали, база отвечала
+			 * нарушением внешнего ключа, а панель показывала общий отказ. Человек видел
+			 * «агент не удаляется» и не имел ни одной зацепки. Теперь называем таблицу,
+			 * которая держит запись: следующий такой ключ найдётся за минуту, а не за час.
+			 */
+			const err = e as { code?: string; table?: string; constraint?: string };
+			if (err?.code === "23503") {
+				send(res, fail(409, "AGENT_REFERENCED",
+					`Агента держат записи в таблице «${err.table ?? "?"}» (${err.constraint ?? "внешний ключ"})`));
+				return;
+			}
+			throw e;
+		}
 		await audit.write({ event: "agent.delete", agentId: null, userUuid: u.uuid,
 			details: { id: req.params.id, name: agent.name } });
 		res.json({ success: true, data: { ok: true } });
@@ -913,6 +931,33 @@ export function onecRouter(deps: Deps) {
 	});
 
 	/**
+	 * СКРЫТЬ БАЗУ ИЗ РАБОТЫ — решение администратора о базе-фантоме.
+	 *
+	 * ЗАЧЕМ. Бывает, что кластер базу перечисляет, а самой базы нет: `ibcmd` отвечает «База
+	 * данных отсутствует в сервере баз данных». Запись в кластере осталась, данных нет;
+	 * убрать регистрацию может только администратор на сервере 1С (агент такого не умеет и
+	 * уметь не должен — это разрушающее действие над чужой системой). Но пока запись жива,
+	 * база каждый раз попадает в списки, в отборы и в групповые команды и каждый раз
+	 * отказывает одинаково.
+	 *
+	 * Скрытие — это отметка в реестре сервиса: «с этой базой не работаем». Срез кластера её
+	 * не снимает и не ставит, данные базы не трогаются, решение обратимо. Снятая отметка
+	 * возвращает базу в работу — например, после восстановления из копии.
+	 */
+	r.post("/bases/:key/hidden", async (req, res) => {
+		const u = req.erpUser!;
+		const hidden = (req.body as { hidden?: unknown } | undefined)?.hidden === true;
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		await bases.setDisabled(base.id, hidden);
+		await audit.write({
+			event: hidden ? "onec.base.hide" : "onec.base.unhide", agentId: null, userUuid: u.uuid,
+			details: { baseKey: base.key },
+		});
+		res.json({ success: true, data: { ok: true, hidden } });
+	});
+
+	/**
 	 * ОБСЛУЖИВАНИЕ БАЗЫ: проверка, загрузка из выгрузки, обновление конфигурации.
 	 *
 	 * Все три понимают `dryRun: true` — агент возвращает план и базу не трогает. Для
@@ -960,6 +1005,20 @@ export function onecRouter(deps: Deps) {
 		}
 		const force = (req.body as { force?: unknown } | undefined)?.force === true;
 		send(res, await run(req, "AGENT_KILL_PROCESS", { pid, force }));
+	});
+
+	/**
+	 * УДАЛИТЬ МЁРТВУЮ РЕГИСТРАЦИЮ БАЗЫ ИЗ КЛАСТЕРА.
+	 *
+	 * Для базы-фантома это единственное настоящее лечение: скрытие лишь убирает её с глаз,
+	 * а запись в кластере продолжает жить и мозолить глаза всем остальным инструментам.
+	 * Данные команда не трогает — их и нет; проверяет это САМ АГЕНТ через СУБД и у живой
+	 * базы отказывает (см. docs/TASK_SERVICE_DROP_INFOBASE.md). Отсюда и `confirm: true`:
+	 * восстановить запись можно только вручную, со всеми параметрами подключения.
+	 */
+	r.post("/bases/:key/drop-registration", async (req, res) => {
+		const body = (req.body ?? {}) as Record<string, unknown>;
+		send(res, await run(req, "CLUSTER_DROP_INFOBASE", { ...body, baseKey: req.params.key }));
 	});
 
 	r.post("/bases/:key/lock", async (req, res) => {

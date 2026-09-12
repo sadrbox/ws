@@ -26,7 +26,7 @@ import Notice from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
 import { getFormatDate } from "src/utils/datetime";
 import { runBatch, type BatchType } from "src/services/onec/api";
-import { publishLabel } from "src/models/OneCAdmin/shared";
+import { publishLabel, usePublishAddressHint } from "src/models/OneCAdmin/shared";
 import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
 import { noteNotice, useNoticeScope } from "src/components/TechMessages/store";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
@@ -43,17 +43,26 @@ export const BasePublication: FC<{
 	published: boolean | null;
 	publishUrl: string | null;
 	/**
-	 * Адрес под публичным именем сервера («Настройки»): агент отдаёт то, что записано в
+	 * Адрес под публичным именем сервера («Параметры» агента): агент отдаёт то, что записано в
 	 * привязке сайта IIS, и это обычно localhost — рабочий адрес с самого сервера и
 	 * бесполезный снаружи.
 	 */
 	publishUrlPublic: string | null;
 	/** Когда состояние проверяли: без даты «нет» и «не знаем» выглядят одинаково. */
 	seenAt: string | null;
-}> = ({ baseKey, published, publishUrl, publishUrlPublic, seenAt }) => {
+	/** Сервер базы — по нему берётся «Адрес сервера» для предпросмотра ссылки. */
+	serverName?: string | null;
+}> = ({ baseKey, published, publishUrl, publishUrlPublic, seenAt, serverName }) => {
 	const qc = useQueryClient();
 	const scope = useNoticeScope();
 	const [confirm, setConfirm] = useState<Job | null>(null);
+	/*
+	 * КАКОЙ БУДЕТ ССЫЛКА — до нажатия. Публикация идёт на веб-сервер самой машины, и агент
+	 * возвращает адрес из привязки сайта IIS: обычно `http://localhost/<база>`. Полезной
+	 * ссылку делает «Адрес сервера» из параметров агента, поэтому подтверждение называет
+	 * получающийся адрес, а если он не задан — говорит, где его указать.
+	 */
+	const address = usePublishAddressHint(serverName);
 
 	const run = useMutation({
 		mutationFn: async (job: Job) => {
@@ -121,7 +130,11 @@ export const BasePublication: FC<{
 					onApply={() => run.mutate(confirm)}>
 					<div className={styles.ConfirmText}>
 						<div className={styles.ConfirmDetails}>{translate("onecBase")}: {baseKey}</div>
-						<Notice inline items={[{ type: "attention", text: translate(SPEC[confirm].warning) }]} />
+						<Notice inline items={[
+							{ type: "attention", text: translate(SPEC[confirm].warning) },
+							// Снятие публикации адреса не создаёт — подсказка только к публикации.
+							...(confirm === "publish" ? [address] : []),
+						]} />
 					</div>
 				</Modal>
 			)}

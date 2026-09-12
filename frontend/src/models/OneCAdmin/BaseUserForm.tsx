@@ -55,7 +55,7 @@ const basesColumns = (): TColumn[] => ([
 	{ identifier: "baseKey", type: "string", width: "200px", minWidth: "130px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "baseName", type: "string", width: "240px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "rolesCount", type: "number", width: "110px", minWidth: "80px", alignment: "right", visible: true, inlist: true },
-	{ identifier: "seenAt", type: "string", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "seenAt", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 /** Черновик: роль → должна ли она быть в базе. Только изменённое попадёт в команду. */
@@ -233,7 +233,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	const [basesCols, setBasesCols] = useState<TColumn[]>(() => getModelColumns(basesColumns(), "OneCAdmin_bufBases"));
 	const basesRows = useMemo(() => occ.map((o, i) => ({
 		id: i + 1, uuid: o.baseKey, baseKey: o.baseKey, baseName: o.baseName || "—",
-		rolesCount: (o.roles ?? []).length, seenAt: o.seenAt ? getFormatDate(o.seenAt) : "—",
+		rolesCount: (o.roles ?? []).length, seenAt: o.seenAt,
 	})), [occ]);
 	const basesView = useStaticTableView(basesRows, { baseKey: "asc" });
 

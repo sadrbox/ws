@@ -20,7 +20,7 @@ import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand } from "../commands/admin.ts
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import {
-	needsFullBases, publicationReport,
+	ibFailureReason, needsFullBases, publicationReport,
 	type BaseService, type BaseState, type PublicationItem,
 } from "../bases/service.ts";
 
@@ -417,13 +417,23 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 *
 		 * Теперь признак ставит и снимает ТОЛЬКО тот, кто в базу заходит.
 		 */
-		if (row.base_key && (p.data.status === "SUCCESS" || p.data.error?.code === "INFOBASE_NOT_FOUND")) {
+		/*
+		 * ПРИЧИНУ РАЗБИРАЕМ ПО ТЕКСТУ, А НЕ ТОЛЬКО ПО КОДУ. Код у агента крупный — IB_ERROR
+		 * на всё, что ответила утилита, — и по нему база `aibek` («База данных отсутствует
+		 * в сервере баз данных») ничем не отличалась от занятого каталога: отметка не
+		 * ставилась, база оставалась «рабочей», и её снова и снова звали командами.
+		 * Классификация намеренно узкая: не узнали причину — ничего не помечаем.
+		 */
+		const failReason = p.data.status === "SUCCESS" ? null : ibFailureReason(p.data.error);
+		if (row.base_key && (p.data.status === "SUCCESS" || failReason)) {
 			const spec = findAdminCommand(row.type);
 			// Только команды ВНУТРЬ базы: срез кластера об этом ничего не знает.
 			if (spec?.requiresBase && spec.capability === "ib.admin") {
 				const me = await agents.findById(req.agent!.agentId);
 				if (me?.serverId) {
-					await bases.markIbReachable(me.serverId, row.base_key, p.data.status === "SUCCESS");
+					await bases.markIbReachable(
+						me.serverId, row.base_key, p.data.status === "SUCCESS", failReason ?? "UNKNOWN",
+					);
 				}
 			}
 		}

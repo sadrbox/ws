@@ -31,16 +31,19 @@ import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseExtensionsCached, fetchBaseUsersCached, fetchSessions, refreshBases,
+	fetchBaseExtensionsCached, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBases,
 	type IbExtension, type IbUser, type OnecBase,
 } from "src/services/onec/api";
-import { QueryError, publishLabel, useAgents, useBaseContentCheck } from "src/models/OneCAdmin/shared";
+import {
+	QueryError, publishLabel, unreachableReason, unreachableShort, useAgents, useBaseContentCheck,
+} from "src/models/OneCAdmin/shared";
 import { useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import BaseUserCommands from "src/models/OneCAdmin/BaseUserCommands";
 import BaseCredentialsTab from "./BaseCredentials";
+import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
 import BaseMaintenance from "./BaseMaintenance";
@@ -89,7 +92,7 @@ const sessionColumns = (): TColumn[] => ([
 	{ identifier: "userName", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "appId", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "host", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "startedAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "startedAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 /**
@@ -301,6 +304,17 @@ const useBaseTabs = (row: TDataItem) => {
 	];
 };
 
+/** Запись реестра → строка карточки. Один код на открытие и на обновление после команд. */
+const baseToRow = (b: OnecBase): TDataItem => ({
+	baseKey: b.key, name: b.name, status: b.status, serverName: b.serverName,
+	onecVersion: b.onecVersion, extensionsCount: b.extensionsCount,
+	published: b.published, publishUrl: b.publishUrl,
+	publishUrlPublic: b.publishUrlPublic, publishSeenAt: b.publishSeenAt,
+	ibUnreachableAt: b.ibUnreachableAt, ibUnreachableReason: b.ibUnreachableReason,
+	disabled: b.disabled,
+	lastSeenAt: b.lastSeenAt, infobaseId: b.infobaseId,
+} as unknown as TDataItem);
+
 /**
  * Форма элемента: шапка полями + вложенные таблицы во вкладках. Только чтение.
  *
@@ -309,7 +323,27 @@ const useBaseTabs = (row: TDataItem) => {
  * и пустой ключ базы, с которым запросы уходят в `/bases//extensions`.
  */
 export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
-	const row = (paneProps.data ?? {}) as TDataItem;
+	const opened = (paneProps.data ?? {}) as TDataItem;
+	/*
+	 * КАРТОЧКА ЧИТАЕТ РЕЕСТР, А НЕ ТОЛЬКО СНИМОК, С КОТОРЫМ ЕЁ ОТКРЫЛИ.
+	 *
+	 * Пейн передаёт строку таблицы — то, как база выглядела в момент двойного щелчка. Пока
+	 * карточка показывала ТОЛЬКО её, любая команда оставляла экран в прошлом: опубликовали
+	 * базу, задание отработало, реестр обновился, а в открытой карточке по-прежнему «не
+	 * опубликована» — до перезагрузки страницы. Теперь поверх снимка ложится текущая запись
+	 * реестра, а реестр перечитывается сам после каждой завершившейся работы (см.
+	 * refreshAfterWork в OneCAdmin/progress).
+	 *
+	 * Снимок остаётся основой: базы может не быть в реестре (её только что завели), и
+	 * показывать пустую карточку вместо известных реквизитов было бы хуже.
+	 */
+	const key = asText(opened.baseKey);
+	const registry = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases, enabled: !!key });
+	const fresh = useMemo(
+		() => (registry.data?.items ?? []).find((b) => b.key.toLowerCase() === key.toLowerCase()),
+		[registry.data, key],
+	);
+	const row = useMemo(() => (fresh ? { ...opened, ...baseToRow(fresh) } : opened), [fresh, opened]);
 	const tabs = useBaseTabs(row);
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
@@ -374,9 +408,18 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 										</GroupRow>
 									</Group>
 
+									{/* Доступность: почему в базу не войти и что панель может с этим
+									    сделать. Молчит, пока всё в порядке. */}
+									<BaseAvailability baseKey={asText(row.baseKey)}
+										status={asText(row.status)}
+										hidden={row.disabled === true}
+										ibUnreachableAt={row.ibUnreachableAt ? asText(row.ibUnreachableAt) : null}
+										ibUnreachableReason={row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null} />
+
 									{/* Публикация — со своими командами по ЭТОЙ базе: в списке те же команды
 									    групповые, здесь цель уже выбрана и она на экране. */}
 									<BasePublication baseKey={asText(row.baseKey)}
+										serverName={row.serverName ? asText(row.serverName) : null}
 										published={row.published as boolean | null}
 										publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
 										publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
@@ -416,13 +459,7 @@ export function useOpenOnecBase() {
 		const cached = qc.getQueryData<{ items?: OnecBase[] }>(["onec", "bases"])?.items ?? [];
 		const found = cached.find((b) => b.key.toLowerCase() === key.toLowerCase());
 		const row: TDataItem = found
-			? ({
-				baseKey: found.key, name: found.name, status: found.status, serverName: found.serverName,
-				onecVersion: found.onecVersion, extensionsCount: found.extensionsCount,
-				published: found.published, publishUrl: found.publishUrl,
-				publishUrlPublic: found.publishUrlPublic, publishSeenAt: found.publishSeenAt,
-				lastSeenAt: found.lastSeenAt, infobaseId: found.infobaseId,
-			} as unknown as TDataItem)
+			? baseToRow(found)
 			: (typeof base === "string" ? ({ baseKey: key } as unknown as TDataItem) : base);
 		addPane({ label: `${translate("onecBase")}: ${key}`, component: OneCBasesForm as never, data: row });
 	};
@@ -473,9 +510,15 @@ export const OneCBasesList: FC<{
 			 * которая заведомо откажет; поэтому состояние называет именно это.
 			 */
 			if (col.identifier === "status") {
+				const reason = row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null;
 				return (
-					<span title={row.ibUnreachableAt ? translate("onecBaseIbUnreachable") : undefined}>
-						{row.ibUnreachableAt ? translate("onecBaseUnreachableShort") : statusLabel(asText(row.status))}
+					<span title={row.ibUnreachableAt
+						? unreachableReason({
+							status: asText(row.status), disabled: row.disabled === true,
+							ibUnreachableAt: asText(row.ibUnreachableAt), ibUnreachableReason: reason,
+						})
+						: undefined}>
+						{row.ibUnreachableAt ? unreachableShort(reason) : statusLabel(asText(row.status))}
 					</span>
 				);
 			}
@@ -484,20 +527,10 @@ export const OneCBasesList: FC<{
 				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;
 			}
 			/*
-			 * Когда состояние публикации проверяли. Колонка СКРЫТА по умолчанию (см.
-			 * columns.json): агент присылает признак в каждом срезе баз, и дата у всех
-			 * строк получается одна и та же — в списке это столбец одинаковых значений.
-			 * Свою работу она делает в КАРТОЧКЕ базы, рядом с самим состоянием: там и
-			 * задают вопрос «насколько это свежо». В списке включается настройкой колонок.
-			 */
-			if (col.identifier === "publishSeenAt") {
-				return <span>{row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "—"}</span>;
-			}
-			/*
 			 * Адрес публикации — тоже скрыт по умолчанию: он длинный, а нужен точечно.
 			 * «—» у неопубликованной базы — не пропуск, а отсутствие адреса как такового.
 			 *
-			 * Показываем адрес ПОД ПУБЛИЧНЫМ ИМЕНЕМ сервера, если оно задано в «Настройках»;
+			 * Показываем адрес ПОД ПУБЛИЧНЫМ ИМЕНЕМ сервера, если оно задано в параметрах агента;
 			 * подсказка хранит то, что сказал агент, — расхождение между ними и есть повод
 			 * проверить привязку сайта.
 			 */

@@ -26,7 +26,6 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { getFormatDate } from "src/utils/datetime";
 import {
 	fetchBases, fetchSessions, setSessionsLock, terminateSession,
 	type ClusterRow, type OnecBase,
@@ -43,18 +42,12 @@ const sessionsColumns = (): TColumn[] => ([
 	{ identifier: "userName", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "appId", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "host", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "startedAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "lastActiveAt", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "startedAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "lastActiveAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 /** Дата от rac → формат приложения. Нераспознанное показываем как пришло: лучше сырая
  *  строка, чем «—» вместо реального значения (у разных версий платформы формат разный). */
-const onecDate = (v: string | undefined | null): string => {
-	if (!v) return "—";
-	const t = Date.parse(v);
-	return Number.isNaN(t) ? v : getFormatDate(new Date(t).toISOString());
-};
-
 export const SessionsTab: FC = () => {
 	const [baseFilter, setBaseFilter] = useState<string>("");
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(sessionsColumns(), "OneCAdmin_sessions"));
@@ -207,8 +200,9 @@ export const SessionsTab: FC = () => {
 		appId: r.appId || "—",
 		host: r.host || "—",
 		// Даты сеансов приходят от rac как есть (ISO); показываем в формате приложения.
-		startedAt: onecDate(r.startedAt),
-		lastActiveAt: onecDate(r.lastActiveAt),
+		// Дату рисует таблица (колонки типа datetime): формат один на всё приложение.
+		startedAt: r.startedAt,
+		lastActiveAt: r.lastActiveAt,
 	})), [sorted.rows]);
 
 	const selectedBase = useMemo(

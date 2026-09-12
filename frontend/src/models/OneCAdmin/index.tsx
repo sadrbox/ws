@@ -7,6 +7,11 @@
  * широкие. Наблюдение от переключения вкладок НЕ прерывается — за командами следит сама
  * панель (useBatchWatch), а не вкладка; счётчик у «Прогресса» говорит, идёт ли что-то.
  *
+ * НАСТРОЕК ОТДЕЛЬНОЙ ВКЛАДКОЙ НЕТ. Всё, что настраивается у сервера 1С (публичный адрес,
+ * адрес и порт RAS), правится там же, где смотрят на сам сервер, — во вкладке «Параметры»
+ * карточки агента: агент и есть то, что связывает панель с этим сервером. Отдельная
+ * вкладка означала бы два места для одних и тех же полей.
+ *
  * СООБЩЕНИЯ ЗДЕСЬ НЕ ВЫВОДЯТСЯ. Все `<Notice />` приложения показывает одна область —
  * «Технические сообщения» справа от пейнов (components/TechMessages). Своей доски у панели
  * больше нет: два места вывода одного и того же — это два места, которые обязаны
@@ -57,11 +62,10 @@ import BatchesTab from "./BatchesTab";
 import AgentsTab from "./AgentsTab";
 import ProcessesTab from "./ProcessesTab";
 import ProgressTab from "./ProgressTab";
-import SettingsTab from "./SettingsTab";
 import { useBatchWatch } from "./progress";
 import main from "src/styles/main.module.scss";
 
-type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "progress" | "settings";
+type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "progress";
 
 /**
  * «Кластер» — живое состояние сервера 1С одним разделом.
@@ -168,13 +172,6 @@ export const OneCAdminList: FC = () => {
 			id: "progress",
 			label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
 			component: tab === "progress" ? <ProgressSection watch={watch} /> : null,
-		},
-		{
-			// Настройки — то, что панель знает о среде, а узнать сама не может: под каким
-			// именем сервер виден снаружи. Агент этого не знает и знать не обязан.
-			id: "settings",
-			label: translate("onecTabSettings"),
-			component: tab === "settings" ? <SettingsTab /> : null,
 		},
 	], [tab, running, watch]);
 

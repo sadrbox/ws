@@ -5,7 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient as appQueryClient } from "src/app/queryClient";
 import { restoreQueryCache, persistQueryCache, clearPersistedCache } from "src/services/queryPersist";
 import { initialSync, startPeriodicSync, stopPeriodicSync } from "src/services/syncManager";
 import { clearOfflineDb } from "src/services/offlineDb";
@@ -58,32 +59,9 @@ const readPaneAnimMs = (): number => {
 // ────────────────────────────────────────────────
 
 const App: React.FC = () => {
-  // ⚠️ QueryClient создаётся один раз и сохраняется в state.
-  // Ранее `new QueryClient()` вызывался при каждом рендере — это приводило
-  // к потере кэша React Query и невозможности invalidateQueries обновлять данные.
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        // offlineFirst: при отсутствии сети — сначала отдать данные из кэша,
-        // а сетевой запрос выполнить позже, когда сеть восстановится.
-        networkMode: "offlineFirst",
-        staleTime: 2 * 60 * 1000,
-        gcTime: 30 * 60 * 1000,
-        retry: (failureCount, error: { code?: string; message?: string; status?: number }) => {
-          // Не ретраить при сетевых ошибках — бессмысленно
-          if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") return false;
-          // 4xx — отказ по существу (нет прав, не аутентифицирован, неверный вход), а не
-          // сбой связи: повтор даст тот же ответ. Для команд в 1С это ещё и цена —
-          // второй вызов rac и второй сеанс ради того же отказа.
-          if (typeof error?.status === "number" && error.status >= 400 && error.status < 500) return false;
-          return failureCount < 1;
-        },
-      },
-      mutations: {
-        networkMode: "offlineFirst",
-      },
-    },
-  }));
+  // QueryClient — ОДИН на приложение и живёт в модуле (src/app/queryClient): обновлять
+  // данные после выполненной команды должен реестр операций, а он вне дерева React.
+  const queryClient = appQueryClient;
 
   const screenRef = useRef<HTMLDivElement>(null);
 

@@ -612,6 +612,17 @@ const Table: FC<TableProps> = memo((props) => {
     let selected = 0;
     for (const row of rows) {
       for (const child of childRows(row)) {
+        /*
+         * СЧИТАЕМ ТОЛЬКО ТО, ЧТО МОЖНО ОТМЕТИТЬ.
+         *
+         * Потомок без `__selected` — поясняющая строка: чекбокса у неё нет (см.
+         * TableBodyRow), отметить её нельзя. Пока такие строки попадали в знаменатель,
+         * «отмечено всё» было недостижимо: заголовочный чекбокс навсегда застревал в
+         * промежуточном состоянии и на каждое нажатие снова отмечал всё вместо того, чтобы
+         * снять. Живой случай — «Задания»: у базы, для которой команда даже не создалась
+         * (отсеяли на постановке), отмечать нечего, а весь чекбокс из-за неё не работал.
+         */
+        if (child.__selected === undefined) continue;
         total += 1;
         if (child.__selected === true) selected += 1;
       }
@@ -623,6 +634,7 @@ const Table: FC<TableProps> = memo((props) => {
       toggleAll: (next: boolean) => {
         for (const row of rows) {
           for (const child of childRows(row)) {
+            if (child.__selected === undefined) continue;
             if ((child.__selected === true) !== next) onChildToggle(row, child, next);
           }
         }

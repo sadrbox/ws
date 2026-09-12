@@ -49,3 +49,36 @@ describe("применимость базы: «числится в класте�
 		expect(isApplicable(base({ status: "MISSING" }), "publish")).toBe(false);
 	});
 });
+
+// ── База-фантом: запись в кластере есть, самой базы нет ─────────────────────
+//
+// Живой случай: `aibek` числится ONLINE, а ibcmd отвечает «База данных отсутствует в
+// сервере баз данных». Такой базе неприменимо НИЧЕГО, включая публикацию: та не соединяется
+// с базой и формально «сработала бы», но на веб-сервере появилась бы ссылка на пустоту — по
+// ней потом придут и получат «База данных не обнаружена».
+describe("база, которой нет в СУБД", () => {
+	const phantom = (reason: string) => base({
+		ibUnreachableAt: "2026-09-12T05:39:41.996Z",
+		ibUnreachableReason: reason,
+	});
+
+	it("неприменима ни к одной операции", () => {
+		for (const op of ["ib", "http", "publish", "unpublish"] as const) {
+			expect(isApplicable(phantom("NO_DB"), op)).toBe(false);
+			expect(isApplicable(phantom("NO_INFOBASE"), op)).toBe(false);
+		}
+	});
+
+	it("«не пускают» запрещает только команды внутрь базы", () => {
+		// Права чинятся настройкой учётных данных, а не исключением базы из работы.
+		expect(isApplicable(phantom("NO_ACCESS"), "ib")).toBe(false);
+		expect(isApplicable(phantom("NO_ACCESS"), "publish")).toBe(true);
+	});
+
+	it("причина названа словами, а не кодом", () => {
+		expect(unreachableReason(phantom("NO_DB"))).toBe(translate("onecBaseNoDb"));
+		expect(unreachableReason(phantom("NO_ACCESS"))).toBe(translate("onecBaseNoAccess"));
+		// Причину не разобрали — остаётся прежнее общее объяснение.
+		expect(unreachableReason(phantom("UNKNOWN"))).toBe(translate("onecBaseIbUnreachable"));
+	});
+});

@@ -148,6 +148,15 @@ export class AgentService {
 	 * Команды ссылаются на агента внешним ключом, поэтому удаляются здесь же и в одной
 	 * транзакции: иначе удаление падало бы на первом же агенте, который хоть раз работал.
 	 * История команд без агента бессмысленна — она вся про то, кто и что исполнял.
+	 *
+	 * ЧТО УДАЛЯЕМ, А ЧТО ОТВЯЗЫВАЕМ. Удаляются только команды — они принадлежат агенту.
+	 * Журнал аудита и ДИАЛОГИ остаются: журнал ведут ради разбирательств «кто это сделал»,
+	 * а диалог — переписка человека с помощником, и стирать её заодно с удалением служебной
+	 * записи никто не просил. У обоих ссылка просто обнуляется.
+	 *
+	 * Про диалоги здесь отдельная история: ссылку на них забыли, и удаление падало на
+	 * внешнем ключе `conversations_agent_id_fkey` — молча, ответом «внутренняя ошибка».
+	 * Со стороны панели это выглядело как «агент не удаляется» без единого объяснения.
 	 */
 	async remove(id: string): Promise<boolean> {
 		const client = await this.db.connect();
@@ -155,6 +164,7 @@ export class AgentService {
 			await client.query("BEGIN");
 			await client.query(`DELETE FROM commands WHERE agent_id = $1`, [id]);
 			await client.query(`UPDATE audit_log SET agent_id = NULL WHERE agent_id = $1`, [id]);
+			await client.query(`UPDATE conversations SET agent_id = NULL WHERE agent_id = $1`, [id]);
 			const r = await client.query(`DELETE FROM agents WHERE id = $1`, [id]);
 			await client.query("COMMIT");
 			return (r.rowCount ?? 0) > 0;

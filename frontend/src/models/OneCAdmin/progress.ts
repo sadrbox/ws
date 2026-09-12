@@ -17,8 +17,8 @@
  * done/failed/pending. Завершённые записи не исчезают сами — их убирает человек кнопкой,
  * иначе итог операции пропал бы ровно в тот момент, когда его собрались прочитать.
  */
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useSyncExternalStore } from "react";
+import { queryClient } from "src/app/queryClient";
 import { cancelBatch, fetchBatches, type BatchProgress } from "src/services/onec/api";
 import { translate } from "src/i18";
 
@@ -74,6 +74,49 @@ export const kindOfBatch = (type: string): OpKind => {
 	return "update";
 };
 
+/**
+ * ЧТО ПЕРЕЧИТАТЬ, КОГДА РАБОТА ЗАКОНЧИЛАСЬ.
+ *
+ * Команда меняет 1С, а панель этого не видит: у неё в руках кэш ответов. Поэтому после
+ * каждой завершившейся операции — и команды агенту, и обычного запроса — перечитываем всё,
+ * на что она могла повлиять. Ключи перечислены явно: живое состояние кластера (сеансы,
+ * соединения, процессы) сюда НЕ входит — каждый такой запрос стоит команды в 1С, и дёргать
+ * их после любой чужой работы незачем.
+ */
+const REFRESH_KEYS = [
+	"bases",              // состояние баз, включая публикацию
+	"base-ext",           // расширения в карточке базы
+	"ext-summary",        // сводка «в каких базах какое расширение»
+	"user-summary",
+	"base-users-cached",
+	"user-where",
+	"agents",             // состояние агента после включения/отключения/переименования
+	"servers",
+];
+
+/**
+ * Перечитать данные во ВСЕХ открытых формах, а не только там, откуда запускали.
+ *
+ * Так и просили: «после выполнения команд, операций, запросов обновлять данные в открытых
+ * формах элементов». Раньше это делал хук, живший на вкладке панели, — и работало только
+ * пока вкладка открыта. Карточка базы, открытая отдельным пейном, после публикации
+ * показывала прежнее состояние до перезагрузки страницы.
+ *
+ * ПЕРЕЧИТЫВАЕМ ДВАЖДЫ. Сервис обновляет свой кэш содержимого базы отдельной командой
+ * (IB_LIST_USERS ставится следом за изменяющей), и в момент, когда наша команда уже
+ * «выполнена», свежие данные ещё едут. Один запоздалый повтор дешевле, чем показать старое
+ * значение как новое.
+ */
+export function refreshAfterWork(): void {
+	const once = () => {
+		for (const key of REFRESH_KEYS) void queryClient.invalidateQueries({ queryKey: ["onec", key] });
+		// Список баз ERP-прокси (ModelList) живёт под своим ключом.
+		void queryClient.invalidateQueries({ queryKey: ["onec-bases"] });
+	};
+	once();
+	window.setTimeout(once, 5000);
+}
+
 let ops: Op[] = [];
 const listeners = new Set<() => void>();
 let seq = 0;
@@ -112,6 +155,9 @@ export function progressOp(id: string, done: number, failed = 0): void {
 /** Связать запись с заданием сервиса: дальше её двигает опрос заданий. */
 export function attachBatch(id: string, batchId: string, total: number, note = ""): void {
 	replace(id, (o) => ({ ...o, batchId, total, note: note || o.note }));
+	// Задание появилось — значит, есть за чем следить. Наблюдение не ждёт, пока кто-нибудь
+	// откроет нужную вкладку: команду ставят из карточки, а смотрят потом куда угодно.
+	ensureBatchWatch();
 }
 
 /** Закрыть операцию, считаемую на клиенте. */
@@ -124,6 +170,9 @@ export function finishOp(id: string, r: { failed?: number; note?: string } = {})
 		state: (r.failed ?? o.failed) > 0 ? "failed" : "done",
 		finishedAt: Date.now(),
 	}));
+	// Операция закончилась — данные в открытых формах устарели. Даже чтение: ответ 1С
+	// оседает в реестре сервиса, и карточка обязана показать то, что только что прочитали.
+	refreshAfterWork();
 }
 
 /**
@@ -137,6 +186,9 @@ export function mergeBatch(p: BatchProgress): void {
 	const target = ops.find((o) => o.batchId === p.id);
 	if (!target) return;
 	const running = p.pending > 0;
+	// Переход «шла → закончилась» — единственный момент, когда есть что перечитывать.
+	// На каждом опросе этого делать нельзя: опрос идёт раз в три секунды.
+	if (!running && target.state === "running") refreshAfterWork();
 	const failedItem = p.items.find((i) => i.error);
 	replace(target.id, (o) => ({
 		...o,
@@ -214,64 +266,66 @@ const snapshot = () => ops;
 export const useOnecOps = (): Op[] => useSyncExternalStore(subscribe, snapshot, snapshot);
 
 /**
- * Слежение за командами: опрос заданий, пока есть незавершённые.
+ * Слежение за командами — В МОДУЛЕ, а не на экране.
  *
- * Живёт в ХУКЕ, а не на одном экране: команду ставят и со списка, и из карточки, а
- * карточка — отдельный пейн и может остаться единственным открытым. Ключ запроса общий,
- * поэтому два наблюдателя не удваивают трафик.
+ * Команду ставят из карточки, из списка, из помощника; выполняется она минутами, и её
+ * результат нужен всем открытым формам сразу. Пока опрос жил в хуке вкладки, он работал,
+ * только пока эта вкладка открыта: закрыли панель — и «Задания» доедут, а карточка базы
+ * останется с прежним состоянием публикации до перезагрузки страницы.
  *
- * ПОСЛЕ ЗАВЕРШЕНИЯ перечитываем реестр — и делаем это ДВАЖДЫ. Сервис обновляет свой кэш
- * содержимого базы отдельной командой (IB_LIST_USERS ставится следом за изменяющей), и в
- * момент, когда наша команда уже «выполнена», свежие данные ещё едут. Один запоздалый
- * повтор дешевле, чем показывать старое значение как новое.
+ * Теперь опрос начинается сам, как только у операции появилось задание, и прекращается
+ * сам, когда незавершённых не осталось: лишнего трафика нет, а наблюдение не зависит от
+ * того, на что человек сейчас смотрит.
+ */
+let poll: number | null = null;
+let polling = false;
+const watchListeners = new Set<() => void>();
+const emitWatch = () => { for (const l of watchListeners) l(); };
+
+async function pollBatches(): Promise<void> {
+	if (polling) return;
+	polling = true;
+	emitWatch();
+	try {
+		const r = await fetchBatches();
+		for (const b of r.items) mergeBatch(b);
+	} catch {
+		// Сеть отвалилась — следующий тик попробует снова. Ошибку наблюдения показывать
+		// человеку незачем: он её не просил и сделать с ней ничего не может.
+	} finally {
+		polling = false;
+		emitWatch();
+		if (poll !== null && !hasRunningBatches(ops)) {
+			window.clearInterval(poll);
+			poll = null;
+		}
+	}
+}
+
+/** Начать наблюдение, если есть за чем. Идемпотентно: второй вызов ничего не удваивает. */
+export function ensureBatchWatch(): void {
+	if (poll !== null || !hasRunningBatches(ops)) return;
+	poll = window.setInterval(() => void pollBatches(), 3000);
+	void pollBatches();
+}
+
+const subscribeWatch = (l: () => void) => { watchListeners.add(l); return () => { watchListeners.delete(l); }; };
+
+/**
+ * Состояние наблюдения для экрана: идёт ли опрос и сколько операций в работе.
+ *
+ * Сам опрос хук больше не держит — он лишь показывает то, что делает модуль, и даёт
+ * кнопку «обновить сейчас».
  */
 export function useBatchWatch(): { isFetching: boolean; refresh: () => void; running: number } {
-	const ops = useOnecOps();
-	const watching = hasRunningBatches(ops);
-	const qc = useQueryClient();
+	const list = useOnecOps();
+	const isFetching = useSyncExternalStore(subscribeWatch, () => polling, () => false);
 
-	const q = useQuery({
-		queryKey: ["onec", "batches"],
-		queryFn: fetchBatches,
-		refetchInterval: watching ? 3000 : false,
-		staleTime: 0,
-	});
-
-	useEffect(() => {
-		for (const b of q.data?.items ?? []) mergeBatch(b);
-	}, [q.data]);
-
-	const was = useRef(false);
-	useEffect(() => {
-		const prev = was.current;
-		was.current = watching;
-		if (!prev || watching) return;
-		// Перечитываем ВСЁ, что команда могла изменить, а не только пользователей.
-		// Раньше здесь были три ключа про пользователей — и состояние публикации после
-		// «Опубликовать» не менялось в списке баз до перезагрузки страницы: команда
-		// отрабатывала, реестр обновлялся, а панель об этом не спрашивала.
-		// Живое состояние кластера (сеансы, соединения, процессы) сюда НЕ входит: каждый
-		// такой запрос — команда в 1С, и дёргать их после любой чужой команды незачем.
-		const refresh = () => {
-			for (const key of [
-				"bases",              // состояние баз, включая публикацию
-				"base-ext",           // расширения в карточке базы
-				"ext-summary",        // сводка «в каких базах какое расширение»
-				"user-summary",
-				"base-users-cached",
-				"user-where",
-			]) void qc.invalidateQueries({ queryKey: ["onec", key] });
-			// Список баз ERP-прокси (ModelList) живёт под своим ключом.
-			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
-		};
-		refresh();
-		const t = window.setTimeout(refresh, 5000);
-		return () => window.clearTimeout(t);
-	}, [watching, qc]);
+	useEffect(() => { ensureBatchWatch(); }, [list]);
 
 	return {
-		isFetching: q.isFetching,
-		refresh: () => void q.refetch(),
-		running: ops.filter((o) => o.state === "running").length,
+		isFetching,
+		refresh: () => void pollBatches(),
+		running: list.filter((o) => o.state === "running").length,
 	};
 }

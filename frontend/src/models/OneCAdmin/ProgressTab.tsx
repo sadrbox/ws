@@ -24,7 +24,6 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { getFormatDate } from "src/utils/datetime";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { cancelOp, clearFinished, useOnecOps, type Op } from "./progress";
@@ -36,7 +35,7 @@ const opColumns = (): TColumn[] => ([
 	{ identifier: "opTarget", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "opProgress", type: "string", width: "180px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "opState", type: "string", width: "130px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "opStartedAt", type: "string", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "opStartedAt", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "opNote", type: "string", width: "320px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
@@ -69,7 +68,8 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		// Значение колонки — текст для поиска и сортировки; полосу рисует renderCell.
 		opProgress: o.total ? `${o.done} / ${o.total}` : (o.state === "running" ? "…" : "—"),
 		opState: stateLabel(o),
-		opStartedAt: getFormatDate(new Date(o.startedAt).toISOString()),
+		// Дату рисует таблица: колонка типа datetime, значение — как есть.
+		opStartedAt: new Date(o.startedAt).toISOString(),
 		opNote: o.note || duration(o),
 		__percent: o.total ? Math.min(Math.round((o.done / o.total) * 100), 100) : (o.state === "running" ? 0 : 100),
 		__state: o.state,

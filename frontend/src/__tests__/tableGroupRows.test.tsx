@@ -280,3 +280,55 @@ describe("Table: перенос текста в ячейках", () => {
     expect(bodyRows(container).length).toBe(60);
   });
 });
+
+
+// ── Строка, которую отметить НЕЛЬЗЯ, не должна ломать чекбокс шапки ──────────
+//
+// Живой случай — «Задания»: у базы, для которой команды даже не создалось (её отсеяли при
+// постановке), отмечать нечего, и `__selected` у такой строки нет вовсе. Пока она попадала
+// в знаменатель «отмечено всё», состояние «всё» было недостижимо: чекбокс в шапке навсегда
+// застревал промежуточным и на каждое нажатие снова отмечал всё вместо того, чтобы снять.
+
+describe("Table: неотмечаемая вложенная строка не блокирует чекбокс шапки", () => {
+  /** Две базы с командами (обе отмечены) и одна без команды — её отметить нечем. */
+  const mixed = (r: TDataItem): TDataItem[] => (
+    r.uuid === "role-a"
+      ? [
+        { id: -1, uuid: "role-a|BASE1", name: "BASE1", note: "В очереди", __selected: true },
+        { id: -2, uuid: "role-a|BASE2", name: "BASE2", note: "В очереди", __selected: true },
+        { id: -3, uuid: "role-a|BASE3", name: "BASE3", note: "Команда не создана" },
+      ]
+      : []
+  );
+
+  const renderMixed = (onChildToggle: (p: TDataItem, c: TDataItem, n: boolean) => void) => render(
+    <TestWrapper>
+      <Table {...buildStaticTableProps({
+        componentName: "TestMixedTable",
+        rows, columns: columns(), setColumns: () => { },
+        selectable: true,
+        childRows: mixed,
+        onChildToggle,
+        expandedRowIds: new Set(["role-a"]),
+        disableActiveRow: true,
+      })} />
+    </TestWrapper>,
+  );
+
+  it("«отмечено всё» достижимо: неотмечаемая строка в счёт не идёт", () => {
+    const { container } = renderMixed(() => {});
+    const box = container.querySelector<HTMLInputElement>('thead input[type="checkbox"]')!;
+    expect(box.checked).toBe(true);
+    expect(box.indeterminate).toBe(false);
+  });
+
+  it("щелчок по полной отметке снимает её у всех, кого можно отметить", () => {
+    const onChildToggle = vi.fn<(p: TDataItem, c: TDataItem, n: boolean) => void>();
+    const { container } = renderMixed(onChildToggle);
+    fireEvent.click(container.querySelector<HTMLInputElement>('thead input[type="checkbox"]')!);
+    // Сняли обе отмеченные; строку без отметки не трогали вовсе.
+    expect(onChildToggle).toHaveBeenCalledTimes(2);
+    expect(onChildToggle.mock.calls.every((c) => c[2] === false)).toBe(true);
+    expect(onChildToggle.mock.calls.map((c) => c[1].uuid)).toEqual(["role-a|BASE1", "role-a|BASE2"]);
+  });
+});

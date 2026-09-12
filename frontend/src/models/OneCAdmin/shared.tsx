@@ -12,8 +12,9 @@ import type { NoticeItem } from "src/components/Notice";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import {
-	fetchBaseExtensions, fetchBaseUsers, fetchAgents, hasCapability, type OnecBase,
+	fetchBaseExtensions, fetchBaseUsers, fetchAgents, fetchServers, hasCapability, type OnecBase,
 } from "src/services/onec/api";
+import { previewUrl } from "./ServerParams";
 import { finishOp, progressOp, startOp } from "./progress";
 import { noteNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import styles from "./OneCAdmin.module.scss";
@@ -42,11 +43,24 @@ export type OnecOperation = "ib" | "http" | "publish" | "unpublish";
 
 /** Принимает всё, у чего есть эти три поля: строку списка баз или запись реестра. */
 export function isApplicable(
-	b: Pick<OnecBase, "status" | "disabled" | "published"> & { ibUnreachableAt?: string | null },
+	b: Pick<OnecBase, "status" | "disabled" | "published"> & {
+		ibUnreachableAt?: string | null;
+		ibUnreachableReason?: string | null;
+	},
 	op: OnecOperation,
 ): boolean {
 	// Базы, которой нет в кластере, нет ни для одной операции.
 	if (b.status === "MISSING" || b.disabled) return false;
+	/*
+	 * БАЗЫ НЕТ ВОВСЕ — ни одна операция к ней неприменима, включая публикацию.
+	 *
+	 * Публикация не соединяется с базой и потому формально «сработала бы»: на веб-сервере
+	 * появилась бы ссылка на несуществующие данные. Смысла в такой ссылке нет, а вреда —
+	 * достаточно: по ней потом придут и получат «База данных не обнаружена». Пока причина
+	 * не разобрана (UNKNOWN, «не пускают»), запрет остаётся прежним — только на команды
+	 * внутрь базы: вопрос прав решается настройкой, а не исключением базы из работы.
+	 */
+	if (b.ibUnreachableReason === "NO_DB" || b.ibUnreachableReason === "NO_INFOBASE") return false;
 	/*
 	 * База ЧИСЛИТСЯ в кластере, но войти в неё нельзя — фантом: запись в кластере осталась,
 	 * самой базы на СУБД уже нет. Для операций ВНУТРИ базы это отказ, известный заранее:
@@ -77,11 +91,60 @@ export const publishLabel = (v: boolean | null | undefined): string =>
  * на вопрос, который после него задают: как так, если она в списке? Отвечаем: в списке она
  * потому, что кластер её перечисляет; войти нельзя потому, что самой базы уже нет.
  */
-export function unreachableReason(b: Pick<OnecBase, "status" | "disabled"> & { ibUnreachableAt?: string | null }): string {
+export function unreachableReason(
+	b: Pick<OnecBase, "status" | "disabled"> & {
+		ibUnreachableAt?: string | null;
+		ibUnreachableReason?: string | null;
+	},
+): string {
 	if (b.disabled) return translate("onecBaseDisabled");
 	if (b.status === "MISSING") return translate("onecBaseMissing");
-	if (b.ibUnreachableAt) return translate("onecBaseIbUnreachable");
+	if (b.ibUnreachableAt) return translate(UNREACHABLE_TEXT[b.ibUnreachableReason ?? ""] ?? "onecBaseIbUnreachable");
 	return translate("unknownError");
+}
+
+/**
+ * ПОЧЕМУ в базу не войти — по коду из сервиса (см. ibFailureReason в ai/src/bases).
+ *
+ * Разница решает, что делать дальше, и потому названа словами. «Базы нет в СУБД» не
+ * лечится повтором никогда: запись в кластере осталась, данных нет, и выход — либо
+ * восстановить из копии, либо убрать регистрацию. «Не пускают» — вопрос учётных данных.
+ * Общее «недоступна» заставляло человека выяснять это самому, по тексту ошибки, который он
+ * уже один раз прочитал и не понял.
+ */
+const UNREACHABLE_TEXT: Record<string, string> = {
+	NO_DB: "onecBaseNoDb",
+	NO_INFOBASE: "onecBaseNoInfobase",
+	NO_ACCESS: "onecBaseNoAccess",
+	UNKNOWN: "onecBaseIbUnreachable",
+};
+
+/** Короткая подпись состояния базы-фантома для списка: в колонку длинный текст не влезет. */
+export const unreachableShort = (reason?: string | null): string =>
+	translate(reason === "NO_DB" ? "onecBaseNoDbShort"
+		: reason === "NO_ACCESS" ? "onecBaseNoAccessShort"
+			: "onecBaseUnreachableShort");
+
+/**
+ * КАКОЙ БУДЕТ ССЫЛКА после публикации — до того, как её нажали.
+ *
+ * Агент публикует базу на веб-сервере этой машины и честно возвращает адрес из привязки
+ * сайта IIS — обычно `http://localhost/<база>`. С самого сервера он рабочий, снаружи по
+ * нему не попасть. Имя, под которым сервер виден из сети, задают в карточке агента
+ * («Параметры» → «Адрес сервера»), и именно оно решает, будет ли ссылка кому-то полезна.
+ * Поэтому предупреждение о публикации называет адрес, а не пугает словом «localhost»:
+ * заданный адрес — показываем, незаданный — говорим, где его указать.
+ */
+export function usePublishAddressHint(serverName?: string | null): NoticeItem {
+	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers });
+	const items = servers.data?.items ?? [];
+	// Сервер базы — по имени; когда сервер один, имя не нужно (и его может не быть в строке).
+	const server = (serverName && items.find((s) => s.name === serverName))
+		|| (items.length === 1 ? items[0] : null);
+	const host = (server?.publicHost ?? "").trim();
+	return host
+		? { type: "info", text: `${translate("onecPublishAddress")}: ${previewUrl(host)}` }
+		: { type: "warning", text: translate("onecPublishNoPublicHost") };
 }
 
 /** Что читаем у базы: её пользователей или её расширения. */
