@@ -553,6 +553,26 @@ export const setBaseHidden = (key: string, hidden: boolean) =>
 		method: "POST", body: JSON.stringify({ hidden }),
 	});
 
+/**
+ * Состояние очереди и измеренные длительности команд.
+ *
+ * Отвечает на два вопроса, которые панель раньше не умела задать: «сколько ждать» (среднее
+ * по типу команды за неделю) и «чего ждёт очередь» (сколько команд стоит, есть ли живой
+ * агент и занят ли он).
+ */
+export type OnecQueueStats = {
+	types: { type: string; avgSecs: number; samples: number }[];
+	queued: number;
+	running: number;
+	oldestQueuedSecs: number;
+	agentsOnline: number;
+	agentsBusy: number;
+	/** Сколько команд внутрь базы агент получает одновременно — делитель в оценке времени. */
+	ibParallel: number;
+};
+
+export const fetchQueueStats = () => aiFetch<OnecQueueStats>("/v1/onec/queue-stats");
+
 /** Есть ли на связи админ-агент с нужной способностью. */
 export const hasCapability = (agents: OnecAgent[] | undefined, capability: string): boolean =>
 	(agents ?? []).some((a) => a.role === "admin" && a.online && !a.disabled && a.capabilities.includes(capability));

@@ -27,6 +27,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { cancelOp, clearFinished, useOnecOps, type Op } from "./progress";
+import { formatDuration, queueReason, useQueueStats } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";
 
 const opColumns = (): TColumn[] => ([
@@ -58,6 +59,13 @@ const duration = (o: Op): string => {
 
 export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = ({ onRefresh, isLoading }) => {
 	const ops = useOnecOps();
+	/*
+	 * ЧЕГО ЖДЁТ ОЧЕРЕДЬ. Команда «в очереди» выглядела так же, как выполняющаяся: не
+	 * отличить «агент занят другой базой» от «агента нет на связи», хотя чинится это
+	 * по-разному — второе на сервере 1С, первое терпением. Строка отвечает на оба вопроса
+	 * сразу: сколько стоит, сколько идёт и почему стоит.
+	 */
+	const stats = useQueueStats();
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(opColumns(), "OneCAdmin_ops"));
 
 	const rows = useMemo(() => ops.map((o, i) => ({
@@ -94,8 +102,20 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		setActive((a) => (a ? { ...a, cancelable: 0 } : a));
 	}, [active]);
 
+	const queueLine = [
+		stats.data?.running ? `${translate("onecBatchRunning")}: ${stats.data.running}` : "",
+		stats.data?.queued ? `${translate("onecBatchQueuedState")}: ${stats.data.queued}` : "",
+		queueReason(stats.data),
+		stats.data?.oldestQueuedSecs
+			? `${translate("onecQueueOldest")}: ${formatDuration(stats.data.oldestQueuedSecs)}`
+			: "",
+	].filter(Boolean).join(" · ");
+
 	return (
-		<Table {...buildStaticTableProps({
+		<>
+			{/* Строка состояния очереди: молчит, когда очереди нет — сообщать «пусто» незачем. */}
+			{queueLine && <div className={styles.Hint}>{translate("onecQueueState")}: {queueLine}</div>}
+			<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ops", rows: view.rows, columns: cols, setColumns: setCols,
 			sorting: view.sorting, search: view.search, isLoading: false,
 			reloading: !!isLoading,
@@ -147,6 +167,7 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 				</>
 			),
 		})} />
+		</>
 	);
 };
 

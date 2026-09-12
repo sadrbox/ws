@@ -133,7 +133,23 @@ export const MessagesView: FC<{
 	toolbar?: ReactNode;
 }> = ({ messages, toolbar }) => {
 	const [mode, setMode] = useState<GroupMode>(readMode);
-	const groups = useMemo(() => groupMessages(messages, mode), [messages, mode]);
+	/*
+	 * ПОИСК — по тексту и источнику. Предел журнала 200 записей, и при десятке объектов
+	 * нужное сообщение искалось глазами: группировка отвечает «чьё это», но не «где то,
+	 * про lock-файл». Отбор «только ошибки» — второй частый вопрос: остальное в этот момент
+	 * только мешает.
+	 */
+	const [needle, setNeedle] = useState("");
+	const [errorsOnly, setErrorsOnly] = useState(false);
+	const shown = useMemo(() => {
+		const q = needle.trim().toLowerCase();
+		return messages.filter((m) => {
+			if (errorsOnly && m.type !== "error" && m.type !== "attention") return false;
+			if (!q) return true;
+			return m.text.toLowerCase().includes(q) || (m.source ?? "").toLowerCase().includes(q);
+		});
+	}, [messages, needle, errorsOnly]);
+	const groups = useMemo(() => groupMessages(shown, mode), [shown, mode]);
 	const active = useMemo(() => messages.filter((m) => m.active).length, [messages]);
 
 	/*
@@ -172,9 +188,30 @@ export const MessagesView: FC<{
 				<div className={styles.ViewTools}>
 					{toolbar}
 					{!!messages.length && (
-						<span className={styles.ViewCount}>
-							{translate("techMsgActive")}: {active} · {translate("total")}: {messages.length}
-						</span>
+						<>
+							<input
+								className={styles.Search}
+								type="search"
+								value={needle}
+								placeholder={translate("search")}
+								aria-label={translate("search")}
+								onChange={(e) => setNeedle(e.target.value)}
+							/>
+							<Button size="sm" variant="secondary" active={errorsOnly}
+								title={translate("techMsgErrorsOnlyHint")}
+								onClick={() => setErrorsOnly((v) => !v)}>
+								{translate("techMsgErrorsOnly")}
+							</Button>
+							{/* Когда отбор что-то отсёк, счётчик говорит об этом: «12 из 200».
+							    Иначе человек считает, что видит всё. */}
+							<span className={styles.ViewCount}>
+								{translate("techMsgActive")}: {active} · {translate("total")}: {
+									shown.length === messages.length
+										? messages.length
+										: `${shown.length} / ${messages.length}`
+								}
+							</span>
+						</>
 					)}
 				</div>
 			)}
@@ -201,7 +238,13 @@ export const MessagesView: FC<{
 
 			<div className={styles.Frame}>
 				<div className={styles.Rows}>
-					{!groups.length && <span className={styles.Empty}>{translate("techMessagesNone")}</span>}
+					{!groups.length && (
+						<span className={styles.Empty}>
+							{/* «Ничего не нашлось» и «сообщений нет» — разные ответы: первый
+							    значит, что отбор можно снять, второй — что всё в порядке. */}
+							{messages.length ? translate("techMsgNothingFound") : translate("techMessagesNone")}
+						</span>
+					)}
 
 					{groups.map((g, i) => {
 						const open = isOpen(g, i);

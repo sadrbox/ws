@@ -40,6 +40,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
 import { fetchBases, runBatch, type BatchType, type OnecBase } from "src/services/onec/api";
 import { isApplicable, unreachableReason, usePublishAddressHint, type OnecOperation } from "./shared";
+import { estimateSecs, formatDuration, useQueueStats } from "./queueStats";
 import { attachBatch, finishOp, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
@@ -114,6 +115,10 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	 * когда сервер в реестре один, оно и не требуется.
 	 */
 	const address = usePublishAddressHint(items.find((b) => picked.has(b.key.toLowerCase()))?.serverName);
+
+	/** Оценка времени операции: измеренная длительность типа × число баз ÷ параллельность. */
+	const stats = useQueueStats();
+	const eta = formatDuration(estimateSecs(stats.data, spec?.type ?? "", picked.size));
 
 	const [name, setName] = useState(asText(data.name));
 	const [fullName, setFullName] = useState("");
@@ -299,6 +304,16 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 								value={translate(spec.title)} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
 							<Field name="gcw_plan_count" label={translate("onecBatchTargets")}
 								value={String(targets.length)} disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
+							{/*
+							  * СКОЛЬКО ЭТО ЗАЙМЁТ — до нажатия, а не после. Сто десять баз по
+							  * измеренным девятнадцати секундам — это тридцать пять минут, и
+							  * человек вправе узнать это заранее, а не по счётчику «7 из 110».
+							  * Оценка берётся из фактических длительностей за неделю; нет
+							  * замеров — так и говорим, а не выдумываем округлое число.
+							  */}
+							<Field name="gcw_plan_eta" label={translate("onecEstimate")}
+								value={eta || translate("onecEstimateUnknown")}
+								disabled width={FIELD_WIDTH.md} onChange={() => {}} />
 						</GroupRow>
 						<FormArea title={translate("onecTabBases")}>
 							<div className={styles.PlanRow}>

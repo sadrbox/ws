@@ -1898,7 +1898,7 @@
   "onecOpCancelTooLate": "Болдырмайтын ештеңе жоқ: командалар 1С серверінде орындалуда",
   "onecOpPickFirst": "Тізімнен операцияны таңдаңыз",
   "onecOpsNothingToClear": "Аяқталған операциялар жоқ",
-  "secShort": "сек",
+  "secShort": "с",
   "minShort": "мин",
   "opTitle": "Операция",
   "opKind": "Түрі",
@@ -2013,5 +2013,16 @@
   "onecNothingToCheck": "Тексеретін ештеңе жоқ: дерекқорлар қолжетімсіз",
   "deleteBlockedShort": "Жою мүмкін емес: сілтемелер кедергі",
   "deleteFailed": "Құжатты жою мүмкін болмады",
-  "documentDeleted": "Құжат жойылды"
+  "documentDeleted": "Құжат жойылды",
+  "onecQueueNoAgent": "күтуде: агент байланыста жоқ",
+  "onecQueueAgentBusy": "күтуде: агент басқа дерекқормен бос емес",
+  "onecQueueWaiting": "кезекте",
+  "onecQueueRunning": "орындалуда",
+  "onecQueueState": "Кезек",
+  "onecEstimate": "Уақыт бағасы",
+  "onecEstimateUnknown": "бағалауға дерек жоқ",
+  "onecQueueOldest": "ең ескісі күтуде",
+  "techMsgErrorsOnly": "Тек қателер",
+  "techMsgErrorsOnlyHint": "Тек қателер мен іркіліс туралы ескертулерді көрсету",
+  "techMsgNothingFound": "Ештеңе табылмады: сүзгіні алып тастаңыз немесе сұранысты өзгертіңіз"
 }

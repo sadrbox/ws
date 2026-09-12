@@ -2013,5 +2013,16 @@
   "onecNothingToCheck": "Проверять нечего: базы недоступны",
   "deleteBlockedShort": "Удалить нельзя: мешают ссылки",
   "deleteFailed": "Не удалось удалить документ",
-  "documentDeleted": "Документ удалён"
+  "documentDeleted": "Документ удалён",
+  "onecQueueNoAgent": "ждёт: агента нет на связи",
+  "onecQueueAgentBusy": "ждёт: агент занят другой базой",
+  "onecQueueWaiting": "ждёт очереди",
+  "onecQueueRunning": "выполняется",
+  "onecQueueState": "Очередь",
+  "onecEstimate": "Оценка времени",
+  "onecEstimateUnknown": "нет данных для оценки",
+  "onecQueueOldest": "самая старая ждёт",
+  "techMsgErrorsOnly": "Только ошибки",
+  "techMsgErrorsOnlyHint": "Показывать только ошибки и предупреждения о сбоях",
+  "techMsgNothingFound": "Ничего не нашлось: снимите отбор или измените запрос"
 }

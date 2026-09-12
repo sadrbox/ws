@@ -153,3 +153,51 @@ describe("Технические сообщения: журнал со шкал�
 		expect(screen.getByText("Агент не на связи")).toBeTruthy();
 	});
 });
+
+// ── Поиск и отбор по журналу ────────────────────────────────────────────────
+//
+// Предел журнала — 200 записей, и при десятке объектов нужное сообщение искалось глазами:
+// группировка отвечает «чьё это», но не «где то, про lock-файл». Отбор «только ошибки» —
+// второй частый вопрос: в момент разбора остальное мешает.
+
+describe("Технические сообщения: поиск и отбор", () => {
+	/** Подписанная витрина — как в приложении: снимок не заметил бы изменений хранилища. */
+	const Live = () => <MessagesView messages={useScopedNotices(APP_SCOPE)} />;
+	const show = () => render(<TestWrapper><Live /></TestWrapper>);
+
+	beforeEach(() => {
+		act(() => { clearScope("pane-1"); clearNoticeHistory(APP_SCOPE); getMessages().length = 0; });
+	});
+
+	const fill = () => act(() => {
+		addMessage({ scope: "pane-1", type: "error", text: "Занят рабочий каталог: lock-файл", source: "Базы 1С" });
+		addMessage({ scope: "pane-1", type: "info", text: "Публикация выполнена", source: "Публикация" });
+	});
+
+	it("поиск идёт и по тексту, и по источнику", () => {
+		fill();
+		show();
+		fireEvent.change(screen.getByRole("searchbox"), { target: { value: "lock" } });
+		expect(screen.getByText(/Занят рабочий каталог/)).toBeTruthy();
+		expect(screen.queryByText("Публикация выполнена")).toBeNull();
+
+		fireEvent.change(screen.getByRole("searchbox"), { target: { value: "публикац" } });
+		expect(screen.getByText("Публикация выполнена")).toBeTruthy();
+	});
+
+	it("«только ошибки» убирает всё остальное", () => {
+		fill();
+		show();
+		fireEvent.click(screen.getByRole("button", { name: /Только ошибки/ }));
+		expect(screen.getByText(/Занят рабочий каталог/)).toBeTruthy();
+		expect(screen.queryByText("Публикация выполнена")).toBeNull();
+	});
+
+	it("пустой результат отбора — это не «сообщений нет»", () => {
+		// Разные ответы: один значит «сними отбор», другой — «всё в порядке».
+		fill();
+		show();
+		fireEvent.change(screen.getByRole("searchbox"), { target: { value: "чего-то, чего нет" } });
+		expect(screen.getByText(/Ничего не нашлось/)).toBeTruthy();
+	});
+});

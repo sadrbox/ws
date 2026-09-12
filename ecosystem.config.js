@@ -1,4 +1,24 @@
 // ecosystem.config.js
+//
+// РЕЖИМ ЗАДАЁТСЯ ПЕРЕМЕННОЙ APP_MODE, а не правкой файла.
+//
+//   APP_MODE не задан (умолчание) — РАЗРАБОТКА: фронт живёт dev-сервером Vite с HMR,
+//     бэкенд одним процессом в fork. Так удобно работать и отлаживать.
+//   APP_MODE=production — ПРОД: фронт раздаёт собранный `dist` (`vite preview`), бэкенд
+//     идёт кластером на четыре воркера, NODE_ENV=production у обоих.
+//
+// Зачем разделение. Прод работал dev-сервером: неминифицированный код, предупреждения
+// React, sourcemaps наружу и HMR-сокет, стучащийся на локальный адрес разработчика. Сборка
+// при этом есть и собирается за полминуты (194 кБ gzip главного чанка) — не хватало только
+// раздачи. А объявленный здесь кластер на четыре воркера (под него и считался пул Prisma:
+// 4 × 17 = 68 < 100 соединений) фактически не включался.
+//
+// Порядок выкладки прода:
+//   cd frontend && npm run build
+//   APP_MODE=production pm2 start ecosystem.config.js
+const PRODUCTION = process.env.APP_MODE === "production";
+const NODE_ENV = PRODUCTION ? "production" : "development";
+
 module.exports = {
 	apps: [
 		// 1. Dev-сервер Vite в ./frontend (см. vite.config.ts).
@@ -11,11 +31,15 @@ module.exports = {
 			name: "frontend",
 			cwd: "./frontend", // Рабочая директория
 			script: "npx",
-			args: "vite --host", // dev-сервер на 0.0.0.0:5173 с HMR
+			// Прод раздаёт СОБРАННОЕ (`vite preview` отдаёт ./dist на том же порту), а
+			// разработка — dev-сервер с HMR. Порт один и тот же: снаружи (туннель, LAN)
+			// ничего перенастраивать не нужно.
+			args: PRODUCTION ? "vite preview --host --port 5173" : "vite --host",
 			watch: false,
 			ignore_watch: ["node_modules", "dist", "logs"],
 			env: {
-				NODE_ENV: "development",
+				NODE_ENV,
+				// HMR — только у dev-сервера: у раздачи `dist` сокета нет вовсе.
 				VITE_HMR_HOST: "192.168.1.112",
 				VITE_HMR_PROTOCOL: "ws",
 				VITE_HMR_CLIENT_PORT: "5173",
@@ -31,11 +55,13 @@ module.exports = {
 			cwd: "./backend", // Рабочая директория
 			//script: "server.js", // Прямой запуск server.js
 			script: "server.js", // ESM-вход; PM2 cluster с ESM проверен — работает
-			exec_mode: "cluster",
-			instances: 4, // многоядерность: 4 воркера. DB-пул: 4 × дефолт Prisma(17) = 68 < max_connections 100
+			// Кластер — только в проде: в разработке один процесс проще отлаживать
+			// (точки останова, перезапуск, чтение логов без чересполосицы воркеров).
+			exec_mode: PRODUCTION ? "cluster" : "fork",
+			instances: PRODUCTION ? 4 : 1, // DB-пул: 4 × дефолт Prisma(17) = 68 < max_connections 100
 			// watch: ["server.js", "routes", "controllers"], // Опционально: слежение за файлами
 			env: {
-				NODE_ENV: "development",
+				NODE_ENV,
 				PORT: 3000,
 			},
 			error_file: "./logs/backend-err.log",
@@ -62,7 +88,9 @@ module.exports = {
 		},
 
 		// 3. Prisma Studio (новый процесс)
-		{
+		// Prisma Studio — ИНСТРУМЕНТ РАЗРАБОТЧИКА: полный доступ ко всем таблицам мимо прав
+		// приложения. В проде его не поднимаем вовсе; нужен разово — запускается руками.
+		...(PRODUCTION ? [] : [{
 			name: "prisma-studio",
 			cwd: "./backend", // ← папка с prisma/schema.prisma
 			script: "npx",
@@ -72,6 +100,6 @@ module.exports = {
 			error_file: "./logs/prisma-err.log",
 			out_file: "./logs/prisma-out.log",
 			log_date_format: "YYYY-MM-DD HH:mm:ss",
-		},
+		}]),
 	],
 };

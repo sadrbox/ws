@@ -168,6 +168,24 @@
 	gap: 6px;
 }
 
+// Поиск по журналу: высотой с кнопки рядом, чтобы ряд читался одной строкой.
+.Search {
+	flex: 1 1 120px;
+	min-width: 90px;
+	height: $heightFieldInput;
+	padding: 0 6px;
+	border: 1px solid $fieldBorder;
+	border-radius: $radius2;
+	background: $fieldBackground;
+	color: $color6;
+	font: 400 #{$fontsize} $fontfamily;
+
+	&:focus {
+		outline: none;
+		border-color: $color1;
+	}
+}
+
 // Счётчики — здесь же, справа от кнопок: они про тот самый список, которым эти кнопки
 // распоряжаются. Цифры читают, сравнивая, — моноширинные разряды не пляшут.
 .ViewCount {

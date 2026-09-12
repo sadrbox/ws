@@ -447,4 +447,49 @@ export class CommandQueue {
 			finishedAt: c.finished_at?.toISOString() ?? null,
 		};
 	}
+	/**
+	 * ЧТО СЕЙЧАС В ОЧЕРЕДИ И СКОЛЬКО ОБЫЧНО ИДЁТ РАБОТА.
+	 *
+	 * Два вопроса, на которые панель раньше не умела отвечать: «сколько ждать» и «чего ждёт
+	 * эта команда». Человек видел счётчик «сделано 7 из 110» — и не знал, сорок это минут
+	 * или три; а команда в состоянии `queued` выглядела так же, как выполняющаяся.
+	 *
+	 * Средняя длительность считается по ВЫПОЛНЕННЫМ командам за неделю и по времени от
+	 * выдачи до ответа — «сколько идёт сама работа», а не «сколько провисело в очереди».
+	 * По каждому типу отдельно: чтение расширений из базы и команда кластера отличаются на
+	 * два порядка, и общее среднее не значило бы ничего.
+	 */
+	async stats(): Promise<{
+		types: { type: string; avgSecs: number; samples: number }[];
+		queued: number;
+		running: number;
+		oldestQueuedSecs: number;
+	}> {
+		const durations = await this.db.query<{ type: string; avg_secs: string; samples: string }>(
+			`SELECT type,
+			        round(avg(extract(epoch FROM (finished_at - dispatched_at))))::text AS avg_secs,
+			        count(*)::text AS samples
+			   FROM commands
+			  WHERE state = 'done' AND dispatched_at IS NOT NULL AND finished_at IS NOT NULL
+			    AND finished_at > now() - interval '7 days'
+			  GROUP BY type`,
+		);
+		const queue = await this.db.query<{ queued: string; running: string; oldest_secs: string | null }>(
+			`SELECT count(*) FILTER (WHERE state = 'queued')::text AS queued,
+			        count(*) FILTER (WHERE state = 'dispatched')::text AS running,
+			        round(extract(epoch FROM (now() - min(created_at) FILTER (WHERE state = 'queued'))))::text AS oldest_secs
+			   FROM commands
+			  WHERE state IN ('queued', 'dispatched')`,
+		);
+		const q = queue.rows[0];
+		return {
+			types: durations.rows.map((r) => ({
+				type: r.type, avgSecs: Number(r.avg_secs) || 0, samples: Number(r.samples) || 0,
+			})),
+			queued: Number(q?.queued ?? 0),
+			running: Number(q?.running ?? 0),
+			oldestQueuedSecs: q?.oldest_secs ? Number(q.oldest_secs) : 0,
+		};
+	}
+
 }
