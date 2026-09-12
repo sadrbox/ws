@@ -105,6 +105,13 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 					{showObject && <span>{objectTitle}</span>}
 					{showSource && <span>{m.source}</span>}
 					{!m.active && <span>{translate("techMsgPast")}</span>}
+					{/*
+					  * ЧЬЁ ЭТО СООБЩЕНИЕ. Запись живого источника — текущее состояние открытой
+					  * формы, а не запись в журнале: она держится, пока форма так считает, и
+					  * очистка её не берёт. Без этой пометки «Очистить историю» выглядела
+					  * сломанной: нажал — а сообщения остались.
+					  */}
+					{m.fromSource && m.active && <span>{translate("techMsgFromForm")}</span>}
 				</div>
 
 				<div className={styles.MsgActions}>
@@ -125,16 +132,21 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 						</Button>
 					))}
 					{/*
-					  * «Скрыть» — кнопкой-иконкой. Подпись у неё одна и та же на каждом
-					  * сообщении, а строк в списке десятки: повторённое сорок раз слово
-					  * отнимает место у того, ради чего в список и смотрят, — у текста.
-					  * Название осталось подсказкой и именем кнопки для чтения с экрана.
+					  * «Скрыть» — кнопкой-иконкой: подпись одна и та же на каждом сообщении, а
+					  * строк десятки, и повторённое слово отнимает место у текста.
+					  *
+					  * У ЖИВОГО СООБЩЕНИЯ КНОПКИ НЕТ ВОВСЕ. Скрыть его нельзя: форма сообщает
+					  * своё состояние заново, и запись возвращается через секунду — проверено.
+					  * Кнопка, обещающая то, чего не может, хуже отсутствующей; вместо неё в
+					  * подстрочнике сказано, кто это сообщает.
 					  */}
-					<IconButton size="sm" title={translate("hide")}
-						aria-label={translate("hide")}
-						onClick={() => dismissMessage(m.id)}>
-						<Icon name="clear" />
-					</IconButton>
+					{!(m.fromSource && m.active) && (
+						<IconButton size="sm" title={translate("hide")}
+							aria-label={translate("hide")}
+							onClick={() => dismissMessage(m.id)}>
+							<Icon name="clear" />
+						</IconButton>
+					)}
 				</div>
 			</div>
 		</article>

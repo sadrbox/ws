@@ -58,6 +58,8 @@ export const TechMessages: FC = () => {
 	// сворачивание означало бы «не знать о новых сообщениях».
 	const messages = useScopedNotices(scope);
 	const active = messages.filter((n) => n.active).length;
+	// Сколько записей держат открытые формы: именно они остаются после очистки.
+	const live = messages.filter((n) => n.active && n.fromSource).length;
 
 	const toggleAll = (v: boolean) => {
 		setShowAll(v);
@@ -144,11 +146,17 @@ export const TechMessages: FC = () => {
 								onClick={() => toggleAll(true)}>
 								{translate("techMessagesAll")}
 							</Button>
-							{/* Гаснет ровно тогда, когда чистить нечего: остаются только записи
-							    живых источников, а их эта кнопка не трогает (см. isClearable). */}
+							{/*
+							  * Гаснет ровно тогда, когда чистить нечего, — но молча гаснущая кнопка
+							  * при непустом списке выглядит сломанной. Подсказка называет, что
+							  * осталось и почему: это не мусор, а то, что открытые формы сообщают
+							  * прямо сейчас; уберёшь — вернётся.
+							  */}
 							<Button size="sm" variant="secondary"
 								disabled={!isClearable(messages)}
-								title={translate("techMessagesHistoryClear")}
+								title={isClearable(messages)
+									? translate("techMessagesHistoryClear")
+									: `${translate("techMessagesOnlyLive")}: ${live}`}
 								onClick={() => clearNoticeHistory(scope)}>
 								<Icon name="clear" /> {translate("techMessagesHistoryClear")}
 							</Button>

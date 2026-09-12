@@ -36,8 +36,12 @@ const NotificationsList: FC<NotificationsListProps> = () => {
 		<div className={main.PaneFill}>
 			<div className={styles.JournalHeader}>
 				<h3 className={styles.JournalTitle}>{translate("techMessages")}</h3>
+				{/* Кнопка гаснет, когда чистить нечего, и подсказка называет, ЧТО осталось:
+				    записи открытых форм очистка не берёт — они вернутся сами. */}
 				<Button size="sm" variant="secondary" disabled={!history}
-					title={history ? translate("techMessagesHistoryClear") : translate("techMessagesHistoryEmpty")}
+					title={history
+						? translate("techMessagesHistoryClear")
+						: `${translate("techMessagesOnlyLive")}: ${messages.filter((m) => m.active && m.fromSource).length}`}
 					onClick={() => clearNoticeHistory(APP_SCOPE)}>
 					<Icon name="clear" /> {translate("techMessagesHistoryClear")}
 				</Button>
