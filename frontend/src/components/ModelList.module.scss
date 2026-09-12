@@ -68,10 +68,10 @@
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
-	padding-right: 10px;
 }
 
-// Разделитель — общий компонент SplitPane (SplitPane.module.scss).
+// Разделитель — общий компонент SplitPane (SplitPane.module.scss). Зазор между
+// половинами задаёт он сам: половины к нему не прилипают и своих отступов не держат.
 
 .splitPreview {
 	// flex-basis (ширина в %) задаётся inline-стилем из перетаскиваемого разделителя.
@@ -80,7 +80,6 @@
 	min-width: 0;
 	min-height: 0;
 	overflow-y: auto;
-	padding-left: 10px;
 }
 
 .previewEmpty {

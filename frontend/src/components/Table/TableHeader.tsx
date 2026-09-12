@@ -9,6 +9,7 @@ import { memo, useCallback, useMemo, useRef, useEffect, type MouseEvent as React
 import { getTranslateColumn } from 'src/i18';
 import { useTableContext, useTableVolatile } from './context';
 import { normalizeLastColumnWidth } from './services';
+import { spreadResize, type ResizeColumn } from './columnResize';
 import styles from './Table.module.scss';
 
 export const TableHeader = memo(() => {
@@ -82,16 +83,26 @@ export const TableHeader = memo(() => {
   }, [isIndeterminate, groupSelection]);
 
   // ── Column Resize ──────────────────────────────────────────────────────
+  //
+  // СУЖЕНИЕ ИДЁТ ЦЕПОЧКОЙ ВЛЕВО. Колонка ужимается до своего минимума, а дальше границу
+  // тянет за собой ПРЕДЫДУЩАЯ колонка, потом та, что перед ней, и так до первой. Прежде
+  // движение упиралось в минимум: таблица из десяти колонок не помещалась в узкий пейн, а
+  // подвинуть границу было некуда — оставалось прятать колонки настройкой.
+  //
+  // Колонка отметок в этом не участвует: её ширина постоянна, и отдавать её под данные
+  // значило бы сделать чекбоксы недоступными ради лишних десяти пикселей. В расчёт
+  // попадают только колонки данных (visibleColumns), а смещение колонки отметок в
+  // <colgroup> учитывается отдельно (colOffset).
   const { actions } = useTableContext();
   const resizingRef = useRef<{
     colIndex: number;
     startX: number;
-    startWidth: number;
-    minW: number;
+    /** Ширины и минимумы ВСЕХ видимых колонок на момент захвата границы. */
+    start: ResizeColumn[];
     isLastCol: boolean;
-    colId: string;
-    th: HTMLElement;
-    colEl: HTMLElement | null;
+    /** Элементы шапки и <colgroup> по индексам видимых колонок — кэш на время перетаскивания. */
+    ths: HTMLElement[];
+    colEls: HTMLElement[];
   } | null>(null);
 
   const handleResizeMouseDown = useCallback((e: ReactMouseEvent, colIndex: number) => {
@@ -99,29 +110,45 @@ export const TableHeader = memo(() => {
     e.stopPropagation();
 
     const th = (e.target as HTMLElement).closest('th') as HTMLElement | null;
-    if (!th) return;
+    const table = th?.closest('table');
+    if (!th || !table) return;
 
-    // Кэшируем все нужные ссылки один раз — onMouseMove не делает никаких DOM-запросов
+    // Кэшируем все нужные ссылки один раз — onMouseMove не делает никаких DOM-запросов.
     const colOffset = showCheckbox ? 1 : 0;
-    const colEl = (th.closest('table')?.querySelector('colgroup')?.children[colIndex + colOffset] as HTMLElement) ?? null;
-    const col = visibleColumns[colIndex];
-    const minW = parseInt(col.minWidth ?? '50', 10);
-    const isLastCol = colIndex === visibleColumns.length - 1;
+    const headCells = Array.from(table.querySelectorAll<HTMLElement>('thead th'));
+    const colGroup = Array.from(table.querySelector('colgroup')?.children ?? []) as HTMLElement[];
+    const ths = headCells.slice(colOffset);
+    const colEls = colGroup.slice(colOffset);
+    // Ширины берём ИЗМЕРЕННЫЕ, а не из настроек: последняя колонка живёт с width: auto, и
+    // её настроечная ширина ничего не говорит о том, сколько места она занимает сейчас.
+    const start: ResizeColumn[] = visibleColumns.map((c, i) => ({
+      width: ths[i]?.getBoundingClientRect().width ?? 0,
+      min: parseInt(c.minWidth ?? '50', 10),
+    }));
 
     resizingRef.current = {
-      colIndex, startX: e.clientX, startWidth: th.getBoundingClientRect().width,
-      minW, isLastCol, colId: col.identifier, th, colEl,
+      colIndex, startX: e.clientX, start,
+      isLastCol: colIndex === visibleColumns.length - 1,
+      ths, colEls,
     };
     isResizingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
+    const apply = (clientX: number): number[] => {
+      const r = resizingRef.current!;
+      const next = spreadResize(r.start, r.colIndex, clientX - r.startX);
+      for (let i = 0; i < next.length; i += 1) {
+        if (next[i] === r.start[i].width) continue;
+        const px = `${next[i]}px`;
+        if (r.ths[i]) r.ths[i].style.width = px;
+        if (r.colEls[i]) r.colEls[i].style.width = px;
+      }
+      return next;
+    };
+
     const onMouseMove = (ev: MouseEvent) => {
-      const r = resizingRef.current;
-      if (!r) return;
-      const newWidth = Math.max(r.minW, r.startWidth + (ev.clientX - r.startX));
-      r.th.style.width = newWidth + 'px';
-      if (r.colEl) r.colEl.style.width = newWidth + 'px';
+      if (resizingRef.current) apply(ev.clientX);
     };
 
     const onMouseUp = (ev: MouseEvent) => {
@@ -131,9 +158,14 @@ export const TableHeader = memo(() => {
       document.body.style.userSelect = '';
       const r = resizingRef.current;
       if (!r) return;
-      const newWidth = Math.max(r.minW, r.startWidth + (ev.clientX - r.startX));
+      const next = apply(ev.clientX);
+      // Сохраняем ВСЕ колонки, которых коснулась цепочка, а не одну перетаскиваемую.
+      const byId = new Map<string, string>();
+      visibleColumns.forEach((c, i) => {
+        if (next[i] !== r.start[i].width) byId.set(c.identifier, `${next[i]}px`);
+      });
+      const mapped = columns.map(c => (byId.has(c.identifier) ? { ...c, width: byId.get(c.identifier)! } : c));
       // Последняя колонка: сохраняем явную ширину, не сбрасываем в auto
-      const mapped = columns.map(c => c.identifier === r.colId ? { ...c, width: newWidth + 'px' } : c);
       const updatedColumns = r.isLastCol ? mapped : normalizeLastColumnWidth(mapped);
       actions.setColumns(updatedColumns);
       // Служебные колонки (__*) не сохраняем в localStorage (иначе сигнатура колонок
