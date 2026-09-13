@@ -1,7 +1,10 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import MessagesView from "src/components/TechMessages/MessagesView";
-import { APP_SCOPE, useScopedNotices } from "src/components/TechMessages/store";
+import TechMessages from "src/components/TechMessages/TechMessages";
+import {
+	APP_SCOPE, clearNoticeHistory, setTechMessagesOpen, useScopedNotices,
+} from "src/components/TechMessages/store";
 import {
 	abandonOp, attachBatch, finishOp, getOps, mergeBatch, progressOp, startOp,
 } from "src/models/OneCAdmin/progress";
@@ -133,5 +136,50 @@ describe("Технические сообщения: прогресс запро
 		expect(screen.getByText(`${translate("onecOpFailedCount")}: 1`)).toBeTruthy();
 		// Причина отказа названа поимённо: «где встало» — половина ответа.
 		expect(screen.getByText(/almaz67: нет связи/)).toBeTruthy();
+	});
+
+	it("«Без группировки» — операции без заголовка секции, но видны", () => {
+		// Сплошная лента не должна держать единственный заголовок — у «Прогресса».
+		localStorage.setItem("tech_messages_group", "none");
+		// Название своё: итоги операций прошлых проверок лежат в журнале, и в сплошной ленте
+		// они раскрыты — общее название нашлось бы дважды.
+		act(() => { startOp({ kind: "read", title: "Сверить ленту", target: "базы: 2", total: 2 }); });
+		show();
+		expect(screen.queryByText(translate("techMsgProgress"))).toBeNull();
+		expect(screen.getByText(/Сверить ленту/)).toBeTruthy();
+		expect(screen.getByRole("progressbar")).toBeTruthy();
+	});
+});
+
+describe("Технические сообщения: очистка убирает и завершённые операции", () => {
+	beforeEach(() => {
+		act(() => {
+			getOps().slice().forEach((o) => abandonOp(o.id));
+			clearNoticeHistory(APP_SCOPE);
+			setTechMessagesOpen(true);
+		});
+		localStorage.setItem("tech_messages_all", "1");
+	});
+
+	const clearButton = () => screen.getByRole("button", { name: new RegExp(translate("techMessagesHistoryClear")) });
+
+	it("завершённая уходит, идущая остаётся", () => {
+		act(() => {
+			finishOp(startOp({ kind: "read", title: "Законченная проверка", target: "b1", total: 1 }));
+			startOp({ kind: "update", title: "Идущая запись", target: "b2", total: 1 });
+		});
+		// Итог законченной операции уже лёг событием в журнал — его уберёт та же очистка.
+		clearNoticeHistory(APP_SCOPE);
+		render(<TestWrapper><TechMessages /></TestWrapper>);
+
+		// Сообщений нет, но есть завершённая операция — чистить есть что, кнопка активна.
+		expect((clearButton() as HTMLButtonElement).disabled).toBe(false);
+		fireEvent.click(clearButton());
+
+		expect(getOps().map((o) => o.title)).toEqual(["Идущая запись"]);
+		expect(screen.queryByText(/Законченная проверка/)).toBeNull();
+		expect(screen.getByText(/Идущая запись/)).toBeTruthy();
+		// Осталась только идущая работа — убирать нечего.
+		expect((clearButton() as HTMLButtonElement).disabled).toBe(true);
 	});
 });

@@ -247,20 +247,29 @@ export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
 
 	// Под заголовком дня дата известна и в строке не нужна; в остальных режимах — нужна.
 	const withDate = mode !== "date";
-	const open = !collapsed;
+	/*
+	 * «БЕЗ ГРУППИРОВКИ» — ЗНАЧИТ БЕЗ ЗАГОЛОВКОВ, в том числе у этой секции. Она рисовалась
+	 * группой при любом режиме, и в сплошной ленте оставался единственный заголовок — выбор
+	 * человека соблюдался везде, кроме неё. Без заголовка сворачивать нечем, поэтому строки
+	 * всегда раскрыты — так же, как сообщения в этом режиме.
+	 */
+	const flat = mode === "none";
+	const open = flat || !collapsed;
 	const total = ops.length + (slow ? 1 : 0);
 
 	return (
 		<section className={styles.Group} data-progress="">
-			<button type="button" className={styles.GroupHead} data-kind="progress"
-				aria-expanded={open} onClick={() => setCollapsed(open)}>
-				<span className={`${styles.GroupCaret}${open ? ` ${styles.CaretOpen}` : ""}`}>
-					<Icon name="caretDown" />
-				</span>
-				<span className={styles.GroupTitle}>{translate("techMsgProgress")}</span>
-				{running > 0 && <span className={styles.GroupRunning}>{running}</span>}
-				<span className={styles.GroupTotal}>{total}</span>
-			</button>
+			{!flat && (
+				<button type="button" className={styles.GroupHead} data-kind="progress"
+					aria-expanded={open} onClick={() => setCollapsed(open)}>
+					<span className={`${styles.GroupCaret}${open ? ` ${styles.CaretOpen}` : ""}`}>
+						<Icon name="caretDown" />
+					</span>
+					<span className={styles.GroupTitle}>{translate("techMsgProgress")}</span>
+					{running > 0 && <span className={styles.GroupRunning}>{running}</span>}
+					<span className={styles.GroupTotal}>{total}</span>
+				</button>
+			)}
 
 			{open && (
 				<div className={styles.GroupBody}>

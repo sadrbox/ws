@@ -32,8 +32,8 @@ import {
 	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
 	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement,
 } from "./store";
+import { clearFinished, useOnecOps } from "src/models/OneCAdmin/progress";
 import MessagesView from "./MessagesView";
-import { useRunningOps } from "./runningOps";
 import styles from "./TechMessages.module.scss";
 
 /** Чьи сообщения показывать — настройка рабочего места, переживает перезагрузку. */
@@ -63,10 +63,22 @@ export const TechMessages: FC = () => {
 	 * случившемся, а проверка сотни баз идёт минутами и не сообщает о себе ничего, пока не
 	 * кончится: свернув область, человек переставал знать, работает ли что-нибудь вообще.
 	 */
-	const running = useRunningOps();
+	const ops = useOnecOps();
+	const running = ops.filter((o) => o.state === "running").length;
 	const active = messages.filter((n) => n.active).length;
 	// Сколько записей держат открытые формы: именно они остаются после очистки.
 	const live = messages.filter((n) => n.active && n.fromSource).length;
+	/*
+	 * ОЧИСТКА — ВСЕГО, ЧТО ВИДНО, А НЕ ТОЛЬКО СООБЩЕНИЙ.
+	 *
+	 * Операции живут в своём реестре (progress.ts), и прежде очистка его не касалась: список
+	 * пустел, а секция «Прогресс запросов и команд» с давно законченной работой оставалась —
+	 * будто кнопка сработала наполовину. Уходят только ЗАВЕРШЁННЫЕ: идущую работу убрать с
+	 * экрана значило бы перестать знать, что она идёт. Операции не привязаны к форме, и
+	 * секция показывает их при любом срезе, поэтому и чистятся они при любом срезе.
+	 */
+	const finished = ops.length - running;
+	const clearable = isClearable(messages) || finished > 0;
 
 	const toggleAll = (v: boolean) => {
 		setShowAll(v);
@@ -167,11 +179,11 @@ export const TechMessages: FC = () => {
 							  * прямо сейчас; уберёшь — вернётся.
 							  */}
 							<Button size="sm" variant="secondary"
-								disabled={!isClearable(messages)}
-								title={isClearable(messages)
+								disabled={!clearable}
+								title={clearable
 									? translate("techMessagesHistoryClear")
 									: `${translate("techMessagesOnlyLive")}: ${live}`}
-								onClick={() => clearNoticeHistory(scope)}>
+								onClick={() => { clearNoticeHistory(scope); clearFinished(); }}>
 								<Icon name="clear" /> {translate("techMessagesHistoryClear")}
 							</Button>
 						</>
