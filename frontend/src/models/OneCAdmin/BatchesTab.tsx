@@ -21,6 +21,11 @@
  * он сам на сервере 1С; назвать отменой прекращение ожидания значило бы соврать о
  * состоянии чужой системы. Поэтому кнопка называет, сколько из отмеченного ещё можно
  * отменить, и гаснет, когда таких нет.
+ *
+ * ПРЕРВАТЬ НАЧАТОЕ (P3) — отдельная кнопка и отдельный смысл: это просьба агенту снять
+ * работу, и выполняет её он. Разрешено только чтениям у агента с `agent.cancel`; у начатой
+ * строки, которую прервать нельзя, итог говорит почему — запись не обрывают, или агент
+ * старый. Подтверждение обязательно: работа уже идёт на сервере 1С.
  */
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,7 +38,9 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
-import { cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
+import { abortCommand, cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
+import { useAppContext } from "src/app/context";
+import { notify } from "src/components/TechMessages/store";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { reportBatchStart, useOnecWrite } from "./shared";
@@ -81,6 +88,34 @@ export function retryTargets(
 	return out;
 }
 
+/**
+ * ЧТО ПРЕРВЁТСЯ — отмеченные команды, которые уже выполняются и которые сервис разрешает
+ * прервать (`abortable`: чтение у агента с `agent.cancel`). Правило одно с сервисом: панель
+ * не предлагает то, от чего он откажет.
+ */
+export function abortTargets(
+	items: { items: { commandId: string | null; state: string; abortable?: boolean }[] }[],
+	picked: Set<string>,
+): string[] {
+	return items
+		.flatMap((b) => b.items)
+		.filter((it) => !!it.commandId && picked.has(it.commandId) && it.state === "dispatched" && it.abortable === true)
+		.map((it) => it.commandId as string);
+}
+
+/** Групповые чтения: только их сервис разрешает прерывать. */
+const READ_BATCHES = new Set(["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]);
+
+/**
+ * Почему начатую строку прервать нельзя — словами, а не молча погасшей кнопкой. Два разных
+ * ответа: запись, выгрузку и обновление не обрывают вовсе (база осталась бы в промежуточном
+ * состоянии), а чтение не прерывает старый агент — это лечится обновлением.
+ */
+export function abortHint(batchType: string, it: { state: string; abortable?: boolean }): string | null {
+	if (it.state !== "dispatched" || it.abortable === true) return null;
+	return translate(READ_BATCHES.has(batchType) ? "onecAbortAgentOld" : "onecAbortNotAllowed");
+}
+
 /** Состояние команды словами: коды состояний — внутренняя кухня очереди. */
 const stateLabel = (state: string): string => translate(
 	state === "done" ? "onecBatchDone"
@@ -101,6 +136,7 @@ const notQueued = (b: { items: { state: string }[] }): number =>
 export const BatchesTab: FC = () => {
 	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
+	const { actions: { confirm } } = useAppContext();
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
 	/**
 	 * Отмеченные КОМАНДЫ (по идентификатору): цель отмены. Отмечают базы, а не задания —
@@ -156,6 +192,35 @@ export const BatchesTab: FC = () => {
 		onError: (e) => reportError(e, { source: translate("onecTabBatches") }),
 	});
 
+	/**
+	 * Прервать начатые чтения (P3) — по одной команде: отмену выполняет агент, забравший
+	 * каждую, и ответ у каждой свой. «Уже завершилась» — не ошибка: итог пришёл сам.
+	 */
+	const abort = useMutation({
+		mutationFn: async (ids: string[]) => {
+			let aborted = 0;
+			let finished = 0;
+			for (const id of ids) {
+				const r = await abortCommand(id);
+				if (r.aborted) aborted++; else finished++;
+			}
+			return { aborted, finished };
+		},
+		onSuccess: (r) => {
+			void after();
+			setPicked(new Set());
+			// Прерванная работа — событие: «кто и когда её снял» спрашивают позже тоста.
+			if (r.aborted) notify({ severity: "success", source: translate("onecTabBatches"), text: `${translate("onecAborted")}: ${r.aborted}` });
+			if (r.finished) notify({ severity: "info", source: translate("onecTabBatches"), text: `${translate("onecAbortFinished")}: ${r.finished}`, ephemeral: true });
+		},
+		onError: (e) => { void after(); reportError(e, { source: translate("onecTabBatches") }); },
+	});
+
+	const askAbort = async (ids: string[]) => {
+		if (!ids.length || !(await confirm(translate("onecAbortConfirm")))) return;
+		abort.mutate(ids);
+	};
+
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(batchColumns(), "OneCAdmin_batches"));
 
 	const rowsRaw = useMemo(() => items.map((b, i) => ({
@@ -202,11 +267,14 @@ export const BatchesTab: FC = () => {
 			title: it.baseKey ?? "—",
 			progress: stateLabel(it.state),
 			failedCount: "",
-			outcome: it.error ? `${it.error.code}: ${it.error.message}` : (it.outcome || "—"),
+			// У начатой строки, которую прервать нельзя, итог говорит почему.
+			outcome: it.error ? `${it.error.code}: ${it.error.message}` : (abortHint(b.type, it) ?? (it.outcome || "—")),
 			createdAt: "",
 			__commandId: it.commandId ?? "",
 			// Отменить можно только не начатое: агент ещё не забирал эту команду.
 			__cancelable: it.state === "queued" ? 1 : 0,
+			// Прервать — только начатое чтение у агента, который это умеет (P3).
+			__abortable: it.abortable === true ? 1 : 0,
 			/*
 			 * Отметка живёт в данных потомка — по ней же считается отметка задания
 			 * (см. TableBodyRow: группа = «отмечены все вложенные»).
@@ -242,6 +310,9 @@ export const BatchesTab: FC = () => {
 		}
 		return ids;
 	}, [items, picked]);
+
+	/** Что из отмеченного прервётся: начатые чтения у агента с agent.cancel. */
+	const abortable = useMemo(() => abortTargets(items, picked), [items, picked]);
 
 	/** Что именно повторится: отмеченные базы, чьи команды не удались. */
 	const targets = useMemo(() => retryTargets(items, picked), [items, picked]);
@@ -285,6 +356,12 @@ export const BatchesTab: FC = () => {
 							onClick={() => cancel.mutate(cancelable)}>
 							<Icon name="close" /> {translate("onecBatchCancelQueued")}
 							{cancelable.length ? ` (${cancelable.length})` : ""}
+						</Button>
+						<Button variant="danger" disabled={!abortable.length || abort.isPending}
+							title={abortable.length ? `${translate("onecAbort")}: ${abortable.length}` : translate("onecAbortNone")}
+							onClick={() => void askAbort(abortable)}>
+							<Icon name="close" /> {translate("onecAbort")}
+							{abortable.length ? ` (${abortable.length})` : ""}
 						</Button>
 						<Button variant="secondary"
 							disabled={!retryCount || retry.isPending}

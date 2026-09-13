@@ -373,6 +373,18 @@ export const cancelCommands = (ids: string[]) =>
 		method: "POST", body: JSON.stringify({ ids }),
 	});
 
+/**
+ * ПРЕРВАТЬ НАЧАТУЮ команду (P3) — это делает агент, а не очередь.
+ *
+ * Только чтения и только у агента с `agent.cancel`: сервис откажет в остальном. Ответ
+ * `aborted: false` с `reason: "NOT_RUNNING"` — команда успела закончиться сама, это не ошибка.
+ */
+export const abortCommand = (id: string, force?: boolean) =>
+	aiFetch<{ aborted: boolean; killed?: boolean; note?: string | null; reason?: string }>(
+		`/v1/onec/commands/${encodeURIComponent(id)}/abort`,
+		{ method: "POST", body: JSON.stringify(force ? { force: true } : {}) },
+	);
+
 /** Остановить групповую операцию: отменяются все её команды, которые ещё не начаты. */
 export const cancelBatch = (batchId: string) =>
 	aiFetch<{ canceled: number }>(`/v1/onec/batches/${encodeURIComponent(batchId)}/cancel`, {
@@ -386,6 +398,8 @@ export type BatchProgress = {
 	id: string; type: string; total: number; done: number; failed: number; pending: number;
 	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
 	cancelable: number;
+	/** Сколько начатых команд можно прервать (S4). Нет — сервис старее панели. */
+	abortable?: number;
 	createdAt: string;
 	items: {
 		/** Идентификатор команды — по нему её отменяют, пока она не начата. */
@@ -393,6 +407,8 @@ export type BatchProgress = {
 		baseKey: string | null; state: string; error: { code: string; message: string } | null;
 		/** Итог одной строкой: путь к выгрузке или адрес публикации. */
 		outcome: string | null;
+		/** Начатую команду можно прервать: это чтение, и агент умеет отмену (S4). */
+		abortable?: boolean;
 	}[];
 };
 
