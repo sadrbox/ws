@@ -41,7 +41,9 @@ export function useDocumentNotices({
 }: UseDocumentNoticesArgs): NoticeItem[] {
 	const hint = getDocumentFillHint(docType, fields);
 	const basisOn = !!basisMismatch?.mismatch;
-	const basisText = basisMismatch?.differences?.join(", ") ?? "";
+	// Каждое расхождение — отдельной строкой: в них стоят значения («в документе 5, в основании 3»),
+	// и через запятую они сливались бы в одну нечитаемую фразу.
+	const basisText = formatBasisDifferences(basisMismatch?.differences ?? []);
 	const cptyOn = !!contractMismatch;
 
 	return useMemo(() => {
@@ -52,12 +54,23 @@ export function useDocumentNotices({
 		if (basisOn) {
 			items.push({
 				type: "warning",
-				text: translate("basisMismatch") + (basisText ? `: ${basisText}` : ""),
+				text: translate("basisMismatch") + (basisText ? `:${basisText}` : ""),
 			});
 		}
 		if (cptyOn) items.push({ type: "warning", text: translate("contractCounterpartyMismatch") });
 		return items;
 	}, [formError, hint, basisOn, basisText, cptyOn]);
+}
+
+/** Сколько расхождений перечислять: остальное — числом, иначе сообщение занимает экран. */
+const BASIS_DIFF_SHOWN = 10;
+
+/** Список расхождений под заголовком сообщения: «\n• …», лишнее — «и ещё N». */
+export function formatBasisDifferences(list: string[]): string {
+	if (!list.length) return "";
+	const shown = list.slice(0, BASIS_DIFF_SHOWN).map((d) => `\n• ${d}`).join("");
+	const rest = list.length - BASIS_DIFF_SHOWN;
+	return rest > 0 ? `${shown}\n• ${translate("basisDiffMore")} ${rest}` : shown;
 }
 
 export default useDocumentNotices;

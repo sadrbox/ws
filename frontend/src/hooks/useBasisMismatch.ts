@@ -12,10 +12,8 @@
  */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { translate } from "src/i18";
 import { refillFromBasisSource } from "src/utils/createFromBasis";
-import { isEquivalent } from "src/utils/normalize";
-import { asText } from "src/utils/asText";
+import { describeBasisDifferences } from "src/utils/basisDifferences";
 import type { BasisSource } from "src/utils/createFromBasis";
 import type { TDataItem } from "src/components/Table/types";
 
@@ -59,14 +57,6 @@ export interface BasisMismatchResult {
 	differences: string[];
 }
 
-/** Подпись поля шапки: явная метка → перевод базового имени → само имя ключа. */
-function fieldLabel(key: string, fieldLabels?: Record<string, string>): string {
-	if (fieldLabels?.[key]) return fieldLabels[key];
-	const base = key.replace(/Uuid$/, "");
-	const translated = translate(base);
-	return translated && translated !== base ? translated : base;
-}
-
 export function useBasisMismatch({
 	basisType,
 	basisUuid,
@@ -91,68 +81,14 @@ export function useBasisMismatch({
 	return useMemo<BasisMismatchResult>(() => {
 		if (!enabled || !data) return { mismatch: false, differences: [] };
 
-		const differences: string[] = [];
-
-		// ── Шапка: сверяем идентификаторы (*Uuid) основания с зависимым документом.
-		const basisFields = data.fields ?? {};
-		for (const key of Object.keys(basisFields)) {
-			if (!key.endsWith("Uuid")) continue; // только идентификаторы, без имён/дат
-			if (key.startsWith("basisDocument")) continue;
-			// Сравниваем только поля, которые реально есть у зависимого документа
-			// (напр. у счёта-фактуры нет warehouseUuid — не считаем расхождением).
-			if (!(key in (currentFields ?? {}))) continue;
-			if (ignoreFields?.includes(key)) continue;
-			if (!isEquivalent(basisFields[key], currentFields?.[key])) {
-				differences.push(fieldLabel(key, fieldLabels));
-			}
-		}
-
-		// ── Строки: число и совпадение по ключевым полям, БЕЗ учёта порядка.
-		// Для header-документов без табличной части (банк-выписка) сравнение
-		// строк пропускается — иначе расхождение было бы всегда.
-		const basisItems = ignoreItems ? [] : (data.items ?? []);
-		const cur = (currentItems ?? []).filter(
-			(r: TDataItem) => r._pendingAction !== "delete",
-		);
-
-		// ВОЗВРАТЫ: частичный возврат допустим → не сверяем кол-во/суммы, а только
-		// что каждая номенклатура зависимого документа присутствует в основании.
-		if (!ignoreItems && itemMatchMode === "productsSubset") {
-			const basisProducts = new Set(
-				basisItems.map((r: Record<string, unknown>) => r?.productUuid).filter(Boolean),
-			);
-			const hasExtraneous = cur.some(
-				(r: Record<string, unknown>) => r?.productUuid && !basisProducts.has(r.productUuid as string),
-			);
-			if (hasExtraneous) {
-				differences.push(
-					translate("basisMismatchExtraProduct") || "номенклатура отсутствует в основании",
-				);
-			}
-			return { mismatch: differences.length > 0, differences };
-		}
-
-		const serializeRow = (r: Record<string, unknown>) =>
-			itemKeys
-				.map((k) => {
-					const v = r?.[k];
-					// Нормализуем "30" vs 30 vs null → единая строка (как isEquivalent).
-					if (v === null || v === undefined || v === "") return "";
-					const n = Number(v);
-					return Number.isFinite(n) && asText(v).trim() !== "" ? String(n) : asText(v);
-				})
-				.join("|");
-		const sortedSig = (rows: Record<string, unknown>[]) => rows.map(serializeRow).sort();
-		const curSig = sortedSig(cur);
-		const basisSig = sortedSig(basisItems);
-		const itemsSame =
-			curSig.length === basisSig.length &&
-			curSig.every((s, i) => s === basisSig[i]);
-		if (!itemsSame) {
-			differences.push(
-				translate("basisMismatchItems") || "строки отличаются от основания",
-			);
-		}
+		// В чём именно расхождение — фразами со значениями (utils/basisDifferences).
+		const differences = describeBasisDifferences({
+			basisFields: data.fields ?? {},
+			currentFields: currentFields ?? {},
+			basisItems: ignoreItems ? [] : (data.items ?? []),
+			currentItems: (currentItems ?? []).filter((r: TDataItem) => r._pendingAction !== "delete"),
+			itemKeys, itemMatchMode, ignoreItems, ignoreFields, fieldLabels,
+		});
 
 		return { mismatch: differences.length > 0, differences };
 	}, [enabled, data, currentFields, currentItems, fieldLabels, itemKeys, itemMatchMode, ignoreItems, ignoreFields]);
