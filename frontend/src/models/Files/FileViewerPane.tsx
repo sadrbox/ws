@@ -3,7 +3,8 @@ import apiClient from "src/services/api/client";
 import PaneHeaderSelect from "src/components/Toolbar/PaneHeaderSelect";
 import IconButton from "src/components/IconButton/IconButton";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
-import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
+import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FileViewPane, type FileMeta } from "./FileViewPane";
@@ -105,8 +106,8 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
       a.download = selectedFile.fileName ?? "file";
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch {
-      showToast("Ошибка скачивания файла", "error");
+    } catch (e) {
+      reportError(e, { source: translate("files"), fallback: translate("fileDownloadError") });
     }
   }, [selectedFile]);
 

@@ -19,7 +19,7 @@ import LookupField from "src/components/Field/LookupField";
 import ObjectLink from "src/components/ObjectLink";
 import { refFromRestore } from "src/utils/objectRef";
 import { describeRestore } from "src/utils/objectRefResolve";
-import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import styles from "./ObjectMarks.module.scss";
 
 interface MarkRow {
@@ -131,8 +131,7 @@ const ObjectMarks: FC<ObjectMarksProps> = ({ endpoint, uuid, organizationUuid, r
       setTargetType("");
       refresh();
     } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || translate("error"), "error");
+      reportError(e, { source: translate("marks"), fallback: translate("error") });
     }
   }, [uuid, endpoint, targetType, organizationUuid, refresh]);
 
@@ -141,8 +140,7 @@ const ObjectMarks: FC<ObjectMarksProps> = ({ endpoint, uuid, organizationUuid, r
       await apiClient.delete(`object-marks/${markUuid}`);
       refresh();
     } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || translate("error"), "error");
+      reportError(e, { source: translate("marks"), fallback: translate("error") });
     }
   }, [refresh]);
 

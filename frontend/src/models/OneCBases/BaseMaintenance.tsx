@@ -26,6 +26,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { CapabilityGuard, ReadonlyNotice, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { attachBatch, finishOp, startOp } from "src/models/OneCAdmin/progress";
 import {
@@ -65,7 +66,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		}
 	};
 
-	const fail = (e: unknown) => showToast(e instanceof Error ? e.message : String(e), "error");
+	const fail = (e: unknown) => reportError(e, { source: translate("onecBase") });
 
 	/** Сухой прогон: спрашиваем агента, что произойдёт, и показываем ЕГО текст. */
 	const plan = useMutation({

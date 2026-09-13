@@ -53,10 +53,23 @@ export function errorText(e: unknown, fallback = translate("unknownError")): str
 		const o = e as { response?: { data?: { message?: unknown } }; message?: unknown };
 		const server = o.response?.data?.message;
 		if (typeof server === "string" && server.trim()) return humanErrorText(server);
-		if (typeof o.message === "string" && o.message.trim()) return humanErrorText(o.message);
+		if (typeof o.message === "string" && o.message.trim() && !AXIOS_GENERIC.test(o.message.trim())) {
+			return humanErrorText(o.message);
+		}
 	}
 	return fallback;
 }
+
+/**
+ * «Request failed with status code 500» — слова axios, когда сервер не объяснил отказ.
+ * Человеку они не говорят ничего, а у места вызова есть свой переведённый `fallback`
+ * («Не удалось загрузить список файлов») — он и честнее, и понятнее.
+ */
+const AXIOS_GENERIC = /^Request failed with status code \d+$/i;
+
+/** Ошибка пришла от apiClient (у неё есть ответ сервера), а не от сервиса 1С или кода. */
+const hasHttpResponse = (e: unknown): boolean =>
+	!!e && typeof e === "object" && !!(e as { response?: unknown }).response;
 
 /**
  * СБОЙ ЭТО ИЛИ ОТКАЗ.
@@ -94,6 +107,11 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 	const text = errorText(e, opts.fallback);
 
 	if (!isSystemError(status)) return [{ type: opts.type ?? "error", text }];
+
+	// 403 от apiClient уже показал и записал перехватчик (services/api/client.ts): второй
+	// тост и вторая запись о том же отказе ничего не добавляют. Отказ сервиса 1С идёт мимо
+	// перехватчика — его показываем здесь.
+	if (status === 403 && hasHttpResponse(e)) return [];
 
 	// Тост «сейчас» и след в журнале — одним событием: тост живёт четыре секунды, а вопрос
 	// «что это было» возникает позже.

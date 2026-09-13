@@ -66,6 +66,27 @@ describe("маршрутизация ошибок: канал по вопрос�
 		expect(isSystemError(undefined)).toBe(true);
 	});
 
+	it("«Request failed with status code» уступает переведённому запасному тексту", () => {
+		// Сервер отказал без объяснения — слова axios человеку не говорят ничего.
+		const bare = { response: { status: 500, data: {} }, message: "Request failed with status code 500" };
+		expect(errorText(bare, "Не удалось загрузить список файлов")).toBe("Не удалось загрузить список файлов");
+		// Настоящее сообщение исключения по-прежнему важнее запасного.
+		expect(errorText(new Error("база заблокирована"), "запасной")).toBe("база заблокирована");
+	});
+
+	it("403 от apiClient не дублируется: его уже показал перехватчик", () => {
+		const own = routeError(http(403, "недостаточно прав"));
+		expect(own).toHaveLength(0);
+		expect(toasts).toHaveLength(0);
+		expect(getMessages()).toHaveLength(0);
+	});
+
+	it("403 от сервиса мимо перехватчика показывается здесь", () => {
+		routeError({ status: 403, message: "нет прав на базу" });
+		expect(toasts).toEqual(["нет прав на базу"]);
+		expect(getMessages().map((m) => m.text)).toEqual(["нет прав на базу"]);
+	});
+
 	it("статус и текст достаются из любой формы ошибки", () => {
 		expect(errorStatus(http(422))).toBe(422);
 		expect(errorStatus({ status: 409 })).toBe(409);

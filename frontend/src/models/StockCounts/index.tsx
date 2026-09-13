@@ -40,6 +40,7 @@ import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
+import { routeError } from "src/services/errors/route";
 import { openDocumentFromBasis, type BasisFromTarget, type BasisSource } from "src/utils/createFromBasis";
 import { useAppContext } from "src/app/context";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
@@ -230,7 +231,10 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
         "success",
       );
     } catch (e: unknown) {
-      showToast((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? translate("error"), "error");
+      // Отказ по существу («есть несохранённые правки») — в сообщение формы, где на него
+      // смотрят; системный сбой routeError уже показал тостом и записал в журнал.
+      const own = routeError(e, { source: translate("StockCountsList"), fallback: translate("error") });
+      if (own.length) form.store.setError(own[0].text);
     } finally {
       setIsFilling(false);
     }

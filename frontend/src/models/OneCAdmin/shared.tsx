@@ -18,7 +18,7 @@ import {
 } from "src/services/onec/api";
 import { previewUrl } from "./ServerParams";
 import { finishOp, progressOp, startOp } from "./progress";
-import { noteNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
+import { noteNotice, notify, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { errorText } from "src/services/errors/route";
 import styles from "./OneCAdmin.module.scss";
 
@@ -165,17 +165,15 @@ export function reportBatchStart(r: BatchStart, source?: string): void {
 	const reason = r.skipped[0]?.reason ?? "";
 	if (!r.queued) {
 		const text = `${translate("onecBatchNothingQueued")}${reason ? `: ${reason}` : ""}`;
-		showToast(text, "error");
-		noteNotice(source ?? translate("onecCommands"), { type: "error", text });
+		notify({ severity: "error", text, source: source ?? translate("onecCommands") });
 		return;
 	}
 	if (r.skipped.length) {
 		const text = `${translate("onecBatchQueued")}: ${r.queued}/${r.total}`
 			+ ` · ${translate("onecBatchNotQueued")}: ${r.skipped.length}${reason ? ` (${reason})` : ""}`;
-		showToast(text, "warning");
 		// Отсеянных может быть десяток, а в тост влезает одна причина — остальное в журнал.
-		noteNotice(source ?? translate("onecCommands"), {
-			type: "warning",
+		notify({
+			severity: "warning", toast: text, source: source ?? translate("onecCommands"),
 			text: r.skipped.map((x) => `${x.baseKey} — ${x.reason}`).join("\n"),
 		});
 		return;

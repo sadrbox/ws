@@ -88,7 +88,7 @@ export const ProcessesTab: FC = () => {
 				setConfirm({ pid: vars.pid, force: true, note: text });
 				return;
 			}
-			showToast(text, "error");
+			reportError(e, { source: translate("onecTabProcesses") });
 		},
 	});
 

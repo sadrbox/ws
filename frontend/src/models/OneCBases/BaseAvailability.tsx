@@ -76,7 +76,7 @@ export const BaseAvailability: FC<{
 		},
 		onError: (e) => {
 			setConfirmDrop(false);
-			showToast(e instanceof Error ? e.message : translate("unknownError"), "error");
+			reportError(e, { source: translate("onecBase") });
 		},
 	});
 

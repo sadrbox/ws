@@ -1,6 +1,7 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import apiClient from "src/services/api/client";
-import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
+import { translate } from "src/i18";
 import styles from "./AvatarUpload.module.scss";
 
 interface AvatarUploadProps {
@@ -69,8 +70,8 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
           headers: { "Content-Type": "multipart/form-data" },
         });
         await loadAvatar();
-      } catch (_err) {
-        showToast("Ошибка загрузки аватара", "error");
+      } catch (err) {
+        reportError(err, { source: translate("avatar"), fallback: translate("avatarUploadError") });
       } finally {
         setIsUploading(false);
         if (inputRef.current) inputRef.current.value = "";
@@ -87,8 +88,8 @@ const AvatarUpload: FC<AvatarUploadProps> = ({
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
       setAvatarUrl(null);
-    } catch (_err) {
-      showToast("Ошибка удаления аватара", "error");
+    } catch (err) {
+      reportError(err, { source: translate("avatar"), fallback: translate("avatarDeleteError") });
     }
   }, [endpoint, entityUuid, disabled]);
 

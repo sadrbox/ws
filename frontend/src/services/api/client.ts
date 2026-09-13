@@ -5,7 +5,8 @@ import axios, {
 } from "axios";
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
 import { isNetworkError as isNetworkLikeError } from "../networkUtils";
-import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
+import { translate } from "src/i18";
 
 // Локальный API для разработки по LAN/IP. Хост конфигурируется через env
 // (VITE_LOCAL_API_URL), чтобы не хардкодить конкретный адрес рабочей станции;
@@ -115,7 +116,12 @@ apiClient.interceptors.response.use(
 				serverMessage && serverMessage.length < 200
 					? serverMessage
 					: "У вас недостаточно прав для выполнения этого действия";
-			showToast(message, "error", 6000);
+			// Тост «сейчас» и след в журнале. Ключ склеивает очередь 403 от одного экрана
+			// (десяток запросов разом) в одну запись; routeError этот отказ не повторяет.
+			notify({
+				severity: "error", text: message, source: translate("system"),
+				key: "http-403", toastDuration: 6000,
+			});
 		}
 
 		return Promise.reject(

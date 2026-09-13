@@ -7,6 +7,7 @@ import { Group } from "src/components/UI";
 import { Button } from "src/components/Button";
 import { Divider } from "src/components/Field";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { getCurrentUser } from "src/services/auth";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchBackups, createBackup, type BackupFile } from "src/services/backup/api";
@@ -31,8 +32,7 @@ const BackupSection: FC = () => {
       void qc.invalidateQueries({ queryKey: ["admin-backups"] });
     },
     onError: (e: unknown) => {
-      const a = e as { response?: { data?: { message?: string } }; message?: string };
-      showToast(a?.response?.data?.message || a?.message || translate("serverError"), "error");
+      reportError(e, { source: translate("backupCreate"), fallback: translate("serverError") });
     },
   });
 

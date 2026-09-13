@@ -23,6 +23,7 @@ import { Field } from "src/components/Field";
 import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -72,7 +73,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	);
 
 	const refresh = () => qc.invalidateQueries({ queryKey: ["onec", "agents"] });
-	const fail = (e: unknown) => showToast(e instanceof Error ? e.message : translate("unknownError"), "error");
+	const fail = (e: unknown) => reportError(e, { source: translate("onecTabAgents") });
 
 	/** Над кем операция — в реестре прогресса это единственный ориентир. */
 	const agentName = agent?.name || agentId.slice(0, 8);

@@ -9,6 +9,7 @@ import { Button } from "src/components/Button";
 import ConfirmModal from "src/components/ConfirmModal";
 import { useConfirm } from "src/hooks/useConfirm";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import apiClient from "src/services/api/client";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
@@ -87,8 +88,8 @@ const InstallsPanel: FC<PanelProps> = ({ licenseUuid }) => {
 			const res = await apiClient.get<InstallsResponse>(`/${MODEL_ENDPOINT}/${licenseUuid}/installs`);
 			setRows(res.data?.items ?? []);
 			setSummary({ activeCount: res.data?.activeCount ?? 0, limit: res.data?.limit ?? 0, enforced: res.data?.enforced === true });
-		} catch {
-			showToast(translate("esfLoadError"), "error");
+		} catch (e) {
+			reportError(e, { source: translate("EsfLicensesList"), fallback: translate("esfLoadError") });
 		} finally {
 			setIsLoading(false);
 		}
@@ -103,8 +104,8 @@ const InstallsPanel: FC<PanelProps> = ({ licenseUuid }) => {
 			await apiClient.delete(`/${MODEL_ENDPOINT}/${licenseUuid}/installs/${asText(row.uuid)}`);
 			showToast(translate("esfInstallReleased"), "success");
 			await load();
-		} catch {
-			showToast(translate("esfLoadError"), "error");
+		} catch (e) {
+			reportError(e, { source: translate("EsfLicensesList"), fallback: translate("esfLoadError") });
 		}
 	}, [confirm, licenseUuid, load]);
 
@@ -173,8 +174,8 @@ const LogPanel: FC<PanelProps> = ({ licenseUuid }) => {
 		try {
 			const res = await apiClient.get<{ items?: TDataItem[] }>(`/${MODEL_ENDPOINT}/${licenseUuid}/logs?limit=200`);
 			setRows(res.data?.items ?? []);
-		} catch {
-			showToast(translate("esfLoadError"), "error");
+		} catch (e) {
+			reportError(e, { source: translate("EsfLicensesList"), fallback: translate("esfLoadError") });
 		} finally {
 			setIsLoading(false);
 		}

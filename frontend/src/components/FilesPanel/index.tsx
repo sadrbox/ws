@@ -7,6 +7,8 @@ import type { TableProps } from "src/components/Table";
 import columnsJson from "./columns.json";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
+import { translate } from "src/i18";
 import { useAppContext } from "src/app/context";
 import { FileViewerPane } from "src/models/Files/FileViewerPane";
 import UploadProgress, { formatFileSize } from "./UploadProgress";
@@ -101,8 +103,8 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         : `/${MODEL_ENDPOINT}?ownerType=${encodeURIComponent(ownerType ?? "")}&ownerUuid=${encodeURIComponent(ownerUuid ?? "")}`;
       const res = await apiClient.get<{ items?: TDataItem[] }>(url);
       setRows(res.data?.items ?? []);
-    } catch (_e) {
-      showToast("Ошибка загрузки списка файлов", "error");
+    } catch (e) {
+      reportError(e, { source: translate("files"), fallback: translate("filesListLoadError") });
     } finally {
       setIsLoading(false);
     }
@@ -171,8 +173,8 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         await loadFiles();
         onFilesChange?.();
         showToast(`Файл «${file.name}» загружен`, "success");
-      } catch (_err) {
-        showToast("Ошибка загрузки файла", "error");
+      } catch (err) {
+        reportError(err, { source: translate("files"), fallback: translate("fileUploadError") });
       } finally {
         setIsUploading(false);
         setUploadInfo(null);
@@ -187,8 +189,8 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
     async (fileUuid: string) => {
       try {
         await apiClient.delete(`/${MODEL_ENDPOINT}/${fileUuid}`);
-      } catch (_err) {
-        showToast("Ошибка удаления файла", "error");
+      } catch (err) {
+        reportError(err, { source: translate("files"), fallback: translate("fileDeleteError") });
       }
     },
     [],

@@ -20,7 +20,7 @@ import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { useGovDocs } from "src/hooks/useGovDocs";
-import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
 import { FormLookup } from "src/components/Field/FormLookup";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -299,14 +299,18 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
       if (id === "snt") {
         const r = await govDocs.issueSnt("inventory-transfers", uuid);
         form.setFields({ sntStatus: r.sntStatus, sntId: r.sntId, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>);
-        // T7.8: построчные ошибки отклонения СНТ → тост.
+        // T7.8: построчные ошибки отклонения СНТ. Тост — сколько ошибок, список — в журнал формы.
         if (r.errors?.length) {
-          showToast(r.errors.map((e) => [e.errorCode, e.text].filter(Boolean).join(": ") + (e.property ? ` (${e.property})` : "")).join("\n"), "error");
+          notify({
+            severity: "error", source: translate("inventoryTransfer"), scope: form.paneId,
+            text: r.errors.map((e) => [e.errorCode, e.text].filter(Boolean).join(": ") + (e.property ? ` (${e.property})` : "")).join("\n"),
+            toast: `${translate("govDeclined")}: ${r.errors.length}`,
+          });
         }
       }
       else if (id === "sntStatus") { const r = await govDocs.refreshSnt("inventory-transfers", uuid); form.setFields({ sntStatus: r.sntStatus, sntRegistrationNumber: r.sntRegistrationNumber } as unknown as Partial<TFields>); }
     } catch { /* ошибка через govDocs.error */ }
-  }, [form.fields.uuid, form.setFields, govDocs]);
+  }, [form.fields.uuid, form.setFields, form.paneId, govDocs]);
 
   const headerActionsPortal = usePaneHeaderActions(
     form.paneId,

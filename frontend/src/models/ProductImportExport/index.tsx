@@ -12,6 +12,8 @@ import apiClient from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
+import { reportError } from "src/services/errors/route";
 import type { TPane } from "src/app/types";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { readWorkbookAoa, downloadAoa } from "src/utils/sheetIO";
@@ -280,7 +282,8 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       );
     } catch (err) {
       console.error(err);
-      showToast(translate("fileReadError"), "error");
+      // Разбор файла — на клиенте, статуса нет: текст свой, а не слова библиотеки чтения.
+      notify({ severity: "error", text: translate("fileReadError"), source: translate("ProductImportExport") });
     } finally {
       setIsLoading(false);
     }
@@ -323,7 +326,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       setFillVersion((v) => v + 1);
     } catch (err) {
       console.error(err);
-      showToast(translate("importError"), "error");
+      reportError(err, { source: translate("ProductImportExport"), fallback: translate("importError") });
     } finally {
       setIsLoading(false);
     }
@@ -357,7 +360,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       showToast(`Выгружено позиций: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
-      showToast(translate("exportError"), "error");
+      reportError(err, { source: translate("ProductImportExport"), fallback: translate("exportError") });
     } finally {
       setIsLoading(false);
     }
@@ -376,7 +379,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       downloadAoa([header, sample], { sheetName: "template", fileName: "products_template.xlsx" });
     } catch (err) {
       console.error(err);
-      showToast(translate("templateError"), "error");
+      notify({ severity: "error", text: translate("templateError"), source: translate("ProductImportExport") });
     }
   };
 

@@ -14,6 +14,7 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import LookupField from "src/components/Field/LookupField";
 import { Field } from "src/components/Field";
 import FieldActionButton from "src/components/Field/FieldActionButton";
@@ -350,8 +351,8 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
             basisDocumentUuid: docUuid,
             basisDocumentLabel: saleLabel({ number: docNumber, date: new Date().toISOString() }),
           });
-        } catch {
-          showToast(translate("terminalCashOrderFailed"), "error", 6000);
+        } catch (e) {
+          reportError(e, { source: translate("salesTerminal"), fallback: translate("terminalCashOrderFailed") });
         }
       }
 

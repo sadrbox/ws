@@ -15,6 +15,8 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import Modal from "src/components/Modal";
 import { FieldSelect } from "src/components/Field";
 import { showToast } from "src/components/UIToast";
+import Notice, { type NoticeItem } from "src/components/Notice";
+import { routeError } from "src/services/errors/route";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { fetchClassifiers, fetchClassifierCounts, importClassifiers, importClassifiersFile, CLASSIFIER_TYPES } from "src/services/classifiers/api";
 import ClassifierTree, { buildNamePathTree, type TreeNode } from "./ClassifierTree";
@@ -58,6 +60,9 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const [search, setSearch] = useState("");
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(COLUMNS, COMPONENT));
 	const [showImport, setShowImport] = useState(false);
+	// Ответ окну импорта: неверный JSON и отказ сервиса по существу — в самом окне, где на
+	// них смотрят; системный сбой routeError покажет тостом и запишет в журнал.
+	const [importNotice, setImportNotice] = useState<NoticeItem[]>([]);
 	const [importText, setImportText] = useState("");
 	const [file, setFile] = useState<File | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -78,11 +83,12 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const { data: countsResp } = useQuery({ queryKey: ["classifier-counts"], queryFn: fetchClassifierCounts, staleTime: 60_000 });
 	const counts = countsResp?.counts ?? {};
 
-	const closeImport = useCallback(() => { setShowImport(false); setImportText(""); setFile(null); }, []);
+	const closeImport = useCallback(() => { setShowImport(false); setImportText(""); setFile(null); setImportNotice([]); }, []);
 
 	const doImport = useCallback(async () => {
 		if (busy) return;
 		setBusy(true);
+		setImportNotice([]);
 		try {
 			if (file) {
 				const r = await importClassifiersFile(file);
@@ -91,15 +97,14 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 			} else {
 				let parsed: { code: string; name: string; parentCode?: string }[];
 				try { parsed = JSON.parse(importText) as { code: string; name: string; parentCode?: string }[]; if (!Array.isArray(parsed)) throw new Error(); }
-				catch { showToast(translate("clsImportBadJson"), "error"); return; }
+				catch { setImportNotice([{ type: "error", text: translate("clsImportBadJson") }]); return; }
 				const r = await importClassifiers(type, parsed);
 				showToast(`${translate("clsImported")}: ${r.upserted}`, "success");
 			}
 			closeImport(); void refetch();
 			void qc.invalidateQueries({ queryKey: ["classifier-counts"] }); // счётчики в опциях
 		} catch (e) {
-			const a = e as { response?: { data?: { message?: string } }; message?: string };
-			showToast(a?.response?.data?.message || a?.message || "Ошибка импорта", "error");
+			setImportNotice(routeError(e, { source: translate("clsSection"), fallback: translate("importError") }));
 		} finally { setBusy(false); }
 	}, [busy, file, importText, type, refetch, closeImport, qc]);
 
@@ -172,6 +177,7 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 						placeholder='[{"code":"1234","name":"…","parentCode":"12"}]'
 						onChange={(e) => setImportText(e.target.value)} />
 					{busy && <div className={styles.Count}>{translate("clsImporting")}</div>}
+					<Notice inline items={importNotice} />
 				</Modal>
 			)}
 		</>

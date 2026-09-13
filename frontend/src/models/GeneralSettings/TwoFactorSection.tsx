@@ -3,11 +3,12 @@
 import { FC, useEffect, useState, useCallback } from "react";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { Button } from "src/components/Button";
 import { twoFactorStatus, twoFactorSetup, twoFactorEnable, twoFactorDisable } from "src/services/auth";
 import styles from "./GeneralSettings.module.scss";
 
-const errText = (e: unknown) => (e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Ошибка";
+const fail = (e: unknown) => reportError(e, { source: translate("twoFaTitle"), fallback: translate("error") });
 
 const TwoFactorSection: FC = () => {
 	const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -20,21 +21,21 @@ const TwoFactorSection: FC = () => {
 	const startSetup = useCallback(async () => {
 		setBusy(true);
 		try { const r = await twoFactorSetup(); setSetup({ secret: r.secret, otpauthUrl: r.otpauthUrl }); setCode(""); }
-		catch (e) { showToast(errText(e), "error"); }
+		catch (e) { fail(e); }
 		finally { setBusy(false); }
 	}, []);
 
 	const confirmEnable = useCallback(async () => {
 		setBusy(true);
 		try { const r = await twoFactorEnable(code); showToast(r.message, "success"); setEnabled(true); setSetup(null); setCode(""); }
-		catch (e) { showToast(errText(e), "error"); }
+		catch (e) { fail(e); }
 		finally { setBusy(false); }
 	}, [code]);
 
 	const disable = useCallback(async () => {
 		setBusy(true);
 		try { const r = await twoFactorDisable(code); showToast(r.message, "success"); setEnabled(false); setCode(""); }
-		catch (e) { showToast(errText(e), "error"); }
+		catch (e) { fail(e); }
 		finally { setBusy(false); }
 	}, [code]);
 

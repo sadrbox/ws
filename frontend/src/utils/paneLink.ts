@@ -14,6 +14,8 @@ import { asText } from "src/utils/asText";
 // ─────────────────────────────────────────────────────────────────────────────
 import type { TPaneRestore } from "src/app/types";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
+import { translate } from "src/i18";
 
 const PARAM = "open";
 
@@ -106,6 +108,7 @@ export async function copyPaneLink(restore: TPaneRestore): Promise<void> {
     }
     showToast("Ссылка скопирована", "success");
   } catch {
-    showToast("Не удалось скопировать ссылку", "error");
+    // Сбой буфера обмена — клиентский, статуса нет: текст свой, а не слова браузера.
+    notify({ severity: "error", text: translate("linkCopyError"), source: translate("system") });
   }
 }

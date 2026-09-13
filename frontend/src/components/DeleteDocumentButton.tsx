@@ -13,7 +13,7 @@ import IconButton from "src/components/IconButton/IconButton";
 import { useAppContext } from "src/app/context";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
-import { noteNotice } from "src/components/TechMessages/store";
+import { notify } from "src/components/TechMessages/store";
 import { errorStatus, errorText, reportError } from "src/services/errors/route";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
 import { upsertRecords, getRecordByUuid } from "src/services/offlineDb";
@@ -58,9 +58,11 @@ const DeleteDocumentButton: FC<{
       const status = errorStatus(err);
       const text = errorText(err, translate("deleteFailed"));
       if (status === 409) {
-        noteNotice(translate("delete"), { type: "error", text });
         const refs = text.split(/[\n,;]/).filter((x) => x.trim()).length;
-        showToast(refs > 1 ? `${translate("deleteBlockedShort")}: ${refs}` : text, "error");
+        notify({
+          severity: "error", text, source: translate("delete"),
+          toast: refs > 1 ? `${translate("deleteBlockedShort")}: ${refs}` : text,
+        });
       } else {
         reportError(err, { source: translate("delete"), fallback: translate("deleteFailed") });
       }

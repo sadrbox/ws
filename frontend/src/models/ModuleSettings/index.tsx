@@ -14,6 +14,7 @@ import LookupField from "src/components/Field/LookupField";
 import { Group, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { MODULES } from "src/config/modules";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import styles from "src/styles/main.module.scss";
@@ -64,7 +65,9 @@ const ModuleSettings: FC<Props> = () => {
   };
 
   const handleSave = async () => {
-    if (!orgUuid) { showToast(translate("moduleSelectOrgFirst"), "error"); return; }
+    // Кнопка сохранения есть только при выбранной организации (см. разметку): это
+    // страховка, а не сообщение — сказать «выберите организацию» тут некому.
+    if (!orgUuid) return;
     setSaving(true);
     try {
       const payload = [...disabled];
@@ -75,8 +78,8 @@ const ModuleSettings: FC<Props> = () => {
       qc.setQueryData(["module-settings-edit", orgUuid], payload);
       // Меню (useDisabledModules, ключ ["module-settings", org]) — рефетчим.
       await qc.invalidateQueries({ queryKey: ["module-settings"] });
-    } catch {
-      showToast(translate("serverError"), "error");
+    } catch (e) {
+      reportError(e, { source: translate("moduleSettingsTitle"), fallback: translate("serverError") });
     } finally {
       setSaving(false);
     }

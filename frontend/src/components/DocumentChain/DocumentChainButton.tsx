@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
@@ -137,8 +138,8 @@ const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }
       await api.post(`documents/${childType}/${childUuid}/clear-basis`, {});
       showToast(translate("basisCleared"), "success");
       void refetch();
-    } catch {
-      showToast(translate("basisClearFailed"), "error");
+    } catch (e) {
+      reportError(e, { source: translate("basisDocument"), fallback: translate("basisClearFailed") });
     }
   }, [refetch]);
 

@@ -14,6 +14,8 @@ import apiClient from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
+import { reportError } from "src/services/errors/route";
 import type { TPane } from "src/app/types";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { getFormatDateOnly } from "src/utils/datetime";
@@ -237,7 +239,7 @@ const PriceCorrectionPanel: FC<{
       else showToast(`Загружено цен: ${rows.length}`, "success");
     } catch (err) {
       console.error(err);
-      showToast(translate("pricesLoadError"), "error");
+      reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("pricesLoadError") });
     } finally {
       setIsLoading(false);
     }
@@ -296,7 +298,7 @@ const PriceCorrectionPanel: FC<{
       showToast(`Подставлено из «${srcPriceTypeName}»: ${applied}`, applied ? "success" : "info");
     } catch (err) {
       console.error(err);
-      showToast(translate("pricesFromTypeError"), "error");
+      reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("pricesFromTypeError") });
     } finally {
       setIsLoading(false);
     }
@@ -368,7 +370,7 @@ const PriceCorrectionPanel: FC<{
       await handleFill();
     } catch (err) {
       console.error(err);
-      showToast(translate("pricesSaveError"), "error");
+      reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("pricesSaveError") });
     } finally {
       setIsLoading(false);
     }
@@ -645,7 +647,8 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       );
     } catch (err) {
       console.error(err);
-      showToast(translate("fileReadError"), "error");
+      // Разбор файла — на клиенте, статуса нет: текст свой, а не слова библиотеки чтения.
+      notify({ severity: "error", text: translate("fileReadError"), source: translate("ProductPriceCorrection") });
     } finally {
       setIsLoading(false);
     }
@@ -681,7 +684,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       setFillVersion((v) => v + 1);
     } catch (err) {
       console.error(err);
-      showToast(translate("importError"), "error");
+      reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("importError") });
     } finally {
       setIsLoading(false);
     }
@@ -723,7 +726,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       showToast(`${translate("downloadBackup")}: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
-      showToast(translate("backupExportError"), "error");
+      reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("backupExportError") });
     } finally {
       setIsLoading(false);
     }
@@ -739,7 +742,7 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
       XLSX.writeFile(wb, "product_prices_template.xlsx");
     } catch (err) {
       console.error("download template error", err);
-      showToast(translate("templateError"), "error");
+      notify({ severity: "error", text: translate("templateError"), source: translate("ProductPriceCorrection") });
     }
   };
 

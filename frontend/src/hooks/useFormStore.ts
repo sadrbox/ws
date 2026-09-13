@@ -11,7 +11,8 @@ import {
 	useState,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { showToast } from "src/components/UIToast";
+// Под другим именем: `notify` здесь — оповещение подписчиков стора формы.
+import { notify as notifyEvent } from "src/components/TechMessages/store";
 import { useAppContext } from "src/app/context";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
@@ -412,7 +413,10 @@ function createFormStore<F extends object>(
 		// У формы в пейне тост показывает уведомление панели ниже (notify): второй вызов
 		// здесь давал два одинаковых тоста подряд. Сами — только без пейна.
 		if (msg && kind === "system" && !_paneUniqId) {
-			showToast(msg, noteType === "warning" ? "warning" : "error");
+			notifyEvent({
+				severity: noteType === "warning" ? "warning" : "error",
+				text: msg, source: _paneLabel || translate("system"),
+			});
 		}
 		if (msg && _paneUniqId) {
 			const entityUuid = state.meta.uuid || (state.fields as unknown as { uuid?: string }).uuid;

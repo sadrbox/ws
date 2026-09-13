@@ -327,6 +327,8 @@ export type NotifyOptions = {
 	toast?: string | false;
 	/** Заголовок тоста — обычно заголовок панели. */
 	toastTitle?: string;
+	/** Сколько держать тост, мс; по умолчанию решает UIToast. */
+	toastDuration?: number;
 	/** Только тост, без следа в журнале: простое «сохранено». Склейки (`key`) у него нет — нечего склеивать. */
 	ephemeral?: boolean;
 	/**
@@ -373,7 +375,7 @@ export function notify(o: NotifyOptions): string {
 	const toast = o.toast === undefined ? o.text : o.toast;
 	// Тост о повторе молчит, пока не прошло окно: десять одинаковых тостов не скажут больше одного.
 	const toastDue = !!toast && !(prev?.toastAt && now - prev.toastAt < REPEAT_WINDOW_MS);
-	if (toastDue && toast) showToast(toast, TOAST_TYPE[o.severity], undefined, o.toastTitle);
+	if (toastDue && toast) showToast(toast, TOAST_TYPE[o.severity], o.toastDuration, o.toastTitle);
 	if (o.ephemeral) return "";
 
 	if (prev) {
