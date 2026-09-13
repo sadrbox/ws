@@ -113,3 +113,39 @@
 2. Загрузка выгрузки (только `_transition`) → в ответе пользователи и расширения ВЫГРУЗКИ.
 3. Снятие процесса → в `state.processes` его нет (или `stillRunning: true`).
 4. `CLUSTER_DROP_INFOBASE` на мёртвой регистрации → в `state.infobases` базы нет.
+
+---
+
+## Сделано в агенте (сборка 2026-09-14 01:35, с дополнениями аудита R7)
+
+| № | Что в ответе | Отличие от задачи |
+|---|---|---|
+| E1 | `state.lock {enabled, message, from, to, scheduledJobsDenied?, permissionCodeSet, readAt}` — `rac infobase info` после `update` | — |
+| E1, срез | поле `lock` в строке `CLUSTER_LIST_INFOBASES` | `infobase info` требует администратора базы, поэтому блокировки читает **фон** под служебной учётной записью: до 20 баз в минуту, база раз в 10 мин, отказ — пауза 6 ч. В срез идёт прочитанное не старше 30 мин, иначе поля нет |
+| E2 | `state.infobases {items, complete, readAt, stillListed}` | удалена последняя база кластера — эха нет: пустой срез агент успехом не отдаёт |
+| E3 | `state.users`, `state.extensions`, `state.config {name, version, synonym?, readAt}` | одним входом в базу; служебного админа в выгрузке нет — вторая попытка под `payload.auth`; расширения без COM — через `ibcmd` |
+| E4 | `state.config`, `state.extensions` **и `state.users`** (R7-А5: роли, которых нет в новой конфигурации) | `version: null`, если версия у конфигурации не задана |
+| E5 | `state.processes {items, readAt, stillRunning}` | **также у `AGENT_CANCEL_COMMAND`** при `killed: true` (R7-А6) |
+| E6 | `state.publication {published, url, webServer, readAt}` | только IIS (`appcmd`); у Apache эха нет — снятие не удаляет `default.vrd`, проверить нечем |
+| R7-А3 | `CLUSTER_DISCONNECT`: к `state.connections` добавлен `state.locks {items, complete, readAt}` по всему кластеру | в задаче не было; таблица «Блокировки» на той же вкладке панели |
+
+Попутно:
+
+* `stillListed` у эха после снятия приходит всегда, `false` тоже.
+* `CLUSTER_INFOBASE_INFO` больше **не отдаёт `permissionCode`** (код разрешения входа открытым
+  текстом) — только `permissionCodeSet`.
+* После `IB_PUBLISH` / `IB_UNPUBLISH` кэш публикаций агента сбрасывается: срез баз в ближайшие
+  5 минут не вернёт прежнее `published`.
+* После удаления регистрации агент забывает знание о базе данных и блокировке этой базы.
+* После обслуживания с блокировкой (`IB_RESTORE`, `IB_APPLY_UPDATE`) блокировка в кэше
+  перечитывается сразу.
+
+**Сервису.** `parseEcho` понимает только `users` / `extensions`; `lock`, `infobases`, `config`,
+`processes`, `publication`, `locks` остаются в результате команды — применять по S1–S5
+(`TASK_SERVICE_ECHO_WRITE_COMMANDS.md`). `state.locks` панель может взять так же, как
+`state.connections`.
+
+**Проверить на сервере — окно блокировки.** При снятии агент передаёт только
+`--sessions-deny=off`, а при включении без окна не стирает прежнее. Если в `state.lock` после
+«Разблокировать» и повторного «Заблокировать» видны старые `from`/`to` из прошлой блокировки,
+включение «без окна» на деле не действует — это задача агенту (правка аргументов `rac`).

@@ -91,23 +91,24 @@ tr[data-loading] {
 	flex: none;
 	// Размер задаём масштабом самой иконки, а не `zoom`: zoom нестандартен и меняет
 	// раскладку соседей, а иконке нужно всего лишь быть чуть крупнее текста.
-	width: 18px;
-	height: 18px;
+	width: 22px;
+	height: 22px;
 	align-items: center;
 	justify-content: center;
-	color: $color5;
+	color: $color6;
 	padding: 0;
 }
 
 .DocDateIcon.docPosted {
-	color: $color51;
+	color: $color81;
 }
 
 .DocPostedBadge {
 	position: absolute;
-	right: 0px;
-	bottom: 0px;
+	right: -1px;
+	bottom: 1px;
 	color: $successText;
+	// border: 1px solid $color6;
 	background: $color60;
 	border-radius: 50%;
 	// zoom: ;
@@ -119,6 +120,7 @@ tr[data-loading] {
 // !important — раньше каждое из них держалось только на нём.
 
 .TableScrollContainer {
+
 	// Строка над активной: нижняя граница цветом выделения, чтобы рамка активной
 	// строки была замкнутой.
 	tr:has(+ tr[data-active]) {

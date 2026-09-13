@@ -54,13 +54,29 @@
 |---|---|---|
 | `IB_CREATE_USER`, `IB_UPDATE_USER`, `IB_DELETE_USER` | `state.users` | то же, что отдаёт `IB_LIST_USERS` |
 | `IB_INSTALL_EXTENSION`, `IB_DELETE_EXTENSION` | `state.extensions` | то же, что отдаёт `IB_LIST_EXTENSIONS` |
-| `CLUSTER_TERMINATE_SESSION` | `state.sessions` | то же, что `CLUSTER_LIST_SESSIONS` по этой базе |
-| `CLUSTER_DISCONNECT` | `state.connections` | то же, что `CLUSTER_LIST_CONNECTIONS` по этой базе |
+| `CLUSTER_TERMINATE_SESSION` | `state.sessions` | то же, что `CLUSTER_LIST_SESSIONS` **без `baseKey`** — весь кластер |
+| `CLUSTER_DISCONNECT` | `state.connections` | то же, что `CLUSTER_LIST_CONNECTIONS` **без `baseKey`** — весь кластер |
 | `IB_PUBLISH` / `IB_UNPUBLISH` | — | уже работает: сервис применяет `url` из ответа (`agentRouter.ts:355`) |
 
 Форма элементов — **ровно та же**, что у соответствующей `*_LIST_*`-команды. Двух форматов
 одного списка быть не должно: сервис применяет их одним и тем же кодом (`registry.syncUsers`,
 `registry.syncExtensions`).
+
+> **13.09, агент: сеансы и соединения сделаны — по всему кластеру, а не по базе.** Первоначально
+> здесь стояло «по этой базе», но панель держит ОДИН список на весь кластер (`["onec","sessions"]`,
+> `["onec","connections"]`) и отбирает базу у себя; список одной базы пришлось бы вклеивать в
+> общий по UUID базы, а в `CLUSTER_DISCONNECT` базы нет вовсе. Весь кластер панель замещает
+> целиком, одной строкой кода.
+>
+> * `complete: true` — только если ответили ВСЕ кластеры сервера; иначе `state` нет, и панель
+>   перечитывает, как раньше.
+> * `stillListed: true` — снятие прошло, но строка ещё в списке: агент перечитывает до 4 раз с
+>   паузой 0,4 с и отдаёт правду на момент `readAt`.
+> * Сервис это состояние не применяет и не вырезает (`parseEcho` берёт только `users` и
+>   `extensions`) — оно доезжает до панели в результате команды. Правок сервиса не нужно.
+> * Где в агенте: `Cluster::list_after_removal` (`src/cluster/mod.rs`), `echo_after_removal` /
+>   `removal_state` (`src/commands/mod.rs`). Задача панели:
+>   [TASK_PANEL_SESSIONS_ECHO.md](TASK_PANEL_SESSIONS_ECHO.md).
 
 ### Правила, без которых это опасно
 

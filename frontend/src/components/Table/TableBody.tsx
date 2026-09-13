@@ -740,8 +740,8 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
                 className={cx(styles.DocDateIcon, row.posted === true && styles.docPosted)}
                 title={row.posted ? translate('posted') : translate('draft')}
               >
-                <Icon name="document" width={15} height={15} />
-                {row.posted ? <Icon name="posted" width={9} height={9} className={styles.DocPostedBadge} /> : null}
+                <Icon name="document" width={22} height={22} />
+                {row.posted ? <Icon name="posted" width={14} height={14} className={styles.DocPostedBadge} /> : null}
               </span>
               <span>{value}</span>
             </span>
