@@ -41,15 +41,6 @@ import { openFormByRef, canOpenByRef } from "src/utils/openFormByRef";
 import { dismissMessage, type TechMessage } from "./store";
 import { useOps } from "./operations";
 
-/**
- * К строке операции в «Прогрессе». Фокус — не только прокрутка: так переход слышен и тем,
- * кто не видит экран, и видно, куда именно привело.
- */
-const showOp = (opId: string): void => {
-	const el = document.getElementById(`op-${opId}`);
-	el?.scrollIntoView?.({ block: "nearest" });
-	el?.focus?.();
-};
 import ProgressSection from "./ProgressSection";
 import {
 	GROUP_MODES, GROUP_MODE_LABEL, groupMessages, groupTitleOf, type GroupMode,
@@ -78,7 +69,6 @@ const readMode = (): GroupMode => {
 const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mode }) => {
 	const { addPane } = useAppContext().windows;
 	const canOpen = !!m.ref && canOpenByRef(m.ref.endpoint);
-	const opAlive = useOps().some((o) => !!m.opId && o.id === m.opId);
 	const at = new Date(m.firstAt).toISOString();
 	// Под заголовком дня дата известна и в строке не нужна; в остальных режимах — нужна.
 	const withDate = mode !== "date";
@@ -140,12 +130,6 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 							{a.label}
 						</Button>
 					))}
-					{/* Итог операции — переход к ней, пока её не убрали из «Прогресса». */}
-					{opAlive && (
-						<Button size="sm" variant="secondary" onClick={() => showOp(m.opId!)}>
-							{translate("techMsgShowOp")}
-						</Button>
-					)}
 				</div>
 				<div className={styles.MsgMeta}>
 					{showSource && (canOpen ? (
@@ -217,18 +201,30 @@ export const MessagesView: FC<{
 	 * про lock-файл». Отбор «только ошибки» — второй частый вопрос: остальное в этот момент
 	 * только мешает.
 	 */
+	/*
+	 * ИТОГ НЕ ПОВТОРЯЕТ СТРОКУ ОПЕРАЦИИ. Пока операция в «Прогрессе», её строка уже говорит, чем
+	 * кончилось, за сколько и почему не вышло, — итог-событие рядом было бы той же записью второй
+	 * раз («Изменить пользователя · Выполнено» и «Изменить пользователя. Выполнено. Время: 13 с»).
+	 * Итог не удаляется: убрали операцию («Скрыть», «Очистить», перезагрузка) — он виден как
+	 * история. Объявление для скринридера идёт по всем записям (TechMessages), его это не касается.
+	 */
+	const ops = useOps();
+	const visible = useMemo(() => {
+		const alive = new Set(ops.map((o) => o.id));
+		return messages.filter((m) => !(m.opId && alive.has(m.opId)));
+	}, [messages, ops]);
 	const [needle, setNeedle] = useState("");
 	const [errorsOnly, setErrorsOnly] = useState(false);
 	const shown = useMemo(() => {
 		const q = needle.trim().toLowerCase();
-		return messages.filter((m) => {
+		return visible.filter((m) => {
 			if (errorsOnly && m.type !== "error" && m.type !== "attention") return false;
 			if (!q) return true;
 			return m.text.toLowerCase().includes(q) || (m.source ?? "").toLowerCase().includes(q);
 		});
-	}, [messages, needle, errorsOnly]);
+	}, [visible, needle, errorsOnly]);
 	const groups = useMemo(() => groupMessages(shown, mode), [shown, mode]);
-	const active = useMemo(() => messages.filter((m) => m.active).length, [messages]);
+	const active = useMemo(() => visible.filter((m) => m.active).length, [visible]);
 
 	/*
 	 * Свёрнутость. Ключи групп в разных режимах разные («ref:sales» и «day:12.09.2026»),
@@ -262,10 +258,10 @@ export const MessagesView: FC<{
 			  * зависят от этих чисел именно кнопки («Очистить историю» гаснет, когда чистить
 			  * нечего), и стоять им лучше рядом.
 			  */}
-			{(toolbar || !!messages.length) && (
+			{(toolbar || !!visible.length || !!ops.length) && (
 				<div className={styles.ViewTools}>
 					{toolbar}
-					{!!messages.length && (
+					{(!!visible.length || !!ops.length) && (
 						<>
 							<input
 								className={styles.Search}
@@ -284,9 +280,9 @@ export const MessagesView: FC<{
 							    Иначе человек считает, что видит всё. */}
 							<span className={styles.ViewCount}>
 								{translate("techMsgActive")}: {active} · {translate("total")}: {
-									shown.length === messages.length
-										? messages.length
-										: `${shown.length} / ${messages.length}`
+									shown.length === visible.length
+										? visible.length
+										: `${shown.length} / ${visible.length}`
 								}
 							</span>
 						</>
@@ -336,7 +332,7 @@ export const MessagesView: FC<{
 						<span className={styles.Empty}>
 							{/* «Ничего не нашлось» и «сообщений нет» — разные ответы: первый
 							    значит, что отбор можно снять, второй — что всё в порядке. */}
-							{messages.length ? translate("techMsgNothingFound") : translate("techMessagesNone")}
+							{visible.length ? translate("techMsgNothingFound") : translate("techMessagesNone")}
 						</span>
 					)}
 

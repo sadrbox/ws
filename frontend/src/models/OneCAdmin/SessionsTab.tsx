@@ -106,7 +106,7 @@ export const SessionsTab: FC = () => {
 			});
 			return terminateSession(p.sessionId, p.baseKey)
 				.then((r) => { finishOp(op); return r; })
-				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e) }); throw e; });
+				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e }); throw e; });
 		},
 		onSuccess: (r) => {
 			const echo = applyEcho(r);
@@ -169,7 +169,7 @@ export const SessionsTab: FC = () => {
 			});
 			return setSessionsLock(p.baseKey, p.enabled, p.message)
 				.then((r) => { finishOp(op); return r; })
-				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e) }); throw e; });
+				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e }); throw e; });
 		},
 		onSuccess: (_d, p) => {
 			showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");

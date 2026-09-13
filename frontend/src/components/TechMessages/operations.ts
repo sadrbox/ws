@@ -192,7 +192,8 @@ function noteOutcome(op: Op): void {
 			].filter(Boolean).join(". ")
 			: translate("onecOpFinishedOk");
 
-	// Итог знает свою операцию (M14): из него переходят к строке «Прогресса», пока она на экране.
+	// Итог знает свою операцию (M14): по `opId` область не показывает его, пока строка операции
+	// ещё на экране, — строка уже говорит то же самое (MessagesView).
 	notify({
 		severity: failed ? "error" : "success",
 		text: `${op.title}. ${result}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
@@ -239,8 +240,31 @@ export function progressOp(id: string, done: number, failed = 0): void {
 	updateOp(id, (o) => ({ ...o, done, failed }));
 }
 
-/** Закрыть операцию, считаемую на клиенте. */
-export function finishOp(id: string, r: { failed?: number; note?: string } = {}): void {
+/**
+ * ОШИБКИ, О КОТОРЫХ УЖЕ СКАЗАЛ ИТОГ ОПЕРАЦИИ.
+ *
+ * Отказ проходил двумя путями: `finishOp` записывал итог «Не выполнено: причина», а обработчик
+ * ошибки на экране звал `reportError` с тем же исключением — вторая запись, а для отказа по
+ * существу ещё и третья, состоянием формы. Помечаем САМ ОБЪЕКТ ошибки: текст сравнивать нельзя
+ * (`e.message` и разобранный ответ сервиса расходятся), а объект — тот же самый.
+ * Маршрутизатор ошибок по этой пометке показывает только тост «сейчас» (services/errors/route.ts).
+ */
+const settledErrors = new WeakSet<object>();
+
+/** Об этой ошибке уже сказал итог операции — второй записи не нужно. */
+export const isSettledError = (e: unknown): boolean =>
+	!!e && typeof e === "object" && settledErrors.has(e);
+
+/**
+ * Закрыть операцию, считаемую на клиенте. `error` — исключение, из-за которого не вышло: итог
+ * операции о нём скажет, и маршрутизатор ошибок не запишет его второй раз.
+ */
+export function finishOp(id: string, r: { failed?: number; note?: string; error?: unknown } = {}): void {
+	// Итог пишет реестр (не вызывающий) — только тогда об ошибке уже сказано.
+	if ((r.failed ?? 0) > 0 && r.error && typeof r.error === "object" && !ownOutcome.has(id)
+		&& ops.some((o) => o.id === id)) {
+		settledErrors.add(r.error);
+	}
 	updateOp(id, (o) => ({
 		...o,
 		done: o.total,
@@ -269,7 +293,7 @@ export async function withOp<T>(
 		finishOp(id);
 		return r;
 	} catch (e) {
-		finishOp(id, { failed: 1, note: e instanceof Error ? e.message : "" });
+		finishOp(id, { failed: 1, note: e instanceof Error ? e.message : "", error: e });
 		throw e;
 	}
 }

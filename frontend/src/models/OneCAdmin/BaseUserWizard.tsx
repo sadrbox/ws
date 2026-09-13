@@ -315,7 +315,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 						r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
 					started += 1;
 				} catch (e) {
-					finishOp(opId, { failed: group.length, note: e instanceof Error ? e.message : String(e) });
+					finishOp(opId, { failed: group.length, note: e instanceof Error ? e.message : String(e), error: e });
 					throw e;
 				}
 			}

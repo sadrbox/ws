@@ -2105,7 +2105,6 @@
   "recomputeCostingRunning": "Пересчёт…",
   "recomputeCostingDone": "Себестоимость пересчитана: регистр — {registers}, проводки — {entries}",
   "recomputeCostingError": "Не удалось пересчитать себестоимость",
-  "techMsgShowOp": "Показать операцию",
   "onecBasesDbCheck": "Проверить базы данных",
   "onecBasesDbChecked": "Проверено баз",
   "onecBasesDbMissing": "нет базы данных",

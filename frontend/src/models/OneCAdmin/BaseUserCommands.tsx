@@ -63,7 +63,7 @@ export const BaseUserCommands: FC<{
 			attachBatch(op, r.batchId, r.total, r.skipped.length ? `${translate("onecSkipped")}: ${r.skipped.length}` : "");
 			return r;
 		} catch (e) {
-			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e) });
+			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 			throw e;
 		}
 	};

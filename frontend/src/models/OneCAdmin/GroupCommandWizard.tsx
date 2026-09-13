@@ -192,7 +192,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 					r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
 				return r;
 			} catch (e) {
-				finishOp(opId, { failed: targets.length, note: e instanceof Error ? e.message : String(e) });
+				finishOp(opId, { failed: targets.length, note: e instanceof Error ? e.message : String(e), error: e });
 				throw e;
 			}
 		},

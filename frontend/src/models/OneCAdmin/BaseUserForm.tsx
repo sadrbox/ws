@@ -361,7 +361,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		} catch (e) {
 			// Команда даже не встала в очередь: без этого запись осталась бы «выполняется»
 			// навсегда — задания, за которым следить, у неё нет.
-			finishOp(op, { failed: bases.length, note: e instanceof Error ? e.message : String(e) });
+			finishOp(op, { failed: bases.length, note: e instanceof Error ? e.message : String(e), error: e });
 			throw e;
 		}
 	}, [userName]);
@@ -452,7 +452,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			finishOp(op);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			finishOp(op, { failed: 1, note: msg });
+			finishOp(op, { failed: 1, note: msg, error: e });
 			// След в журнале уже оставил итог операции (finishOp) — здесь только тост «сейчас»,
 			// и словами человека: «Failed to fetch» не объясняет ничего. reportError записал бы
 			// тот же отказ второй раз.
@@ -613,26 +613,28 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 
 								<GroupCol className={main.FormNotice}>
 									<QueryError error={occurrences.error ?? baseUsers.error} />
-									<Notice items={[
-										...(renameTo ? [{ type: "warning" as const, text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }] : []),
-										/* Название операции и объект — в кавычках и скобках: цепочка из трёх
-										   тире («заблокирована: Изменить пользователя — Иванов — база»)
-										   читалась как одна фраза, где не видно, что чем является. */
-										/*
-										 * Пока идёт операция по объекту, форма только читается: писать
-										 * поверх значений, которые прямо сейчас меняются в 1С, значило бы
-										 * отправить команду по данным, которых уже нет. Но если операция
-										 * идёт подозрительно долго, человек должен знать, что запись можно
-										 * снять, — иначе форма заперта навсегда (живой случай: команда
-										 * выполнена, а панель об этом не узнала).
-										 */
-										...(busy ? [{
-											type: "info" as const,
+									{/*
+									  * «ПРАВКА ЗАБЛОКИРОВАНА» — НАДПИСЬЮ НА МЕСТЕ, а не в общую область. Это
+									  * пояснение, почему поля недоступны (памятка, правило 4), и нужно оно тому,
+									  * кто смотрит на эту форму. В области ту же работу уже показывает строка
+									  * операции в «Прогрессе» — вторая запись о ней была бы дублем.
+									  *
+									  * Название операции и объект — в кавычках и скобках: цепочка из трёх тире
+									  * читалась как одна фраза. Идёт подозрительно долго — говорим, что запись
+									  * можно снять, иначе форма заперта навсегда (команда выполнена, а панель
+									  * об этом не узнала).
+									  */}
+									{busy && (
+										<Notice inline items={[{
+											type: "info",
 											text: `${translate("onecObjectBusy")} «${busy.title}» (${busy.target}). `
 												+ (Date.now() - busy.startedAt > 5 * 60_000
 													? translate("onecObjectBusyStuck")
 													: translate("onecObjectBusyWait")),
-										}] : []),
+										}]} />
+									)}
+									<Notice items={[
+										...(renameTo ? [{ type: "warning" as const, text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }] : []),
 										...(!baseKey ? [{ type: "info" as const, text: translate("onecPickBaseInHeader") }] : []),
 										/*
 										 * НЕСОХРАНЁННЫХ ПРАВОК ЗДЕСЬ НЕТ И НЕ БУДЕТ.

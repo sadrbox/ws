@@ -115,17 +115,29 @@ describe("Общий реестр длительной работы", () => {
 		expect(getMessages()).toHaveLength(1);
 	});
 
-	it("из итога переходят к операции, пока она в «Прогрессе»", () => {
+	it("итог не повторяет строку операции: пока она видна — итога в списке нет", () => {
 		// Без группировки: итог — история, и в режиме объектов его группа свёрнута.
 		localStorage.setItem("tech_messages_group", "none");
 		let id = "";
 		act(() => { id = op("Сверка прав"); finishOp(id); });
 		show();
-		const go = screen.getByRole("button", { name: translate("techMsgShowOp") });
-		fireEvent.click(go);
-		expect(document.activeElement?.id).toBe(`op-${id}`);
+		// Строка операции есть, итог-события рядом нет — это была бы та же запись второй раз.
+		expect(screen.getByText("Сверка прав")).toBeTruthy();
+		expect(screen.queryByText(/^Сверка прав\. /)).toBeNull();
+		// Операцию убрали — итог на месте, как история.
 		act(() => { abandonOp(id); });
-		expect(screen.queryByRole("button", { name: translate("techMsgShowOp") })).toBeNull();
+		expect(screen.getByText(/^Сверка прав\. /)).toBeTruthy();
+	});
+
+	it("отказ, записанный итогом, помечен — маршрутизатор не запишет его второй раз", async () => {
+		const { isSettledError } = await import("src/components/TechMessages/operations");
+		const e = new Error("роль не найдена");
+		act(() => { finishOp(op("Изменить пользователя"), { failed: 1, note: e.message, error: e }); });
+		expect(isSettledError(e)).toBe(true);
+		// Итог пишет сам вызывающий — ему и решать, пометки нет.
+		const own = new Error("своё");
+		act(() => { finishOp(startOp({ kind: "create", title: "Импорт", target: "t", total: 1, reportsOwnOutcome: true }), { failed: 1, error: own }); });
+		expect(isSettledError(own)).toBe(false);
 	});
 
 	it("отмену знает тот, кто поставил работу", async () => {

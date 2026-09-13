@@ -26,6 +26,7 @@ import { notify } from "src/components/TechMessages/store";
 import { translate } from "src/i18";
 import { humanErrorText } from "src/utils/errorText";
 import type { NoticeItem } from "src/components/Notice";
+import { isSettledError } from "src/components/TechMessages/operations";
 
 /** Разбор любой ошибки до двух фактов: статус и текст для человека. */
 export function errorStatus(e: unknown): number | undefined {
@@ -105,6 +106,18 @@ export interface RouteErrorOptions {
 export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem[] {
 	const status = errorStatus(e);
 	const text = errorText(e, opts.fallback);
+
+	/*
+	 * ОБ ЭТОЙ ОШИБКЕ УЖЕ СКАЗАЛ ИТОГ ОПЕРАЦИИ (finishOp с `error`): «Не выполнено: причина» лежит
+	 * в журнале и в строке «Прогресса». Вторая запись о том же отказе — дубль, а сообщение формы —
+	 * третий. Остаётся тост: итог пишется без него, а человеку нужно «сейчас».
+	 */
+	if (isSettledError(e)) {
+		if (!(status === 403 && hasHttpResponse(e))) {
+			notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope, ephemeral: true });
+		}
+		return [];
+	}
 
 	if (!isSystemError(status)) return [{ type: opts.type ?? "error", text }];
 

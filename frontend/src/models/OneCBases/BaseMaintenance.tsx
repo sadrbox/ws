@@ -61,7 +61,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 			finishOp(op);
 			return r;
 		} catch (e) {
-			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e) });
+			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 			throw e;
 		}
 	};

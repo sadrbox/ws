@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { translate } from "src/i18";
 import { errorStatus, errorText, isSystemError, routeError } from "src/services/errors/route";
 import { APP_SCOPE, clearNoticeHistory, getMessages } from "src/components/TechMessages/store";
+import { finishOp, startOp } from "src/components/TechMessages/operations";
 
 const toasts: string[] = [];
 vi.mock("src/components/UIToast", () => ({
@@ -97,5 +98,20 @@ describe("маршрутизация ошибок: канал по вопрос�
 		expect(errorText(http(422, "серий меньше количества"))).toBe("серий меньше количества");
 		expect(errorText(new Error("что-то пошло не так"))).toBe("что-то пошло не так");
 		expect(errorText({}, "запасной")).toBe("запасной");
+	});
+
+	it("об отказе уже сказал итог операции — только тост, без второй записи и без сообщения формы", () => {
+		for (const [status, text] of [[422, "роль не найдена"], [500, "сервер сломался"]] as const) {
+			toasts.length = 0;
+			getMessages().length = 0;
+			const e = http(status, text);
+			finishOp(startOp({ kind: "update", title: "Изменить пользователя", target: "t", total: 1 }), { failed: 1, note: text, error: e });
+			const outcome = getMessages().length;
+			expect(outcome).toBe(1);
+			expect(routeError(e)).toEqual([]);
+			expect(toasts).toEqual([text]);
+			// В журнале по-прежнему одна запись — итог операции.
+			expect(getMessages()).toHaveLength(1);
+		}
 	});
 });

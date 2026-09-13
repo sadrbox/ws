@@ -97,6 +97,17 @@ describe("Технические сообщения: прогресс запро
 		expect(screen.queryByText(translate("techMsgProgress"))).toBeNull();
 	});
 
+	it("итог не дублирует строку операции, пока она видна", () => {
+		localStorage.setItem("tech_messages_group", "none");
+		let id = "";
+		act(() => { id = startOp({ kind: "update", title: "Изменить пользователя", target: "Оператор — _transition", total: 1 }); finishOp(id); });
+		show();
+		expect(screen.getByText("Изменить пользователя")).toBeTruthy();
+		expect(screen.queryByText(/^Изменить пользователя\. /)).toBeNull();
+		act(() => { abandonOp(id); });
+		expect(screen.getByText(/^Изменить пользователя\. /)).toBeTruthy();
+	});
+
 	it("провалившаяся команда по одной базе не выглядит выполненной", () => {
 		/*
 		 * ЖИВОЙ СЛУЧАЙ. «Изменить пользователя · 1 из 1 · 100% · Не удалось: 1» — строка
