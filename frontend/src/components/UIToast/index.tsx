@@ -2,10 +2,9 @@
  * UIToast — глобальный компонент для показа коротких системных уведомлений
  * (ошибки прав доступа, сетевые ошибки и пр.)
  *
- * Работает через CustomEvent "ui_toast":
- *   window.dispatchEvent(new CustomEvent("ui_toast", {
- *     detail: { message: "Недостаточно прав", type: "error" }
- *   }))
+ * Работает через CustomEvent "ui_toast", но слать его руками не нужно:
+ *   notify({ severity, text, source })   — событие: тост + след в журнале (TechMessages/store)
+ *   showToast(message, type)             — только тост; отправляет событие сам
  */
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { translate } from "src/i18";
@@ -183,9 +182,13 @@ const UIToast: FC = () => {
 UIToast.displayName = "UIToast";
 export default UIToast;
 
-/** Утилита — удобный вызов из любого места */
-export function showToast(message: string, type: UIToastType = "error", duration?: number) {
+/**
+ * Утилита — удобный вызов из любого места. Единственное место, откуда уходит событие
+ * "ui_toast". Прикладному коду предпочтительнее `notify` (TechMessages/store): он решает,
+ * оставить ли событию след в журнале.
+ */
+export function showToast(message: string, type: UIToastType = "error", duration?: number, title?: string) {
   window.dispatchEvent(
-    new CustomEvent("ui_toast", { detail: { message, type, duration } }),
+    new CustomEvent("ui_toast", { detail: { message, type, duration, title } }),
   );
 }

@@ -407,7 +407,9 @@ function createFormStore<F extends object>(
 	): void {
 		// Системная ошибка к форме не привязана и правкой полей не чинится → тост.
 		// Ошибка данных формы остаётся в meta.error и рендерится в <Notice /> формы.
-		if (msg && kind === "system") {
+		// У формы в пейне тост показывает уведомление панели ниже (notify): второй вызов
+		// здесь давал два одинаковых тоста подряд. Сами — только без пейна.
+		if (msg && kind === "system" && !_paneUniqId) {
 			showToast(msg, noteType === "warning" ? "warning" : "error");
 		}
 		if (msg && _paneUniqId) {

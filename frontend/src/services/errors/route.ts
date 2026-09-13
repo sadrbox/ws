@@ -22,8 +22,7 @@
  * ЧЕГО ЗДЕСЬ НЕТ. 401 не наш случай: сессию чистит перехватчик клиента, и показывать поверх
  * этого сообщение о «неудаче» значит спорить с экраном входа, который уже открылся.
  */
-import { showToast } from "src/components/UIToast";
-import { noteNotice } from "src/components/TechMessages/store";
+import { notify } from "src/components/TechMessages/store";
 import { translate } from "src/i18";
 import { humanErrorText } from "src/utils/errorText";
 import type { NoticeItem } from "src/components/Notice";
@@ -96,9 +95,9 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 
 	if (!isSystemError(status)) return [{ type: opts.type ?? "error", text }];
 
-	showToast(text, "error");
-	// След в журнале: тост живёт четыре секунды, а вопрос «что это было» возникает позже.
-	noteNotice(opts.source ?? translate("system"), { type: "error", text }, opts.scope);
+	// Тост «сейчас» и след в журнале — одним событием: тост живёт четыре секунды, а вопрос
+	// «что это было» возникает позже.
+	notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope });
 	return [];
 }
 
@@ -109,7 +108,6 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 export function reportError(e: unknown, opts: RouteErrorOptions = {}): void {
 	const items = routeError(e, opts);
 	for (const it of items) {
-		showToast(it.text, "error");
-		noteNotice(opts.source ?? translate("system"), { type: it.type, text: it.text }, opts.scope);
+		notify({ severity: it.type, text: it.text, source: opts.source ?? translate("system"), scope: opts.scope });
 	}
 }

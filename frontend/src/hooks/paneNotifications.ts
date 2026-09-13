@@ -18,7 +18,7 @@
  */
 import { useMemo } from "react";
 import {
-	addMessage, dismissMessage, dismissMessagesWhere, clearScope, resolveMessages,
+	dismissMessage, dismissMessagesWhere, clearScope, notify, resolveMessages,
 	useScopedNotices, type TechMessage,
 } from "src/components/TechMessages/store";
 
@@ -62,26 +62,19 @@ export function addPaneNotification(
 	/** Кнопки-действия внутри уведомления. */
 	actions?: PaneNotificationAction[],
 ): void {
-	addMessage({
+	// Тост и запись — два показа одного события (см. notify): тост отвечает «что сейчас
+	// произошло», область — «что вообще происходило». Запись активна: уведомление панели
+	// ждёт человека («Повторить», «нет связи») и снимается явно.
+	notify({
 		scope: uniqId,
-		type,
+		severity: type,
 		text,
 		source: context?.paneLabel ?? "",
 		ref: context?.ref,
 		actions,
+		active: true,
+		toastTitle: context?.paneLabel,
 	});
-
-	// Всплывающее сообщение — по-прежнему: оно отвечает «что сейчас произошло», а область
-	// сообщений — «что вообще происходило». Это разные вопросы и разные поверхности.
-	window.dispatchEvent(
-		new CustomEvent("ui_toast", {
-			detail: {
-				message: text,
-				type: type === "error" ? "error" : type === "warning" ? "warning" : "info",
-				title: context?.paneLabel,
-			},
-		}),
-	);
 }
 
 /** Удалить конкретное уведомление. */

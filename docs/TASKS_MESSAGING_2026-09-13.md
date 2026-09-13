@@ -58,7 +58,14 @@ P0: M10, M13. Остальное опирается на них.
 
 ## Задачи
 
-### M10. Единая точка входа `notify()` (P0)
+### M10. Единая точка входа `notify()` (P0) — СДЕЛАНО 2026-09-13
+
+Итог: `notify` в `TechMessages/store.ts`; `noteNotice`, `addMessage`, `addPaneNotification`,
+`routeError`/`reportError` — обёртки над ним; `showToast` получил `title`, прямой
+`dispatchEvent("ui_toast")` в `paneNotifications` убран. Попутно: системная ошибка формы в
+пейне давала ДВА одинаковых тоста (`useFormStore.setError` + уведомление панели) — теперь
+один. Тест — `__tests__/notify.test.ts`. Параметр `key` отложен в M16: без склейки он
+ничего не делает.
 
 Сделать в `components/TechMessages/store.ts` одну функцию для событий:
 
@@ -84,7 +91,8 @@ P0: M10, M13. Остальное опирается на них.
 `useReportNotice` / `reportNotices` (вид `state`) не трогать: у них другой жизненный цикл.
 
 *Готово, когда:* в `store.ts` один путь создания события; `ui_toast` отправляется только
-из `notify`; тест: `notify` без `ephemeral` даёт и тост, и запись; с `ephemeral` — только
+из `components/UIToast` (`showToast`), прямых `dispatchEvent("ui_toast")` в прикладном
+коде нет; тест: `notify` без `ephemeral` даёт и тост, и запись; с `ephemeral` — только
 тост; `toast: false` — только запись.
 
 ### M11. Тосты-ошибки — через маршрутизатор (P1, после M10)

@@ -37,6 +37,7 @@
  */
 import { createContext, useContext, useEffect, useId, useRef, useSyncExternalStore } from "react";
 import type { NoticeItem, NoticeType } from "src/components/Notice";
+import { showToast, type UIToastType } from "src/components/UIToast";
 
 export type TechMessage = {
 	id: string;
@@ -288,22 +289,79 @@ export function reportNotices(scope: string, rawKey: string, source: string, ite
 	emit();
 }
 
+/** У тоста палитра уже: «attention» (не заполнено обязательное) показывается предупреждением. */
+const TOAST_TYPE: Record<NoticeType, UIToastType> = {
+	error: "error", attention: "warning", warning: "warning", success: "success", info: "info",
+};
+
+export type NotifyOptions = {
+	severity: NoticeType;
+	/** Полный текст — он и остаётся в журнале. */
+	text: string;
+	/** Где это возникло — словами человека («Реализация № 12», «Базы 1С»). */
+	source: string;
+	/** Область (пейн); по умолчанию всё приложение. */
+	scope?: string;
+	ref?: TechMessage["ref"];
+	actions?: TechMessage["actions"];
+	/**
+	 * Событие ЖДЁТ человека: кнопка «Повторить», «нет связи», пока связь не вернулась. Такое
+	 * считается актуальным (счётчик на полосе области) до явного снятия. Обычный факт —
+	 * «импорт выполнен» — сразу история.
+	 */
+	active?: boolean;
+	/**
+	 * Текст тоста. По умолчанию — тот же `text`; строка — короткий вариант, когда подробности
+	 * за четыре секунды не прочитать; `false` — без тоста (итог фоновой работы, на который
+	 * человек не смотрит в эту секунду).
+	 */
+	toast?: string | false;
+	/** Заголовок тоста — обычно заголовок панели. */
+	toastTitle?: string;
+	/** Только тост, без следа в журнале: простое «сохранено». */
+	ephemeral?: boolean;
+};
+
 /**
- * Разовое сообщение: итог операции, отказ команды, результат проверки.
- * Активным не становится — это уже случившийся факт, ему место сразу в истории.
+ * ЕДИНСТВЕННЫЙ ВХОД ДЛЯ СОБЫТИЙ (M10, docs/TASKS_MESSAGING_2026-09-13.md).
+ *
+ * Тост и журнал — не два канала, а два ПОКАЗА одного события: тост отвечает «что сейчас
+ * произошло», журнал — «что происходило». Пока показ выбирал автор, звавший `showToast`
+ * или `noteNotice` по отдельности, одно и то же событие то терялось через четыре секунды,
+ * то появлялось тостом дважды (форма и уведомление панели звали тост каждый сам).
+ * Теперь автор говорит, ЧТО случилось и нужен ли след, а показы выбирает эта функция.
+ *
+ * Состояние формы (`<Notice />`, `useReportNotice`) сюда не идёт: у него другой жизненный
+ * цикл — его снимает источник, а не человек.
+ *
+ * Возвращает идентификатор записи; у `ephemeral` записи нет — пустая строка.
  */
-export function noteNotice(source: string, item: NoticeItem, scope = APP_SCOPE): void {
+export function notify(o: NotifyOptions): string {
+	const toast = o.toast === undefined ? o.text : o.toast;
+	if (toast) showToast(toast, TOAST_TYPE[o.severity], undefined, o.toastTitle);
+	if (o.ephemeral) return "";
+
 	const now = Date.now();
+	const id = `m${++seq}`;
 	notices = [{
-		id: `n${++seq}`, scope, key: `once_${seq}`, type: item.type, text: item.text,
-		source, firstAt: now, lastAt: now, active: false,
+		id, scope: o.scope ?? APP_SCOPE, key: id, type: o.severity, text: o.text, source: o.source,
+		firstAt: now, lastAt: now, active: o.active === true, ref: o.ref, actions: o.actions,
 	}, ...notices].slice(0, LIMIT);
 	emit();
+	return id;
 }
 
 /**
- * ИМПЕРАТИВНОЕ уведомление — то, что раньше заводила подсистема уведомлений панелей:
- * «сохранено локально», «нет связи с сервером», отказ бэкенда с кнопкой «Повторить».
+ * Разовое сообщение без тоста: итог операции, отказ команды, результат проверки.
+ * Активным не становится — это уже случившийся факт, ему место сразу в истории.
+ */
+export function noteNotice(source: string, item: NoticeItem, scope = APP_SCOPE): void {
+	notify({ severity: item.type, text: item.text, source, scope, toast: false });
+}
+
+/**
+ * ИМПЕРАТИВНОЕ уведомление без тоста — то, что раньше заводила подсистема уведомлений
+ * панелей: «сохранено локально», «нет связи с сервером», отказ бэкенда с кнопкой «Повторить».
  *
  * Отличие от `<Notice />` одно: у того есть источник, который может ЗАМОЛЧАТЬ (ошибка
  * ушла — запись перешла в историю), а это — событие: оно случилось и остаётся, пока его
@@ -317,14 +375,10 @@ export function addMessage(m: {
 	ref?: TechMessage["ref"];
 	actions?: TechMessage["actions"];
 }): string {
-	const now = Date.now();
-	const id = `m${++seq}`;
-	notices = [{
-		id, scope: m.scope, key: id, type: m.type, text: m.text, source: m.source,
-		firstAt: now, lastAt: now, active: true, ref: m.ref, actions: m.actions,
-	}, ...notices].slice(0, LIMIT);
-	emit();
-	return id;
+	return notify({
+		severity: m.type, text: m.text, source: m.source, scope: m.scope,
+		ref: m.ref, actions: m.actions, active: true, toast: false,
+	});
 }
 
 /** Убрать запись совсем (крестик на сообщении). */
