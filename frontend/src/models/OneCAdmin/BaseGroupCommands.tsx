@@ -7,8 +7,9 @@
  * модальном окне размером с записку перемешивались, а «что произойдёт» не показывалось
  * вовсе — человек узнавал итог из отчёта задания.
  *
- * Единственное исключение — «Проверить публикации»: это не операция над выбранными базами,
- * а одно чтение веб-сервера, и спрашивать для него «над чем» нечего.
+ * Исключения — чтения, которым помощник не нужен: «Проверить публикации» (одно чтение
+ * веб-сервера на все базы) и «Проверить базы данных» (отмеченные базы или все). Они доступны
+ * и уровню «только просмотр» — чтение ничего не меняет (F5).
  */
 import { FC } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,9 +20,10 @@ import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
-import { refreshPublications } from "src/services/onec/api";
+import { checkBasesDb, refreshPublications } from "src/services/onec/api";
 import { withOp } from "./progress";
-import { noteNotice } from "src/components/TechMessages/store";
+import { noteNotice, notify } from "src/components/TechMessages/store";
+import { checkDbOutcome } from "./checkBasesDb";
 import { useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
 import { useOnecWrite } from "./shared";
 
@@ -96,6 +98,33 @@ export const BaseGroupCommands: FC<{
 		onError: (e) => reportError(e, { source: translate("onecTabBases") }),
 	});
 
+	/**
+	 * «Проверить базы данных» (P2): есть ли у зарегистрированных баз их база данных в СУБД —
+	 * фантомы, которые кластер перечисляет, а открыть нельзя. Без отметок — все базы, с
+	 * отметками — отмеченные. На сотне баз ответ идёт до минуты: ход виден в «Прогрессе», а
+	 * итог пишем сами — содержательнее безликого «Выполнено».
+	 */
+	const CHECK_DB = "checkBasesDb";
+
+	const checkDb = useMutation({
+		mutationFn: () => withOp(
+			{
+				kind: "read", title: translate("onecBasesDbCheck"),
+				target: keys.length ? `${translate("onecBatchTargets")}: ${keys.length}` : translate("onecTabBases"),
+				total: 0, reportsOwnOutcome: true,
+			},
+			() => checkBasesDb(keys),
+		),
+		onSuccess: (d) => {
+			// Отметки в реестре сервис уже поставил при приёме ответа — перечитываем список.
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+			const o = checkDbOutcome(d);
+			notify({ severity: o.severity, source: translate("onecTabBases"), text: o.text });
+		},
+		onError: (e) => reportError(e, { source: translate("onecTabBases") }),
+	});
+
 	/** Подпись операции в списке группы — та же, что была на отдельной кнопке. */
 	const OP_LABEL: Record<GroupOp, string> = {
 		publish: "onecPublish", unpublish: "onecUnpublish",
@@ -104,24 +133,23 @@ export const BaseGroupCommands: FC<{
 		backup: "onecBackup", checkBase: "onecMaintCheck",
 	};
 
-	// Групповые команды — только изменения (публикация, пользователи, расширения,
-	// выгрузка): правом «только просмотр» их не показываем вовсе (F5).
-	if (!canWrite) return null;
-
 	return (
 		<>
 			{groups.map((g) => {
 				const spec = GROUPS[g];
 				const options = [
-					...spec.ops.map((o) => ({ id: o, label: translate(OP_LABEL[o]) })),
+					// Изменения (публикация, пользователи, расширения, выгрузка) — только полному
+					// доступу: правом «только просмотр» их не показываем вовсе (F5).
+					...(canWrite ? spec.ops.map((o) => ({ id: o, label: translate(OP_LABEL[o]) })) : []),
+					// Чтения — всем, кому открыта панель.
 					...(g === "publication"
-						? [{
-							id: CHECK_PUBLICATIONS,
-							label: translate("onecPublicationsCheck"),
-							disabled: checkPublications.isPending,
-						}]
+						? [
+							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), disabled: checkPublications.isPending },
+							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), disabled: checkDb.isPending },
+						]
 						: []),
 				];
+				if (!options.length) return null;
 				return (
 					<ActionsDropdownButton
 						key={g}
@@ -133,6 +161,7 @@ export const BaseGroupCommands: FC<{
 							: translate("onecWizPickInside")}
 						onSelect={(id) => {
 							if (id === CHECK_PUBLICATIONS) { checkPublications.mutate(); return; }
+							if (id === CHECK_DB) { checkDb.mutate(); return; }
 							// Отметки списка — заготовка: набор целей правят в самом помощнике.
 							openWizard(id as GroupOp, keys, presetName);
 						}}

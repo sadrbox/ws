@@ -275,6 +275,29 @@ export const refreshPublications = () =>
 	).then((d) => awaitCommand<{ items: OnecBase[]; report?: PublicationReport }>(d));
 
 /**
+ * Ответ агента на проверку наличия баз данных (`CLUSTER_CHECK_BASES`). Поля `dbMissing` у
+ * строки нет — проверить не удалось; `note` — почему проверка не проведена (например, у
+ * агента нет пароля СУБД).
+ */
+export type CheckBasesResult = {
+	items?: { key: string; dbMissing?: boolean }[];
+	checked?: number;
+	skipped?: number;
+	note?: string;
+};
+
+/**
+ * Проверить, есть ли у баз их база данных в СУБД (P2). Без ключей — все базы кластера.
+ * На сотне баз ответ дольше, чем сервис держит запрос, — поэтому дожидаемся команды.
+ * Отметки в реестре сервис ставит сам при приёме ответа.
+ */
+export const checkBasesDb = (baseKeys?: string[]) =>
+	aiFetch<CheckBasesResult | Pending>("/v1/onec/bases/check-db", {
+		method: "POST",
+		body: JSON.stringify(baseKeys?.length ? { baseKeys } : {}),
+	}).then((d) => awaitCommand<CheckBasesResult>(d));
+
+/**
  * Роли для выбора при создании и изменении пользователя.
  *
  * Без `baseKey` — те, что уже встречались в базах (кэш реестра, без обращения к 1С).
