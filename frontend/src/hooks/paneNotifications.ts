@@ -18,7 +18,7 @@
  */
 import { useMemo } from "react";
 import {
-	dismissMessage, dismissMessagesWhere, clearScope, notify, resolveMessages,
+	dismissByKey, dismissMessage, clearScope, notify, resolveMessages,
 	useScopedNotices, type TechMessage,
 } from "src/components/TechMessages/store";
 
@@ -58,7 +58,12 @@ export function addPaneNotification(
 	type: PaneNotification["type"],
 	text: string,
 	/** Контекст: заголовок панели и ссылка на объект. */
-	context?: { paneLabel?: string; ref?: { endpoint: string; uuid: string; label?: string } },
+	context?: {
+		paneLabel?: string;
+		ref?: { endpoint: string; uuid: string; label?: string };
+		/** Ключ склейки повторов (например NETWORK_KEY): одна запись «×N» вместо десятка. */
+		key?: string;
+	},
 	/** Кнопки-действия внутри уведомления. */
 	actions?: PaneNotificationAction[],
 ): void {
@@ -74,6 +79,7 @@ export function addPaneNotification(
 		actions,
 		active: true,
 		toastTitle: context?.paneLabel,
+		key: context?.key,
 	});
 }
 
@@ -83,13 +89,21 @@ export function dismissPaneNotification(_uniqId: string, noteId: string): void {
 }
 
 /**
+ * Ключ «сетевых» уведомлений: нет связи, сервер недоступен, данные из кэша, сохранено
+ * локально. Одно на панель — последнее состояние связи, повторы склеиваются.
+ */
+export const NETWORK_KEY = "network";
+
+/**
  * Удалить из панели «сетевые» уведомления (offline / нет связи / локальный кэш).
  * Вызывается после успешного online-обращения к серверу, чтобы устаревшие
  * предупреждения не вводили пользователя в заблуждение.
+ *
+ * По КЛЮЧУ, а не по тексту: прежняя регулярка знала четыре формулировки и пропускала пятую
+ * («Сервер временно недоступен»), а любая правка текста молча ломала снятие.
  */
 export function dismissNetworkNotifications(uniqId: string): void {
-	const NETWORK_RE = /Нет связи с сервером|режиме offline|локального кэша|Сохранено локально/i;
-	dismissMessagesWhere(uniqId, (m) => NETWORK_RE.test(m.text));
+	dismissByKey(uniqId, NETWORK_KEY);
 }
 
 /** Очистить все уведомления панели. */

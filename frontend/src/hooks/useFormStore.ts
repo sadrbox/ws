@@ -1,5 +1,5 @@
 import { asText } from "src/utils/asText";
-import { addPaneNotification, resolvePaneNotifications, dismissNetworkNotifications, type PaneNotification } from "./paneNotifications";
+import { addPaneNotification, resolvePaneNotifications, dismissNetworkNotifications, NETWORK_KEY, type PaneNotification } from "./paneNotifications";
 import { persistToSession, restoreFromSession, clearSession } from "./formSession";
 import { setPaneDirty, setPaneIsEditMode } from "./paneFormState";
 import {
@@ -404,6 +404,8 @@ function createFormStore<F extends object>(
 		msg: string | null,
 		noteType?: PaneNotification["type"],
 		kind: "form" | "system" = "form",
+		/** Ключ склейки уведомления панели (NETWORK_KEY для сетевых). */
+		key?: string,
 	): void {
 		// Системная ошибка к форме не привязана и правкой полей не чинится → тост.
 		// Ошибка данных формы остаётся в meta.error и рендерится в <Notice /> формы.
@@ -427,6 +429,7 @@ function createFormStore<F extends object>(
 			addPaneNotification(_paneUniqId, noteType ?? "error", msg, {
 				paneLabel: _paneLabel,
 				ref: entityUuid ? { endpoint, uuid: String(entityUuid), label } : undefined,
+				key,
 			});
 		}
 		setMeta({
@@ -505,7 +508,7 @@ function createFormStore<F extends object>(
 
 			if (fromCache) {
 				const cacheMsg = "Данные загружены из локального кэша (offline-режим).";
-				setError(cacheMsg, "info");
+				setError(cacheMsg, "info", "form", NETWORK_KEY);
 			} else if (_paneUniqId) {
 				// Свежие данные с сервера — убираем стальные «сетевые» уведомления.
 				dismissNetworkNotifications(_paneUniqId);
@@ -528,7 +531,7 @@ function createFormStore<F extends object>(
 				const offMsg = getIsOnline()
 					? "Сервер временно недоступен. Повторите попытку."
 					: "Нет связи с сервером. Работа в режиме offline — данные будут загружены при восстановлении соединения.";
-				setError(offMsg, "warning");
+				setError(offMsg, "warning", "form", NETWORK_KEY);
 			} else {
 				setError(
 					translateError((err as ApiError).response?.data?.message ?? "") ||
@@ -606,7 +609,7 @@ function createFormStore<F extends object>(
 			if (wasOffline) {
 				const saveMsg =
 					"Сохранено локально. Синхронизация произойдёт при восстановлении связи.";
-				setError(saveMsg, "info");
+				setError(saveMsg, "info", "form", NETWORK_KEY);
 			} else if (_paneUniqId) {
 				// Успешное online-сохранение — убираем стальные «сетевые»
 				// уведомления, оставшиеся от прежних неудачных load/save.
@@ -625,6 +628,7 @@ function createFormStore<F extends object>(
 			// Класс ошибки решает, где её показать: данные формы → <Notice /> в форме,
 			// системный сбой → <UIToast />.
 			let kind: "form" | "system" = "system";
+			let key: string | undefined;
 			const status = (err as ApiError).response?.status;
 			const serverMsg = translateError((err as ApiError).response?.data?.message ?? "");
 
@@ -633,6 +637,7 @@ function createFormStore<F extends object>(
 					? "Сервер временно недоступен. Повторите попытку сохранения."
 					: "Нет связи с сервером. Повторите попытку при восстановлении соединения.";
 				noteType = "warning";
+				key = NETWORK_KEY;
 			} else if (status === 409) {
 				msg = serverMsg || "Запись уже существует";
 				kind = "form";
@@ -653,7 +658,7 @@ function createFormStore<F extends object>(
 			} else if ((err as ApiError).message) {
 				msg = serverMsg || translateError((err as ApiError).message ?? "");
 			}
-			setError(msg, noteType, kind);
+			setError(msg, noteType, kind, key);
 			setMeta({ isLoading: false });
 			return { success: false };
 		}

@@ -153,6 +153,10 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 					  * сломанной: нажал — а сообщения остались.
 					  */}
 					{m.fromSource && m.active && <span>{translate("techMsgFromForm")}</span>}
+					{/* Повторы склеены в одну запись (notify, key): сколько раз — сказано числом. */}
+					{(m.repeat ?? 1) > 1 && (
+						<span title={`${translate("techMsgRepeated")}: ${m.repeat}`}>×{m.repeat}</span>
+					)}
 				</div>
 
 
@@ -302,7 +306,13 @@ export const MessagesView: FC<{
 			  * поэтому ширин две и выбирает их режим.
 			  */}
 			<div className={styles.Frame} data-mode={mode}>
-				<div className={styles.Rows}>
+				{/*
+				  * ЖУРНАЛ ДЛЯ ВСПОМОГАТЕЛЬНЫХ ТЕХНОЛОГИЙ (M17) — по смыслу, но без собственного
+				  * озвучивания: живой регион на весь список читал бы вслух каждую перерисовку
+				  * (секунды «идёт уже 40 с», раскрытие группы). Новое объявляет Announcer в
+				  * области, и только то, о чём не сказал тост.
+				  */}
+				<div className={styles.Rows} role="log" aria-live="off" aria-label={translate("techMessages")}>
 					{/* Идущая работа — над случившимся: она про «сейчас», и она меняется. */}
 					<ProgressSection mode={mode} />
 

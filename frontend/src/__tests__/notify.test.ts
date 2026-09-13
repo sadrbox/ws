@@ -8,9 +8,9 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-	APP_SCOPE, addMessage, clearNoticeHistory, clearScope, getMessages, noteNotice, notify,
+	APP_SCOPE, addMessage, clearNoticeHistory, clearScope, getMessages, noteNotice, notify, reportNotices,
 } from "src/components/TechMessages/store";
-import { addPaneNotification } from "src/hooks/paneNotifications";
+import { NETWORK_KEY, addPaneNotification, dismissNetworkNotifications } from "src/hooks/paneNotifications";
 
 const toasts: { message: string; type?: string; title?: string }[] = [];
 vi.mock("src/components/UIToast", () => ({
@@ -85,5 +85,79 @@ describe("notify: тост и журнал — два показа одного 
 		expect(toasts).toEqual([{ message: "Нет связи с сервером", type: "error", title: "Реализация № 12" }]);
 		expect(getMessages()).toHaveLength(1);
 		expect(getMessages()[0]).toMatchObject({ scope: "pane-1", active: true, source: "Реализация № 12" });
+	});
+});
+
+describe("notify: повторы склеиваются (M16)", () => {
+	beforeEach(() => {
+		toasts.length = 0;
+		clearScope("pane-1");
+		clearScope("pane-2");
+		clearNoticeHistory(APP_SCOPE);
+		getMessages().length = 0;
+		vi.restoreAllMocks();
+	});
+
+	it("десять одинаковых подряд — одна запись ×10 и один тост", () => {
+		for (let i = 0; i < 10; i++) {
+			notify({ severity: "warning", text: "Нет связи с сервером", source: "Реализация", key: "network" });
+		}
+		expect(getMessages()).toHaveLength(1);
+		expect(getMessages()[0].repeat).toBe(10);
+		expect(toasts).toHaveLength(1);
+	});
+
+	it("повтор меняет текст той же записи: показано последнее состояние", () => {
+		notify({ severity: "warning", text: "Нет связи с сервером", source: "Реализация", key: "network" });
+		notify({ severity: "info", text: "Сохранено локально", source: "Реализация", key: "network" });
+		expect(getMessages()).toHaveLength(1);
+		expect(getMessages()[0]).toMatchObject({ text: "Сохранено локально", type: "info", repeat: 2 });
+	});
+
+	it("после окна тишины — новый случай: новая запись и новый тост", () => {
+		const t0 = Date.now();
+		const now = vi.spyOn(Date, "now").mockReturnValue(t0);
+		notify({ severity: "error", text: "Сервер недоступен", source: "Реализация", key: "srv" });
+		now.mockReturnValue(t0 + 61_000);
+		notify({ severity: "error", text: "Сервер недоступен", source: "Реализация", key: "srv" });
+		expect(getMessages()).toHaveLength(2);
+		expect(toasts).toHaveLength(2);
+	});
+
+	it("один ключ в разных пейнах — разные записи", () => {
+		notify({ severity: "warning", text: "Нет связи", source: "А", scope: "pane-1", key: "network" });
+		notify({ severity: "warning", text: "Нет связи", source: "Б", scope: "pane-2", key: "network" });
+		expect(getMessages()).toHaveLength(2);
+	});
+
+	it("сетевые уведомления снимаются по ключу, а не по тексту", () => {
+		// «Сервер временно недоступен» прежняя регулярка не знала и не снимала.
+		addPaneNotification("pane-1", "warning", "Сервер временно недоступен. Повторите попытку.", {
+			paneLabel: "Реализация", key: NETWORK_KEY,
+		});
+		addPaneNotification("pane-1", "error", "Не проведён", { paneLabel: "Реализация" });
+		dismissNetworkNotifications("pane-1");
+		expect(getMessages().map((m) => m.text)).toEqual(["Не проведён"]);
+	});
+});
+
+describe("журнал — не аудит (M18)", () => {
+	beforeEach(() => {
+		clearScope("pane-1");
+		clearNoticeHistory(APP_SCOPE);
+		getMessages().length = 0;
+	});
+
+	it("сообщения форм не оседают в хранилище браузера, события — остаются", () => {
+		reportNotices("pane-1", "form", "Реализация", [{ type: "attention", text: "Не заполнен ИИН покупателя" }]);
+		noteNotice("Базы 1С", { type: "error", text: "Команда отклонена" });
+
+		const saved = JSON.parse(localStorage.getItem("tech-messages") ?? "[]") as { text: string; fromSource?: boolean }[];
+		expect(saved.some((m) => m.fromSource)).toBe(false);
+		expect(saved.map((m) => m.text)).toEqual(["Команда отклонена"]);
+		// На экране сообщение формы при этом есть: не пишется оно только на диск.
+		expect(getMessages().some((m) => m.text === "Не заполнен ИИН покупателя")).toBe(true);
+
+		reportNotices("pane-1", "form", "Реализация", []);
 	});
 });

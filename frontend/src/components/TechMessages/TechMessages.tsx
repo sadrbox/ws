@@ -22,7 +22,7 @@
  * свёрнутая занимает узкую полосу, раскрытая — свою долю. Никакого `position: absolute`:
  * накладка закрывала бы содержимое формы ровно там, где с ним работают.
  */
-import { FC, useState } from "react";
+import { FC, useEffect, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import IconButton from "src/components/IconButton/IconButton";
@@ -30,7 +30,7 @@ import { Icon } from "src/components/IconButton/icons";
 import { useAppContext } from "src/app/context";
 import {
 	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
-	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement,
+	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement, type TechMessage,
 } from "./store";
 import { clearFinished, useOnecOps } from "src/models/OneCAdmin/progress";
 import MessagesView from "./MessagesView";
@@ -41,6 +41,55 @@ const ALL_KEY = "tech_messages_all";
 
 const readAll = (): boolean => {
 	try { return localStorage.getItem(ALL_KEY) === "1"; } catch { return false; }
+};
+
+const announceLine = (m: TechMessage): string => `${m.source ? `${m.source}: ` : ""}${m.text}`;
+
+/**
+ * ОБЪЯВИТЬ НОВОЕ ТЕМ, КТО НЕ ВИДИТ ЭКРАН (M17).
+ *
+ * Тост объявляет себя сам (UIToast: role="alert"/"status"). Но итог фоновой работы, отказ
+ * команды и сообщение формы приходят без тоста — и при свёрнутой области человек со
+ * скринридером не узнавал о них вовсе. Поэтому здесь объявляется ровно то, о чём тост не
+ * сказал: ошибки — срочно, остальные события — вежливо. Состояния форм, кроме ошибок, не
+ * объявляются: сводка «правок: 6, 7, 6…» при каждом нажатии превратилась бы в диктовку.
+ *
+ * Объявляется только ПОЯВИВШЕЕСЯ после монтирования: история из хранилища — не новость.
+ * Слушает всё приложение, а не срез: переключение «Текущие/Все» не должно зачитывать
+ * чужое старое как новое. Живёт вне ветки «раскрыта/свёрнута» — объявлять важно в обеих.
+ */
+const Announcer: FC = () => {
+	const all = useScopedNotices(APP_SCOPE);
+	const seen = useRef<Set<string> | null>(null);
+	const [said, setSaid] = useState({ urgent: "", calm: "" });
+
+	useEffect(() => {
+		if (!seen.current) {
+			seen.current = new Set(all.map((m) => m.id));
+			return;
+		}
+		const known = seen.current;
+		const fresh = all.filter((m) => !known.has(m.id));
+		if (!fresh.length) return;
+		for (const m of fresh) known.add(m.id);
+
+		const quiet = fresh.filter((m) => !m.toastAt);
+		const urgent = quiet.filter((m) => m.type === "error" || m.type === "attention");
+		const calm = quiet.filter((m) => !urgent.includes(m) && !m.fromSource);
+		if (!urgent.length && !calm.length) return;
+		setSaid({ urgent: urgent.map(announceLine).join(". "), calm: calm.map(announceLine).join(". ") });
+	}, [all]);
+
+	return (
+		<>
+			<span className={styles.VisuallyHidden} aria-live="assertive" aria-atomic="true" data-announce="urgent">
+				{said.urgent}
+			</span>
+			<span className={styles.VisuallyHidden} aria-live="polite" aria-atomic="true" data-announce="calm">
+				{said.calm}
+			</span>
+		</>
+	);
 };
 
 export const TechMessages: FC = () => {
@@ -87,6 +136,8 @@ export const TechMessages: FC = () => {
 
 	if (!open) {
 		return (
+			<>
+			<Announcer />
 			<aside className={styles.Rail} data-place={placement} aria-label={translate("techMessages")}>
 				<IconButton
 					size="md"
@@ -96,14 +147,26 @@ export const TechMessages: FC = () => {
 				>
 					<Icon name="caretDown" />
 				</IconButton>
-				{running > 0 && <span className={styles.Spinner} title={translate("techMsgProgress")} />}
-				{active > 0 && <span className={styles.RailCount}>{active}</span>}
+				{/* Счётчик и спиннер — словами для скринридера: «3» и вращение сами ничего не говорят. */}
+				{running > 0 && (
+					<span className={styles.Spinner} role="img"
+						title={translate("techMsgProgress")}
+						aria-label={`${translate("techMsgProgress")}: ${running}`} />
+				)}
+				{active > 0 && (
+					<span className={styles.RailCount} aria-label={`${translate("techMsgActive")}: ${active}`}>
+						{active}
+					</span>
+				)}
 				<span className={styles.RailTitle}>{translate("techMessages")}</span>
 			</aside>
+			</>
 		);
 	}
 
 	return (
+		<>
+		<Announcer />
 		<aside className={styles.Dock} data-place={placement} aria-label={translate("techMessages")}>
 			<div className={styles.Head}>
 				<span className={styles.Title}>{translate("techMessages")}</span>
@@ -191,6 +254,7 @@ export const TechMessages: FC = () => {
 				/>
 			</div>
 		</aside>
+		</>
 	);
 };
 

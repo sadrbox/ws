@@ -693,6 +693,19 @@
 	font-weight: 600;
 }
 
+// Текст для скринридера: в разметке есть, на экране места не занимает (объявления области).
+.VisuallyHidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
 // Движение — не для всех: кому анимация мешает, тот её отключил в системе.
 @media (prefers-reduced-motion: reduce) {
 

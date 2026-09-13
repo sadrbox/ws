@@ -77,6 +77,10 @@ export type TechMessage = {
 	 * следующем же рендере она вернётся тем же текстом.
 	 */
 	fromSource?: boolean;
+	/** Сколько раз событие повторилось в окне склейки (см. notify, `key`). Нет — один раз. */
+	repeat?: number;
+	/** Когда о записи последний раз сказал тост. Нет — тоста не было: объявлять некому, кроме области. */
+	toastAt?: number;
 };
 
 /**
@@ -179,11 +183,16 @@ let notices: TechMessage[] = load();
 let seq = 0;
 const listeners = new Set<() => void>();
 
-/** Сохраняем только то, что имеет смысл после перезагрузки: без функций-обработчиков. */
+/**
+ * Сохраняем только то, что имеет смысл после перезагрузки: без функций-обработчиков и без
+ * сообщений форм. Сообщение формы — текущее состояние, после перезагрузки его всё равно не
+ * поднимают (см. load), а текст из полей формы («не заполнен ИИН …») незачем оставлять в
+ * хранилище браузера. Журнал — не аудит (M18): он про события, а не про данные.
+ */
 function persist(): void {
 	try {
 		localStorage.setItem(STORE_KEY, JSON.stringify(
-			notices.map(({ actions: _actions, ...rest }) => rest),
+			notices.filter((n) => !n.fromSource).map(({ actions: _actions, ...rest }) => rest),
 		));
 	} catch { /* приватный режим или переполнение — не повод ломать экран */ }
 }
@@ -318,9 +327,24 @@ export type NotifyOptions = {
 	toast?: string | false;
 	/** Заголовок тоста — обычно заголовок панели. */
 	toastTitle?: string;
-	/** Только тост, без следа в журнале: простое «сохранено». */
+	/** Только тост, без следа в журнале: простое «сохранено». Склейки (`key`) у него нет — нечего склеивать. */
 	ephemeral?: boolean;
+	/**
+	 * Ключ склейки повторов в пределах области: «нет связи» при опросе раз в три секунды —
+	 * одна запись «×N», а не журнал, забитый одинаковыми строками. Без ключа каждое событие
+	 * отдельное.
+	 */
+	key?: string;
 };
+
+/**
+ * Окно склейки: повтор внутри него правит прежнюю запись и не показывает тост снова.
+ * Минута — дольше любого опроса в приложении и короче, чем «это уже другой случай».
+ */
+const REPEAT_WINDOW_MS = 60_000;
+
+/** Ключ события отделён от ключей живых источников (`scope::raw` в reportNotices). */
+const eventKey = (scope: string, key: string): string => `evt::${scope}::${key}`;
 
 /**
  * ЕДИНСТВЕННЫЙ ВХОД ДЛЯ СОБЫТИЙ (M10, docs/TASKS_MESSAGING_2026-09-13.md).
@@ -337,15 +361,43 @@ export type NotifyOptions = {
  * Возвращает идентификатор записи; у `ephemeral` записи нет — пустая строка.
  */
 export function notify(o: NotifyOptions): string {
+	const now = Date.now();
+	const scope = o.scope ?? APP_SCOPE;
+	const key = o.key && !o.ephemeral ? eventKey(scope, o.key) : undefined;
+	/*
+	 * ПОВТОР — ТА ЖЕ ЗАПИСЬ (M16). Сличаем по ключу и по свежести: повтор через час — уже
+	 * другой случай, и сливать его с утренним значило бы врать о ходе событий.
+	 */
+	const prev = key ? notices.find((n) => n.key === key && now - n.lastAt < REPEAT_WINDOW_MS) : undefined;
+
 	const toast = o.toast === undefined ? o.text : o.toast;
-	if (toast) showToast(toast, TOAST_TYPE[o.severity], undefined, o.toastTitle);
+	// Тост о повторе молчит, пока не прошло окно: десять одинаковых тостов не скажут больше одного.
+	const toastDue = !!toast && !(prev?.toastAt && now - prev.toastAt < REPEAT_WINDOW_MS);
+	if (toastDue && toast) showToast(toast, TOAST_TYPE[o.severity], undefined, o.toastTitle);
 	if (o.ephemeral) return "";
 
-	const now = Date.now();
+	if (prev) {
+		const next: TechMessage = {
+			...prev,
+			type: o.severity, text: o.text, source: o.source, lastAt: now,
+			repeat: (prev.repeat ?? 1) + 1,
+			active: prev.active || o.active === true,
+			ref: o.ref ?? prev.ref,
+			actions: o.actions ?? prev.actions,
+			// Повторилось — значит, повод не исчерпан: действия снова в силе.
+			resolved: undefined,
+			...(toastDue ? { toastAt: now } : {}),
+		};
+		notices = notices.map((n) => (n.id === prev.id ? next : n));
+		emit();
+		return prev.id;
+	}
+
 	const id = `m${++seq}`;
 	notices = [{
-		id, scope: o.scope ?? APP_SCOPE, key: id, type: o.severity, text: o.text, source: o.source,
+		id, scope, key: key ?? id, type: o.severity, text: o.text, source: o.source,
 		firstAt: now, lastAt: now, active: o.active === true, ref: o.ref, actions: o.actions,
+		...(toastDue ? { toastAt: now } : {}),
 	}, ...notices].slice(0, LIMIT);
 	emit();
 	return id;
@@ -395,6 +447,12 @@ export function dismissMessagesWhere(scope: string, match: (m: TechMessage) => b
 	if (next.length === notices.length) return;
 	notices = next;
 	emit();
+}
+
+/** Убрать события области по ключу склейки — без разбора текста (см. notify, `key`). */
+export function dismissByKey(scope: string, key: string): void {
+	const k = eventKey(scope, key);
+	dismissMessagesWhere(scope, (m) => m.key === k);
 }
 
 /**
