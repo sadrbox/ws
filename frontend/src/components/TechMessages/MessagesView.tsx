@@ -95,15 +95,11 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 	 * представление, по которому и открывают.
 	 */
 	/*
-	 * ИСТОЧНИК И ОБЪЕКТ — РАЗНОЕ, когда подписи расходятся. «Удаление» или «Базы 1С» — где это
-	 * случилось; «Реализация № 3» или «almaz67» — о чём. Тогда источник стоит текстом, а ссылкой
-	 * служит объект. Если источник уже и есть представление объекта (содержит его подпись) —
-	 * одна ссылка, как прежде.
+	 * ТЕКСТ ОБЪЕКТА И ЕСТЬ ССЫЛКА — одна. Вторая подпись того же объекта рядом («Реализация ТМЗ
+	 * и услуг: № 23414 - 08.03.2026» и ещё «№ 23414 от 08.03.2026») называла его дважды разными
+	 * словами (живой случай 13.09). Подпись ссылки — лишь запасной текст, когда источника нет.
 	 */
-	const objectLabel = m.ref?.label ?? "";
-	const separateObject = canOpen && !!objectLabel && !!m.source
-		&& m.source !== objectLabel && !m.source.includes(objectLabel);
-	const linkText = separateObject ? objectLabel : (m.source || objectLabel);
+	const linkText = m.source || m.ref?.label || "";
 
 	return (
 		<article className={styles.Row} data-type={m.type} data-past={!m.active || undefined}>
@@ -141,11 +137,10 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 					))}
 				</div>
 				<div className={styles.MsgMeta}>
-					{separateObject && showSource && <span>{m.source}</span>}
-					{(separateObject || showSource) && (canOpen ? (
+					{showSource && (canOpen ? (
 						<button type="button" className={styles.MsgLink}
 							title={`${translate("open")}: ${linkText}`}
-							onClick={() => void openFormByRef(m.ref!, addPane, separateObject ? objectLabel : m.source)}>
+							onClick={() => void openFormByRef(m.ref!, addPane, m.source)}>
 							{linkText}
 						</button>
 					) : <span>{linkText}</span>)}
@@ -219,9 +214,18 @@ export const MessagesView: FC<{
 	 * история. Объявление для скринридера идёт по всем записям (TechMessages), его это не касается.
 	 */
 	const ops = useOps();
+	/*
+	 * СОБЫТИЕ НЕ ПОВТОРЯЕТ ОТКРЫТУЮ ФОРМУ. Отказ записи приходит двумя путями: форма показывает
+	 * его своим сообщением («сообщает форма»), а хранилище формы пишет уведомление панели — тот
+	 * же текст второй строкой (живой случай 13.09: «Недостаточно остатка…» дважды). Уведомление
+	 * не убираем: в формах, которые ошибку сами не выводят, это единственный её показ. Пока
+	 * форма той же вкладки сообщает дословно то же — событие скрыто; форму закрыли — оно история.
+	 */
 	const visible = useMemo(() => {
 		const alive = new Set(ops.map((o) => o.id));
-		return messages.filter((m) => !(m.opId && alive.has(m.opId)));
+		const live = new Set(messages.filter((m) => m.fromSource && m.active).map((m) => `${m.scope}\u0000${m.text}`));
+		return messages.filter((m) => !(m.opId && alive.has(m.opId))
+			&& !(!m.fromSource && live.has(`${m.scope}\u0000${m.text}`)));
 	}, [messages, ops]);
 	const [needle, setNeedle] = useState("");
 	const [errorsOnly, setErrorsOnly] = useState(false);

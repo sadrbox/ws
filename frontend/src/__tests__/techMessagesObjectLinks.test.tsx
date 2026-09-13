@@ -75,13 +75,31 @@ describe("ссылка на объект сообщения", () => {
 		expect(canOpenByRef("нет-такого")).toBe(false);
 	});
 
-	it("источник и объект расходятся — источник текстом, объект ссылкой", () => {
+	it("текст объекта и есть ссылка — второй подписи того же объекта нет", () => {
+		// Живой случай 13.09: «Реализация ТМЗ и услуг: № 23414 - 08.03.2026» и ниже ещё
+		// «№ 23414 от 08.03.2026» — один объект двумя подписями.
 		act(() => {
-			setScopeObject("pane-1", sale);
-			notify({ severity: "error", text: "Удаление запрещено", source: "Удаление", scope: "pane-1", toast: false });
+			notify({
+				severity: "error", text: "Недостаточно остатка", source: "Реализация ТМЗ и услуг: № 3 - 05.03.2026",
+				scope: "pane-1", toast: false, ref: { endpoint: "sales", uuid: "s1", label: "№ 3 от 05.03.2026" },
+			});
 		});
 		render(<TestWrapper><Live /></TestWrapper>);
-		expect(screen.getByRole("button", { name: "Реализация № 3" })).toBeTruthy();
-		expect(screen.getByText("Удаление")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Реализация ТМЗ и услуг: № 3 - 05.03.2026" })).toBeTruthy();
+		expect(screen.queryByText("№ 3 от 05.03.2026")).toBeNull();
+	});
+
+	it("отказ записи не повторяется: пока форма сообщает тот же текст, уведомление скрыто", () => {
+		const text = "Недостаточно остатка для проведения";
+		act(() => {
+			reportNotices("pane-1", "k", "Реализация № 3", [{ type: "error", text }]);
+			notify({ severity: "error", text, source: "Реализация № 3", scope: "pane-1", toast: false });
+		});
+		render(<TestWrapper><Live /></TestWrapper>);
+		expect(screen.getAllByText(text)).toHaveLength(1);
+		// Форма замолчала (закрыли, исправили) — уведомление видно как история.
+		act(() => { reportNotices("pane-1", "k", "Реализация № 3", []); });
+		expect(screen.getAllByText(text)).toHaveLength(1);
+		expect(getMessages().filter((m) => m.text === text)).toHaveLength(1);
 	});
 });

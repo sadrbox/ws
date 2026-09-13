@@ -12,7 +12,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 // Под другим именем: `notify` здесь — оповещение подписчиков стора формы.
-import { notify as notifyEvent } from "src/components/TechMessages/store";
+import { notify as notifyEvent, useNoticeOrigin, useScopeObject } from "src/components/TechMessages/store";
 import { useAppContext } from "src/app/context";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
@@ -1284,6 +1284,16 @@ export function useFormStore<F extends object>(
 		store.getSnapshot,
 		store.getSnapshot,
 	);
+
+	/*
+	 * ОБЪЕКТ ФОРМЫ — для ссылки из её сообщений («Недостаточно остатка…», «не заполнен склад»).
+	 * Рецепт пейна знает запись только при открытии из списка; новая форма получает uuid при
+	 * записи, и рецепт об этом не узнаёт. Хранилище знает всегда: endpoint и uuid записи,
+	 * подпись — заголовок пейна, тот же текст, что стоит в сообщении.
+	 */
+	const { source: paneTitle } = useNoticeOrigin();
+	const recordUuid = snapshot.meta.uuid || asText((snapshot.fields as { uuid?: unknown }).uuid);
+	useScopeObject(recordUuid && endpoint ? { endpoint, uuid: String(recordUuid), label: paneTitle } : undefined);
 
 	// ── Auto-load при монтировании ──
 	const loadTriggeredRef = useRef(false);
