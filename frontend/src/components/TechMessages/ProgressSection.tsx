@@ -20,9 +20,10 @@
  * запрос, превратила бы список в мигалку — а сообщать «идёт обычная жизнь» незачем.
  * Пропадает строка тоже не сразу: мелькнувшее на 200 мс не читается, а раздражает.
  *
- * ОТКУДА ДАННЫЕ. Реестр операций живёт в `models/OneCAdmin/progress`: он единственный в
- * приложении, кто считает длительную работу, и заводить рядом второй — значит завести два
- * ответа на один вопрос. Эта секция его только показывает.
+ * ОТКУДА ДАННЫЕ. Реестр длительной работы — `./operations`, общий для приложения (M13):
+ * панель 1С подключается к нему адаптером, остальная долгая работа — через `withOp`. Эта
+ * секция его только показывает — и подчиняется тем же командам списка, что и сообщения:
+ * поиску, «Только ошибкам» и срезу «Текущая форма».
  */
 import { FC, useEffect, useState, useSyncExternalStore } from "react";
 import { translate } from "src/i18";
@@ -35,8 +36,8 @@ import { humanErrorText } from "src/utils/errorText";
 import { showToast } from "src/components/UIToast";
 import {
 	abandonOp, cancelOp, opDuration, opKindLabel, opPercent, opStateLabel, opSucceeded,
-	useOnecOps, type Op,
-} from "src/models/OneCAdmin/progress";
+	useOps, type Op,
+} from "./operations";
 import type { GroupMode } from "./grouping";
 import styles from "./TechMessages.module.scss";
 
@@ -236,14 +237,37 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
  * сообщала бы то, что и так видно. Сворачивается, как группа сообщений, — и по той же
  * причине: заголовок целиком кнопка, попадать курсором в стрелку 10×10 — работа.
  */
-export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
-	const ops = useOnecOps();
+export const ProgressSection: FC<{
+	mode: GroupMode;
+	/** Поиск списка: по названию, объекту и причине. */
+	needle?: string;
+	/** «Только ошибки»: остаются упавшие операции. */
+	errorsOnly?: boolean;
+	/** Срез «Текущая форма»: операции других пейнов скрыты, операции без пейна — видны. */
+	pane?: string;
+}> = ({ mode, needle = "", errorsOnly = false, pane }) => {
+	const ops = useOps();
 	const slow = useSlowFetching();
 	const [collapsed, setCollapsed] = useState(false);
-	const running = ops.filter((o) => o.state === "running").length;
-	useTick(running > 0 || !!slow);
+	/*
+	 * ТЕ ЖЕ КОМАНДЫ, ЧТО И У СООБЩЕНИЙ. Раньше поиск и «Только ошибки» отсекали сообщения, а
+	 * операции оставались все: человек искал «lock-файл» и видел в ответ десяток чужих
+	 * проверок. Операция без пейна (происхождение неизвестно, так запускает панель 1С) видна
+	 * в любом срезе — прятать её значило бы потерять из виду работу, которая идёт.
+	 */
+	const q = needle.trim().toLowerCase();
+	const shown = ops.filter((o) => {
+		if (pane && o.pane && o.pane !== pane) return false;
+		if (errorsOnly && o.state !== "failed") return false;
+		if (q && !`${o.title} ${o.target} ${o.note}`.toLowerCase().includes(q)) return false;
+		return true;
+	});
+	// Ожидание сервера — не ошибка и ни на какой поиск не отвечает: при отборе его не показываем.
+	const slowShown = slow && !q && !errorsOnly ? slow : null;
+	const running = shown.filter((o) => o.state === "running").length;
+	useTick(running > 0 || !!slowShown);
 
-	if (!ops.length && !slow) return null;
+	if (!shown.length && !slowShown) return null;
 
 	// Под заголовком дня дата известна и в строке не нужна; в остальных режимах — нужна.
 	const withDate = mode !== "date";
@@ -255,7 +279,7 @@ export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
 	 */
 	const flat = mode === "none";
 	const open = flat || !collapsed;
-	const total = ops.length + (slow ? 1 : 0);
+	const total = shown.length + (slowShown ? 1 : 0);
 
 	return (
 		<section className={styles.Group} data-progress="">
@@ -278,15 +302,15 @@ export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
 					  * десяток одновременно, и десять одинаковых строк «идёт запрос» не
 					  * скажут больше, чем одна с числом.
 					  */}
-					{slow && (
+					{slowShown && (
 						<article className={styles.Row} data-type="info" data-run="">
 							<div className={styles.RowTime}>
 								{withDate && (
 									<span className={styles.RowDay}>
-										{getFormatDateOnly(new Date(slow.since).toISOString())}
+										{getFormatDateOnly(new Date(slowShown.since).toISOString())}
 									</span>
 								)}
-								<span>{getFormatTimeOnly(new Date(slow.since).toISOString())}</span>
+								<span>{getFormatTimeOnly(new Date(slowShown.since).toISOString())}</span>
 								<span className={styles.MsgType}>{translate("techMsgRequestsHint")}</span>
 							</div>
 							<div className={styles.RowRail} aria-hidden="true">
@@ -294,20 +318,20 @@ export const ProgressSection: FC<{ mode: GroupMode }> = ({ mode }) => {
 							</div>
 							<div className={styles.RowBody}>
 								<div className={styles.MsgText}>
-									{translate("techMsgRequests")}: {slow.count}
+									{translate("techMsgRequests")}: {slowShown.count}
 								</div>
 								{/* Сколько осталось, сервер не сообщает — значит, спиннер, а не полоса. */}
 								<Progress percent={null} />
 								<div className={styles.MsgMeta}>
 									<span>
-										{Math.max(Math.round((Date.now() - slow.since) / 1000), 0)} {translate("secShort")}
+										{Math.max(Math.round((Date.now() - slowShown.since) / 1000), 0)} {translate("secShort")}
 									</span>
 								</div>
 							</div>
 						</article>
 					)}
 
-					{ops.map((op) => <OpRow key={op.id} op={op} withDate={withDate} />)}
+					{shown.map((op) => <OpRow key={op.id} op={op} withDate={withDate} />)}
 				</div>
 			)}
 		</section>

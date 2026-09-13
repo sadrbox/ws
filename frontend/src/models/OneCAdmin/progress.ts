@@ -1,21 +1,19 @@
 /**
- * Реестр выполняющихся операций «Пользователей баз»: и запросов, и команд.
+ * Операции «Пользователей баз» — АДАПТЕР панели 1С к общему реестру длительной работы.
  *
  * ЗАЧЕМ ОН ЕСТЬ. Кнопка «Проверить пользователей» опрашивает 1С по каждой базе, а запись
  * прав ставит команду в очередь агенту. И то и другое длится дольше, чем человек готов
- * смотреть на крутящийся индикатор: спиннер в тулбаре отвечает только «идёт», но не «сколько
- * осталось» и «что уже не получилось». Реестр даёт вкладке «Прогресс запросов и команд»
- * ответы на оба вопроса, а операция при этом не привязана к экрану, с которого её запустили:
- * карточка пары живёт отдельным пейном и может быть закрыта раньше, чем команда доедет.
+ * смотреть на крутящийся индикатор. Сам реестр — запись, ход, итог в журнал — теперь общий
+ * (`components/TechMessages/operations.ts`, M13): тот же вопрос задаёт и работа вне 1С.
+ * Здесь осталось то, что знает только панель 1С:
  *
- * ПОЧЕМУ МОДУЛЬ, А НЕ КОНТЕКСТ. Операции переживают размонтирование: закрыли карточку —
- * запись прав всё равно идёт, и её прогресс должен остаться видимым. Контекст пришлось бы
- * поднимать выше пейнов, то есть на всё приложение, ради одной вкладки.
+ *   - задания сервиса: `attachBatch` связывает запись с заданием, опрос переносит в неё
+ *     done/failed/pending, отмена снимает с очереди то, что агент ещё не забрал;
+ *   - перечитывание кэша 1С после любой законченной работы (`refreshAfterWork`);
+ *   - блокировка карточки, пока над парой «человек + база» идёт работа (`opBlocks`).
  *
- * ЖИЗНЬ ЗАПИСИ. Запрос считает сам вызывающий (done/total по базам). Команда считается по
- * ответу сервиса: `batchId` связывает запись с заданием, и опрос заданий переносит в неё
- * done/failed/pending. Завершённые записи не исчезают сами — их убирает человек кнопкой,
- * иначе итог операции пропал бы ровно в тот момент, когда его собрались прочитать.
+ * ПРЕЖНИЕ ИМЕНА СОХРАНЕНЫ. Панель зовёт `startOp`/`finishOp`/`useOnecOps` из двух десятков
+ * мест; реэкспорт позволяет перенести реестр, не трогая ни одно из них.
  */
 import { useEffect, useSyncExternalStore } from "react";
 import { queryClient } from "src/app/queryClient";
@@ -23,95 +21,20 @@ import {
 	cancelBatch, fetchBatches, hasCapability, type BatchProgress, type OnecAgent,
 } from "src/services/onec/api";
 import { translate } from "src/i18";
-import { humanErrorText } from "src/utils/errorText";
-import { noteNotice } from "src/components/TechMessages/store";
+import {
+	abandonOp, cancelOp, clearFinished, finishOp, getOps, opDuration, opKindLabel, opPercent,
+	opStateLabel, opSucceeded, progressOp, setOpCanceler, settleOp, startOp as startCoreOp,
+	updateOp, useOps, withOp as withCoreOp, type Op, type OpInit, type OpKind, type OpState,
+} from "src/components/TechMessages/operations";
 
-/** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
-export type OpKind = "read" | "create" | "update" | "delete";
-export type OpState = "running" | "done" | "failed";
-
-export type Op = {
-	id: string;
-	kind: OpKind;
-	/** Что делаем — словами человека, а не типом команды. */
-	title: string;
-	/** По чему: база, пользователь или «базы: 12». */
-	target: string;
-	total: number;
-	done: number;
-	failed: number;
-	state: OpState;
-	startedAt: number;
-	finishedAt: number | null;
-	/** Задание сервиса, если операция — команда агенту. */
-	batchId: string | null;
-	/**
-	 * Сколько команд операции ещё можно отменить: их никто не начинал. Ноль значит, что
-	 * отменять нечего — работа уже идёт на сервере 1С, и остановить её панель не может.
-	 */
-	cancelable: number;
-	/** Короткий итог или причина отказа. */
-	note: string;
-	/**
-	 * НАД ЧЕМ идёт работа. Пока операция выполняется, эти объекты правке не подлежат:
-	 * значения в 1С меняются прямо сейчас, и форма, позволяющая писать поверх, отправила
-	 * бы команду по данным, которых уже нет.
-	 */
-	scope: { user?: string; bases: string[] };
+export {
+	abandonOp, cancelOp, clearFinished, finishOp, getOps, opDuration, opKindLabel, opPercent,
+	opStateLabel, opSucceeded, progressOp,
 };
+export type { Op, OpKind, OpState };
 
-/**
- * КАК ОПЕРАЦИЯ ЧИТАЕТСЯ СЛОВАМИ И ЦИФРАМИ — здесь, а не на экране.
- *
- * Смотрят на одни и те же операции из двух мест: вкладка «Прогресс запросов и команд» на
- * экране «Пользователи баз» и область «Технических сообщений», которая видна откуда
- * угодно. Держать подписи и счёт процентов у каждого из них значило бы завести два ответа
- * на один вопрос — и однажды разойтись в них.
- */
-export const opKindLabel = (k: OpKind): string => translate(
-	k === "read" ? "onecOpRead" : k === "create" ? "onecOpCreate" : k === "delete" ? "onecOpDelete" : "onecOpUpdate",
-);
-
-export const opStateLabel = (o: Op): string => (
-	o.state === "running" ? translate("onecOpRunning")
-		: o.state === "failed" ? translate("onecOpFailed")
-			: translate("onecOpDone")
-);
-
-/**
- * Длительность словами: «сколько уже идёт» важнее точной секунды старта.
- *
- * «0 с» не говорит ничего — ни что работа была мгновенной, ни что счёт вообще идёт;
- * выглядело это как несчитанное поле. Про меньшее секунды так и сказано.
- */
-export const opDuration = (o: Op, now = Date.now()): string => {
-	const ms = (o.finishedAt ?? now) - o.startedAt;
-	const s = Math.max(Math.round(ms / 1000), 0);
-	if (s < 1) return translate("onecOpUnderSec");
-	return s < 60 ? `${s} ${translate("secShort")}` : `${Math.floor(s / 60)} ${translate("minShort")} ${s % 60} ${translate("secShort")}`;
-};
-
-/**
- * Сколько частей работы ВЫШЛО. `done` считает обработанные — и удавшиеся, и отказавшие;
- * само по себе это число обманывает: у команды по одной базе, которая не прошла, оно
- * равно единице, и полоса показывала «1 из 1 · 100%» рядом с «Не удалось: 1».
- */
-export const opSucceeded = (o: Op): number => Math.max(o.done - o.failed, 0);
-
-/**
- * Доля выполненного, 0–100.
- *
- * ЧЕГО ЗДЕСЬ НЕТ — выдуманного прогресса. Пока неизвестно, из скольких частей состоит
- * работа (`total` = 0), процента не существует: показывать «0 %» у работы, которая идёт,
- * значит врать о ней, и такую операцию показывают неопределённым индикатором (спиннером),
- * а не полосой. Поэтому здесь `null`, а не ноль.
- */
-export const opPercent = (o: Op): number | null => {
-	// Доля — от УДАВШЕГОСЯ: полоса отвечает на вопрос «сколько получилось», а не «сколько
-	// перебрали». Иначе провалившаяся работа выглядела заполненной до конца.
-	if (o.total > 0) return Math.min(Math.round((opSucceeded(o) / o.total) * 100), 100);
-	return o.state === "running" ? null : (o.failed > 0 ? 0 : 100);
-};
+/** Прежнее имя подписки на реестр — им пользуется вся панель. */
+export const useOnecOps = useOps;
 
 /**
  * Сколько операция может блокировать правку, прежде чем перестанет это делать.
@@ -208,108 +131,47 @@ export function refreshAfterWork(): void {
 	if (!echoReady()) window.setTimeout(once, 5000);
 }
 
-let ops: Op[] = [];
-const listeners = new Set<() => void>();
-let seq = 0;
-
-const emit = () => { for (const l of listeners) l(); };
-const replace = (id: string, patch: (op: Op) => Op) => {
-	let hit = false;
-	const next = ops.map((o) => (o.id === id ? (hit = true, patch(o)) : o));
-	if (!hit) return;
-	ops = next;
-	emit();
+/**
+ * Отмена записи, связанной с заданием: сервис снимает с очереди то, что агент ещё не
+ * забрал. Ту, что забрал, выполняет он, и «отмена» означала бы лишь, что мы перестали ждать.
+ */
+const batchCanceler = (id: string, batchId: string) => async (): Promise<number> => {
+	const r = await cancelBatch(batchId);
+	if (r.canceled > 0) {
+		updateOp(id, (o) => ({
+			...o,
+			cancelable: 0,
+			note: `${translate("onecOpCanceled")}: ${r.canceled}`,
+		}));
+	}
+	return r.canceled;
 };
 
 /**
- * ИТОГ ОПЕРАЦИИ — СОБЫТИЕМ В ЖУРНАЛ, а не только строкой в «Прогрессе».
- *
- * ЗАЧЕМ. Пока операция шла, форма сообщала состояние: «идёт операция, дождитесь». Оно
- * исчезает вместе с операцией — и правильно делает: состояние, которого больше нет, не
- * оставляет следа. Но тогда от всей работы не остаётся НИЧЕГО: «Прогресс» — отдельный
- * экран с отдельным списком, а человек смотрит в «Технические сообщения» и видит, что
- * сообщение о работе пропало, будто её и не было. Отсюда и ощущение противоречия: строка
- * «Выполнено» в одном месте и молчание в другом.
- *
- * Поэтому окончание операции пишется событием: что делали, над чем, чем кончилось и
- * сколько заняло. Событие остаётся, пока его не уберут, — это и есть ответ на вопрос
- * «что вообще происходило».
+ * Начать операцию панели. Любая законченная работа панели перечитывает кэш 1С — это и
+ * отличает её от общей операции.
  */
-function noteOutcome(op: Op): void {
-	const secs = Math.max(0, Math.round(((op.finishedAt ?? Date.now()) - op.startedAt) / 1000));
-	const failed = op.failed > 0;
-	const ok = op.done - op.failed;
-	const why = humanErrorText(op.note);
-
-	/*
-	 * ЧИТАЕТСЯ КАК ФРАЗА, А НЕ КАК СТРОКА ЖУРНАЛА.
-	 *
-	 * Было: «Операция завершилась с ошибками. С ошибками: 1 · Failed to fetch · 4 с» —
-	 * четыре обрывка через точки, где «операция» безымянна, «с ошибками» сказано дважды, а
-	 * причина написана по-английски и не для человека. Теперь по порядку: ЧТО делали, ЧЕМ
-	 * кончилось, ПОЧЕМУ (если не вышло) и СКОЛЬКО заняло. Над чем работали — подписью
-	 * записи: по этому же объекту она встаёт в свою группу.
-	 */
-	const result = failed && ok === 0
-		? `${translate("onecOpFinishedFailed")}${why ? `: ${why}` : ""}`
-		: op.total > 1
-			? [
-				`${translate("onecOpFinishedOk")}: ${ok} ${translate("onecOpOutOf")} ${op.total}`,
-				failed ? `${translate("onecOpFailedCount")}: ${op.failed}${why ? ` — ${why}` : ""}` : "",
-			].filter(Boolean).join(". ")
-			: translate("onecOpFinishedOk");
-
-	noteNotice(op.target || op.title, {
-		type: failed ? "error" : "success",
-		text: `${op.title}. ${result}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
-	});
-}
-
-/** Начать операцию. Возвращает идентификатор — по нему её потом двигают. */
-export function startOp(init: {
-	kind: OpKind; title: string; target: string; total: number;
-	batchId?: string | null; note?: string; scope?: { user?: string; bases?: string[] };
-}): string {
-	const id = `op_${++seq}_${Date.now()}`;
-	ops = [{
-		id, kind: init.kind, title: init.title, target: init.target,
-		total: Math.max(init.total, 0), done: 0, failed: 0,
-		state: "running", startedAt: Date.now(), finishedAt: null,
-		batchId: init.batchId ?? null, note: init.note ?? "", cancelable: 0,
-		scope: { ...(init.scope?.user ? { user: init.scope.user } : {}), bases: init.scope?.bases ?? [] },
-	}, ...ops];
-	emit();
+export function startOp(init: OpInit): string {
+	const id = startCoreOp({ ...init, onFinish: refreshAfterWork });
+	if (init.batchId) setOpCanceler(id, batchCanceler(id, init.batchId));
 	return id;
 }
 
-/** Продвинуть счётчик запроса: столько баз уже обработано. */
-export function progressOp(id: string, done: number, failed = 0): void {
-	replace(id, (o) => ({ ...o, done, failed }));
+/** Обернуть одиночную операцию панели записью реестра (с перечитыванием кэша 1С). */
+export function withOp<T>(
+	init: Omit<OpInit, "total"> & { total?: number },
+	run: () => Promise<T>,
+): Promise<T> {
+	return withCoreOp({ ...init, onFinish: refreshAfterWork }, run);
 }
 
 /** Связать запись с заданием сервиса: дальше её двигает опрос заданий. */
 export function attachBatch(id: string, batchId: string, total: number, note = ""): void {
-	replace(id, (o) => ({ ...o, batchId, total, note: note || o.note }));
+	updateOp(id, (o) => ({ ...o, batchId, total, note: note || o.note }));
+	setOpCanceler(id, batchCanceler(id, batchId));
 	// Задание появилось — значит, есть за чем следить. Наблюдение не ждёт, пока кто-нибудь
 	// откроет нужную вкладку: команду ставят из карточки, а смотрят потом куда угодно.
 	ensureBatchWatch();
-}
-
-/** Закрыть операцию, считаемую на клиенте. */
-export function finishOp(id: string, r: { failed?: number; note?: string } = {}): void {
-	replace(id, (o) => ({
-		...o,
-		done: o.total,
-		failed: r.failed ?? o.failed,
-		note: r.note ?? o.note,
-		state: (r.failed ?? o.failed) > 0 ? "failed" : "done",
-		finishedAt: Date.now(),
-	}));
-	// Операция закончилась — данные в открытых формах устарели. Даже чтение: ответ 1С
-	// оседает в реестре сервиса, и карточка обязана показать то, что только что прочитали.
-	refreshAfterWork();
-	const done = ops.find((o) => o.id === id);
-	if (done) noteOutcome(done);
 }
 
 /**
@@ -320,7 +182,7 @@ export function finishOp(id: string, r: { failed?: number; note?: string } = {})
  * если HTTP-запрос давно завершился: «отправлено» и «сделано» — разные события.
  */
 export function mergeBatch(p: BatchProgress): void {
-	const target = ops.find((o) => o.batchId === p.id);
+	const target = getOps().find((o) => o.batchId === p.id);
 	if (!target) return;
 	const running = p.pending > 0;
 	// Переход «шла → закончилась» — единственный момент, когда есть что перечитывать.
@@ -328,7 +190,7 @@ export function mergeBatch(p: BatchProgress): void {
 	const justFinished = !running && target.state === "running";
 	if (justFinished) refreshAfterWork();
 	const failedItem = p.items.find((i) => i.error);
-	replace(target.id, (o) => ({
+	updateOp(target.id, (o) => ({
 		...o,
 		total: p.total,
 		cancelable: p.cancelable ?? 0,
@@ -342,94 +204,12 @@ export function mergeBatch(p: BatchProgress): void {
 	}));
 	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к
 	// одному концу не должны оставлять разный след.
-	if (justFinished) {
-		const done = ops.find((o) => o.id === target.id);
-		if (done) noteOutcome(done);
-	}
-}
-
-/**
- * Обернуть одиночную операцию записью реестра.
- *
- * Правило панели: ВСЯ работа, которую она поручает сервису или агенту, видна в «Прогрессе».
- * Без этого экран отвечал «команда отправлена» и замолкал — а команда идёт минутами, и
- * узнать, чем она кончилась, было неоткуда.
- */
-export async function withOp<T>(
-	init: { kind: OpKind; title: string; target: string; total?: number; scope?: { user?: string; bases?: string[] } },
-	run: () => Promise<T>,
-): Promise<T> {
-	const id = startOp({ ...init, total: init.total ?? 1 });
-	try {
-		const r = await run();
-		finishOp(id);
-		return r;
-	} catch (e) {
-		finishOp(id, { failed: 1, note: e instanceof Error ? e.message : "" });
-		throw e;
-	}
-}
-
-/**
- * ОТМЕНИТЬ операцию — то, что в ней ещё не начато.
- *
- * Панель может остановить только команды в очереди: ту, что агент забрал, выполняет он, и
- * «отмена» означала бы лишь, что мы перестали ждать ответа. Поэтому возвращаем ЧЕСТНОЕ
- * число отменённого: ноль — значит не успели, и это ответ, а не ошибка.
- */
-export async function cancelOp(id: string): Promise<number> {
-	const op = ops.find((o) => o.id === id);
-	if (!op?.batchId) return 0;
-	const r = await cancelBatch(op.batchId);
-	if (r.canceled > 0) {
-		replace(id, (o) => ({
-			...o,
-			cancelable: 0,
-			note: `${translate("onecOpCanceled")}: ${r.canceled}`,
-		}));
-	}
-	return r.canceled;
-}
-
-/**
- * ПРЕКРАТИТЬ НАБЛЮДЕНИЕ за операцией — не отменяя её.
- *
- * Разные вещи, и путать их нельзя: отмена останавливает команду на сервере, а это просто
- * убирает запись с экрана. Нужна она, когда запись зависла и держит форму запертой: задание
- * не отвечает, команда давно выполнена, а панель об этом не узнала. Кнопка так и называется,
- * и подпись честно говорит, что на сервере ничего не изменится.
- */
-export function abandonOp(id: string): void {
-	const next = ops.filter((o) => o.id !== id);
-	if (next.length === ops.length) return;
-	ops = next;
-	emit();
-}
-
-/** Убрать завершённые: список нужен для наблюдения, а не как журнал (журнал — «Задания»). */
-export function clearFinished(): void {
-	const next = ops.filter((o) => o.state === "running");
-	if (next.length === ops.length) return;
-	ops = next;
-	emit();
+	if (justFinished) settleOp(target.id);
 }
 
 /** Есть ли незавершённые команды — по этому признаку включается опрос заданий. */
 export const hasRunningBatches = (list: Op[]): boolean =>
 	list.some((o) => o.state === "running" && !!o.batchId);
-
-const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
-const snapshot = () => ops;
-
-/** Подписка на реестр: список меняется целиком, поэтому сравнение по ссылке верно. */
-export const useOnecOps = (): Op[] => useSyncExternalStore(subscribe, snapshot, snapshot);
-
-/**
- * Прочитать реестр вне React — для чистых функций и для проверок: городить рендер ради
- * разбора списка значило бы проверять заодно и разметку (так же читается журнал
- * сообщений — `getMessages`).
- */
-export const getOps = (): Op[] => ops;
 
 /**
  * Слежение за командами — В МОДУЛЕ, а не на экране.
@@ -461,7 +241,7 @@ async function pollBatches(): Promise<void> {
 	} finally {
 		polling = false;
 		emitWatch();
-		if (poll !== null && !hasRunningBatches(ops)) {
+		if (poll !== null && !hasRunningBatches(getOps())) {
 			window.clearInterval(poll);
 			poll = null;
 		}
@@ -470,7 +250,7 @@ async function pollBatches(): Promise<void> {
 
 /** Начать наблюдение, если есть за чем. Идемпотентно: второй вызов ничего не удваивает. */
 export function ensureBatchWatch(): void {
-	if (poll !== null || !hasRunningBatches(ops)) return;
+	if (poll !== null || !hasRunningBatches(getOps())) return;
 	poll = window.setInterval(() => void pollBatches(), 3000);
 	void pollBatches();
 }

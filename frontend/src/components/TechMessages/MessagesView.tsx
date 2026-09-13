@@ -193,7 +193,9 @@ export const MessagesView: FC<{
 	messages: TechMessage[];
 	/** Команды всего списка: чьи сообщения показывать, очистка истории. */
 	toolbar?: ReactNode;
-}> = ({ messages, toolbar }) => {
+	/** Пейн среза «Текущая форма»: операции других пейнов скрыты. Нет — всё приложение. */
+	pane?: string;
+}> = ({ messages, toolbar, pane }) => {
 	const [mode, setMode] = useState<GroupMode>(readMode);
 	/*
 	 * ПОИСК — по тексту и источнику. Предел журнала 200 записей, и при десятке объектов
@@ -314,7 +316,7 @@ export const MessagesView: FC<{
 				  */}
 				<div className={styles.Rows} role="log" aria-live="off" aria-label={translate("techMessages")}>
 					{/* Идущая работа — над случившимся: она про «сейчас», и она меняется. */}
-					<ProgressSection mode={mode} />
+					<ProgressSection mode={mode} needle={needle} errorsOnly={errorsOnly} pane={pane} />
 
 					{!groups.length && (
 						<span className={styles.Empty}>

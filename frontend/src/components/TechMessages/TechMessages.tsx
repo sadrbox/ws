@@ -32,7 +32,7 @@ import {
 	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
 	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement, type TechMessage,
 } from "./store";
-import { clearFinished, useOnecOps } from "src/models/OneCAdmin/progress";
+import { clearFinished, useOps } from "./operations";
 import MessagesView from "./MessagesView";
 import styles from "./TechMessages.module.scss";
 
@@ -112,7 +112,7 @@ export const TechMessages: FC = () => {
 	 * случившемся, а проверка сотни баз идёт минутами и не сообщает о себе ничего, пока не
 	 * кончится: свернув область, человек переставал знать, работает ли что-нибудь вообще.
 	 */
-	const ops = useOnecOps();
+	const ops = useOps();
 	const running = ops.filter((o) => o.state === "running").length;
 	const active = messages.filter((n) => n.active).length;
 	// Сколько записей держат открытые формы: именно они остаются после очистки.
@@ -223,6 +223,7 @@ export const TechMessages: FC = () => {
 				    Действия по отдельному сообщению живут в самом сообщении. */}
 				<MessagesView
 					messages={messages}
+					pane={scope === APP_SCOPE ? undefined : scope}
 					toolbar={(
 						<>
 							<Button size="sm" variant="secondary" active={!showAll}
