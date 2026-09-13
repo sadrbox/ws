@@ -236,7 +236,7 @@ const PriceCorrectionPanel: FC<{
       applyRows(rows);
       setFilled(true);
       if (rows.length === 0) showToast(translate("pricesNotFound"), "info");
-      else showToast(`Загружено цен: ${rows.length}`, "success");
+      else showToast(`${translate("pricesLoaded")}: ${rows.length}`, "success");
     } catch (err) {
       console.error(err);
       reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("pricesLoadError") });
@@ -274,7 +274,7 @@ const PriceCorrectionPanel: FC<{
       return { ...r, price: p };
     });
     applyRows(next);
-    showToast(`Операция применена к ${next.length} строкам`, "info");
+    showToast(`${translate("pricesOperationApplied")}: ${next.length}`, "info");
   };
 
   const copyFromType = async () => {
@@ -295,7 +295,10 @@ const PriceCorrectionPanel: FC<{
         return r;
       });
       applyRows(next);
-      showToast(`Подставлено из «${srcPriceTypeName}»: ${applied}`, applied ? "success" : "info");
+      showToast(
+        translate("pricesCopiedFrom").replace("{type}", String(srcPriceTypeName)).replace("{n}", String(applied)),
+        applied ? "success" : "info",
+      );
     } catch (err) {
       console.error(err);
       reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("pricesFromTypeError") });
@@ -364,9 +367,17 @@ const PriceCorrectionPanel: FC<{
     try {
       const resp = await apiClient.post<{ summary?: BatchSummary }>(`/${ENDPOINT}/batch`, { operations: ops });
       const s = resp.data?.summary;
-      showToast(s
-        ? `Готово. Обновлено: ${s.updated || 0}, создано: ${s.created || 0}, удалено: ${s.deleted || 0}, пропущено: ${s.skipped || 0}`
-        : "Готово", "success");
+      // Итог записи цен — СОБЫТИЕ (M12): что изменилось в ценах, спрашивают позже тоста.
+      notify({
+        severity: "success", source: translate("ProductPriceCorrection"),
+        text: s
+          ? translate("pricesSaveSummary")
+            .replace("{updated}", String(s.updated || 0))
+            .replace("{created}", String(s.created || 0))
+            .replace("{deleted}", String(s.deleted || 0))
+            .replace("{skipped}", String(s.skipped || 0))
+          : translate("pricesSaved"),
+      });
       await handleFill();
     } catch (err) {
       console.error(err);
@@ -675,7 +686,14 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
     try {
       const resp = await apiClient.post<{ summary?: BatchSummary }>(`/${ENDPOINT}/batch`, { operations: ops });
       const s = resp.data?.summary;
-      showToast(s ? `Загрузка завершена. Создано: ${s.created || 0}, пропущено: ${s.skipped || 0}` : "Загрузка завершена", "success");
+      notify({
+        severity: "success", source: translate("ProductPriceCorrection"),
+        text: s
+          ? translate("pricesUploadSummary")
+            .replace("{created}", String(s.created || 0))
+            .replace("{skipped}", String(s.skipped || 0))
+          : translate("pricesUploaded"),
+      });
       setFile(null);
       setAllRows([]);
       setPendingRows([]);

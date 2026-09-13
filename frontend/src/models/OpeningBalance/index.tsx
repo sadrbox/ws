@@ -18,8 +18,8 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import { Button } from "src/components/Button";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import ModelForm from "src/components/ModelForm";
-import { showToast } from "src/components/UIToast";
 import { routeError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
 import { api } from "src/services/api/client";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import styles from "src/styles/main.module.scss";
@@ -69,13 +69,14 @@ const OpeningBalanceForm: FC<Partial<TPane>> = (paneProps) => {
       const base = { productUuid, warehouseUuid, organizationUuid: orgUuid };
       if (kind === "serial") {
         const r = await api.post<{ created?: number }>("opening-balance/serials", { ...base, serials });
-        showToast(`${translate("openingBalanceDone")}: ${r?.created ?? 0}`, "success");
+        // Ввод остатков меняет учёт — событие (M12), а не мигание.
+        notify({ severity: "success", source: translate("openingBalance"), text: `${translate("openingBalanceDone")}: ${r?.created ?? 0}` });
         setSerials("");
       } else {
         await api.post("opening-balance/batches", {
           ...base, batchNumber, expiryDate: expiryDate || null, quantity: Number(quantity) || 0,
         });
-        showToast(translate("openingBalanceDone"), "success");
+        notify({ severity: "success", source: translate("openingBalance"), text: `${translate("openingBalanceDone")}: ${batchNumber}` });
         setBatchNumber(""); setExpiryDate(""); setQuantity("");
       }
       await loadGap();

@@ -10,6 +10,7 @@ import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { routeError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
 import { Field } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import FieldActionButton from "src/components/Field/FieldActionButton";
@@ -201,7 +202,9 @@ const DocumentNumberSettings: FC = () => {
     try {
       const res = await api.post<{ updated?: number }>("document-number-settings/renumber-drafts", { organizationUuid: orgKey });
       const n = res?.updated ?? 0;
-      showToast(n > 0 ? `${translate("renumberDraftsDone")}: ${n}` : translate("renumberDraftsNone"), "success");
+      // Перенумерация необратима: сколько документов затронуто — событие (M12).
+      if (n > 0) notify({ severity: "success", source: translate("documentNumbering"), text: `${translate("renumberDraftsDone")}: ${n}` });
+      else showToast(translate("renumberDraftsNone"), "success");
     } catch (e: unknown) {
       // Куда показывать — решает routeError: отказ по существу возвращается сюда
       // сообщением формы, системный сбой уходит тостом и записью в журнал.

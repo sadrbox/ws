@@ -6,8 +6,8 @@ import { translate } from "src/i18";
 import { Group } from "src/components/UI";
 import { Button } from "src/components/Button";
 import { Divider } from "src/components/Field";
-import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
 import { getCurrentUser } from "src/services/auth";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchBackups, createBackup, type BackupFile } from "src/services/backup/api";
@@ -28,7 +28,11 @@ const BackupSection: FC = () => {
   const create = useMutation({
     mutationFn: createBackup,
     onSuccess: (r) => {
-      showToast(`${translate("backupCreated")}: ${r.backup.file} (${mb(r.backup.size)})`, "success");
+      // Какой файл копии создан — событие (M12): его ищут, когда понадобилось восстановление.
+      notify({
+        severity: "success", source: translate("backupCreate"),
+        text: `${translate("backupCreated")}: ${r.backup.file} (${mb(r.backup.size)})`,
+      });
       void qc.invalidateQueries({ queryKey: ["admin-backups"] });
     },
     onError: (e: unknown) => {

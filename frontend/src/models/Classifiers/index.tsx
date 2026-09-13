@@ -14,9 +14,9 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import Modal from "src/components/Modal";
 import { FieldSelect } from "src/components/Field";
-import { showToast } from "src/components/UIToast";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { routeError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { fetchClassifiers, fetchClassifierCounts, importClassifiers, importClassifiersFile, CLASSIFIER_TYPES } from "src/services/classifiers/api";
 import ClassifierTree, { buildNamePathTree, type TreeNode } from "./ClassifierTree";
@@ -93,13 +93,14 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 			if (file) {
 				const r = await importClassifiersFile(file);
 				const detail = Object.entries(r.counts).map(([t, n]) => `${t}: ${n}`).join(", ");
-				showToast(`${translate("clsImported")} (${detail})`, "success");
+				// Итог импорта — событие (M12): сколько записей какого типа легло, спрашивают позже тоста.
+				notify({ severity: "success", source: translate("clsSection"), text: `${translate("clsImported")} (${detail})` });
 			} else {
 				let parsed: { code: string; name: string; parentCode?: string }[];
 				try { parsed = JSON.parse(importText) as { code: string; name: string; parentCode?: string }[]; if (!Array.isArray(parsed)) throw new Error(); }
 				catch { setImportNotice([{ type: "error", text: translate("clsImportBadJson") }]); return; }
 				const r = await importClassifiers(type, parsed);
-				showToast(`${translate("clsImported")}: ${r.upserted}`, "success");
+				notify({ severity: "success", source: translate("clsSection"), text: `${translate("clsImported")}: ${r.upserted}` });
 			}
 			closeImport(); void refetch();
 			void qc.invalidateQueries({ queryKey: ["classifier-counts"] }); // счётчики в опциях

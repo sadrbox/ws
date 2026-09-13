@@ -172,7 +172,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         });
         await loadFiles();
         onFilesChange?.();
-        showToast(`Файл «${file.name}» загружен`, "success");
+        showToast(`${translate("fileUploaded")}: ${file.name}`, "success");
       } catch (err) {
         reportError(err, { source: translate("files"), fallback: translate("fileUploadError") });
       } finally {

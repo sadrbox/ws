@@ -4,6 +4,8 @@ import type { TDataItem } from "src/components/Table/types";
 import { useAppContext } from "src/app/context";
 import { getComponentName } from "src/app/getComponentName";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
+import { translate } from "src/i18";
 import { isSyncableEndpoint } from "src/services/offlineDataService";
 import { upsertRecords, getRecordByUuid, type SyncRecord } from "src/services/offlineDb";
 import { describeRow } from "src/utils/describeRow";
@@ -166,30 +168,32 @@ export function useModelDelete(
 				}
 			}
 
-			// ── 3) Показываем результат через toast (вместо native alert) ────────
-			//   Частичный результат (удалено не всё) — отдельное предупреждение, где
-			//   видно и сколько удалено, и сколько/почему НЕ удалено.
+			// ── 3) Результат ────────────────────────────────────────────────────
+			//   Удалено не всё — СОБЫТИЕ (M12): тост говорит счёт, а поимённо, что и
+			//   почему не удалилось, остаётся в журнале — список ссылок за девять секунд
+			//   не прочитать, а вопрос «почему не удалилось» возникает позже.
 			const deletedCount = deletedIds.size;
 			const failedCount = errors.length;
 			if (deletedCount > 0 && failedCount > 0) {
-				showToast(
-					`Удалено: ${deletedCount}. Не удалось удалить: ${failedCount}.\n${errors.join("\n")}`,
-					"warning",
-					9000,
-				);
+				const summary = translate("deleteSummaryPartial")
+					.replace("{deleted}", String(deletedCount))
+					.replace("{failed}", String(failedCount));
+				notify({
+					severity: "warning", source: translate("delete"), toastDuration: 9000,
+					toast: summary, text: `${summary}\n${errors.join("\n")}`,
+				});
 			} else if (failedCount > 0) {
-				showToast(
-					failedCount === 1
-						? errors[0]
-						: `Не удалось удалить (${failedCount}):\n${errors.join("\n")}`,
-					"error",
-					9000,
-				);
+				const summary = translate("deleteFailedMany").replace("{n}", String(failedCount));
+				notify({
+					severity: "error", source: translate("delete"), toastDuration: 9000,
+					toast: failedCount === 1 ? errors[0] : summary,
+					text: failedCount === 1 ? errors[0] : `${summary}\n${errors.join("\n")}`,
+				});
 			} else if (deletedCount > 0) {
 				showToast(
 					deletedCount === 1
-						? "Запись удалена"
-						: `Удалено записей: ${deletedCount}`,
+						? translate("deleteDoneOne")
+						: `${translate("deleteDoneMany")}: ${deletedCount}`,
 					"success",
 					3000,
 				);

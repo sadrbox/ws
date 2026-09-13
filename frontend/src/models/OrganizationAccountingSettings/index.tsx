@@ -5,6 +5,8 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
+import { reportError } from "src/services/errors/route";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
@@ -418,7 +420,8 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                   disabled={recomputing || form.isLoading || !canWrite || !form.fields.organizationUuid}
                   onClick={async () => {
                     const org = form.fields.organizationUuid;
-                    if (!org) { alert("Сначала выберите организацию"); return; }
+                    // Без организации кнопка выключена: это страховка, а не сообщение.
+                    if (!org) return;
                     if (!confirm("Пересчитать себестоимость и проводки по открытому периоду этой организации? Закрытые периоды не затрагиваются. Операция идемпотентна.")) return;
                     setRecomputing(true);
                     try {
@@ -426,10 +429,16 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                         "accounting/recompute-costing", { organizationUuid: org },
                       );
                       await queryClient.invalidateQueries();
-                      alert(`Готово. Пересчитано документов: регистр — ${resp?.registers ?? 0}, проводки — ${resp?.entries ?? 0}.`);
+                      // Итог — СОБЫТИЕ, а не alert (M12): пересчёт меняет суммы в проводках и
+                      // отчётах, и «что и когда пересчитали» спрашивают позже, чем живёт окно.
+                      notify({
+                        severity: "success", source: translate("recomputeCosting"),
+                        text: translate("recomputeCostingDone")
+                          .replace("{registers}", String(resp?.registers ?? 0))
+                          .replace("{entries}", String(resp?.entries ?? 0)),
+                      });
                     } catch (e) {
-                      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-                      alert(msg || "Ошибка пересчёта");
+                      reportError(e, { source: translate("recomputeCosting"), fallback: translate("recomputeCostingError") });
                     } finally {
                       setRecomputing(false);
                     }
@@ -460,7 +469,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     />
                     <circle cx="12" cy="12" r="2.5" fill="#1976D2" />
                   </svg>
-                  {recomputing ? "Пересчёт…" : "Пересчитать себестоимость"}
+                  {recomputing ? translate("recomputeCostingRunning") : translate("recomputeCosting")}
                 </Button>
                 <span className={styles.SettingHint}>
                   Ретроактивный пересчёт после ввода документов задним числом: заново

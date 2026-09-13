@@ -106,7 +106,7 @@ export async function copyPaneLink(restore: TPaneRestore): Promise<void> {
       document.execCommand("copy");
       document.body.removeChild(ta);
     }
-    showToast("Ссылка скопирована", "success");
+    showToast(translate("linkCopied"), "success");
   } catch {
     // Сбой буфера обмена — клиентский, статуса нет: текст свой, а не слова браузера.
     notify({ severity: "error", text: translate("linkCopyError"), source: translate("system") });

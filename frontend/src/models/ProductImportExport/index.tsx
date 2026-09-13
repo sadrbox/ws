@@ -277,7 +277,11 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       const noName = rows.filter((r) => !r.name).length;
       const matched = rows.filter((r) => r.productUuid).length;
       showToast(
-        `Строк: ${rows.length}, сопоставлено: ${matched}, новых: ${rows.length - matched}${noName ? `, без наименования: ${noName}` : ""}`,
+        translate("productParseSummary")
+          .replace("{rows}", String(rows.length))
+          .replace("{matched}", String(matched))
+          .replace("{new}", String(rows.length - matched))
+          + (noName ? `, ${translate("productParseNoName").replace("{n}", String(noName))}` : ""),
         noName ? "warning" : "success",
       );
     } catch (err) {
@@ -315,9 +319,19 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     try {
       const resp = await apiClient.post<{ summary?: { created?: number; updated?: number; barcodesAdded?: number; pricesAdded?: number; skipped?: number } }>(`/${ENDPOINT}/import`, { rows, date: priceDate });
       const s = resp.data?.summary;
-      showToast(s
-        ? `Готово. Создано: ${s.created || 0}, обновлено: ${s.updated || 0}, штрих-кодов: +${s.barcodesAdded || 0}, цен: +${s.pricesAdded || 0}, пропущено: ${s.skipped || 0}`
-        : "Импорт завершён", "success");
+      // Итог импорта — СОБЫТИЕ (M12): «сколько создано и сколько пропущено» спрашивают
+      // позже, чем живёт тост.
+      notify({
+        severity: "success", source: translate("ProductImportExport"),
+        text: s
+          ? translate("productImportSummary")
+            .replace("{created}", String(s.created || 0))
+            .replace("{updated}", String(s.updated || 0))
+            .replace("{barcodes}", String(s.barcodesAdded || 0))
+            .replace("{prices}", String(s.pricesAdded || 0))
+            .replace("{skipped}", String(s.skipped || 0))
+          : translate("importDone"),
+      });
       setFile(null);
       setAllRows([]);
       setPendingRows([]);
@@ -357,7 +371,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         ...typeNames.map((n) => (latest[n] != null ? latest[n] : ""))];
       })];
       downloadAoa(aoa, { sheetName: "products", fileName: `products_export_${today()}.xlsx` });
-      showToast(`Выгружено позиций: ${items.length}`, "success");
+      showToast(`${translate("productsExported")}: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
       reportError(err, { source: translate("ProductImportExport"), fallback: translate("exportError") });

@@ -4,8 +4,8 @@ import { Button } from "src/components/Button";
 import Modal from "src/components/Modal";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { routeError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
 import LookupField from "src/components/Field/LookupField";
-import { showToast } from "src/components/UIToast";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -70,7 +70,8 @@ const BankStatementImportButton: FC = () => {
         + (r.matched ? `, ${translate("bankImportMatched")}: ${r.matched}` : "")
         + (r.skipped ? `, ${translate("bankImportSkipped")}: ${r.skipped}` : "")
         + (r.unresolved ? `, ${translate("bankImportUnresolved")}: ${r.unresolved}` : "");
-      showToast(summary, (r.unresolved ?? 0) > 0 ? "warning" : "success");
+      // Итог импорта — событие (M12): «сколько не распознано» разбирают после, не за 4 секунды.
+      notify({ severity: (r.unresolved ?? 0) > 0 ? "warning" : "success", text: summary, source: translate("bankImport") });
       await qc.invalidateQueries({ queryKey: ["bank-statements"] });
       setOpen(false);
     } catch (e) {
