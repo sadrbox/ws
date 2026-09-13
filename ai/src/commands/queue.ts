@@ -14,7 +14,9 @@
 import { EventEmitter } from "node:events";
 import type { Db } from "../db/pool.ts";
 
-export type CommandState = "queued" | "dispatched" | "done" | "failed" | "expired";
+// `canceled` пишет queue.cancel — тип обязан его знать: иначе проверка «команда отменена»
+// (S2) выглядит для компилятора невозможной.
+export type CommandState = "queued" | "dispatched" | "done" | "failed" | "expired" | "canceled";
 
 export type EnqueueInput = {
 	agentId: string;
@@ -422,13 +424,21 @@ export class CommandQueue {
 	}
 
 	/** Результат от агента. Повторная доставка того же результата (spool) — не ошибка. */
+	/**
+	 * Принять результат команды.
+	 *
+	 * ОТМЕНЁННУЮ НЕ ПЕРЕТИРАЕМ (S2). Поздний результат (агент досылает при остановке службы или
+	 * прерванная команда всё-таки ответила) заменил бы итог отмены на «выполнено» — и оператор
+	 * увидел бы, что отменённое прошло. По ИСТЁКШИМ результаты принимаем и дальше: агент
+	 * досылает их из своей очереди, когда связь вернулась, и это правда о выполненной работе.
+	 */
 	async complete(agentId: string, res: WireResult): Promise<CommandRow | null> {
 		const ok = res.status === "SUCCESS";
 		const r = await this.db.query<CommandRow>(
 			`UPDATE commands
 			    SET state = $3, result_status = $4, result = $5::jsonb, error = $6::jsonb,
 			        onec_http_status = $7, finished_at = COALESCE(finished_at, now())
-			  WHERE id = $1 AND agent_id = $2
+			  WHERE id = $1 AND agent_id = $2 AND state <> 'canceled'
 			  RETURNING *`,
 			[res.commandId, agentId, ok ? "done" : "failed", res.status,
 				res.result === undefined ? null : JSON.stringify(res.result),

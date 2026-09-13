@@ -13,7 +13,7 @@ import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import { requireAgent } from "../auth/index.ts";
-import { decideInstance, instanceConflictMessage } from "../agents/instances.ts";
+import { decideInstance, instanceConflictMessage, isFarewell } from "../agents/instances.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand } from "../commands/admin.ts";
@@ -296,6 +296,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			onecReachable: p.data.onec?.reachable ?? false,
 			onecVersion: p.data.onec?.version ?? null,
 		});
+		/*
+		 * УХОДЯЩИЙ ВЛАДЕЛЕЦ ГОВОРИТ «Я ВСЁ» (S1) — аренду до срока не держим, иначе заменивший
+		 * его процесс получает 409 после каждого обновления службы. Промежуточный обработчик
+		 * выше уже продлил владение на этом же запросе — снятие идёт после него. Команды здесь
+		 * не закрываем: забранные агент возвращает сам, а оставшиеся за прежним процессом
+		 * закрывает failLostByRestart при регистрации нового.
+		 */
+		const farewellInstance = agentInstance(req);
+		if (farewellInstance && isFarewell(p.data.status)
+			&& await agents.releaseOwnershipIf(req.agent!.agentId, farewellInstance)) {
+			await audit.write({ event: "agent.instance.released", agentId: req.agent!.agentId,
+				details: { instance: farewellInstance, reason: "farewell" } });
+		}
 		// Список процессов приходит попутно с heartbeat: отдельная команда нужна только
 		// кнопке «Обновить сейчас», а раз в полминуты панель узнаёт о них бесплатно.
 		if (p.data.processes) await agents.setProcesses(req.agent!.agentId, p.data.processes);
@@ -444,9 +457,15 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 
 		const row = await queue.complete(req.agent!.agentId, wire);
 		if (!row) {
-			// Неизвестная команда: возможно, очищена по сроку. Отвечаем 200, иначе агент будет
-			// вечно досылать её из spool.
-			log.warn({ agentId: req.agent!.agentId, commandId: p.data.commandId }, "результат для неизвестной команды");
+			// Результат не принят. Отвечаем 200 в любом случае, иначе агент будет вечно досылать
+			// его из spool. Но в журнале причины различаем (S2): «отменённая команда» — это
+			// итог отмены, который поздний результат перетёр бы, а «неизвестная» — повод
+			// разбираться (очищена по сроку или чужая).
+			const known = pending ?? await queue.get(p.data.commandId);
+			log.warn({ agentId: req.agent!.agentId, commandId: p.data.commandId, type: known?.type },
+				known?.state === "canceled"
+					? "результат по отменённой команде отброшен"
+					: "результат для неизвестной команды");
 			res.json({ success: true, data: { ok: true, ignored: true } });
 			return;
 		}

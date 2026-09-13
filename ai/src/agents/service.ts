@@ -398,6 +398,22 @@ export class AgentService {
 		return (r.rowCount ?? 0) > 0;
 	}
 
+	/**
+	 * Снять владение, ТОЛЬКО если им владеет этот экземпляр — для прощального heartbeat.
+	 *
+	 * Сравнение — в самом UPDATE, а не отдельным чтением перед ним: между «прочитали
+	 * владельца» и «сняли» новый процесс успевает забрать аренду, и снятие по старому
+	 * прочтению выбило бы уже его.
+	 */
+	async releaseOwnershipIf(agentId: string, instanceId: string): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE agents SET owner_instance_id = NULL, owner_seen_at = NULL, owner_since = NULL
+			  WHERE id = $1 AND owner_instance_id = $2`,
+			[agentId, instanceId.slice(0, 200)],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	async touchInstance(agentId: string, instanceId: string, version: string | null, remoteAddr?: string | null): Promise<void> {
 		const r = await this.db.query<{ inserted: boolean }>(
 			`INSERT INTO agent_instances (agent_id, instance_id, version, remote_addr)

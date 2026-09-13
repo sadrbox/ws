@@ -47,6 +47,20 @@ export function decideInstance(input: {
 	return { kind: "reject", ownerInstanceId, ownerSeenSecsAgo: secsAgo };
 }
 
+/**
+ * ПРОЩАНИЕ ОСВОБОЖДАЕТ ВЛАДЕНИЕ (S1, docs/TASKS_ONEC_FIXES_2026-09-13.md).
+ *
+ * При штатной остановке агент шлёт последний heartbeat со `status: "OFFLINE"` (агент:
+ * `src/agent.rs`). Раньше сервис записывал статус и держал аренду за ушедшим процессом до
+ * срока — и поднявшийся на замену процесс всё это время получал 409 «под этим токеном уже
+ * работает другой экземпляр»: после каждого обновления службы.
+ *
+ * Снимать владение можно только ТОМУ, кто прощается: сравнение с владельцем делает сам
+ * UPDATE (`AgentService.releaseOwnershipIf`), иначе прощание чужой копии токена сняло бы
+ * владение с работающего агента.
+ */
+export const isFarewell = (status: string): boolean => status.trim().toUpperCase() === "OFFLINE";
+
 /** Текст отказа для второго экземпляра — он попадёт в лог агента, а не в панель. */
 export function instanceConflictMessage(ownerInstanceId: string, secsAgo: number): string {
 	return `Под этим токеном уже работает другой экземпляр агента (${ownerInstanceId}, отвечал ${secsAgo} с назад). `
