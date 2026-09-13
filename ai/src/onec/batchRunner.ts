@@ -12,7 +12,7 @@
  * запуска по расписанию разные субъекты (человек с правом `full` против самого сервиса), и
  * решать это должен вызывающий.
  */
-import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, buildAdminPayload, findAdminCommand } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, buildAdminPayload, findAdminCommand, payloadRefusal } from "../commands/admin.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { BatchService } from "./batches.ts";
@@ -102,6 +102,10 @@ export async function startBatch(
 			skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });
 			continue;
 		}
+		// Содержимое требует больше, чем тип (C5): база отсеивается с причиной, а не уходит
+		// агенту, который ответит успехом и ничего не сделает.
+		const refusal = payloadRefusal(agent, spec, built.payload);
+		if (refusal) { skipped.push({ baseKey: key, reason: refusal }); continue; }
 		const cmd = await deps.queue.enqueue({
 			agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: key,
 			type: spec.type, payload: built.payload, userUuid: input.userUuid,

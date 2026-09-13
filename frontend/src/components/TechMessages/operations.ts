@@ -23,7 +23,7 @@
 import { useSyncExternalStore } from "react";
 import { translate } from "src/i18";
 import { humanErrorText } from "src/utils/errorText";
-import { APP_SCOPE, notify } from "./store";
+import { APP_SCOPE, notify, type TechMessage } from "./store";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
 export type OpKind = "read" | "create" | "update" | "delete";
@@ -68,6 +68,8 @@ export type Op = {
 	 * локальный флаг «занято» умирает вместе с окном, а работа — нет.
 	 */
 	workKey?: string;
+	/** Объект работы (одна база, пользователь базы, запись): по нему открывают из строки и из итога. */
+	ref?: TechMessage["ref"];
 };
 
 export type OpInit = {
@@ -80,6 +82,8 @@ export type OpInit = {
 	scope?: { user?: string; bases?: string[] };
 	pane?: string;
 	workKey?: string;
+	/** Объект работы — ссылка в строке «Прогресса» и в итоге. */
+	ref?: TechMessage["ref"];
 	/** Что сделать, когда работа закончена (адаптер 1С перечитывает кэш). */
 	onFinish?: () => void;
 	/**
@@ -199,6 +203,7 @@ function noteOutcome(op: Op): void {
 		text: `${op.title}. ${result}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
 		source: op.target || op.title,
 		scope: op.pane,
+		ref: op.ref,
 		toast: false,
 		opId: op.id,
 	});
@@ -228,6 +233,7 @@ export function startOp(init: OpInit): string {
 		// «Всё приложение» — это не пейн: такая операция видна в любом срезе.
 		...(init.pane && init.pane !== APP_SCOPE ? { pane: init.pane } : {}),
 		...(init.workKey ? { workKey: init.workKey } : {}),
+		...(init.ref ? { ref: init.ref } : {}),
 	}, ...ops];
 	if (init.onFinish) finishHooks.set(id, init.onFinish);
 	if (init.reportsOwnOutcome) ownOutcome.add(id);

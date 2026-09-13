@@ -26,6 +26,8 @@
  * поиску, «Только ошибкам» и срезу «Текущая форма».
  */
 import { FC, useEffect, useState, useSyncExternalStore } from "react";
+import { useAppContext } from "src/app/context";
+import { canOpenByRef, openFormByRef } from "src/utils/openFormByRef";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import IconButton from "src/components/IconButton/IconButton";
@@ -125,6 +127,7 @@ const Progress: FC<{ percent: number | null; state?: Op["state"]; value?: string
 
 /** Одна операция реестра — в той же сетке, что и сообщение: время, шкала, тело. */
 const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
+	const { addPane } = useAppContext().windows;
 	const at = new Date(op.startedAt).toISOString();
 	const percent = opPercent(op);
 	const running = op.state === "running";
@@ -192,7 +195,14 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 
 
 				<div className={styles.MsgMeta}>
-					{op.target && <span>{op.target}</span>}
+					{/* Над чем работа — ссылкой, если объект один и его можно открыть (база, пользователь). */}
+					{op.target && (op.ref && canOpenByRef(op.ref.endpoint) ? (
+						<button type="button" className={styles.MsgLink}
+							title={`${translate("open")}: ${op.target}`}
+							onClick={() => void openFormByRef(op.ref!, addPane, op.target)}>
+							{op.target}
+						</button>
+					) : <span>{op.target}</span>)}
 					{/*
 					  * У работы по одной базе число отказов не добавляет ничего: «Не удалось: 1»
 					  * при единственной команде — это просто «Не выполнено». Счёт нужен там, где

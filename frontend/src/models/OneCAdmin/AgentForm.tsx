@@ -25,6 +25,7 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { durationRows, failureRows } from "./agentStats";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
+import { useScopeObject } from "src/components/TechMessages/store";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -78,38 +79,44 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 
 	/** Над кем операция — в реестре прогресса это единственный ориентир. */
 	const agentName = agent?.name || agentId.slice(0, 8);
+	/** Объект карточки: по нему итоги операций и сообщения открывают именно её. */
+	const agentRef = useMemo(
+		() => (agentId ? { endpoint: "onec-agents", uuid: agentId, label: agentName } : undefined),
+		[agentId, agentName],
+	);
+	useScopeObject(agentRef);
 
 	// Сервер этого агента — из общего списка серверов: один источник на всю панель.
 	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers });
 	const server = (servers.data?.items ?? []).find((s) => s.id === agent?.serverId) ?? null;
 
 	const rotate = useMutation({
-		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRotate"), target: agentName },
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRotate"), target: agentName, ref: agentRef },
 			() => rotateAgentToken(agentId)),
 		onSuccess: (d) => { setConfirm(null); setIssued(d.token); void refresh(); },
 		onError: fail,
 	});
 	const toggle = useMutation({
 		mutationFn: (disabled: boolean) => withOp(
-			{ kind: "update", title: translate(disabled ? "onecAgentDisable" : "onecAgentEnable"), target: agentName },
+			{ kind: "update", title: translate(disabled ? "onecAgentDisable" : "onecAgentEnable"), target: agentName, ref: agentRef },
 			() => setAgentDisabled(agentId, disabled)),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const release = useMutation({
-		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentReleaseInstance"), target: agentName },
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentReleaseInstance"), target: agentName, ref: agentRef },
 			() => releaseAgentInstance(agentId)),
 		onSuccess: () => { setConfirm(null); showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const rename = useMutation({
-		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRename"), target: agentName },
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRename"), target: agentName, ref: agentRef },
 			() => renameAgent(agentId, name.trim())),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const remove = useMutation({
-		mutationFn: () => withOp({ kind: "delete", title: translate("onecAgentDelete"), target: agentName },
+		mutationFn: () => withOp({ kind: "delete", title: translate("onecAgentDelete"), target: agentName, ref: agentRef },
 			() => deleteAgent(agentId)),
 		onSuccess: () => {
 			setConfirm(null);

@@ -92,6 +92,8 @@ export interface RouteErrorOptions {
 	scope?: string;
 	/** Что показать, если у ошибки нет текста. */
 	fallback?: string;
+	/** Объект, о котором отказ: без него — объект области (формы), если он известен. */
+	ref?: { endpoint: string; uuid: string; label?: string };
 	/** Тип сообщения формы: по умолчанию «ошибка». */
 	type?: NoticeItem["type"];
 }
@@ -114,7 +116,7 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 	 */
 	if (isSettledError(e)) {
 		if (!(status === 403 && hasHttpResponse(e))) {
-			notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope, ephemeral: true });
+			notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope, ref: opts.ref, ephemeral: true });
 		}
 		return [];
 	}
@@ -128,7 +130,7 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 
 	// Тост «сейчас» и след в журнале — одним событием: тост живёт четыре секунды, а вопрос
 	// «что это было» возникает позже.
-	notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope });
+	notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope, ref: opts.ref });
 	return [];
 }
 
@@ -139,6 +141,6 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 export function reportError(e: unknown, opts: RouteErrorOptions = {}): void {
 	const items = routeError(e, opts);
 	for (const it of items) {
-		notify({ severity: it.type, text: it.text, source: opts.source ?? translate("system"), scope: opts.scope });
+		notify({ severity: it.type, text: it.text, source: opts.source ?? translate("system"), scope: opts.scope, ref: opts.ref });
 	}
 }

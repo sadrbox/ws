@@ -21,6 +21,7 @@
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import type { TechMessage } from "./store";
+import { getByEndpoint } from "src/registry/modelRegistry";
 
 /** Чем список разложен на группы. «none» — сплошная лента, свежие сверху. */
 export type GroupMode = "object" | "date" | "none";
@@ -69,13 +70,16 @@ export const ENDPOINT_TITLE: Record<string, string> = {
 	contactpersons: "contactPerson",
 	bankaccounts: "bankAccount",
 	"onec-bases": "onecBase",
+	"onec-base-users": "onecBaseUserCard",
+	"onec-agents": "onecTabAgents",
 };
 
 /** Заголовок группы по записи: вид объекта, иначе источник, иначе «Прочее». */
 export function groupTitleOf(m: TechMessage): { id: string; title: string } {
 	if (m.ref?.endpoint) {
 		const key = ENDPOINT_TITLE[m.ref.endpoint];
-		const title = (key && translate(key)) || m.ref.endpoint;
+		// Вида нет в словаре — подпись из реестра моделей («Номенклатура»), и лишь затем сам endpoint.
+		const title = (key && translate(key)) || getByEndpoint(m.ref.endpoint)?.label || m.ref.endpoint;
 		return { id: `ref:${m.ref.endpoint}`, title };
 	}
 	if (m.source) return { id: `src:${m.source}`, title: m.source };

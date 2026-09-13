@@ -94,7 +94,16 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 	 * повторяла уже написанное рядом и занимала целый ряд под текстом. Осталось одно:
 	 * представление, по которому и открывают.
 	 */
-	const linkText = m.source || m.ref?.label || "";
+	/*
+	 * ИСТОЧНИК И ОБЪЕКТ — РАЗНОЕ, когда подписи расходятся. «Удаление» или «Базы 1С» — где это
+	 * случилось; «Реализация № 3» или «almaz67» — о чём. Тогда источник стоит текстом, а ссылкой
+	 * служит объект. Если источник уже и есть представление объекта (содержит его подпись) —
+	 * одна ссылка, как прежде.
+	 */
+	const objectLabel = m.ref?.label ?? "";
+	const separateObject = canOpen && !!objectLabel && !!m.source
+		&& m.source !== objectLabel && !m.source.includes(objectLabel);
+	const linkText = separateObject ? objectLabel : (m.source || objectLabel);
 
 	return (
 		<article className={styles.Row} data-type={m.type} data-past={!m.active || undefined}>
@@ -132,10 +141,11 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 					))}
 				</div>
 				<div className={styles.MsgMeta}>
-					{showSource && (canOpen ? (
+					{separateObject && showSource && <span>{m.source}</span>}
+					{(separateObject || showSource) && (canOpen ? (
 						<button type="button" className={styles.MsgLink}
 							title={`${translate("open")}: ${linkText}`}
-							onClick={() => void openFormByRef(m.ref!, addPane, m.source)}>
+							onClick={() => void openFormByRef(m.ref!, addPane, separateObject ? objectLabel : m.source)}>
 							{linkText}
 						</button>
 					) : <span>{linkText}</span>)}

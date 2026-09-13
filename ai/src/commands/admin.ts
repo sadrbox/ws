@@ -607,6 +607,40 @@ export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spe
 }
 
 /**
+ * СПОСОБНОСТЬ, КОТОРУЮ ТРЕБУЕТ САМО СОДЕРЖИМОЕ КОМАНДЫ, а не её тип.
+ *
+ * `IB_UPDATE_USER` правит и реквизиты, и роли, и по типу ему достаточно `ib.admin`. Но роли
+ * применяет только сборка со способностью `ib.roles` (13.09): прежние отвечали на
+ * `addRoles`/`removeRoles`/`roles` успехом и ничего не меняли, а сборка без `ib.echo` вдобавок
+ * не давала сервису это заметить — панель показывала «Выполнено». Решение администратора
+ * (C5, 13.09): такие сборки правку ролей НЕ получают вовсе — отказ сразу, со словами «обновите
+ * агента», вместо команды, которая молча ничего не сделает. Остальные команды (сеансы,
+ * публикация, обслуживание) старая сборка выполняет, как и раньше.
+ *
+ * `null` — содержимое сверх `spec.capability` ничего не требует.
+ */
+export function requiredCapability(
+	spec: Pick<AdminCommandSpec, "type">, payload: Record<string, unknown>,
+): { capability: string; message: string } | null {
+	if (spec.type === "IB_UPDATE_USER"
+		&& (payload.addRoles !== undefined || payload.removeRoles !== undefined || payload.roles !== undefined)) {
+		return {
+			capability: "ib.roles",
+			message: "Агент на сервере 1С не применяет правку ролей (нет способности ib.roles) — обновите агента",
+		};
+	}
+	return null;
+}
+
+/** Чего агенту не хватает для ЭТОЙ команды с ЭТИМ содержимым; `null` — хватает всего. */
+export function payloadRefusal(
+	agent: Pick<AgentView, "capabilities">, spec: Pick<AdminCommandSpec, "type">, payload: Record<string, unknown>,
+): string | null {
+	const need = requiredCapability(spec, payload);
+	return need && !agent.capabilities.includes(need.capability) ? need.message : null;
+}
+
+/**
  * Можно ли прервать команду (S4): она уже выполняется, это чтение, и агент умеет отмену.
  * Одно правило на маршрут прерывания и на признак `abortable` в заданиях — панель не должна
  * предлагать то, от чего сервис откажет.

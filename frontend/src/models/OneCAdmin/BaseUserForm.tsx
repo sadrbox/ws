@@ -28,7 +28,7 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { notify } from "src/components/TechMessages/store";
+import { notify, useScopeObject } from "src/components/TechMessages/store";
 import { humanErrorText } from "src/utils/errorText";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
@@ -40,12 +40,12 @@ import type { TPane } from "src/app/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseUsers, fetchBaseUsersCached, fetchRoles, fetchUserOccurrences, runBatch,
+	fetchBaseUsers, fetchBaseUsersCached, fetchRoles, fetchUserOccurrences, hasCapability, runBatch,
 } from "src/services/onec/api";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
-import { QueryError, useOnecWrite } from "./shared";
+import { QueryError, useAgents, useOnecWrite } from "./shared";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import {
 	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps,
@@ -160,6 +160,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		[ops, userName, baseKey],
 	);
 	const locked = !!busy;
+	// Объект карточки: сообщения и итоги операций по этому человеку открывают её.
+	useScopeObject(baseKey && userName
+		? { endpoint: "onec-base-users", uuid: `${baseKey}|${userName}`, label: `${userName} — ${baseKey}` }
+		: undefined);
 
 	// Спиннер на ⟳ в шапке панели: пока идёт операция по объекту карточки, кнопка
 	// крутится и не принимает нажатие — свежих значений всё равно ещё нет.
@@ -502,6 +506,18 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 
 	const changedCount = draft.size + (dirtyProfile ? 1 : 0);
 
+	/*
+	 * ПРАВКА РОЛЕЙ — ТОЛЬКО АГЕНТУ, КОТОРЫЙ ЕЁ ПРИМЕНЯЕТ (C5, решение администратора 13.09).
+	 * Сборка без `ib.roles` отвечает на поправки ролей успехом и ничего не меняет; сервис такую
+	 * команду не отправит (payloadRefusal). Здесь то же правило ДО нажатия: «Применить» гаснет и
+	 * говорит почему. Агента нет на связи вовсе — не блокируем: об этом скажет CapabilityGuard,
+	 * а «обновите агента» было бы неправдой.
+	 */
+	const agents = useAgents();
+	const adminsOnline = (agents.data?.items ?? []).some((a) => a.role === "admin" && a.online && !a.disabled);
+	const roleEdits = [...changedByBase.values()].some((c) => c.add.length > 0 || c.remove.length > 0);
+	const rolesBlocked = roleEdits && adminsOnline && !hasCapability(agents.data?.items, "ib.roles");
+
 	/**
 	 * МАССОВАЯ ПРАВКА — ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ СЛОВАМИ (см. userUpdate.massRoleChange).
 	 * Живой случай 12–13.09: за один щелчок по заголовку таблицы пользователю выдали все
@@ -709,8 +725,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 										onClick={() => { setDraft(new Map()); setForm(baseline); }}>
 										<Icon name="restore" /> {translate("onecResetDraft")}
 									</Button>
-									<Button variant="primary" disabled={!changedCount || save.isPending || locked}
-										title={changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNothingToApply")}
+									<Button variant="primary" disabled={!changedCount || save.isPending || locked || rolesBlocked}
+										title={rolesBlocked
+											? translate("onecRolesAgentOutdated")
+											: changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNothingToApply")}
 										onClick={apply}>
 										{/* Счёт правок — на кнопке: он про неё и есть. */}
 										<Icon name="save" /> {translate("apply")}{changedCount ? ` (${changedCount})` : ""}

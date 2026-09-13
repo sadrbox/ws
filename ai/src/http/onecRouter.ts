@@ -33,7 +33,7 @@ import type { BatchService } from "../onec/batches.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
-	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, findAdminCommand,
+	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, findAdminCommand, payloadRefusal,
 } from "../commands/admin.ts";
 
 type Deps = {
@@ -199,6 +199,9 @@ export function onecRouter(deps: Deps) {
 				? `Агент не умеет команду «${spec.title}» (${spec.type}) — обновите агента на сервере 1С`
 				: `Агент не умеет «${spec.title}»: нет способности ${spec.capability}`);
 		}
+		// Тип команде по силам, а содержимое — нет (C5: правка ролей без ib.roles).
+		const refusal = payloadRefusal(agent, spec, built.payload);
+		if (refusal) return fail(409, "CAPABILITY_MISSING", refusal);
 
 		const cmd = await queue.enqueue({
 			agentId: agent.id,
@@ -1113,6 +1116,8 @@ export function onecRouter(deps: Deps) {
 				skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });
 				continue;
 			}
+			const refusal = payloadRefusal(agent, spec, cmd.payload as Record<string, unknown>);
+			if (refusal) { skipped.push({ baseKey: key, reason: refusal }); continue; }
 			const fresh = await queue.enqueue({
 				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: cmd.base_key,
 				type: cmd.type, payload: cmd.payload, userUuid: u.uuid,

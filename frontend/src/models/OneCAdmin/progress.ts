@@ -151,8 +151,25 @@ const batchCanceler = (id: string, batchId: string) => async (): Promise<number>
  * Начать операцию панели. Любая законченная работа панели перечитывает кэш 1С — это и
  * отличает её от общей операции.
  */
+/**
+ * ОБЪЕКТ ОПЕРАЦИИ 1С — из того, над чем она идёт. Одна база и человек в ней — карточка
+ * пользователя базы; одна база — карточка базы; баз много — объекта нет (задание по списку).
+ * Так итог «Изменить пользователя. Выполнено» открывает того самого пользователя, а не
+ * заставляет искать его в списке.
+ */
+function onecOpRef(init: { ref?: Op["ref"]; scope?: { user?: string; bases?: string[] } }): Op["ref"] {
+	if (init.ref) return init.ref;
+	const bases = init.scope?.bases ?? [];
+	if (bases.length !== 1) return undefined;
+	const base = bases[0];
+	const user = init.scope?.user;
+	return user
+		? { endpoint: "onec-base-users", uuid: `${base}|${user}`, label: `${user} — ${base}` }
+		: { endpoint: "onec-bases", uuid: base, label: base };
+}
+
 export function startOp(init: OpInit): string {
-	const id = startCoreOp({ ...init, onFinish: refreshAfterWork });
+	const id = startCoreOp({ ...init, ref: onecOpRef(init), onFinish: refreshAfterWork });
 	if (init.batchId) setOpCanceler(id, batchCanceler(id, init.batchId));
 	return id;
 }
@@ -162,7 +179,7 @@ export function withOp<T>(
 	init: Omit<OpInit, "total"> & { total?: number },
 	run: () => Promise<T>,
 ): Promise<T> {
-	return withCoreOp({ ...init, onFinish: refreshAfterWork }, run);
+	return withCoreOp({ ...init, ref: onecOpRef(init), onFinish: refreshAfterWork }, run);
 }
 
 /** Связать запись с заданием сервиса: дальше её двигает опрос заданий. */

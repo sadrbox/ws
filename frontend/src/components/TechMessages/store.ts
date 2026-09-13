@@ -125,6 +125,49 @@ export const useNoticeOrigin = (): NoticeOrigin => useContext(NoticeScope);
 export const useNoticeScope = (): string => useContext(NoticeScope).scope;
 
 /**
+ * ОБЪЕКТ ОБЛАСТИ — то, о чём сообщения этой формы: документ, справочник, база 1С, агент.
+ *
+ * Сообщение называло объект только подписью («Реализация № 3», «almaz67»), и открыть его из
+ * списка было нельзя: ссылку передавало одно место из сорока. Проставлять её в каждом вызове —
+ * значит однажды забыть. Поэтому объект знает ОБЛАСТЬ: форма записи — по своему рецепту
+ * восстановления (UI/PaneItem), карточки без записи (база, пользователь базы, агент) —
+ * сами (`useScopeObject`). Любое сообщение области без своей ссылки получает эту.
+ */
+const scopeObjects = new Map<string, NonNullable<TechMessage["ref"]>>();
+
+/**
+ * Назначить (или снять — `null`) объект области. Сообщения, пришедшие РАНЬШЕ назначения
+ * (дочерние формы сообщают о себе до того, как пейн успел назвать объект), получают ссылку
+ * задним числом; у записей того же объекта обновляется подпись («→ загрузка…» → «№ 3»).
+ */
+export function setScopeObject(scope: string, ref: TechMessage["ref"] | null): void {
+	if (!ref) { scopeObjects.delete(scope); return; }
+	scopeObjects.set(scope, ref);
+	let changed = false;
+	notices = notices.map((n) => {
+		if (n.scope !== scope) return n;
+		const same = !!n.ref && n.ref.endpoint === ref.endpoint && n.ref.uuid === ref.uuid;
+		if (n.ref && (!same || n.ref.label === ref.label)) return n;
+		changed = true;
+		return { ...n, ref };
+	});
+	if (changed) emit();
+}
+
+/** Сообщить объект формы — для карточек, у которых нет рецепта записи (1С: база, пользователь, агент). */
+export function useScopeObject(ref: TechMessage["ref"] | undefined): void {
+	const scope = useNoticeScope();
+	const endpoint = ref?.endpoint;
+	const uuid = ref?.uuid;
+	const label = ref?.label;
+	useEffect(() => {
+		if (!endpoint || !uuid || scope === APP_SCOPE) return;
+		setScopeObject(scope, { endpoint, uuid, ...(label ? { label } : {}) });
+		return () => setScopeObject(scope, null);
+	}, [scope, endpoint, uuid, label]);
+}
+
+/**
  * ХРАНЕНИЕ. Записи переживают перезагрузку — так вёл себя прежний журнал уведомлений, и
  * терять это при слиянии нельзя: «что было, пока меня не было» — половина смысла журнала.
  * Действия (`actions`) не сериализуются: обработчик — функция. Поэтому из хранилища
@@ -307,6 +350,7 @@ export function reportNotices(scope: string, rawKey: string, source: string, rep
 			fresh.push({
 				id: `n${++seq}`, scope, key, type: it.type, text: it.text, source,
 				firstAt: now, lastAt: now, active: true,
+				...(scopeObjects.has(scope) ? { ref: scopeObjects.get(scope) } : {}),
 				// За этой записью стоит ЖИВОЙ ИСТОЧНИК: экран сообщает её заново, пока она
 				// верна. Её нельзя ни убрать историей, ни удалить насовсем — источник скажет
 				// то же самое снова, и «очистить» превращалось бы в мигание списка.
@@ -435,7 +479,8 @@ export function notify(o: NotifyOptions): string {
 	const id = `m${++seq}`;
 	notices = [{
 		id, scope, key: key ?? id, type: o.severity, text: o.text, source: o.source,
-		firstAt: now, lastAt: now, active: o.active === true, ref: o.ref, actions: o.actions,
+		// Своей ссылки нет — объект области (форма, в которой это случилось).
+		firstAt: now, lastAt: now, active: o.active === true, ref: o.ref ?? scopeObjects.get(scope), actions: o.actions,
 		...(toastDue ? { toastAt: now } : {}),
 		...(o.opId ? { opId: o.opId } : {}),
 	}, ...notices].slice(0, LIMIT);

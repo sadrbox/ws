@@ -46,6 +46,7 @@ import BaseCredentialsTab from "./BaseCredentials";
 import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
+import { useScopeObject } from "src/components/TechMessages/store";
 import BaseMaintenance from "./BaseMaintenance";
 import columnsJson from "./columns.json";
 
@@ -343,6 +344,8 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	 * показывать пустую карточку вместо известных реквизитов было бы хуже.
 	 */
 	const key = asText(opened.baseKey);
+	// Объект карточки: сообщения и итоги операций по базе открывают эту карточку.
+	useScopeObject(key ? { endpoint: "onec-bases", uuid: key, label: key } : undefined);
 	const registry = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases, enabled: !!key });
 	const fresh = useMemo(
 		() => (registry.data?.items ?? []).find((b) => b.key.toLowerCase() === key.toLowerCase()),

@@ -7,6 +7,8 @@
  */
 import type { TPane } from "src/app/types";
 import { loadLazyComponent, type LazyComponentEntry } from "src/utils/lazyComponent";
+import { getByEndpoint } from "src/registry/modelRegistry";
+import { translate } from "src/i18";
 
 type AddPane = (pane: Partial<TPane>) => void;
 
@@ -55,16 +57,59 @@ const FORM_REGISTRY: Record<string, LazyComponentEntry> = {
 };
 
 /**
- * Открывает форму документа в новой панели по endpoint и uuid.
- * Если endpoint неизвестен — ничего не делает.
+ * ОБЪЕКТЫ 1С — не записи ERP: у них нет формы в реестре моделей, а «идентификатор» — ключ базы,
+ * пара «база|пользователь» или id агента. Открываются теми же карточками, что и из панели.
+ */
+const ONEC_OPENERS: Record<string, (uuid: string, label?: string) => Promise<Partial<TPane> | null>> = {
+	"onec-bases": async (key) => {
+		const m = await import("src/models/OneCBases");
+		return { component: m.OneCBasesForm as never, data: { baseKey: key } as never, label: `${translate("onecBase")}: ${key}` };
+	},
+	"onec-base-users": async (id) => {
+		const cut = id.indexOf("|");
+		const baseKey = cut > 0 ? id.slice(0, cut) : "";
+		const userName = cut > 0 ? id.slice(cut + 1) : "";
+		if (!baseKey || !userName) return null;
+		const m = await import("src/models/OneCAdmin/BaseUserForm");
+		return {
+			component: m.default as never, data: { userName, baseKey } as never,
+			label: `${translate("onecBaseUserCard")}: ${userName} — ${baseKey}`,
+		};
+	},
+	"onec-agents": async (agentId, label) => {
+		const m = await import("src/models/OneCAdmin/AgentForm");
+		return {
+			component: m.AgentForm as never, data: { agentId } as never,
+			label: `${translate("onecTabAgents")}: ${label || agentId.slice(0, 8)}`,
+		};
+	},
+};
+
+/**
+ * Открывает форму объекта в новой панели по endpoint и uuid (уже открытую — активирует).
+ * Порядок: объекты 1С → формы этого модуля → общий реестр форм. Неизвестный endpoint — ничего.
  */
 export async function openFormByRef(
-	ref: { endpoint: string; uuid: string },
+	ref: { endpoint: string; uuid: string; label?: string },
 	addPane: AddPane,
 	paneLabel?: string,
 ): Promise<void> {
-	const entry = FORM_REGISTRY[ref.endpoint.toLowerCase()];
-	if (!entry) return;
+	const key = ref.endpoint.toLowerCase();
+	const onec = ONEC_OPENERS[key];
+	if (onec) {
+		const pane = await onec(ref.uuid, ref.label);
+		if (pane) addPane(pane);
+		return;
+	}
+	const entry = FORM_REGISTRY[key];
+	if (!entry) {
+		// Любая запись из реестра моделей: справочники, документы, настройки.
+		if (getByEndpoint(ref.endpoint)) {
+			const { openFormByEndpoint } = await import("src/registry/formRegistry");
+			await openFormByEndpoint(ref.endpoint, ref.uuid, addPane);
+		}
+		return;
+	}
 	const Component = await loadLazyComponent(entry);
 	if (!Component) return;
 	addPane({
@@ -74,7 +119,8 @@ export async function openFormByRef(
 	});
 }
 
-/** true если для endpoint зарегистрирована форма */
+/** true если объект этого вида можно открыть по ссылке */
 export function canOpenByRef(endpoint: string): boolean {
-	return endpoint.toLowerCase() in FORM_REGISTRY;
+	const key = endpoint.toLowerCase();
+	return key in ONEC_OPENERS || key in FORM_REGISTRY || !!getByEndpoint(endpoint);
 }

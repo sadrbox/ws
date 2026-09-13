@@ -12,7 +12,7 @@ import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import TechMessages from 'src/components/TechMessages/TechMessages';
-import { NoticeScope, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
+import { NoticeScope, setScopeObject, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
 import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
@@ -287,6 +287,19 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
    * полусотне мест — и однажды забыли.
    */
   const origin = useMemo(() => ({ scope: p.uniqId, source: p.label }), [p.uniqId, p.label]);
+
+  /*
+   * ОБЪЕКТ ПЕЙНА — для ссылки из сообщений. Форма записи знает его по рецепту восстановления
+   * (endpoint + uuid): любое сообщение, случившееся в ней, открывает эту запись и тогда, когда
+   * пейн уже закрыт. Новая, ещё не записанная форма объекта не имеет — ссылки нет.
+   */
+  const formEndpoint = p.restore?.kind === "form" && p.restore.uuid ? p.restore.endpoint : "";
+  const formUuid = p.restore?.kind === "form" ? p.restore.uuid ?? "" : "";
+  useEffect(() => {
+    if (!formEndpoint || !formUuid) return;
+    setScopeObject(p.uniqId, { endpoint: formEndpoint, uuid: formUuid, label: p.label });
+    return () => setScopeObject(p.uniqId, null);
+  }, [p.uniqId, formEndpoint, formUuid, p.label]);
 
   return (
     <NoticeScope.Provider value={origin}>
