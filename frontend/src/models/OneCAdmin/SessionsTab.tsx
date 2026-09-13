@@ -14,7 +14,7 @@
  * работает в базе, поэтому обе операции проходят через модальное окно с явным «Да».
  */
 import React, { FC, useCallback, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
 import Table from "src/components/Table";
@@ -33,6 +33,7 @@ import {
 } from "src/services/onec/api";
 import { errorNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { finishOp, startOp } from "./progress";
+import { echoList } from "./clusterEcho";
 import { useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -84,6 +85,17 @@ export const SessionsTab: FC = () => {
 	const failed = useCallback(
 		(e: unknown) => reportError(e, { source: translate("onecTabSessions") }), []);
 
+	const qc = useQueryClient();
+	/**
+	 * Список из ответа на снятие кладём в таблицу сразу — без второй команды агенту
+	 * (clusterEcho.echoList). Вернёт false — списка в ответе нет, перечитывать вызывающему.
+	 */
+	const applyEcho = useCallback((r: Parameters<typeof echoList>[0]) => {
+		const echo = echoList(r, "sessions");
+		if (echo) qc.setQueryData(["onec", "sessions"], { items: echo.items });
+		return echo;
+	}, [qc]);
+
 	const terminate = useMutation({
 		// sessionId здесь — UUID сеанса кластера (см. вызов ниже), а не его номер.
 		mutationFn: (p: { sessionId: string; baseKey?: string }) => {
@@ -96,9 +108,15 @@ export const SessionsTab: FC = () => {
 				.then((r) => { finishOp(op); return r; })
 				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e) }); throw e; });
 		},
-		onSuccess: () => {
-			showToast(translate("onecSessionTerminated"), "success");
-			void sessions.refetch();
+		onSuccess: (r) => {
+			const echo = applyEcho(r);
+			if (!echo) void sessions.refetch();
+			// Строка ещё в списке кластера — «сеанс снят» над ней звучало бы ложью, и человек
+			// снял бы его ещё раз.
+			showToast(
+				translate(echo?.stillListed ? "onecSessionStillListed" : "onecSessionTerminated"),
+				echo?.stillListed ? "warning" : "success",
+			);
 		},
 		onError: failed,
 	});
@@ -120,12 +138,17 @@ export const SessionsTab: FC = () => {
 			});
 			let ok = 0;
 			const failedIds: string[] = [];
+			// Решает ПОСЛЕДНЕЕ успешное снятие: список от более раннего не знает о следующих.
+			let lastEcho: ReturnType<typeof echoList> = null;
 			for (const id of ids) {
-				try { await terminateSession(id, sessionBase(id)); ok += 1; }
-				catch { failedIds.push(id); }
+				try {
+					// Строки пропадают по мере работы, а не все разом в конце.
+					lastEcho = applyEcho(await terminateSession(id, sessionBase(id)));
+					ok += 1;
+				} catch { failedIds.push(id); }
 			}
 			finishOp(op, { failed: failedIds.length });
-			return { ok, failed: failedIds };
+			return { ok, failed: failedIds, fresh: !!lastEcho };
 		},
 		onSuccess: (r) => {
 			showToast(r.failed.length
@@ -133,7 +156,7 @@ export const SessionsTab: FC = () => {
 				: `${translate("onecSessionTerminated")}: ${r.ok}`,
 				r.failed.length ? "warning" : "success");
 			setPickedSessions([]);
-			void sessions.refetch();
+			if (!r.fresh) void sessions.refetch();
 		},
 		onError: failed,
 	});

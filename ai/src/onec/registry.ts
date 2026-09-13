@@ -20,6 +20,9 @@ export type IbUser = {
 	 */
 	showInList?: boolean | null;
 };
+/** Откуда известно showInList: 'base' — прочитано у 1С, 'panel' — по успешной записи панели. */
+export type ShowInListSource = "base" | "panel" | null;
+
 export type IbExtension = {
 	name: string;
 	/** Синоним — человеческое имя расширения; служебное Имя часто нечитаемо. */
@@ -58,8 +61,10 @@ export class OnecRegistry {
 			const name = (u.name ?? "").trim();
 			if (!name) continue;
 			await this.db.query(
-				`INSERT INTO base_users (id, base_id, name, full_name, disabled, roles, show_in_list, seen_at)
-				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, false), $6::jsonb, $7, now())
+				`INSERT INTO base_users (id, base_id, name, full_name, disabled, roles, show_in_list,
+				                         show_in_list_source, seen_at)
+				 VALUES ($1, $2, $3, COALESCE($4, ''), COALESCE($5, false), $6::jsonb, $7,
+				         CASE WHEN $7::boolean IS NULL THEN NULL ELSE 'base' END, now())
 				 ON CONFLICT (base_id, lower(name)) DO UPDATE
 				    SET name = EXCLUDED.name, full_name = EXCLUDED.full_name,
 				        disabled = EXCLUDED.disabled, roles = EXCLUDED.roles,
@@ -67,6 +72,9 @@ export class OnecRegistry {
 				        -- и у публикации. Иначе сборка, которая признак не отдаёт, стирала бы
 				        -- его при каждом чтении списка.
 				        show_in_list = COALESCE(EXCLUDED.show_in_list, base_users.show_in_list),
+				        -- Источник меняется только вместе со значением: прочитанное у 1С
+				        -- становится 'base', молчание агента оставляет прежний источник.
+				        show_in_list_source = COALESCE(EXCLUDED.show_in_list_source, base_users.show_in_list_source),
 				        seen_at = now()`,
 				[randomUUID(), baseId, name, u.fullName ?? null, u.disabled ?? null,
 					JSON.stringify(u.roles ?? []), u.showInList ?? null],
@@ -93,7 +101,7 @@ export class OnecRegistry {
 	 */
 	async rememberShowInList(baseId: string, name: string, value: boolean): Promise<boolean> {
 		const r = await this.db.query(
-			`UPDATE base_users SET show_in_list = $3
+			`UPDATE base_users SET show_in_list = $3, show_in_list_source = 'panel'
 			  WHERE base_id = $1 AND lower(name) = lower($2)`,
 			[baseId, name.trim(), value],
 		);
@@ -260,12 +268,12 @@ export class OnecRegistry {
 		}));
 	}
 
-	async usersOfBase(baseId: string): Promise<(IbUser & { seenAt: string })[]> {
+	async usersOfBase(baseId: string): Promise<(IbUser & { seenAt: string; showInListSource: ShowInListSource })[]> {
 		const r = await this.db.query<{
 			name: string; full_name: string; disabled: boolean; roles: string[];
-			show_in_list: boolean | null; seen_at: Date;
+			show_in_list: boolean | null; show_in_list_source: ShowInListSource; seen_at: Date;
 		}>(
-			`SELECT name, full_name, disabled, roles, show_in_list, seen_at
+			`SELECT name, full_name, disabled, roles, show_in_list, show_in_list_source, seen_at
 			   FROM base_users WHERE base_id = $1 ORDER BY name`, [baseId],
 		);
 		return r.rows.map((x) => ({
@@ -274,6 +282,9 @@ export class OnecRegistry {
 			// null остаётся null: «агент не сообщил» — не «выключено». Панель по этому
 			// признаку и решает, показывать ли значение как факт или спросить, что записать.
 			showInList: x.show_in_list,
+			// Откуда значение: панель подписывает прочитанное у 1С и запомненное по своей записи
+			// по-разному — второе не видит правки из конфигуратора.
+			showInListSource: x.show_in_list_source,
 			seenAt: x.seen_at.toISOString(),
 		}));
 	}

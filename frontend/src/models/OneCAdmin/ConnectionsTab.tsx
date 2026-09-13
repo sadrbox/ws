@@ -9,7 +9,7 @@
  * только по отмеченным строкам.
  */
 import { FC, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
@@ -24,6 +24,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { disconnectConnection, fetchConnections, fetchLocks, type ClusterRow } from "src/services/onec/api";
 import { QueryError, VSplit, useOnecWrite } from "./shared";
+import { echoList } from "./clusterEcho";
 import styles from "./OneCAdmin.module.scss";
 
 const connColumns = (): TColumn[] => ([
@@ -57,20 +58,29 @@ export const ConnectionsTab: FC = () => {
 	const connView = useStaticTableView(toRows(connections.data?.items ?? [], "connection"), { connId: "asc" });
 	const lockView = useStaticTableView(toRows(locks.data?.items ?? [], "session"), { session: "asc" });
 
+	const qc = useQueryClient();
 	const disconnect = useMutation({
 		// Последовательно: операция мгновенная, зато при отказе видно, на каком соединении.
 		mutationFn: async (ids: string[]) => {
 			let ok = 0; const failed: string[] = [];
+			// Список соединений из ответа на разрыв (clusterEcho.echoList) кладём в таблицу сразу.
+			// Решает ПОСЛЕДНИЙ успешный разрыв: список от более раннего не знает о следующих.
+			let lastEcho: ReturnType<typeof echoList> = null;
 			for (const id of ids) {
-				try { await disconnectConnection(id); ok += 1; } catch { failed.push(id); }
+				try {
+					lastEcho = echoList(await disconnectConnection(id), "connections");
+					if (lastEcho) qc.setQueryData(["onec", "connections"], { items: lastEcho.items });
+					ok += 1;
+				} catch { failed.push(id); }
 			}
-			return { ok, failed };
+			return { ok, failed, fresh: !!lastEcho };
 		},
 		onSuccess: (r) => {
 			showToast(`${translate("onecDisconnected")}: ${r.ok}${r.failed.length ? ` / ${r.ok + r.failed.length}` : ""}`,
 				r.failed.length ? "warning" : "success");
 			setPicked([]);
-			void connections.refetch();
+			// Блокировки в ответ не входят и после разрыва, как и прежде, не перечитываются.
+			if (!r.fresh) void connections.refetch();
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabConnections") }),
 	});

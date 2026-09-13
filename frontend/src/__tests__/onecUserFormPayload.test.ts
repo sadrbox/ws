@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, needsLiveRoles, roleCatalog,
+	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog,
 } from "src/models/OneCAdmin/userUpdate";
 
 const current = { fullName: "Оператор бухгалтер", disabled: false, showInList: null as boolean | null };
@@ -145,45 +145,46 @@ describe("план записи: база карточки не отсеивае
  * последнего чтения, «эталон» снял бы молча, — поэтому набор строится по СВЕЖЕМУ чтению
  * базы, а без него правка остаётся поправками.
  */
-describe("роли: полный набор против поправок", () => {
+describe("роли уходят поправками", () => {
+	/*
+	 * Агент `ib.roles` применяет addRoles/removeRoles сам (docs/TASK_PANEL_ROLES_WITHOUT_PREREAD.md).
+	 * Полный набор `roles` панель больше не шлёт: его пришлось бы считать по чтению перед
+	 * записью — лишний вход в базу и гонка с конфигуратором.
+	 */
 	const changes = (add: string[], remove: string[] = []) => {
 		const m = new Map<string, { add: string[]; remove: string[] }>();
 		m.set("_transition", { add, remove });
 		return m;
 	};
 
-	it("свежие роли известны — уходит полный набор, без поправок", () => {
+	it("своя база — поправки, без полного набора", () => {
 		const { plan } = buildSavePlan({
 			baseKey: "_transition", userName: "Оператор", profileUpdate: null,
-			rolesByBase: changes(["ПолныеПрава"], ["Кассир"]),
-			knownBases: [], ownCurrentRoles: ["Кассир", "БазовыеПрава"],
-		});
-		expect(plan.get("_transition")).toEqual({
-			name: "Оператор", roles: ["БазовыеПрава", "ПолныеПрава"],
-		});
-	});
-
-	it("свежих ролей нет — поправки, как прежде: чужую роль снимать нельзя", () => {
-		const { plan } = buildSavePlan({
-			baseKey: "_transition", userName: "Оператор", profileUpdate: null,
-			rolesByBase: changes(["ПолныеПрава"], ["Кассир"]),
-			knownBases: [], ownCurrentRoles: null,
+			rolesByBase: changes(["ПолныеПрава"], ["Кассир"]), knownBases: [],
 		});
 		expect(plan.get("_transition")).toEqual({
 			name: "Оператор", addRoles: ["ПолныеПрава"], removeRoles: ["Кассир"],
 		});
 	});
 
-	it("чужие базы остаются на поправках: их списки карточка не читает", () => {
+	it("«снять все» — поправками по видимым ролям, а не пустым набором", () => {
+		// `roles: []` снял бы и роль, выданную в конфигураторе после последнего чтения.
+		const { plan } = buildSavePlan({
+			baseKey: "_transition", userName: "Оператор", profileUpdate: null,
+			rolesByBase: changes([], ["Кассир", "БазовыеПрава"]), knownBases: [],
+		});
+		expect(plan.get("_transition")).toEqual({ name: "Оператор", removeRoles: ["Кассир", "БазовыеПрава"] });
+	});
+
+	it("чужие базы — тоже поправки", () => {
 		const m = new Map<string, { add: string[]; remove: string[] }>();
 		m.set("_transition", { add: ["ПолныеПрава"], remove: [] });
 		m.set("almaz67", { add: ["Кассир"], remove: [] });
 		const { plan } = buildSavePlan({
 			baseKey: "_transition", userName: "Оператор", profileUpdate: null,
 			rolesByBase: m, knownBases: ["_transition", "almaz67"],
-			ownCurrentRoles: ["БазовыеПрава"],
 		});
-		expect(plan.get("_transition")).toEqual({ name: "Оператор", roles: ["БазовыеПрава", "ПолныеПрава"] });
+		expect(plan.get("_transition")).toEqual({ name: "Оператор", addRoles: ["ПолныеПрава"] });
 		expect(plan.get("almaz67")).toEqual({ name: "Оператор", addRoles: ["Кассир"] });
 	});
 
@@ -191,12 +192,9 @@ describe("роли: полный набор против поправок", () =
 		const { plan } = buildSavePlan({
 			baseKey: "_transition", userName: "Оператор",
 			profileUpdate: { name: "Оператор", disabled: true },
-			rolesByBase: changes(["ПолныеПрава"]),
-			knownBases: [], ownCurrentRoles: ["БазовыеПрава"],
+			rolesByBase: changes(["ПолныеПрава"]), knownBases: [],
 		});
-		expect(plan.get("_transition")).toEqual({
-			name: "Оператор", disabled: true, roles: ["БазовыеПрава", "ПолныеПрава"],
-		});
+		expect(plan.get("_transition")).toEqual({ name: "Оператор", disabled: true, addRoles: ["ПолныеПрава"] });
 	});
 
 	it("набор: прежние роли минус снятые плюс выданные, без повторов и с учётом регистра", () => {
@@ -249,7 +247,7 @@ describe("массовая правка ролей", () => {
 
 	it("снять ВСЕ роли — подтверждение, даже если ролей было немного", () => {
 		const v = massRoleChange(["Кассир", "БазовыеПрава"], { add: [], remove: ["Кассир", "БазовыеПрава"] });
-		expect(v).toEqual({ kind: "removeAll", added: 0, removed: 2, before: 2, after: 0 });
+		expect(v).toEqual({ kind: "removeAll", privileged: [], added: 0, removed: 2, before: 2, after: 0 });
 	});
 
 	it("выдать все 331 роль разом — подтверждение", () => {
@@ -261,7 +259,7 @@ describe("массовая правка ролей", () => {
 
 	it("мелкая правка проходит без вопросов", () => {
 		// Окно на каждое нажатие приучило бы нажимать «Да» не читая.
-		expect(massRoleChange(roles(10), { add: ["ПолныеПрава"], remove: ["Роль1"] })).toBeNull();
+		expect(massRoleChange(roles(10), { add: ["Кассир"], remove: ["Роль1"] })).toBeNull();
 	});
 
 	it("граница — ровно MASS_ROLES изменений ещё без подтверждения", () => {
@@ -274,22 +272,31 @@ describe("массовая правка ролей", () => {
 	});
 });
 
-describe("чтение ролей перед записью", () => {
-	// Агент `ib.roles` применяет поправки сам: чтение ДО — лишний вход в базу и гонка с
-	// конфигуратором. Старой сборке чтение по-прежнему нужно: поправки она не применяет.
-	const one = { add: ["Кассир"], remove: [] };
-
-	it("агент применяет поправки — не читаем", () => {
-		expect(needsLiveRoles(true, one)).toBe(false);
+describe("административные роли в подтверждении", () => {
+	it("одна административная роль — подтверждение и её имя", () => {
+		const v = massRoleChange(["Кассир"], { add: ["ПолныеПрава"], remove: [] });
+		expect(v?.kind).toBe("privileged");
+		expect(v?.privileged).toEqual(["ПолныеПрава"]);
 	});
 
-	it("агент без `ib.roles` — читаем и при выдаче, и при снятии", () => {
-		expect(needsLiveRoles(false, one)).toBe(true);
-		expect(needsLiveRoles(false, { add: [], remove: ["Кассир"] })).toBe(true);
+	it("регистр не спасает от подтверждения", () => {
+		expect(massRoleChange([], { add: ["администраторсистемы"], remove: [] })?.privileged)
+			.toEqual(["администраторсистемы"]);
 	});
 
-	it("роли не менялись — читать незачем", () => {
-		expect(needsLiveRoles(false, { add: [], remove: [] })).toBe(false);
-		expect(needsLiveRoles(false, undefined)).toBe(false);
+	it("роль уже выдана — не новость, подтверждать нечего", () => {
+		expect(massRoleChange(["ПолныеПрава"], { add: ["ПолныеПрава", "Кассир"], remove: [] })).toBeNull();
+	});
+
+	it("массовая выдача называет административные роли среди прочих", () => {
+		// Живой случай 13.09 00:10: «добавить 229», и среди них ПолныеПрава.
+		const many = Array.from({ length: 30 }, (_, i) => `Роль${i}`);
+		const v = massRoleChange([], { add: [...many, "ПолныеПрава", "ЗапускТолстогоКлиента"], remove: [] });
+		expect(v?.kind).toBe("many");
+		expect(v?.privileged).toEqual(["ПолныеПрава", "ЗапускТолстогоКлиента"]);
+	});
+
+	it("снятие административной роли подтверждения не требует", () => {
+		expect(massRoleChange(["ПолныеПрава", "Кассир"], { add: [], remove: ["ПолныеПрава"] })).toBeNull();
 	});
 });

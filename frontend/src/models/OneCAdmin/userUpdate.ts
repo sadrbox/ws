@@ -85,18 +85,6 @@ export function buildSavePlan(input: {
 	rolesByBase: Map<string, { add: string[]; remove: string[] }>;
 	/** Базы, в которых человек заведён по сводке реестра (регистр букв не важен). */
 	knownBases: string[];
-	/**
-	 * РОЛИ ПОЛЬЗОВАТЕЛЯ В БАЗЕ КАРТОЧКИ, ТОЛЬКО ЧТО ПРОЧИТАННЫЕ У 1С.
-	 *
-	 * Когда они известны, правка ролей своей базы уходит ПОЛНЫМ НАБОРОМ (`roles`), а не
-	 * поправками (`addRoles`/`removeRoles`): сборка агента поправки не применяет — отвечает
-	 * успехом и ничего не меняет (поймано 12.09 по эху команды, см. docs/
-	 * TASK_AGENT_UPDATE_USER_ROLES.md). Полный набор — второй способ из того же контракта.
-	 *
-	 * `null` — прочитать не удалось; тогда шлём поправки, как прежде. Считать «эталон» по
-	 * кэшу нельзя: роль, выданную в конфигураторе после последнего чтения, он молча снял бы.
-	 */
-	ownCurrentRoles?: string[] | null;
 }): {
 	/** База → тело команды IB_UPDATE_USER. Порядок: база карточки первой. */
 	plan: Map<string, Record<string, unknown>>;
@@ -114,14 +102,15 @@ export function buildSavePlan(input: {
 		const isOwn = !!own && base.toLowerCase() === own.toLowerCase();
 		const target = isOwn ? own : base;
 		const entry = plan.get(target) ?? { name: input.userName };
-		if (isOwn && input.ownCurrentRoles) {
-			// Полный набор вместо поправок — см. ownCurrentRoles. Здесь и решается, каким
-			// из двух способов контракта пойдёт правка.
-			entry.roles = applyRoleChanges(input.ownCurrentRoles, { add, remove });
-		} else {
-			if (add.length) entry.addRoles = add;
-			if (remove.length) entry.removeRoles = remove;
-		}
+		/*
+		 * РОЛИ УХОДЯТ ПОПРАВКАМИ. Агент со способностью `ib.roles` применяет `addRoles`/
+		 * `removeRoles` в соединении записи и возвращает новое состояние в эхе; сервис сверяет
+		 * его с поправками (checkRoleIntent). Полный набор `roles` панель больше не шлёт: его
+		 * пришлось бы считать по чтению перед записью — лишний вход в базу и гонка с
+		 * конфигуратором (docs/TASK_PANEL_ROLES_WITHOUT_PREREAD.md).
+		 */
+		if (add.length) entry.addRoles = add;
+		if (remove.length) entry.removeRoles = remove;
 		plan.set(target, entry);
 	}
 
@@ -152,9 +141,31 @@ export function buildSavePlan(input: {
  */
 export const MASS_ROLES = 20;
 
+/**
+ * АДМИНИСТРАТИВНЫЕ РОЛИ — их выдача подтверждается всегда, даже одной.
+ *
+ * ЖИВОЙ СЛУЧАЙ (12–13.09): оператору в `_transition` записаны наборы из 102 и 331 роли, и в
+ * обоих были `ПолныеПрава` и `АдминистраторСистемы` — полный доступ к базе. Окно массовой
+ * правки называло только число («добавить 229»), и что среди них права администратора, из
+ * числа не видно. Имена — из типовых конфигураций на БСП (сверено со справочником ролей
+ * `_transition`); сравнение без учёта регистра, как и везде у ролей 1С.
+ */
+export const PRIVILEGED_ROLES: readonly string[] = [
+	"ПолныеПрава", "АдминистраторСистемы", "Администрирование", "ПравоАдминистрирования",
+	"ЗапускТолстогоКлиента", "ЗапускВнешнегоСоединения", "ЗапускAutomation",
+	"ИнтерактивноеОткрытиеВнешнихОтчетовИОбработок", "ОбновлениеКонфигурацииБазыДанных",
+	"УдаленныйДоступАдминистрированиеИБВМоделиСервиса",
+];
+
 export type MassRoleChange = {
-	/** removeAll — после правки у пользователя не останется ни одной роли. */
-	kind: "removeAll" | "many";
+	/**
+	 * removeAll — после правки у пользователя не останется ни одной роли;
+	 * many — меняется больше MASS_ROLES ролей; privileged — правка мелкая, но выдаёт
+	 * административную роль.
+	 */
+	kind: "removeAll" | "many" | "privileged";
+	/** Выдаваемые административные роли — поимённо, как их назвали в правке. */
+	privileged: string[];
 	added: number;
 	removed: number;
 	/** Сколько ролей у пользователя сейчас и сколько станет. */
@@ -171,9 +182,16 @@ export function massRoleChange(
 	const now = new Set(after.map(norm));
 	const added = [...now].filter((r) => !had.has(r)).length;
 	const removed = [...had].filter((r) => !now.has(r)).length;
-	const base = { added, removed, before: current.length, after: after.length };
+	const admin = new Set(PRIVILEGED_ROLES.map(norm));
+	const privileged: string[] = [];
+	for (const r of changes.add) {
+		const key = norm(r);
+		if (admin.has(key) && !had.has(key) && !privileged.some((x) => norm(x) === key)) privileged.push(r.trim());
+	}
+	const base = { privileged, added, removed, before: current.length, after: after.length };
 	if (current.length > 0 && after.length === 0) return { kind: "removeAll", ...base };
 	if (added + removed > MASS_ROLES) return { kind: "many", ...base };
+	if (privileged.length) return { kind: "privileged", ...base };
 	return null;
 }
 
@@ -227,20 +245,4 @@ export function roleCatalog(baseRoles: string[], grantedHere: string[]): string[
 		out.push(name);
 	}
 	return out.sort((a, b) => a.localeCompare(b, "ru"));
-}
-
-/**
- * Читать роли у 1С перед записью — только если агент поправки не применяет.
- *
- * Агент со способностью `ib.roles` применяет `addRoles`/`removeRoles` в соединении записи, и
- * свежее чтение ему не нужно: оно стоит лишнего входа в базу и открывает гонку с конфигуратором
- * (роль, выданную между чтением и записью, полный набор снял бы). Список агентов ещё не
- * загружен — считаем, что способности нет: лишнее чтение безопаснее снятой по догадке роли.
- * Спецификация: docs/TASK_PANEL_ROLES_WITHOUT_PREREAD.md.
- */
-export function needsLiveRoles(
-	agentAppliesRoles: boolean, changes?: { add: string[]; remove: string[] },
-): boolean {
-	if (agentAppliesRoles) return false;
-	return !!changes && (changes.add.length > 0 || changes.remove.length > 0);
 }

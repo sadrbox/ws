@@ -27,8 +27,7 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
-import { errorText, reportError } from "src/services/errors/route";
-import { hasCapability } from "src/services/onec/api";
+import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -44,12 +43,12 @@ import {
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
-import { QueryError, useAgents, useOnecWrite } from "./shared";
+import { QueryError, useOnecWrite } from "./shared";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import {
-	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps, withOp,
+	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps,
 } from "./progress";
-import { buildSavePlan, buildUserUpdate, massRoleChange, needsLiveRoles, roleCatalog } from "./userUpdate";
+import { buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog } from "./userUpdate";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
@@ -385,47 +384,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 * В БАЗУ, ГДЕ ЧЕЛОВЕКА НЕТ, команда не уходит вовсе: реестр знает, где он заведён, и
 	 * посылать изменение туда, где менять некого, — гарантированный отказ.
 	 */
-	// Агент со способностью `ib.roles` применяет поправки ролей сам — перечитывать роли перед
-	// записью ему не нужно (см. needsLiveRoles).
-	const agents = useAgents();
-	const rolesApplied = hasCapability(agents.data?.items, "ib.roles");
 	const save = useMutation({
 		mutationFn: async () => {
-			/*
-			 * РОЛИ УХОДЯТ ПОПРАВКАМИ; ПОЛНЫМ НАБОРОМ — ТОЛЬКО ДЛЯ СТАРОГО АГЕНТА.
-			 *
-			 * Агент со способностью `ib.roles` применяет `addRoles`/`removeRoles` в том же
-			 * соединении, где пишет пользователя, и в эхе команды возвращает новое состояние.
-			 * Чтение ДО ему не нужно: одна команда вместо двух входов в базу и никакой гонки
-			 * с конфигуратором (docs/TASK_PANEL_ROLES_WITHOUT_PREREAD.md).
-			 *
-			 * ОБХОД — для сборки без `ib.roles`. Она отвечает успехом на поправки и не меняет
-			 * ничего (поймано 12.09 по эху — docs/TASK_AGENT_UPDATE_USER_ROLES.md), поэтому ей
-			 * уходит полный набор `roles`. «Эталон» по кэшу снял бы роль, выданную в
-			 * конфигураторе после последнего чтения, — и перед записью список пользователей
-			 * ЭТОЙ базы перечитывается у 1С. Не удалось прочитать — шлём поправки: пусть лучше
-			 * агент их не применит (и сервис скажет об этом по эху), чем мы снимем чужую роль.
-			 * Удалить обход, когда `ib.roles` будет у всех агентов.
-			 */
-			const ownRoleChanges = [...changedByBase.entries()]
-				.find(([base]) => base.toLowerCase() === baseKey.toLowerCase())?.[1];
-			let ownCurrentRoles: string[] | null = null;
-			if (needsLiveRoles(rolesApplied, ownRoleChanges)) {
-				try {
-					const live = await withOp(
-						{ kind: "read", title: translate("onecUsersCheck"), target: baseKey, scope: { bases: [baseKey] } },
-						() => fetchBaseUsers(baseKey),
-					);
-					const fresh = (live.items ?? []).find((u) => u.name.toLowerCase() === userName.toLowerCase());
-					ownCurrentRoles = fresh?.roles ?? null;
-					// Пользователя в свежем списке нет — набор считать не по чему.
-					if (!ownCurrentRoles) showToast(translate("onecRolesLiveMissing"), "warning");
-				} catch (e) {
-					// Чтение отказало (база недоступна, агент занят) — не выдумываем эталон.
-					showToast(`${translate("onecRolesLiveFailed")}: ${errorText(e)}`, "warning");
-				}
-			}
-
 			/*
 			 * План записи считает общий расчёт (userUpdate.buildSavePlan): база карточки в
 			 * него попадает ВСЕГДА, а отсев «человека там нет» остаётся для остальных баз.
@@ -436,7 +396,6 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 				baseKey, userName, profileUpdate,
 				rolesByBase: changedByBase,
 				knownBases: occ.map((o) => o.baseKey),
-				ownCurrentRoles,
 			});
 			if (skipped.length) {
 				showToast(`${translate("onecUserNotInBases")}: ${skipped.join(", ")}`, "warning");
@@ -542,8 +501,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 * МАССОВАЯ ПРАВКА — ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ СЛОВАМИ (см. userUpdate.massRoleChange).
 	 * Живой случай 12–13.09: за один щелчок по заголовку таблицы пользователю выдали все
 	 * 331 роль, а утром тем же жестом попытались снять все. Считаем по ролям, которые реестр
-	 * знает для базы карточки: это оценка «что увидит человек», а точный набор форма
-	 * перечитает у 1С перед записью.
+	 * знает для базы карточки: это то, что видит человек. В 1С уходят поправки, и агент
+	 * применяет их к фактическому набору.
 	 */
 	const massChange = useMemo(() => {
 		const own = [...changedByBase.entries()]
@@ -616,27 +575,28 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 												{/*
 												  * ТУМБЛЕР, НО НЕ ТРОГАЮЩИЙ ТОГО, ЧЕГО НЕ ЗНАЕТ.
 												  *
-												  * Текущее значение прочитать неоткуда: агент не возвращает его в
-												  * списке пользователей. Поэтому внутри поле трёхзначное — `null`
-												  * значит «не трогали», и в команду оно не попадает вовсе. Тумблер
-												  * показывает известное значение, а когда его нет — выключен, и
-												  * подсказка говорит прямо: значение не читается, переключите,
-												  * если нужно записать своё.
+												  * Внутри поле трёхзначное — `null` значит «не трогали», и в команду
+												  * оно не попадает вовсе. Значение бывает из двух источников
+												  * (`showInListSource`): прочитано у 1С (агент 13.09 12:12 и новее) или
+												  * запомнено по успешной записи панели (старые сборки признак не
+												  * отдавали). Не известно ни откуда — тумблер выключен, подсказка
+												  * говорит, что значение 1С не сообщила.
 												  */}
 												<FieldToggle name="buf_show" label={translate("onecShowInList")}
 													value={form.showInList ?? here?.showInList ?? false}
 													disabled={locked}
 													/*
-													 * Откуда взято показанное — говорим прямо. Значение, которое
-													 * помнит реестр, записала САМА ПАНЕЛЬ (сервис запоминает его
-													 * по успешной команде): из 1С этот признак не читается, и
-													 * выдавать его за прочитанное нельзя.
+													 * Откуда взято показанное — говорим прямо. Прочитанное у 1С
+													 * подсказки не требует; запомненное по записи панели не видит
+													 * правки из конфигуратора, и выдавать его за прочитанное нельзя.
 													 */
-													title={here?.showInList != null
-														? translate("onecShowInListRemembered")
-														: form.showInList === null
-															? translate("onecShowInListUnknown")
-															: undefined}
+													title={here?.showInListSource === "base"
+														? undefined
+														: here?.showInListSource === "panel"
+															? translate("onecShowInListRemembered")
+															: form.showInList === null
+																? translate("onecShowInListUnknown")
+																: undefined}
 													onChange={(v) => setForm((f) => ({ ...f, showInList: v }))} />
 												<FieldToggle name="buf_disabled" label={translate("onecUserDisabled")} value={form.disabled}
 													disabled={locked}
@@ -798,8 +758,16 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 						type: "attention",
 						text: massChange.kind === "removeAll"
 							? translate("onecRolesRemoveAll")
-							: translate("onecRolesMany"),
-					}]} />
+							: massChange.kind === "many"
+								? translate("onecRolesMany")
+								: translate("onecRolesPrivileged"),
+					},
+					// Административные роли — поимённо: из счётчика «добавить 229» не видно, что
+					// среди них полный доступ к базе.
+					...(massChange.privileged.length ? [{
+						type: "attention" as const,
+						text: `${translate("onecRolesPrivilegedList")}: ${massChange.privileged.join(", ")}`,
+					}] : [])]} />
 					<div>
 						{translate("onecRolesBefore")}: {massChange.before} · {translate("onecRolesAfter")}: {massChange.after}
 						{" · "}{translate("onecRolesAdded")}: {massChange.added}

@@ -130,10 +130,27 @@ export const fetchConnections = (baseKey?: string) =>
  * «Ошибка разбора параметра: session».
  */
 export const terminateSession = (sessionId: string, baseKey?: string) =>
-	aiFetch<{ ok: boolean } | Pending>(`/v1/onec/sessions/${encodeURIComponent(sessionId)}/terminate`, {
+	aiFetch<TerminateResult | Pending>(`/v1/onec/sessions/${encodeURIComponent(sessionId)}/terminate`, {
 		method: "POST",
 		body: JSON.stringify(baseKey ? { baseKey } : {}),
-	}).then((d) => awaitCommand<{ ok: boolean }>(d));
+	}).then((d) => awaitCommand<TerminateResult>(d));
+
+/**
+ * Список кластера, приложенный агентом к ответу на снятие сеанса или разрыв соединения
+ * (docs/TASK_PANEL_SESSIONS_ECHO.md). Весь кластер, форма строк — как у fetchSessions /
+ * fetchConnections: им замещается таблица без второй команды.
+ */
+export type ClusterListEcho = {
+	items: ClusterRow[];
+	/** true — ответили все кластеры сервера; иначе агент state не прикладывает вовсе. */
+	complete: boolean;
+	readAt?: string;
+	/** Снятие прошло, но строка на момент readAt ещё в списке кластера. */
+	stillListed?: boolean;
+};
+
+export type TerminateResult = { ok: boolean; state?: { sessions?: ClusterListEcho } };
+export type DisconnectResult = { ok: boolean; state?: { connections?: ClusterListEcho } };
 
 /** Блокировка начала сеансов: пользователи не смогут войти в базу, уже вошедшие продолжат работу. */
 export const setSessionsLock = (baseKey: string, enabled: boolean, message?: string) =>
@@ -154,6 +171,8 @@ export type IbUser = {
 	 * у тех сборок агента, которые возвращают его в списке пользователей.
 	 */
 	showInList?: boolean | null;
+	/** Откуда известно showInList (кэш реестра): 'base' — прочитано у 1С, 'panel' — по записи панели. */
+	showInListSource?: "base" | "panel" | null;
 	seenAt?: string | null;
 };
 export type IbExtension = {
@@ -681,6 +700,6 @@ export const fetchLicenses = () =>
 
 /** Разрыв соединения необратим — как и снятие сеанса. Адресуется UUID соединения. */
 export const disconnectConnection = (connectionId: string, baseKey?: string) =>
-	aiFetch<{ ok: boolean } | Pending>(`/v1/onec/connections/${encodeURIComponent(connectionId)}/disconnect`, {
+	aiFetch<DisconnectResult | Pending>(`/v1/onec/connections/${encodeURIComponent(connectionId)}/disconnect`, {
 		method: "POST", body: JSON.stringify(baseKey ? { baseKey } : {}),
-	}).then((d) => awaitCommand<{ ok: boolean }>(d));
+	}).then((d) => awaitCommand<DisconnectResult>(d));
