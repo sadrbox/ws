@@ -228,3 +228,19 @@ export function roleCatalog(baseRoles: string[], grantedHere: string[]): string[
 	}
 	return out.sort((a, b) => a.localeCompare(b, "ru"));
 }
+
+/**
+ * Читать роли у 1С перед записью — только если агент поправки не применяет.
+ *
+ * Агент со способностью `ib.roles` применяет `addRoles`/`removeRoles` в соединении записи, и
+ * свежее чтение ему не нужно: оно стоит лишнего входа в базу и открывает гонку с конфигуратором
+ * (роль, выданную между чтением и записью, полный набор снял бы). Список агентов ещё не
+ * загружен — считаем, что способности нет: лишнее чтение безопаснее снятой по догадке роли.
+ * Спецификация: docs/TASK_PANEL_ROLES_WITHOUT_PREREAD.md.
+ */
+export function needsLiveRoles(
+	agentAppliesRoles: boolean, changes?: { add: string[]; remove: string[] },
+): boolean {
+	if (agentAppliesRoles) return false;
+	return !!changes && (changes.add.length > 0 || changes.remove.length > 0);
+}

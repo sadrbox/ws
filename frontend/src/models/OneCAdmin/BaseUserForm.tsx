@@ -28,6 +28,7 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { errorText, reportError } from "src/services/errors/route";
+import { hasCapability } from "src/services/onec/api";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -43,12 +44,12 @@ import {
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
-import { QueryError, useOnecWrite } from "./shared";
+import { QueryError, useAgents, useOnecWrite } from "./shared";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import {
 	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps, withOp,
 } from "./progress";
-import { buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog } from "./userUpdate";
+import { buildSavePlan, buildUserUpdate, massRoleChange, needsLiveRoles, roleCatalog } from "./userUpdate";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
@@ -384,26 +385,32 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 * В БАЗУ, ГДЕ ЧЕЛОВЕКА НЕТ, команда не уходит вовсе: реестр знает, где он заведён, и
 	 * посылать изменение туда, где менять некого, — гарантированный отказ.
 	 */
+	// Агент со способностью `ib.roles` применяет поправки ролей сам — перечитывать роли перед
+	// записью ему не нужно (см. needsLiveRoles).
+	const agents = useAgents();
+	const rolesApplied = hasCapability(agents.data?.items, "ib.roles");
 	const save = useMutation({
 		mutationFn: async () => {
 			/*
-			 * РОЛИ УХОДЯТ ПОЛНЫМ НАБОРОМ, И НАБОР СЧИТАЕТСЯ ПО СВЕЖЕМУ ЧТЕНИЮ.
+			 * РОЛИ УХОДЯТ ПОПРАВКАМИ; ПОЛНЫМ НАБОРОМ — ТОЛЬКО ДЛЯ СТАРОГО АГЕНТА.
 			 *
-			 * Сборка агента не применяет поправки `addRoles`/`removeRoles`: отвечает успехом и
-			 * не меняет ничего (поймано 12.09 по эху команды — docs/
-			 * TASK_AGENT_UPDATE_USER_ROLES.md). Второй способ того же контракта — полный набор
-			 * `roles`; им и пользуемся, пока агента не обновят.
+			 * Агент со способностью `ib.roles` применяет `addRoles`/`removeRoles` в том же
+			 * соединении, где пишет пользователя, и в эхе команды возвращает новое состояние.
+			 * Чтение ДО ему не нужно: одна команда вместо двух входов в базу и никакой гонки
+			 * с конфигуратором (docs/TASK_PANEL_ROLES_WITHOUT_PREREAD.md).
 			 *
-			 * Но «эталон» опасен по кэшу: роль, выданную в конфигураторе после последнего
-			 * чтения, он молча снял бы. Поэтому перед записью список пользователей ЭТОЙ базы
-			 * перечитывается у 1С — один вход в базу на правку ролей, зато набор считается по
-			 * тому, что в базе сейчас. Не удалось прочитать — шлём поправки, как прежде: пусть
-			 * лучше агент их не применит (и скажет об этом), чем мы снимем чужую роль.
+			 * ОБХОД — для сборки без `ib.roles`. Она отвечает успехом на поправки и не меняет
+			 * ничего (поймано 12.09 по эху — docs/TASK_AGENT_UPDATE_USER_ROLES.md), поэтому ей
+			 * уходит полный набор `roles`. «Эталон» по кэшу снял бы роль, выданную в
+			 * конфигураторе после последнего чтения, — и перед записью список пользователей
+			 * ЭТОЙ базы перечитывается у 1С. Не удалось прочитать — шлём поправки: пусть лучше
+			 * агент их не применит (и сервис скажет об этом по эху), чем мы снимем чужую роль.
+			 * Удалить обход, когда `ib.roles` будет у всех агентов.
 			 */
 			const ownRoleChanges = [...changedByBase.entries()]
 				.find(([base]) => base.toLowerCase() === baseKey.toLowerCase())?.[1];
 			let ownCurrentRoles: string[] | null = null;
-			if (ownRoleChanges && (ownRoleChanges.add.length || ownRoleChanges.remove.length)) {
+			if (needsLiveRoles(rolesApplied, ownRoleChanges)) {
 				try {
 					const live = await withOp(
 						{ kind: "read", title: translate("onecUsersCheck"), target: baseKey, scope: { bases: [baseKey] } },

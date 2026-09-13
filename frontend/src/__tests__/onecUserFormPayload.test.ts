@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog,
+	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, needsLiveRoles, roleCatalog,
 } from "src/models/OneCAdmin/userUpdate";
 
 const current = { fullName: "Оператор бухгалтер", disabled: false, showInList: null as boolean | null };
@@ -271,5 +271,25 @@ describe("массовая правка ролей", () => {
 
 	it("пользователь без ролей — «снять все» не бывает: снимать нечего", () => {
 		expect(massRoleChange([], { add: [], remove: [] })).toBeNull();
+	});
+});
+
+describe("чтение ролей перед записью", () => {
+	// Агент `ib.roles` применяет поправки сам: чтение ДО — лишний вход в базу и гонка с
+	// конфигуратором. Старой сборке чтение по-прежнему нужно: поправки она не применяет.
+	const one = { add: ["Кассир"], remove: [] };
+
+	it("агент применяет поправки — не читаем", () => {
+		expect(needsLiveRoles(true, one)).toBe(false);
+	});
+
+	it("агент без `ib.roles` — читаем и при выдаче, и при снятии", () => {
+		expect(needsLiveRoles(false, one)).toBe(true);
+		expect(needsLiveRoles(false, { add: [], remove: ["Кассир"] })).toBe(true);
+	});
+
+	it("роли не менялись — читать незачем", () => {
+		expect(needsLiveRoles(false, { add: [], remove: [] })).toBe(false);
+		expect(needsLiveRoles(false, undefined)).toBe(false);
 	});
 });
