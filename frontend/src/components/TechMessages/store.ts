@@ -183,6 +183,29 @@ function load(): TechMessage[] {
 
 let notices: TechMessage[] = load();
 let seq = 0;
+
+/**
+ * УБРАННОЕ ЧЕЛОВЕКОМ СОСТОЯНИЕ: ключ источника → подписи строк, которые он просил не показывать.
+ *
+ * ЖИВОЙ СЛУЧАЙ (13.09, третий раз). «Очистить историю» оставляла сообщения открытых форм —
+ * «Документ заполнен корректно», «Не применено правок: 1», — и крестика у них не было. Довод
+ * был «уберёшь — форма скажет снова через секунду». Но человек, нажавший «Очистить», сказал
+ * ясно: это я видел. Кнопка, которая гаснет при непустом списке, со стороны сломана, как её ни
+ * объясняй.
+ *
+ * Поэтому убранная строка ЗАПОМИНАЕТСЯ дословно и не показывается, пока источник говорит то же
+ * самое. Изменился текст («правок: 1» → «правок: 2») или появилась новая строка — это уже
+ * новое состояние, и оно видно. Источник замолчал о строке — память о ней стирается: когда
+ * «не заполнен склад» вернётся завтра, его покажут. Закрыли форму — забыта вся её память.
+ * На диск память не пишется: после перезагрузки сообщений форм нет вовсе (см. load).
+ */
+const hidden = new Map<string, Set<string>>();
+const signature = (i: { type: NoticeType; text: string }): string => `${i.type}\u0000${i.text}`;
+const hide = (m: TechMessage): void => {
+	const set = hidden.get(m.key) ?? new Set<string>();
+	set.add(signature(m));
+	hidden.set(m.key, set);
+};
 const listeners = new Set<() => void>();
 
 /**
@@ -224,11 +247,21 @@ const emit = () => { persist(); for (const l of listeners) l(); };
  * заводят `addMessage` и `noteNotice`, и они остаются, пока их не уберут. Это согласуется
  * и с загрузкой: сказанное живым источником никогда не поднимается из хранилища (см. load).
  */
-export function reportNotices(scope: string, rawKey: string, source: string, items: NoticeItem[]): void {
+export function reportNotices(scope: string, rawKey: string, source: string, reported: NoticeItem[]): void {
 	const now = Date.now();
 	// Ключ уникален В ПРЕДЕЛАХ ОБЛАСТИ: две открытые карточки баз шлют «base-ext» обе, и
 	// без области вторая затирала бы сообщение первой.
 	const key = `${scope}::${rawKey}`;
+	// Убранное человеком не показываем, пока источник говорит то же самое (см. hidden); о чём
+	// источник замолчал, то забываем — вернётся, значит, случилось снова.
+	let items = reported;
+	const off = hidden.get(key);
+	if (off) {
+		const present = new Set(reported.map(signature));
+		for (const sig of off) if (!present.has(sig)) off.delete(sig);
+		if (!off.size) hidden.delete(key);
+		else items = reported.filter((i) => !off.has(signature(i)));
+	}
 	const mine = notices.filter((n) => n.key === key && n.active);
 
 	if (!items.length) {
@@ -440,10 +473,15 @@ export function addMessage(m: {
 	});
 }
 
-/** Убрать запись совсем (крестик на сообщении). */
+/**
+ * Убрать запись совсем (крестик на сообщении). Запись открытой формы уходит до тех пор, пока
+ * форма сообщает её дословно так же (см. hidden).
+ */
 export function dismissMessage(id: string): void {
+	const gone = notices.find((n) => n.id === id);
+	if (!gone) return;
+	if (gone.fromSource && gone.active) hide(gone);
 	const next = notices.filter((n) => n.id !== id);
-	if (next.length === notices.length) return;
 	notices = next;
 	emit();
 }
@@ -478,6 +516,8 @@ export function resolveMessages(scope: string): void {
 
 /** Убрать все записи области (закрыли форму и её сообщения больше ни о чём). */
 export function clearScope(scope: string): void {
+	// Форма закрыта — её просьбы «не показывать» больше не о чем помнить.
+	for (const k of [...hidden.keys()]) if (k.startsWith(`${scope}::`)) hidden.delete(k);
 	const next = notices.filter((n) => n.scope !== scope);
 	if (next.length === notices.length) return;
 	notices = next;
@@ -485,12 +525,12 @@ export function clearScope(scope: string): void {
 }
 
 /**
- * Очистить список: убрать всё, КРОМЕ того, что источник сообщает прямо сейчас.
+ * Очистить список: убрать ВСЁ, что человек видит в этой области.
  *
- * ЧТО ОСТАЁТСЯ И ПОЧЕМУ ИМЕННО ЭТО. Остаются записи живых источников — незаполненное поле
- * открытой формы, отказ, который экран продолжает показывать. Их удаление ничего не даёт:
- * источник скажет то же самое на следующем рендере, и кнопка «Очистить» превратилась бы в
- * мигание списка.
+ * СООБЩЕНИЯ ОТКРЫТЫХ ФОРМ ТОЖЕ УХОДЯТ — до изменения. Раньше они оставались («источник скажет
+ * то же самое снова»), и кнопка гасла при непустом списке: со стороны — сломана. Теперь
+ * убранная строка формы запоминается дословно и не возвращается, пока форма говорит то же
+ * самое; новое или изменившееся состояние показывается сразу (см. hidden).
  *
  * ЧТО УХОДИТ ТЕПЕРЬ, А РАНЬШЕ ОСТАВАЛОСЬ НАВСЕГДА. События (`addMessage`: «нет связи»,
  * «сохранено локально», отказ команды) заводятся активными и ждут, что их уберут руками, —
@@ -502,16 +542,16 @@ export function clearNoticeHistory(scope = APP_SCOPE): void {
 	const next = notices.filter((n) => {
 		// Чужую область не трогаем: чистят то, что видят.
 		if (scope !== APP_SCOPE && n.scope !== scope) return true;
-		return n.active && n.fromSource === true;
+		if (n.active && n.fromSource) hide(n);
+		return false;
 	});
 	if (next.length === notices.length) return;
 	notices = next;
 	emit();
 }
 
-/** Есть ли что чистить: всё, кроме сказанного живыми источниками. */
-export const isClearable = (list: TechMessage[]): boolean =>
-	list.some((n) => !(n.active && n.fromSource === true));
+/** Есть ли что чистить: любая запись — очистка убирает всё видимое. */
+export const isClearable = (list: TechMessage[]): boolean => list.length > 0;
 
 /**
  * РАСКРЫТА ЛИ ОБЛАСТЬ — состояние общее, потому что переключателей два: кнопка в самой

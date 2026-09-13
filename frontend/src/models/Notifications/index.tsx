@@ -28,20 +28,19 @@ interface NotificationsListProps {
 const NotificationsList: FC<NotificationsListProps> = () => {
 	// Всё приложение: экран открывают именно затем, чтобы увидеть картину целиком.
 	const messages = useScopedNotices(APP_SCOPE);
-	// Чистить есть что, пока в списке есть хоть одна запись, не сказанная живым источником:
-	// события и завершённое уходят, а то, что экран сообщает прямо сейчас, остаётся.
+	// Чистить есть что, пока список не пуст: очистка убирает и события, и сообщения открытых
+	// форм — последние до изменения их состояния (store.hidden).
 	const history = isClearable(messages);
 
 	return (
 		<div className={main.PaneFill}>
 			<div className={styles.JournalHeader}>
 				<h3 className={styles.JournalTitle}>{translate("techMessages")}</h3>
-				{/* Кнопка гаснет, когда чистить нечего, и подсказка называет, ЧТО осталось:
-				    записи открытых форм очистка не берёт — они вернутся сами. */}
+				{/* Кнопка гаснет только при пустом списке. */}
 				<Button size="sm" variant="secondary" disabled={!history}
 					title={history
 						? translate("techMessagesHistoryClear")
-						: `${translate("techMessagesOnlyLive")}: ${messages.filter((m) => m.active && m.fromSource).length}`}
+						: translate("techMessagesHistoryEmpty")}
 					onClick={() => clearNoticeHistory(APP_SCOPE)}>
 					<Icon name="clear" /> {translate("techMessagesHistoryClear")}
 				</Button>

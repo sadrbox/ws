@@ -32,6 +32,8 @@ describe("Технические сообщения — единственное
 		act(() => {
 			reportNotices("pane-1", "k", "s", []);
 			reportNotices("pane-2", "k", "s", []);
+			clearScope("pane-1");
+			clearScope("pane-2");
 			clearNoticeHistory(APP_SCOPE);
 		});
 	});
@@ -188,6 +190,7 @@ describe("Технические сообщения: сводка формы", (
 	beforeEach(() => {
 		act(() => {
 			reportNotices("pane-1", "k", "s", []);
+			clearScope("pane-1");
 			clearNoticeHistory(APP_SCOPE);
 			getMessages().slice().forEach((m) => dismissMessage(m.id));
 		});
@@ -281,6 +284,8 @@ describe("Технические сообщения: очистка списка
 		act(() => {
 			reportNotices("pane-1", "k", "s", []);
 			reportNotices("pane-2", "k", "s", []);
+			clearScope("pane-1");
+			clearScope("pane-2");
 			clearNoticeHistory(APP_SCOPE);
 			getMessages().slice().forEach((m) => dismissMessage(m.id));
 		});
@@ -294,10 +299,13 @@ describe("Технические сообщения: очистка списка
 		expect(getMessages()).toHaveLength(0);
 	});
 
-	it("сказанное живым источником остаётся: удалять его бессмысленно", () => {
+	it("сказанное открытой формой уходит тоже — и не возвращается, пока форма говорит то же", () => {
 		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
 		act(() => { clearNoticeHistory(APP_SCOPE); });
-		expect(getMessages().map((m) => m.text)).toEqual(["Не заполнен склад"]);
+		expect(getMessages()).toHaveLength(0);
+		// Форма доложила то же самое — человек это уже видел и убрал.
+		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
+		expect(getMessages()).toHaveLength(0);
 	});
 
 	it("замолчавший источник уходит вместе с историей", () => {
@@ -308,30 +316,25 @@ describe("Технические сообщения: очистка списка
 		expect(getMessages()).toHaveLength(0);
 	});
 
-	it("кнопка гаснет ровно тогда, когда чистить нечего", () => {
-		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
-		// В списке только живое — чистить нечего, и кнопка обязана это показать.
+	it("кнопка гаснет ровно тогда, когда список пуст", () => {
 		expect(isClearable(getMessages())).toBe(false);
-
-		act(() => { addMessage({ scope: APP_SCOPE, type: "info", text: "Готово", source: "Команда" }); });
+		// Сообщение открытой формы — тоже повод чистить: раньше кнопка гасла при непустом списке.
+		act(() => { reportNotices("pane-1", "k", "Реализация", [{ type: "error", text: "Не заполнен склад" }]); });
 		expect(isClearable(getMessages())).toBe(true);
 	});
 });
 
-// ── Что остаётся после очистки и почему это не мусор ────────────────────────
+// ── Убранное сообщение формы: не возвращается, пока форма говорит то же ────────
 //
-// ЖИВОЙ СЛУЧАЙ (12.09, повторно). «Очистить историю» нажимали — часть сообщений оставалась,
-// а кнопка гасла: со стороны это выглядело сломанным. На деле оставались записи ОТКРЫТЫХ
-// ФОРМ: форма сообщает своё состояние заново, и убрать его нельзя — вернётся через секунду.
-// Проверено: скрытая такая запись возвращается на первом же докладе формы.
-//
-// Значит, чинить надо не очистку, а интерфейс: сказать, чьи это сообщения, и не показывать
-// кнопку, которая не может сделать обещанного.
+// ЖИВОЙ СЛУЧАЙ (13.09, третий раз). «Очистить историю» оставляла «Документ заполнен корректно»
+// и прочие сообщения открытых форм, крестика у них не было. Человек, убравший строку, сказал:
+// «это я видел». Изменится состояние — форма покажет новое.
 
 describe("Технические сообщения: живые записи и очистка", () => {
 	beforeEach(() => {
 		act(() => {
 			reportNotices("pane-1", "k", "s", []);
+			clearScope("pane-1");
 			clearNoticeHistory(APP_SCOPE);
 			getMessages().slice().forEach((m) => dismissMessage(m.id));
 		});
@@ -344,26 +347,53 @@ describe("Технические сообщения: живые записи и 
 		expect(m.active).toBe(true);
 	});
 
-	it("скрытая запись живой формы возвращается — поэтому кнопки «Скрыть» у неё быть не должно", () => {
+	it("убранная крестиком запись формы не возвращается тем же текстом", () => {
 		act(() => { reportNotices("pane-1", "k", "Пользователь базы", [{ type: "info", text: "Не применено правок: 1" }]); });
 		act(() => { dismissMessage(getMessages()[0].id); });
-		expect(getMessages()).toHaveLength(0);
-
-		// Форма доложила состояние заново — запись вернулась. Убрать её нельзя, пока форма
-		// так считает: это не мусор в журнале, а то, что происходит прямо сейчас.
 		act(() => { reportNotices("pane-1", "k", "Пользователь базы", [{ type: "info", text: "Не применено правок: 1" }]); });
+		expect(getMessages()).toHaveLength(0);
+	});
+
+	it("изменилось состояние — форма показывает новое", () => {
+		act(() => { reportNotices("pane-1", "k", "Пользователь базы", [{ type: "info", text: "Не применено правок: 1" }]); });
+		act(() => { clearNoticeHistory(APP_SCOPE); });
+		act(() => { reportNotices("pane-1", "k", "Пользователь базы", [{ type: "info", text: "Не применено правок: 2" }]); });
+		expect(getMessages().map((m) => m.text)).toEqual(["Не применено правок: 2"]);
+	});
+
+	it("убрана одна строка сводки — остальные строки формы на месте", () => {
+		const both = [{ type: "attention" as const, text: "Не заполнен склад" }, { type: "warning" as const, text: "Договор не того контрагента" }];
+		act(() => { reportNotices("pane-1", "k", "Реализация", both); });
+		act(() => { dismissMessage(getMessages().find((m) => m.text === "Не заполнен склад")!.id); });
+		act(() => { reportNotices("pane-1", "k", "Реализация", both); });
+		expect(getMessages().map((m) => m.text)).toEqual(["Договор не того контрагента"]);
+	});
+
+	it("форма замолчала о строке — завтрашнее повторение покажут", () => {
+		const one = [{ type: "attention" as const, text: "Не заполнен склад" }];
+		act(() => { reportNotices("pane-1", "k", "Реализация", one); });
+		act(() => { clearNoticeHistory(APP_SCOPE); });
+		act(() => { reportNotices("pane-1", "k", "Реализация", []); });
+		act(() => { reportNotices("pane-1", "k", "Реализация", one); });
+		expect(getMessages().map((m) => m.text)).toEqual(["Не заполнен склад"]);
+	});
+
+	it("форму закрыли — память о скрытом забыта", () => {
+		const one = [{ type: "attention" as const, text: "Не заполнен склад" }];
+		act(() => { reportNotices("pane-1", "k", "Реализация", one); });
+		act(() => { clearNoticeHistory(APP_SCOPE); });
+		act(() => { clearScope("pane-1"); });
+		act(() => { reportNotices("pane-1", "k", "Реализация", one); });
 		expect(getMessages()).toHaveLength(1);
 	});
 
-	it("после очистки остаются только живые — и кнопка честно гаснет", () => {
+	it("очистка убирает и события, и сообщения форм — кнопка гаснет при пустом списке", () => {
 		act(() => {
 			reportNotices("pane-1", "k", "Пользователь базы", [{ type: "info", text: "Не применено правок: 1" }]);
 			addMessage({ scope: APP_SCOPE, type: "error", text: "Нет связи", source: "Сеть" });
 		});
 		act(() => { clearNoticeHistory(APP_SCOPE); });
-
-		expect(getMessages().map((m) => m.text)).toEqual(["Не применено правок: 1"]);
-		// Гаснет по делу: всё, что можно убрать, уже убрано.
+		expect(getMessages()).toHaveLength(0);
 		expect(isClearable(getMessages())).toBe(false);
 	});
 });

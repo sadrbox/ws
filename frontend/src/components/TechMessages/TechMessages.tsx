@@ -116,7 +116,6 @@ export const TechMessages: FC = () => {
 	const running = ops.filter((o) => o.state === "running").length;
 	const active = messages.filter((n) => n.active).length;
 	// Сколько записей держат открытые формы: именно они остаются после очистки.
-	const live = messages.filter((n) => n.active && n.fromSource).length;
 	/*
 	 * ОЧИСТКА — ВСЕГО, ЧТО ВИДНО, А НЕ ТОЛЬКО СООБЩЕНИЙ.
 	 *
@@ -237,16 +236,14 @@ export const TechMessages: FC = () => {
 								{translate("techMessagesAll")}
 							</Button>
 							{/*
-							  * Гаснет ровно тогда, когда чистить нечего, — но молча гаснущая кнопка
-							  * при непустом списке выглядит сломанной. Подсказка называет, что
-							  * осталось и почему: это не мусор, а то, что открытые формы сообщают
-							  * прямо сейчас; уберёшь — вернётся.
+							  * Гаснет только при пустом списке: очистка убирает всё видимое, и сообщения
+							  * открытых форм тоже — до изменения их состояния (store.hidden).
 							  */}
 							<Button size="sm" variant="secondary"
 								disabled={!clearable}
 								title={clearable
 									? translate("techMessagesHistoryClear")
-									: `${translate("techMessagesOnlyLive")}: ${live}`}
+									: translate("techMessagesHistoryEmpty")}
 								onClick={() => { clearNoticeHistory(scope); clearFinished(); }}>
 								<Icon name="clear" /> {translate("techMessagesHistoryClear")}
 							</Button>
