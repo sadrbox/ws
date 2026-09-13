@@ -27,7 +27,13 @@ import type { AgentRole, AgentView } from "../agents/service.ts";
  * не про 1С вовсе: это его собственные rac/ibcmd/конфигуратор, которые он запустил и
  * которые переживают команду.
  */
-export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs";
+/**
+ * `agent.cancel` — прервать НАЧАТУЮ команду (S4). Отдельно от `agent.procs`: его объявляют
+ * сборки с 11.09, а команды отмены у них нет; сборки с 12.09 23:48 по 13.09 12:12 объявляют
+ * `AGENT_CANCEL_COMMAND`, но у них отмена не доходит до агента, чьи пропуски заняты зависшими
+ * командами. Способность объявляет сборка 13.09 14:58 и новее.
+ */
+export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs" | "agent.cancel";
 
 /**
  * Сколько живёт команда в очереди, если спецификация молчит. Пятнадцати минут хватает
@@ -532,6 +538,27 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		},
 	},
 	{
+		type: "AGENT_CANCEL_COMMAND",
+		title: "Прервать выполняемую команду",
+		operation: "CRITICAL",
+		capability: "agent.cancel",
+		role: "admin",
+		requiresBase: false,
+		/*
+		 * НАСТОЯЩАЯ ОТМЕНА ВМЕСТО «ПЕРЕСТАЛИ ЖДАТЬ» (S4). Зависшая команда держит место
+		 * внутрибазовых операций агента, и вся очередь по всем базам стоит до её срока.
+		 * Ответ `{ ok: true, killed, note }` либо `{ ok: false, reason: "NOT_RUNNING" }` —
+		 * команда успела закончиться сама. Результат прерванной команды агент НЕ шлёт: её
+		 * закрывает сервис (queue.abort). Прерывать разрешено только чтения — это решает
+		 * маршрут, а не агент: обрыв выгрузки, загрузки или обновления оставляет базу в
+		 * промежуточном состоянии. Базы у команды нет — слот внутрибазовых она не ждёт.
+		 */
+		schema: z.object({
+			commandId: z.string().min(1).max(64),
+			force: z.boolean().optional(),
+		}).strict(),
+	},
+	{
 		type: "CLUSTER_SET_SESSIONS_LOCK",
 		title: "Блокировка начала сеансов",
 		operation: "CRITICAL",
@@ -577,6 +604,15 @@ export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spe
 	// полезнее, чем round-trip ради того же вывода.
 	const declaresTypes = agent.capabilities.some((c) => /^[A-Z][A-Z0-9_]+$/.test(c));
 	return declaresTypes ? agent.capabilities.includes(spec.type) : true;
+}
+
+/**
+ * Можно ли прервать команду (S4): она уже выполняется, это чтение, и агент умеет отмену.
+ * Одно правило на маршрут прерывания и на признак `abortable` в заданиях — панель не должна
+ * предлагать то, от чего сервис откажет.
+ */
+export function isAbortable(state: string, type: string, agentCanCancel: boolean): boolean {
+	return state === "dispatched" && agentCanCancel && findAdminCommand(type)?.operation === "READ";
 }
 
 export type AdminPayloadResult =

@@ -304,6 +304,35 @@ export class CommandQueue {
 		return this.cancel(r.rows.map((x) => x.id), by);
 	}
 
+	/**
+	 * ПРЕРВАТЬ НАЧАТУЮ КОМАНДУ (S4) — закрыть её самим, когда агент подтвердил, что снял задачу.
+	 *
+	 * Агент по прерванной команде результата не шлёт: задача снята, отвечать за неё некому.
+	 * Без этого закрытия команда держала бы место внутрибазовых операций до своего срока — и
+	 * вся очередь по всем базам стояла бы ровно так же, как до отмены.
+	 *
+	 * Условие `state = 'dispatched'`: итог, успевший прийти сам, правдив — прерывать нечего.
+	 */
+	async abort(id: string, by: string | null, note: string | null): Promise<boolean> {
+		const r = await this.db.query<{ agent_id: string; base_key: string | null }>(
+			`UPDATE commands
+			    SET state = 'canceled', finished_at = now(),
+			        error = jsonb_build_object(
+			          'code', 'COMMAND_ABORTED',
+			          'message', 'Команда прервана по запросу оператора',
+			          'details', jsonb_build_object('by', $2::text, 'note', $3::text))
+			  WHERE id = $1 AND state = 'dispatched'
+			  RETURNING agent_id, base_key`,
+			[id, by, note],
+		);
+		const row = r.rows[0];
+		if (!row) return false;
+		this.bell.emit("result:" + id);
+		// Место освободилось — будим опрос агента: следующая команда уходит сразу, а не по сроку.
+		this.bell.emit(row.agent_id);
+		return true;
+	}
+
 	private async dispatchQueued(agentId: string, instanceId: string | null = null): Promise<WireCommand[]> {
 		// Просроченные — в expired, чтобы агент не выполнял то, чего уже никто не ждёт.
 		// Причина пишется тут же (см. expireOverdue): здесь это всегда «не забрал».

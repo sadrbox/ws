@@ -485,6 +485,14 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			const me = await agents.findById(req.agent!.agentId);
 			if (me?.serverId) await bases.applyCheckResult(me.serverId, p.data.result);
 		}
+		// Прерывание начатой команды (S4): агент снял задачу и результата по ней не пришлёт —
+		// закрываем её сами, иначе она держит место до срока. Здесь, а не только в обработчике
+		// панели: ответ на отмену мог прийти позже, чем панель ждала (202).
+		if (p.data.status === "SUCCESS" && row.type === "AGENT_CANCEL_COMMAND") {
+			const answer = p.data.result as { ok?: boolean; note?: string } | null;
+			const aborted = typeof row.payload?.commandId === "string" ? row.payload.commandId : null;
+			if (answer?.ok === true && aborted) await queue.abort(aborted, row.user_uuid, answer.note ?? null);
+		}
 		// Экземпляр из details ошибки БОЛЬШЕ НЕ ЗАВОДИМ. Это была замена ещё не
 		// реализованного X-Agent-Instance; теперь агент шлёт заголовок, а «host#pid»
 		// заводил ВТОРУЮ запись для того же процесса — и список экземпляров показывал

@@ -164,7 +164,12 @@ export function onecRouter(deps: Deps) {
 	 * и, скорее всего, выполнится; для CRITICAL текст говорит об этом прямо, иначе оператор
 	 * повторит снятие сеанса, который уже снят.
 	 */
-	async function run(req: Request, type: string, input: unknown): Promise<Outcome> {
+	/**
+	 * `target` — адресовать команду КОНКРЕТНОМУ агенту, а не выбирать по базе. Нужен отмене
+	 * начатой команды (S4): отменять должен тот, кто её забрал, — при нескольких серверах
+	 * выбранный по базе агент получил бы отмену чужой работы.
+	 */
+	async function run(req: Request, type: string, input: unknown, target?: { agentId: string }): Promise<Outcome> {
 		const u = req.erpUser!;
 		// Организация нужна только для журнала: команда адресуется серверу, а не орг.
 		const org = u.organizationUuid;
@@ -183,7 +188,8 @@ export function onecRouter(deps: Deps) {
 				`Базы «${built.baseKey}» нет в реестре. Обновите список из кластера — возможно, она появилась или была удалена`);
 		}
 
-		const agent = await agents.pickAdminAgent(built.baseKey);
+		const chosen = target ? await agents.findById(target.agentId) : await agents.pickAdminAgent(built.baseKey);
+		const agent = chosen && !chosen.disabled ? chosen : null;
 		if (!agent) return await explainNoAgent(built.baseKey, spec.role);
 		if (!agentCanRun(agent, spec)) {
 			// Разделяем два разных случая: агента не настроили на этот класс операций
@@ -1007,6 +1013,47 @@ export function onecRouter(deps: Deps) {
 		if (!ids.length) { send(res, fail(400, "VALIDATION_ERROR", "Не указано, что отменять")); return; }
 		const canceled = await queue.cancel(ids, req.erpUser!.uuid);
 		res.json({ success: true, data: { canceled, asked: ids.length } });
+	});
+
+	/**
+	 * ПРЕРВАТЬ НАЧАТУЮ КОМАНДУ (S4) — отмена, которую выполняет агент, а не очередь.
+	 *
+	 * Отмена выше снимает только не начатое. Начатая зависшая команда держит место
+	 * внутрибазовых операций, и очередь по всем базам стоит до её срока. Прерываются только
+	 * ЧТЕНИЯ: обрыв выгрузки, загрузки или обновления оставляет базу в промежуточном состоянии.
+	 * Отмена адресуется агенту, который команду забрал. Закрывает прерванную команду сервис
+	 * (queue.abort): агент по ней не ответит. Делается и здесь, и при приёме ответа агента —
+	 * ответ на отмену может прийти позже, чем этот запрос ждёт.
+	 */
+	r.post("/commands/:id/abort", async (req, res) => {
+		const cmd = await queue.get(req.params.id);
+		if (!cmd) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
+		if (cmd.state === "queued") {
+			send(res, fail(409, "COMMAND_NOT_STARTED", "Команда ещё не начата — используйте отмену до начала"));
+			return;
+		}
+		if (cmd.state !== "dispatched") {
+			send(res, fail(409, "COMMAND_FINISHED", "Команда уже завершена — прерывать нечего"));
+			return;
+		}
+		if (findAdminCommand(cmd.type)?.operation !== "READ") {
+			send(res, fail(409, "ABORT_NOT_ALLOWED",
+				"Прервать можно только чтение: обрыв выгрузки, загрузки или обновления оставляет базу в промежуточном состоянии"));
+			return;
+		}
+		const force = (req.body as { force?: unknown } | undefined)?.force === true;
+		const outcome = await run(req, "AGENT_CANCEL_COMMAND",
+			{ commandId: cmd.id, ...(force ? { force: true } : {}) }, { agentId: cmd.agent_id });
+		if (outcome.status !== 200) { send(res, outcome); return; }
+
+		const answer = outcome.data as { ok?: boolean; killed?: boolean; note?: string; reason?: string } | null;
+		if (answer?.ok === true) {
+			const aborted = await queue.abort(cmd.id, req.erpUser!.uuid, answer.note ?? null);
+			res.json({ success: true, data: { aborted, killed: answer.killed === true, note: answer.note ?? null } });
+			return;
+		}
+		// NOT_RUNNING — команда успела закончиться сама: итог пришёл или придёт, это не ошибка.
+		res.json({ success: true, data: { aborted: false, reason: answer?.reason ?? "NOT_RUNNING" } });
 	});
 
 	/** Остановить групповую операцию: отменяются все её команды, которые ещё не начаты. */

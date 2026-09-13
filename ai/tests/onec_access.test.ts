@@ -32,6 +32,7 @@ describe("права панели 1С", () => {
 			["POST", "/batches/9f1/retry"],
 			["POST", "/batches/9f1/cancel"],
 			["POST", "/commands/cancel"],
+			["POST", "/commands/7c1/abort"],
 			["POST", "/sessions/77/terminate"],
 			["POST", "/connections/12/disconnect"],
 			["PATCH", "/servers/srv-1"],

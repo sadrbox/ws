@@ -10,6 +10,7 @@
  * завершиться, истечь по TTL или быть переставлена в очереди.
  */
 import { humanizeAgentError } from "./errorHints.ts";
+import { isAbortable } from "../commands/admin.ts";
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 
@@ -32,9 +33,13 @@ export type BatchProgress = {
 		baseKey: string | null; state: string; error: { code: string; message: string } | null;
 		/** Итог операции одной строкой: путь к выгрузке, адрес публикации. */
 		outcome: string | null;
+		/** Начатую команду можно прервать: это чтение, и агент умеет отмену (S4). */
+		abortable?: boolean;
 	}[];
 	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
 	cancelable: number;
+	/** Сколько начатых команд задания можно прервать (S4). */
+	abortable: number;
 };
 
 /**
@@ -147,11 +152,16 @@ export class BatchService {
 		const cmds = await this.db.query<{
 			batch_id: string; id: string; base_key: string | null; state: string;
 			error: { code: string; message: string } | null; outcome: string | null;
+			type: string; can_abort: boolean | null;
 		}>(
 			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
-			`SELECT batch_id, id, base_key, state, error, COALESCE(result->>'path', result->>'url') AS outcome
-			   FROM commands WHERE batch_id = ANY($1::uuid[]) ORDER BY batch_id, created_at`,
+			// Тип команды и способность агента — для признака «можно прервать» (S4).
+			`SELECT c.batch_id, c.id, c.base_key, c.state, c.error,
+			        COALESCE(c.result->>'path', c.result->>'url') AS outcome,
+			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort
+			   FROM commands c LEFT JOIN agents a ON a.id = c.agent_id
+			  WHERE c.batch_id = ANY($1::uuid[]) ORDER BY c.batch_id, c.created_at`,
 			[ids],
 		);
 
@@ -194,6 +204,7 @@ export class BatchService {
 						? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
 						: {}),
 					outcome: r.outcome,
+					abortable: isAbortable(r.state, r.type, r.can_abort === true),
 				}));
 
 				/*
@@ -250,6 +261,8 @@ export class BatchService {
 					done, failed, pending: Math.max(0, head.total - done - failed),
 					// Отменить можно только не начатое: см. queue.cancel.
 					cancelable: items.filter((i) => i.state === "queued").length,
+					// Прервать можно начатое чтение у агента с agent.cancel: см. isAbortable.
+					abortable: items.filter((i) => i.abortable === true).length,
 					createdAt: head.created_at.toISOString(), items,
 				};
 			});
