@@ -5,7 +5,11 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
-import { notify } from "src/components/TechMessages/store";
+import { notify, useNoticeScope } from "src/components/TechMessages/store";
+import { useRunningWork, withOp } from "src/components/TechMessages/operations";
+
+/** Ключ работы в реестре: пересчёт тяжёлый для сервера — один за раз. */
+const RECOMPUTE_WORK = "recompute-costing";
 import { reportError } from "src/services/errors/route";
 import type { TDataItem, TColumn } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
@@ -104,6 +108,10 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
   const savedRef = useRef<TFields | null>(null);
   const savedSnapshot = (f: TFields): TFields => { savedRef.current = { ...f }; return f; };
   const [recomputing, setRecomputing] = useState(false);
+  // Пересчёт — долгая работа реестра (M15): ход виден в области с любого экрана, а вновь
+  // открытая форма знает, что пересчёт уже идёт.
+  const pane = useNoticeScope();
+  const recomputeRunning = useRunningWork(RECOMPUTE_WORK);
   const queryClient = useQueryClient();
 
   const form = useFormStore<TFields>({
@@ -417,7 +425,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                 <Button
                   variant="secondary"
                   size="min"
-                  disabled={recomputing || form.isLoading || !canWrite || !form.fields.organizationUuid}
+                  disabled={recomputing || recomputeRunning || form.isLoading || !canWrite || !form.fields.organizationUuid}
                   onClick={async () => {
                     const org = form.fields.organizationUuid;
                     // Без организации кнопка выключена: это страховка, а не сообщение.
@@ -425,8 +433,15 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     if (!confirm("Пересчитать себестоимость и проводки по открытому периоду этой организации? Закрытые периоды не затрагиваются. Операция идемпотентна.")) return;
                     setRecomputing(true);
                     try {
-                      const resp = await api.post<{ registers?: number; entries?: number }>(
-                        "accounting/recompute-costing", { organizationUuid: org },
+                      const resp = await withOp(
+                        {
+                          kind: "update", title: translate("recomputeCosting"),
+                          target: form.fields.organizationName || org,
+                          workKey: RECOMPUTE_WORK, pane, reportsOwnOutcome: true,
+                        },
+                        () => api.post<{ registers?: number; entries?: number }>(
+                          "accounting/recompute-costing", { organizationUuid: org },
+                        ),
                       );
                       await queryClient.invalidateQueries();
                       // Итог — СОБЫТИЕ, а не alert (M12): пересчёт меняет суммы в проводках и
@@ -469,7 +484,7 @@ const OrganizationAccountingSettingsForm: FC<Partial<TPane>> = (paneProps) => {
                     />
                     <circle cx="12" cy="12" r="2.5" fill="#1976D2" />
                   </svg>
-                  {recomputing ? translate("recomputeCostingRunning") : translate("recomputeCosting")}
+                  {recomputing || recomputeRunning ? translate("recomputeCostingRunning") : translate("recomputeCosting")}
                 </Button>
                 <span className={styles.SettingHint}>
                   Ретроактивный пересчёт после ввода документов задним числом: заново

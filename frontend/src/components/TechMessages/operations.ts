@@ -23,7 +23,7 @@
 import { useSyncExternalStore } from "react";
 import { translate } from "src/i18";
 import { humanErrorText } from "src/utils/errorText";
-import { noteNotice } from "./store";
+import { APP_SCOPE, noteNotice } from "./store";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
 export type OpKind = "read" | "create" | "update" | "delete";
@@ -62,6 +62,12 @@ export type Op = {
 	 * Нет — происхождение неизвестно, и операция видна в любом срезе.
 	 */
 	pane?: string;
+	/**
+	 * Какая это работа — ключ, по которому экран узнаёт, что она УЖЕ идёт («bank-statement-
+	 * import»). Нужен, чтобы вновь открытое окно не дало запустить ту же работу второй раз:
+	 * локальный флаг «занято» умирает вместе с окном, а работа — нет.
+	 */
+	workKey?: string;
 };
 
 export type OpInit = {
@@ -73,8 +79,14 @@ export type OpInit = {
 	note?: string;
 	scope?: { user?: string; bases?: string[] };
 	pane?: string;
+	workKey?: string;
 	/** Что сделать, когда работа закончена (адаптер 1С перечитывает кэш). */
 	onFinish?: () => void;
+	/**
+	 * Итог сообщает сам вызывающий — содержательнее, чем реестр («загружено 88 из 100»). Без
+	 * этого в журнале стояли бы две записи об одном: его итог и безликое «Выполнено».
+	 */
+	reportsOwnOutcome?: boolean;
 };
 
 /**
@@ -140,6 +152,7 @@ let seq = 0;
  */
 const finishHooks = new Map<string, () => void>();
 const cancelers = new Map<string, () => Promise<number>>();
+const ownOutcome = new Set<string>();
 
 const emit = () => { for (const l of listeners) l(); };
 
@@ -192,8 +205,9 @@ function noteOutcome(op: Op): void {
 export function settleOp(id: string): void {
 	finishHooks.delete(id);
 	cancelers.delete(id);
+	const own = ownOutcome.delete(id);
 	const op = ops.find((o) => o.id === id);
-	if (op) noteOutcome(op);
+	if (op && !own) noteOutcome(op);
 }
 
 /** Начать операцию. Возвращает идентификатор — по нему её потом двигают. */
@@ -205,9 +219,12 @@ export function startOp(init: OpInit): string {
 		state: "running", startedAt: Date.now(), finishedAt: null,
 		batchId: init.batchId ?? null, note: init.note ?? "", cancelable: 0,
 		scope: { ...(init.scope?.user ? { user: init.scope.user } : {}), bases: init.scope?.bases ?? [] },
-		...(init.pane ? { pane: init.pane } : {}),
+		// «Всё приложение» — это не пейн: такая операция видна в любом срезе.
+		...(init.pane && init.pane !== APP_SCOPE ? { pane: init.pane } : {}),
+		...(init.workKey ? { workKey: init.workKey } : {}),
 	}, ...ops];
 	if (init.onFinish) finishHooks.set(id, init.onFinish);
+	if (init.reportsOwnOutcome) ownOutcome.add(id);
 	emit();
 	return id;
 }
@@ -293,3 +310,10 @@ export const useOps = (): Op[] => useSyncExternalStore(subscribe, snapshot, snap
 
 /** Прочитать реестр вне React — для чистых функций и для проверок. */
 export const getOps = (): Op[] => ops;
+
+/**
+ * Идёт ли уже работа с этим ключом. Кнопке запуска — вместо локального «занято»: окно
+ * закрыли и открыли снова, а импорт всё ещё идёт — кнопка это знает.
+ */
+export const useRunningWork = (workKey: string): boolean =>
+	useOps().some((o) => o.state === "running" && o.workKey === workKey);

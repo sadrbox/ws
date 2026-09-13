@@ -8,14 +8,14 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, renderHook, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import MessagesView from "src/components/TechMessages/MessagesView";
 import {
 	APP_SCOPE, clearNoticeHistory, getMessages, noteNotice, useScopedNotices,
 } from "src/components/TechMessages/store";
 import {
-	abandonOp, cancelOp, finishOp, getOps, setOpCanceler, startOp,
+	abandonOp, cancelOp, finishOp, getOps, setOpCanceler, startOp, useRunningWork,
 } from "src/components/TechMessages/operations";
 import { translate } from "src/i18";
 import { TestWrapper } from "./utils/TestWrapper";
@@ -84,6 +84,27 @@ describe("Общий реестр длительной работы", () => {
 	it("итог операции ложится в журнал её пейна", () => {
 		act(() => { finishOp(op("Импорт выписки", { pane: "pane-1" })); });
 		expect(getMessages()[0]).toMatchObject({ scope: "pane-1", type: "success" });
+	});
+
+	it("итог сообщает вызывающий — второй записи в журнале нет", () => {
+		// Импорт пишет «загружено 88 из 100» сам; безликое «Выполнено» рядом было бы дублем.
+		act(() => { finishOp(startOp({ kind: "create", title: "Импорт выписки", target: "t", total: 1, reportsOwnOutcome: true })); });
+		expect(getMessages()).toHaveLength(0);
+	});
+
+	it("пейн «всё приложение» — это отсутствие пейна", () => {
+		act(() => { startOp({ kind: "read", title: "Общая работа", target: "t", total: 1, pane: APP_SCOPE }); });
+		expect(getOps()[0].pane).toBeUndefined();
+	});
+
+	it("экран узнаёт, что работа с его ключом уже идёт", () => {
+		const { result } = renderHook(() => useRunningWork("db-backup"));
+		expect(result.current).toBe(false);
+		let id = "";
+		act(() => { id = startOp({ kind: "create", title: "Резервная копия", target: "", total: 1, workKey: "db-backup" }); });
+		expect(result.current).toBe(true);
+		act(() => { finishOp(id); });
+		expect(result.current).toBe(false);
 	});
 
 	it("отмену знает тот, кто поставил работу", async () => {

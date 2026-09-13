@@ -16,7 +16,11 @@ import Modal from "src/components/Modal";
 import { FieldSelect } from "src/components/Field";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { routeError } from "src/services/errors/route";
-import { notify } from "src/components/TechMessages/store";
+import { notify, useNoticeScope } from "src/components/TechMessages/store";
+import { useRunningWork, withOp } from "src/components/TechMessages/operations";
+
+/** Ключ работы в реестре: импорт ГС ВС/КАТО идёт минутами, второй поверх первого не нужен. */
+const IMPORT_WORK = "classifier-import";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { fetchClassifiers, fetchClassifierCounts, importClassifiers, importClassifiersFile, CLASSIFIER_TYPES } from "src/services/classifiers/api";
 import ClassifierTree, { buildNamePathTree, type TreeNode } from "./ClassifierTree";
@@ -63,6 +67,9 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	// Ответ окну импорта: неверный JSON и отказ сервиса по существу — в самом окне, где на
 	// них смотрят; системный сбой routeError покажет тостом и запишет в журнал.
 	const [importNotice, setImportNotice] = useState<NoticeItem[]>([]);
+	// Импорт — долгая работа реестра (M15): ход виден в области, повторный запуск не пройдёт.
+	const pane = useNoticeScope();
+	const importRunning = useRunningWork(IMPORT_WORK);
 	const [importText, setImportText] = useState("");
 	const [file, setFile] = useState<File | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -86,12 +93,16 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const closeImport = useCallback(() => { setShowImport(false); setImportText(""); setFile(null); setImportNotice([]); }, []);
 
 	const doImport = useCallback(async () => {
-		if (busy) return;
+		if (busy || importRunning) return;
 		setBusy(true);
 		setImportNotice([]);
 		try {
 			if (file) {
-				const r = await importClassifiersFile(file);
+				const picked = file;
+				const r = await withOp(
+					{ kind: "create", title: translate("clsImport"), target: picked.name, workKey: IMPORT_WORK, pane, reportsOwnOutcome: true },
+					() => importClassifiersFile(picked),
+				);
 				const detail = Object.entries(r.counts).map(([t, n]) => `${t}: ${n}`).join(", ");
 				// Итог импорта — событие (M12): сколько записей какого типа легло, спрашивают позже тоста.
 				notify({ severity: "success", source: translate("clsSection"), text: `${translate("clsImported")} (${detail})` });
@@ -99,7 +110,10 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 				let parsed: { code: string; name: string; parentCode?: string }[];
 				try { parsed = JSON.parse(importText) as { code: string; name: string; parentCode?: string }[]; if (!Array.isArray(parsed)) throw new Error(); }
 				catch { setImportNotice([{ type: "error", text: translate("clsImportBadJson") }]); return; }
-				const r = await importClassifiers(type, parsed);
+				const r = await withOp(
+					{ kind: "create", title: translate("clsImport"), target: type, workKey: IMPORT_WORK, pane, reportsOwnOutcome: true },
+					() => importClassifiers(type, parsed),
+				);
 				notify({ severity: "success", source: translate("clsSection"), text: `${translate("clsImported")}: ${r.upserted}` });
 			}
 			closeImport(); void refetch();
@@ -107,7 +121,7 @@ export const ClassifiersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 		} catch (e) {
 			setImportNotice(routeError(e, { source: translate("clsSection"), fallback: translate("importError") }));
 		} finally { setBusy(false); }
-	}, [busy, file, importText, type, refetch, closeImport, qc]);
+	}, [busy, importRunning, pane, file, importText, type, refetch, closeImport, qc]);
 
 	// Счётчик записей — в подписи КАЖДОЙ опции (количества по всем типам из
 	// /classifiers/counts, отображаются постоянно).

@@ -4,7 +4,8 @@ import { Button } from "src/components/Button";
 import Modal from "src/components/Modal";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { routeError } from "src/services/errors/route";
-import { notify } from "src/components/TechMessages/store";
+import { notify, useNoticeScope } from "src/components/TechMessages/store";
+import { useRunningWork, withOp } from "src/components/TechMessages/operations";
 import LookupField from "src/components/Field/LookupField";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
@@ -27,6 +28,9 @@ interface ImportResult {
  * Строки создаются НЕпроведёнными — пользователь сверяет и проводит. Дубли (повторный
  * импорт того же файла) сервер отсекает сам.
  */
+/** Ключ работы в реестре: по нему окно узнаёт, что импорт уже идёт. */
+const IMPORT_WORK = "bank-statement-import";
+
 const BankStatementImportButton: FC = () => {
   const qc = useQueryClient();
   const defaultOrg = useDefaultOrganization();
@@ -38,6 +42,14 @@ const BankStatementImportButton: FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [notices, setNotices] = useState<NoticeItem[]>([]);
+  /*
+   * ИМПОРТ — ДОЛГАЯ РАБОТА РЕЕСТРА (M15). Большая выписка идёт минутами: закрыли окно или
+   * ушли с экрана — ход и итог видны в области сообщений, а вновь открытое окно знает, что
+   * импорт ещё идёт, и не даст запустить его второй раз.
+   */
+  const pane = useNoticeScope();
+  const running = useRunningWork(IMPORT_WORK);
+  const importing = busy || running;
 
   const openModal = useCallback(() => {
     // Предзаполняем организацией по умолчанию (счёт пользователь выбирает сам).
@@ -48,6 +60,7 @@ const BankStatementImportButton: FC = () => {
   }, [defaultOrg.organizationUuid, defaultOrg.organizationName]);
 
   const doImport = useCallback(async () => {
+    if (importing) return;
     /*
      * ЧЕГО НЕ ХВАТАЕТ — ГОВОРИМ В ОКНЕ, а не тостом. Человек смотрит в это окно, здесь же
      * и поля, которых не хватает; всплывающее сообщение уводило ответ туда, куда он в этот
@@ -63,9 +76,15 @@ const BankStatementImportButton: FC = () => {
     setBusy(true);
     try {
       const text = await file.text();
-      const r = await api.post<ImportResult>("bank-statements/import", {
-        text, organizationUuid: orgUuid || null, bankAccountUuid: accUuid,
-      });
+      const r = await withOp(
+        {
+          kind: "create", title: translate("bankImport"), target: accName || file.name,
+          workKey: IMPORT_WORK, pane, reportsOwnOutcome: true,
+        },
+        () => api.post<ImportResult>("bank-statements/import", {
+          text, organizationUuid: orgUuid || null, bankAccountUuid: accUuid,
+        }),
+      );
       const summary = `${translate("bankImportDone")}: ${r.imported ?? 0} / ${r.total ?? 0}`
         + (r.matched ? `, ${translate("bankImportMatched")}: ${r.matched}` : "")
         + (r.skipped ? `, ${translate("bankImportSkipped")}: ${r.skipped}` : "")
@@ -80,7 +99,7 @@ const BankStatementImportButton: FC = () => {
     } finally {
       setBusy(false);
     }
-  }, [accUuid, file, orgUuid, qc]);
+  }, [accUuid, accName, file, orgUuid, qc, importing, pane]);
 
   return (
     <>
@@ -91,7 +110,7 @@ const BankStatementImportButton: FC = () => {
           onClose={() => setOpen(false)}
           style={{ minWidth: 480 }}
           buttons={[
-            { label: busy ? translate("bankImporting") : translate("bankImportRun"), onClick: () => void doImport(), variant: "primary" },
+            { label: importing ? translate("bankImporting") : translate("bankImportRun"), onClick: () => void doImport(), variant: "primary" },
             { label: translate("cancel"), onClick: () => setOpen(false), variant: "secondary" },
           ]}
         >

@@ -7,7 +7,11 @@ import { Group } from "src/components/UI";
 import { Button } from "src/components/Button";
 import { Divider } from "src/components/Field";
 import { reportError } from "src/services/errors/route";
-import { notify } from "src/components/TechMessages/store";
+import { notify, useNoticeScope } from "src/components/TechMessages/store";
+import { useRunningWork, withOp } from "src/components/TechMessages/operations";
+
+/** Ключ работы в реестре: pg_dump идёт минутами, и вторая копия поверх первой не нужна. */
+const BACKUP_WORK = "db-backup";
 import { getCurrentUser } from "src/services/auth";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchBackups, createBackup, type BackupFile } from "src/services/backup/api";
@@ -25,8 +29,17 @@ const BackupSection: FC = () => {
     enabled: isSuperAdmin,
   });
 
+  /*
+   * РЕЗЕРВНАЯ КОПИЯ — ДОЛГАЯ РАБОТА РЕЕСТРА (M15): ход виден в области сообщений с любого
+   * экрана, а кнопка знает, что копия уже создаётся, даже если секцию открыли заново.
+   */
+  const pane = useNoticeScope();
+  const running = useRunningWork(BACKUP_WORK);
   const create = useMutation({
-    mutationFn: createBackup,
+    mutationFn: () => withOp(
+      { kind: "create", title: translate("backupCreate"), target: "", workKey: BACKUP_WORK, pane, reportsOwnOutcome: true },
+      () => createBackup(),
+    ),
     onSuccess: (r) => {
       // Какой файл копии создан — событие (M12): его ищут, когда понадобилось восстановление.
       notify({
@@ -52,8 +65,8 @@ const BackupSection: FC = () => {
           {translate("backupHint")}
         </div>
         <div>
-          <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}>
-            <span>💾 {create.isPending ? translate("backupRunning") : translate("backupCreate")}</span>
+          <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending || running}>
+            <span>💾 {create.isPending || running ? translate("backupRunning") : translate("backupCreate")}</span>
           </Button>
         </div>
 
