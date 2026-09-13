@@ -39,6 +39,17 @@ import { getFormatDateOnly, getFormatTimeOnly } from "src/utils/datetime";
 import { useAppContext } from "src/app/context";
 import { openFormByRef, canOpenByRef } from "src/utils/openFormByRef";
 import { dismissMessage, type TechMessage } from "./store";
+import { useOps } from "./operations";
+
+/**
+ * К строке операции в «Прогрессе». Фокус — не только прокрутка: так переход слышен и тем,
+ * кто не видит экран, и видно, куда именно привело.
+ */
+const showOp = (opId: string): void => {
+	const el = document.getElementById(`op-${opId}`);
+	el?.scrollIntoView?.({ block: "nearest" });
+	el?.focus?.();
+};
 import ProgressSection from "./ProgressSection";
 import {
 	GROUP_MODES, GROUP_MODE_LABEL, groupMessages, groupTitleOf, type GroupMode,
@@ -67,6 +78,7 @@ const readMode = (): GroupMode => {
 const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mode }) => {
 	const { addPane } = useAppContext().windows;
 	const canOpen = !!m.ref && canOpenByRef(m.ref.endpoint);
+	const opAlive = useOps().some((o) => !!m.opId && o.id === m.opId);
 	const at = new Date(m.firstAt).toISOString();
 	// Под заголовком дня дата известна и в строке не нужна; в остальных режимах — нужна.
 	const withDate = mode !== "date";
@@ -128,6 +140,12 @@ const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mo
 							{a.label}
 						</Button>
 					))}
+					{/* Итог операции — переход к ней, пока её не убрали из «Прогресса». */}
+					{opAlive && (
+						<Button size="sm" variant="secondary" onClick={() => showOp(m.opId!)}>
+							{translate("techMsgShowOp")}
+						</Button>
+					)}
 				</div>
 				<div className={styles.MsgMeta}>
 					{showSource && (canOpen ? (

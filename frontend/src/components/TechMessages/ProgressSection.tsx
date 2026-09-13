@@ -139,7 +139,7 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 
 	return (
 		<article className={styles.Row} data-type={type} data-run={running || undefined}
-			data-past={!running || undefined}>
+			data-past={!running || undefined} id={`op-${op.id}`} tabIndex={-1}>
 			{/* Вид работы — под временем, там же, где у сообщения стоит его род: левая
 			    колонка отвечает на вопрос «что это», а тело — «о чём». */}
 			<div className={styles.RowTime}>

@@ -2107,6 +2107,7 @@
   "recomputeCostingRunning": "Қайта есептелуде…",
   "recomputeCostingDone": "Өзіндік құн қайта есептелді: тіркелім — {registers}, өткізбелер — {entries}",
   "recomputeCostingError": "Өзіндік құнды қайта есептеу мүмкін болмады",
+  "techMsgShowOp": "Операцияны көрсету",
   "onecOpFinishedOk": "Орындалды",
   "onecOpOutOf": "/",
   "onecOpFailedCount": "Сәтсіз",

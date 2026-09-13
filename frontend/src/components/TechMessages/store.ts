@@ -81,6 +81,8 @@ export type TechMessage = {
 	repeat?: number;
 	/** Когда о записи последний раз сказал тост. Нет — тоста не было: объявлять некому, кроме области. */
 	toastAt?: number;
+	/** Итог какой операции эта запись (M14): по нему из итога переходят к самой операции. */
+	opId?: string;
 };
 
 /**
@@ -337,6 +339,8 @@ export type NotifyOptions = {
 	 * отдельное.
 	 */
 	key?: string;
+	/** Запись — итог этой операции реестра. */
+	opId?: string;
 };
 
 /**
@@ -400,6 +404,7 @@ export function notify(o: NotifyOptions): string {
 		id, scope, key: key ?? id, type: o.severity, text: o.text, source: o.source,
 		firstAt: now, lastAt: now, active: o.active === true, ref: o.ref, actions: o.actions,
 		...(toastDue ? { toastAt: now } : {}),
+		...(o.opId ? { opId: o.opId } : {}),
 	}, ...notices].slice(0, LIMIT);
 	emit();
 	return id;

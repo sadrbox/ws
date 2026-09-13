@@ -23,7 +23,7 @@
 import { useSyncExternalStore } from "react";
 import { translate } from "src/i18";
 import { humanErrorText } from "src/utils/errorText";
-import { APP_SCOPE, noteNotice } from "./store";
+import { APP_SCOPE, notify } from "./store";
 
 /** Вид операции: у чтения и у записи разная цена ошибки, и смешивать их в списке нельзя. */
 export type OpKind = "read" | "create" | "update" | "delete";
@@ -192,10 +192,15 @@ function noteOutcome(op: Op): void {
 			].filter(Boolean).join(". ")
 			: translate("onecOpFinishedOk");
 
-	noteNotice(op.target || op.title, {
-		type: failed ? "error" : "success",
+	// Итог знает свою операцию (M14): из него переходят к строке «Прогресса», пока она на экране.
+	notify({
+		severity: failed ? "error" : "success",
 		text: `${op.title}. ${result}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
-	}, op.pane);
+		source: op.target || op.title,
+		scope: op.pane,
+		toast: false,
+		opId: op.id,
+	});
 }
 
 /**

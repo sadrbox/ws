@@ -107,6 +107,27 @@ describe("Общий реестр длительной работы", () => {
 		expect(result.current).toBe(false);
 	});
 
+	it("итог знает свою операцию, а «Скрыть» операцию итог не трогает (M14)", () => {
+		let id = "";
+		act(() => { id = op("Сверка прав"); finishOp(id); });
+		expect(getMessages()[0].opId).toBe(id);
+		act(() => { abandonOp(id); });
+		expect(getMessages()).toHaveLength(1);
+	});
+
+	it("из итога переходят к операции, пока она в «Прогрессе»", () => {
+		// Без группировки: итог — история, и в режиме объектов его группа свёрнута.
+		localStorage.setItem("tech_messages_group", "none");
+		let id = "";
+		act(() => { id = op("Сверка прав"); finishOp(id); });
+		show();
+		const go = screen.getByRole("button", { name: translate("techMsgShowOp") });
+		fireEvent.click(go);
+		expect(document.activeElement?.id).toBe(`op-${id}`);
+		act(() => { abandonOp(id); });
+		expect(screen.queryByRole("button", { name: translate("techMsgShowOp") })).toBeNull();
+	});
+
 	it("отмену знает тот, кто поставил работу", async () => {
 		const id = op("Команда агенту");
 		setOpCanceler(id, () => Promise.resolve(3));

@@ -28,6 +28,8 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
+import { humanErrorText } from "src/utils/errorText";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
@@ -451,7 +453,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			finishOp(op, { failed: 1, note: msg });
-			showToast(msg, "error");
+			// След в журнале уже оставил итог операции (finishOp) — здесь только тост «сейчас»,
+			// и словами человека: «Failed to fetch» не объясняет ничего. reportError записал бы
+			// тот же отказ второй раз.
+			notify({ severity: "error", text: humanErrorText(msg), source: translate("onecCardRefresh"), ephemeral: true });
 		}
 		await Promise.all([occurrences.refetch(), baseUsers.refetch(), roles.refetch()]);
 	}, [baseKey, userName, occurrences, baseUsers, roles]);
