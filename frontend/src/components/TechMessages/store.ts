@@ -309,7 +309,8 @@ export function reportNotices(scope: string, rawKey: string, source: string, rep
 
 	if (!items.length) {
 		if (!mine.length) return;
-		notices = notices.filter((n) => !(n.key === key && n.active));
+		const said = new Set(mine.map((n) => n.text));
+		notices = retireEchoes(notices.filter((n) => !(n.key === key && n.active)), scope, said);
 		emit();
 		return;
 	}
@@ -370,11 +371,45 @@ export function reportNotices(scope: string, rawKey: string, source: string, rep
 	const gone = new Set(mine.filter((n) => !used.has(n.id)).map((n) => n.id));
 	if (!fresh.length && !updates.size && !gone.size) return;
 
-	notices = [
+	// Что форма перестала говорить (ушло или сменило текст), — то и у её событий уже неправда.
+	const unsaid = new Set([
+		...mine.filter((n) => gone.has(n.id)).map((n) => n.text),
+		...[...updates.values()].map((u) => mine.find((n) => n.id === u.id)?.text).filter((t): t is string => !!t && ![...updates.values()].some((x) => x.text === t)),
+	]);
+	notices = retireEchoes([
 		...fresh,
 		...notices.filter((n) => !gone.has(n.id)).map((n) => updates.get(n.id) ?? n),
-	].slice(0, LIMIT);
+	].slice(0, LIMIT), scope, unsaid);
 	emit();
+}
+
+/**
+ * СОБЫТИЕ, ПОВТОРЯВШЕЕ СОСТОЯНИЕ ФОРМЫ, ПЕРЕСТАЁТ БЫТЬ АКТУАЛЬНЫМ ВМЕСТЕ С НИМ.
+ *
+ * Отказ записи приходит двумя путями: форма показывает его своим сообщением, а хранилище формы
+ * пишет уведомление панели — активное, «ждёт человека». Форма перестала это говорить (ошибку
+ * исправили, форму закрыли) — уведомление оставалось актуальным навсегда (живой случай 14.09:
+ * «Недостаточно остатка…» дважды у закрытой реализации). Теперь оно уходит в историю.
+ */
+function retireEchoes(list: TechMessage[], scope: string, texts: Set<string>): TechMessage[] {
+	if (!texts.size) return list;
+	return list.map((n) => (!n.fromSource && n.active && n.scope === scope && texts.has(n.text)
+		? { ...n, active: false, resolved: true }
+		: n));
+}
+
+/**
+ * ОБЛАСТЬ ЗАКРЫТА (пейн закрыли): её события больше ни о чём не просят — уходят в историю.
+ * Не удаляются: «что было с этим документом» — законный вопрос, и ответ на него в истории.
+ */
+export function retireScope(scope: string): void {
+	let changed = false;
+	notices = notices.map((n) => {
+		if (n.scope !== scope || n.fromSource || !n.active) return n;
+		changed = true;
+		return { ...n, active: false, resolved: true };
+	});
+	if (changed) emit();
 }
 
 /** У тоста палитра уже: «attention» (не заполнено обязательное) показывается предупреждением. */
@@ -547,14 +582,14 @@ export function dismissByKey(scope: string, key: string): void {
 
 /**
  * Повод исчерпан: форму сохранили, и действия в её сообщениях уже ничего не сделают.
- * Сами сообщения остаются — человек должен видеть, что было, а не гадать, куда делось.
+ * Сами сообщения остаются — в ИСТОРИИ: отказ записи после удачной записи уже не актуален.
  */
 export function resolveMessages(scope: string): void {
 	let changed = false;
 	notices = notices.map((n) => {
-		if (n.scope !== scope || n.resolved || !n.active) return n;
+		if (n.scope !== scope || n.fromSource || !n.active) return n;
 		changed = true;
-		return { ...n, resolved: true };
+		return { ...n, resolved: true, active: false };
 	});
 	if (changed) emit();
 }

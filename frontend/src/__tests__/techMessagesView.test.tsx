@@ -157,6 +157,8 @@ describe("Технические сообщения: журнал со шкал�
 		});
 		// Делаем запись неактуальной: очистка истории её не тронет, а вид — свернёт.
 		act(() => { getMessages().forEach((m) => { (m as { active: boolean }).active = false; }); });
+		// Неактуальное видно только в «Истории»; в ней группа из одной истории — свёрнута.
+		localStorage.setItem("tech_messages_history", "1");
 
 		show();
 		expect(screen.queryByText("Прошлое")).toBeNull();
@@ -165,6 +167,7 @@ describe("Технические сообщения: журнал со шкал�
 	});
 
 	it("группировку переключают: по дате записи разных дней расходятся", () => {
+		localStorage.removeItem("tech_messages_history");
 		act(() => {
 			addMessage({ scope: "pane-1", type: "error", text: "Сегодняшнее", source: "Базы 1С" });
 			addMessage({ scope: "pane-1", type: "error", text: "Вчерашнее", source: "Базы 1С" });

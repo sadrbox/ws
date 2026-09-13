@@ -59,6 +59,19 @@ const TYPE_LABEL: Record<TechMessage["type"], string> = {
 /** Как разложен список — настройка рабочего места, переживает перезагрузку. */
 const MODE_KEY = "tech_messages_group";
 
+/**
+ * ПОЛНАЯ ИСТОРИЯ или только актуальное — тоже настройка рабочего места.
+ *
+ * По умолчанию — актуальное: сообщения открытых форм и события, которые ещё ждут человека.
+ * Неактуальное (закрытая форма, исправленная ошибка, прошедшее событие) раньше стояло в списке
+ * наравне с текущим: «Недостаточно остатка…» у реализации, закрытой час назад, читалось как
+ * проблема сейчас. История не удаляется — её показывает кнопка «История».
+ */
+const HISTORY_KEY = "tech_messages_history";
+const readHistory = (): boolean => {
+	try { return localStorage.getItem(HISTORY_KEY) === "1"; } catch { return false; }
+};
+
 const readMode = (): GroupMode => {
 	try {
 		const v = localStorage.getItem(MODE_KEY);
@@ -221,12 +234,20 @@ export const MessagesView: FC<{
 	 * не убираем: в формах, которые ошибку сами не выводят, это единственный её показ. Пока
 	 * форма той же вкладки сообщает дословно то же — событие скрыто; форму закрыли — оно история.
 	 */
-	const visible = useMemo(() => {
+	const [history, setHistory] = useState(readHistory);
+	const toggleHistory = useCallback(() => setHistory((v) => {
+		try { localStorage.setItem(HISTORY_KEY, v ? "0" : "1"); } catch { /* не беда */ }
+		return !v;
+	}), []);
+	const deduped = useMemo(() => {
 		const alive = new Set(ops.map((o) => o.id));
 		const live = new Set(messages.filter((m) => m.fromSource && m.active).map((m) => `${m.scope}\u0000${m.text}`));
 		return messages.filter((m) => !(m.opId && alive.has(m.opId))
 			&& !(!m.fromSource && live.has(`${m.scope}\u0000${m.text}`)));
 	}, [messages, ops]);
+	// Неактуальное — только в истории; сколько его, сказано счётчиком, чтобы не гадать, куда делось.
+	const visible = useMemo(() => (history ? deduped : deduped.filter((m) => m.active)), [deduped, history]);
+	const inHistory = deduped.length - deduped.filter((m) => m.active).length;
 	const [needle, setNeedle] = useState("");
 	const [errorsOnly, setErrorsOnly] = useState(false);
 	const shown = useMemo(() => {
@@ -272,10 +293,10 @@ export const MessagesView: FC<{
 			  * зависят от этих чисел именно кнопки («Очистить историю» гаснет, когда чистить
 			  * нечего), и стоять им лучше рядом.
 			  */}
-			{(toolbar || !!visible.length || !!ops.length) && (
+			{(toolbar || !!deduped.length || !!ops.length) && (
 				<div className={styles.ViewTools}>
 					{toolbar}
-					{(!!visible.length || !!ops.length) && (
+					{(!!deduped.length || !!ops.length) && (
 						<>
 							<input
 								className={styles.Search}
@@ -290,6 +311,11 @@ export const MessagesView: FC<{
 								onClick={() => setErrorsOnly((v) => !v)}>
 								{translate("techMsgErrorsOnly")}
 							</Button>
+							<Button size="sm" variant="secondary" active={history}
+								title={translate("techMsgHistoryHint")}
+								onClick={toggleHistory}>
+								{translate("techMsgHistory")}
+							</Button>
 							{/* Когда отбор что-то отсёк, счётчик говорит об этом: «12 из 200».
 							    Иначе человек считает, что видит всё. */}
 							<span className={styles.ViewCount}>
@@ -298,6 +324,7 @@ export const MessagesView: FC<{
 										? visible.length
 										: `${shown.length} / ${visible.length}`
 								}
+								{!history && inHistory > 0 && ` · ${translate("techMsgInHistory")}: ${inHistory}`}
 							</span>
 						</>
 					)}
@@ -346,7 +373,9 @@ export const MessagesView: FC<{
 						<span className={styles.Empty}>
 							{/* «Ничего не нашлось» и «сообщений нет» — разные ответы: первый
 							    значит, что отбор можно снять, второй — что всё в порядке. */}
-							{visible.length ? translate("techMsgNothingFound") : translate("techMessagesNone")}
+							{visible.length
+								? translate("techMsgNothingFound")
+								: !history && inHistory > 0 ? translate("techMsgNoActual") : translate("techMessagesNone")}
 						</span>
 					)}
 

@@ -29,6 +29,8 @@ describe("ссылка на объект сообщения", () => {
 			getMessages().length = 0;
 		});
 		localStorage.setItem("tech_messages_group", "none");
+		// Тесты вида строки: показываем и историю, чтобы запись без ожидания была в списке.
+		localStorage.setItem("tech_messages_history", "1");
 	});
 
 	it("событие формы получает объект её области", () => {
@@ -97,9 +99,10 @@ describe("ссылка на объект сообщения", () => {
 		});
 		render(<TestWrapper><Live /></TestWrapper>);
 		expect(screen.getAllByText(text)).toHaveLength(1);
-		// Форма замолчала (закрыли, исправили) — уведомление видно как история.
+		// Форма замолчала (закрыли, исправили) — уведомление уходит в историю: одна запись, неактуальная.
 		act(() => { reportNotices("pane-1", "k", "Реализация № 3", []); });
 		expect(screen.getAllByText(text)).toHaveLength(1);
 		expect(getMessages().filter((m) => m.text === text)).toHaveLength(1);
+		expect(getMessages().find((m) => m.text === text)?.active).toBe(false);
 	});
 });

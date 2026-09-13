@@ -99,6 +99,8 @@ describe("Технические сообщения: прогресс запро
 
 	it("итог не дублирует строку операции, пока она видна", () => {
 		localStorage.setItem("tech_messages_group", "none");
+		// Итог — история: без включённой «Истории» его не было бы видно и после снятия операции.
+		localStorage.setItem("tech_messages_history", "1");
 		let id = "";
 		act(() => { id = startOp({ kind: "update", title: "Изменить пользователя", target: "Оператор — _transition", total: 1 }); finishOp(id); });
 		show();

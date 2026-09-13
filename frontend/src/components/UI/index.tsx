@@ -12,7 +12,7 @@ import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import TechMessages from 'src/components/TechMessages/TechMessages';
-import { NoticeScope, setScopeObject, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
+import { NoticeScope, retireScope, setScopeObject, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
 import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
@@ -293,6 +293,10 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
    * (endpoint + uuid): любое сообщение, случившееся в ней, открывает эту запись и тогда, когда
    * пейн уже закрыт. Новая, ещё не записанная форма объекта не имеет — ссылки нет.
    */
+  // Пейн закрыт (все пейны смонтированы разом, размонтирование = закрытие): события его
+  // области больше ни о чём не просят и уходят в историю технических сообщений.
+  useEffect(() => () => retireScope(p.uniqId), [p.uniqId]);
+
   const formEndpoint = p.restore?.kind === "form" && p.restore.uuid ? p.restore.endpoint : "";
   const formUuid = p.restore?.kind === "form" ? p.restore.uuid ?? "" : "";
   useEffect(() => {
