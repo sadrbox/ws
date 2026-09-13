@@ -40,6 +40,8 @@ interface Params {
 	hideToolbar?: boolean;
 	/** Отметки строк (групповые операции над выбранным). По умолчанию выключены. */
 	selectable?: boolean;
+	/** Отметки видны, но недоступны — на время операции над этими данными. */
+	selectionLocked?: boolean;
 	onSelectionChange?: (selected: Set<number>, rows: TDataItem[]) => void;
 	/** Начальные отметки: галочка как СОСТОЯНИЕ данных, а не выбор пользователя. */
 	presetSelectedRows?: Set<number>;
@@ -101,6 +103,7 @@ export function buildStaticTableProps(p: Params) {
 		// read-only списки без массового выбора → без колонки-чекбокса; включается там,
 		// где над выбранными строками выполняются групповые операции.
 		selectable: !!p.selectable,
+		...(p.selectionLocked ? { selectionLocked: true } : {}),
 		...(p.onSelectionChange ? { onSelectionChange: p.onSelectionChange } : {}),
 		...(p.onActiveRowChange ? { onActiveRowChange: p.onActiveRowChange } : {}),
 		...(p.presetSelectedRows ? { presetSelectedRows: p.presetSelectedRows } : {}),

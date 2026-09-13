@@ -353,7 +353,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     childRows,
     onChildToggle,
     onToggleExpand,
-    canSelect,
+    canSelect, selectionLocked,
     // Только сеттеры — значения выделения/навигации приходят пропсами.
     states: {
       setActiveRow,
@@ -675,14 +675,15 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
                 // атрибута indeterminate, есть лишь свойство.
                 ref={(el) => { if (el) el.indeterminate = groupSome; }}
                 checked={isGroup ? groupAll : isSelected}
-                onChange={
-                  onToggleSelect
-                    ? (e) => { e.stopPropagation(); onToggleSelect(e.target.checked); }
-                    : isGroup
-                      ? (e) => { e.stopPropagation(); toggleGroup(e.target.checked); }
-                      : toggleSelect
-                }
-                disabled={isLoading || (!canSelect && !onToggleSelect && !isGroup)}
+                onChange={(e) => {
+                  // Недоступный чекбокс браузер не переключает, но отметку может прислать и
+                  // не щелчок (программное событие): на время операции её не принимаем вовсе.
+                  if (selectionLocked) { e.stopPropagation(); return; }
+                  if (onToggleSelect) { e.stopPropagation(); onToggleSelect(e.target.checked); }
+                  else if (isGroup) { e.stopPropagation(); toggleGroup(e.target.checked); }
+                  else toggleSelect(e);
+                }}
+                disabled={isLoading || !!selectionLocked || (!canSelect && !onToggleSelect && !isGroup)}
               />}
             </div>
           </td>

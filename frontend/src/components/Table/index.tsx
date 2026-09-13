@@ -62,6 +62,8 @@ export interface TableProps {
   variant?: TTableVariant;
   /** false — скрыть колонку чекбоксов выбора строк. По умолчанию true. */
   selectable?: boolean;
+  /** Отметки видны, но недоступны (см. context.selectionLocked). */
+  selectionLocked?: boolean;
   onSelectItem?: (item: TDataItem) => void;
   enableDateRange?: boolean;
   componentName: string;
@@ -337,6 +339,7 @@ const Table: FC<TableProps> = memo((props) => {
   const {
     variant = 'default',
     selectable = true,
+    selectionLocked = false,
     onSelectItem,
     onSelectionChange,
     presetSelectedRows,
@@ -647,7 +650,7 @@ const Table: FC<TableProps> = memo((props) => {
 
   const contextValue = useMemo<TableContextProps>(
     () => ({
-      variant, selectable, onSelectItem,
+      variant, selectable, selectionLocked, onSelectItem,
       componentName, rows, deferredRowsForRender: rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search,
@@ -678,7 +681,7 @@ const Table: FC<TableProps> = memo((props) => {
       },
     }),
     [
-      variant, selectable, onSelectItem,
+      variant, selectable, selectionLocked, onSelectItem,
       componentName, rows, columns, total, totalPages,
       isLoading, error,
       pagination, sorting, filtering, search, extendedActions,
@@ -805,7 +808,7 @@ const Table: FC<TableProps> = memo((props) => {
       return;
     }
     // ── Пробел: переключить выделение активной строки ───────────────────────
-    if (e.key === ' ' && variant !== 'select' && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
+    if (e.key === ' ' && variant !== 'select' && !selectionLocked && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
       e.preventDefault();
       e.stopPropagation();
       const id = activeRow;

@@ -18,7 +18,7 @@ export const TableHeader = memo(() => {
     columns, rows, componentName,
     sorting: { sort, onSortChange },
     states: { setSelectedRows, setIsAllSelectedMode, setExcludedRows },
-    isLoading, canSelect, groupSelection,
+    isLoading, canSelect, groupSelection, selectionLocked,
   } = useTableContext();
   // Значения выделения — из волатильного контекста (чекбокс «выбрать все»).
   const { selectedRows, isAllSelectedMode, excludedRows } = useTableVolatile();
@@ -193,8 +193,9 @@ export const TableHeader = memo(() => {
                 ref={checkboxRef}
                 type="checkbox"
                 checked={groupSelection ? groupSelection.all : isAllSelected}
-                onChange={groupSelection ? groupToggleAll : toggleAll}
-                disabled={isLoading || rows.length === 0 || !canSelect}
+                onChange={selectionLocked ? undefined : groupSelection ? groupToggleAll : toggleAll}
+                readOnly={!!selectionLocked}
+                disabled={isLoading || rows.length === 0 || !canSelect || !!selectionLocked}
               />
             </div>
           </th>
