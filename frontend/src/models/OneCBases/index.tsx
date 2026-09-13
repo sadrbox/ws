@@ -47,6 +47,7 @@ import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
 import { useScopeObject } from "src/components/TechMessages/store";
+import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
 import BaseMaintenance from "./BaseMaintenance";
 import columnsJson from "./columns.json";
 
@@ -319,6 +320,10 @@ const baseToRow = (b: OnecBase): TDataItem => ({
 	ibUnreachableAt: b.ibUnreachableAt, ibUnreachableReason: b.ibUnreachableReason,
 	disabled: b.disabled,
 	lastSeenAt: b.lastSeenAt, infobaseId: b.infobaseId,
+	sessionsDenied: b.sessionsDenied ?? null, sessionsDeniedMessage: b.sessionsDeniedMessage ?? null,
+	sessionsDeniedFrom: b.sessionsDeniedFrom ?? null, sessionsDeniedTo: b.sessionsDeniedTo ?? null,
+	sessionsDeniedSource: b.sessionsDeniedSource ?? null,
+	configName: b.configName ?? null, configVersion: b.configVersion ?? null,
 } as unknown as TDataItem);
 
 /**
@@ -428,6 +433,13 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 													? translate("onecExtNotChecked")
 													: `${translate("extensionsCount")}: ${asText(row.extensionsCount)}`}
 											</StateChip>
+											{/* Вход в базу: закрыт ли он сейчас — видно без перехода на «Сеансы». */}
+											{(() => {
+												const lock = sessionsLockView(row as never);
+												return lock.known
+													? <StateChip tone={lock.tone} title={lock.details || undefined}>{lock.label}</StateChip>
+													: null;
+											})()}
 										</StateChips>
 									</FormArea>
 
@@ -453,6 +465,12 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 													: statusLabel(asText(row.status))} />
 											<ValueRow label={translate("lastSeenAt")}
 												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
+											{/* Конфигурация — после загрузки из выгрузки и обновления (S3); платформа — строкой выше. */}
+											<ValueRow label={translate("onecConfiguration")}
+												value={[asText(row.configName), asText(row.configVersion)].filter(Boolean).join(" ") || "—"} />
+											<ValueRow label={translate("onecSessionsLockState")}
+												title={sessionsLockView(row as never).details || undefined}
+												value={sessionsLockView(row as never).label} />
 										</ValueList>
 									</FormArea>
 

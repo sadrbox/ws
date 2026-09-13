@@ -76,9 +76,17 @@ export const ProcessesTab: FC = () => {
 	const kill = useMutation({
 		mutationFn: (p: { pid: number; force: boolean }) => killAgentProcess(p.pid, p.force),
 		onSuccess: (d) => {
-			showToast(d.note || translate("onecProcKilled"), "success");
+			/*
+			 * СПИСОК ПОСЛЕ СНЯТИЯ — НЕ СНИМОК ИЗ HEARTBEAT. Снимок отстаёт до следующего heartbeat,
+			 * и снятый процесс оставался в таблице. Агент с эхом (E5) приносит список сам — сервис
+			 * его уже сохранил; без эха читаем живым запросом (сервис сохраняет и его).
+			 */
+			const echo = d.state?.processes;
+			showToast(echo?.stillRunning ? translate("onecProcStillRunning") : d.note || translate("onecProcKilled"),
+				echo?.stillRunning ? "warning" : "success");
 			setConfirm(null);
-			void procs.refetch();
+			if (echo) void procs.refetch();
+			else live.mutate();
 		},
 		onError: (e, vars) => {
 			const text = e instanceof Error ? e.message : String(e);

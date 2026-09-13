@@ -23,6 +23,7 @@ import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, parseEcho, roleVerdictMessage } from "../onec/echo.ts";
 import { listItems } from "../onec/listShape.ts";
 import { writeBackOf } from "../onec/writeBack.ts";
+import { planWriteState, readsAfter } from "../onec/writeState.ts";
 
 /** Объект, а не массив и не скаляр: только у такого результата есть поле items. */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -51,6 +52,8 @@ const baseStateSchema = z.object({
 	// Есть ли у базы её данные в СУБД: ответ агента БЕЗ входа в базу (сборка 2026-09-12).
 	// Трёхзначно, как и публикация: отсутствие поля — «не проверял», а не «всё хорошо».
 	dbMissing: z.boolean().nullable().optional(),
+	/** Блокировка сеансов в строке среза (E1); разбирает onec/writeState.parseLock. */
+	lock: z.unknown().optional(),
 });
 
 const registerSchema = z.object({
@@ -514,10 +517,40 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// заводил ВТОРУЮ запись для того же процесса — и список экземпляров показывал
 		// один процесс дважды, под разными именами. Машина и процесс из details
 		// по-прежнему видны в тексте ошибки (describeResponder).
+		/*
+		 * СОСТОЯНИЕ ПОСЛЕ ИЗМЕНЕНИЯ (TASK_SERVICE_ECHO_WRITE_COMMANDS.md, S1–S5): блокировка,
+		 * удалённая регистрация, конфигурация, процессы, публикация. Что записать — решает
+		 * onec/writeState.planWriteState: эхо агента, а без него — известное по факту команды.
+		 */
+		const writeState = p.data.status === "SUCCESS"
+			? planWriteState(row.type, (row.payload ?? {}) as Record<string, unknown>, p.data.result)
+			: [];
+		if (writeState.length) {
+			const me = await agents.findById(req.agent!.agentId);
+			for (const a of writeState) {
+				if (a.kind === "processes") { await agents.setProcesses(row.agent_id, a.items); continue; }
+				if (!me?.serverId) continue;
+				if (a.kind === "infobases") {
+					await bases.sync(me.serverId, a.items as unknown as BaseState[], { complete: true, authoritative: me.role === "admin" });
+					continue;
+				}
+				if (!row.base_key) continue;
+				if (a.kind === "lock") await bases.setSessionsLock(me.serverId, row.base_key, a.lock, a.source);
+				else if (a.kind === "missing") await bases.markMissing(me.serverId, row.base_key);
+				else if (a.kind === "config") await bases.setConfig(me.serverId, row.base_key, a.config);
+				else if (a.kind === "publication") {
+					await bases.setPublication(me.serverId, row.base_key, a.published, a.url, a.seenAt);
+				}
+			}
+			log.info({ commandId: row.id, type: row.type, baseKey: row.base_key, applied: writeState.map((a) => a.kind) },
+				"состояние после изменения применено к реестру");
+		}
 		// Публикация и её снятие — сразу в реестр: иначе состояние обновилось бы только
 		// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
 		if (p.data.status === "SUCCESS" && row.base_key
-			&& (row.type === "IB_PUBLISH" || row.type === "IB_UNPUBLISH")) {
+			&& (row.type === "IB_PUBLISH" || row.type === "IB_UNPUBLISH")
+			// Эхо публикации (E6) уже записано выше — по факту команды записываем только без него.
+			&& !writeState.some((a) => a.kind === "publication")) {
 			const published = row.type === "IB_PUBLISH";
 			const url = published ? (p.data.result as { url?: string } | null)?.url ?? null : null;
 			const me = await agents.findById(req.agent!.agentId);
@@ -559,13 +592,6 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 * `requestId` делает это идемпотентным: если чтение по этой базе уже стоит в
 		 * очереди, второе не создаётся (частичный уникальный индекс среди незавершённых).
 		 */
-		const REFRESH_AFTER: Record<string, "IB_LIST_USERS" | "IB_LIST_EXTENSIONS"> = {
-			IB_CREATE_USER: "IB_LIST_USERS",
-			IB_UPDATE_USER: "IB_LIST_USERS",
-			IB_DELETE_USER: "IB_LIST_USERS",
-			IB_INSTALL_EXTENSION: "IB_LIST_EXTENSIONS",
-			IB_DELETE_EXTENSION: "IB_LIST_EXTENSIONS",
-		};
 		/**
 		 * Состояние из ответа кладём в реестр СРАЗУ: он становится актуальным в тот же миг,
 		 * когда команда стала `done`. Панель читает содержимое базы из реестра
@@ -587,16 +613,16 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				}, "состояние базы применено из ответа команды — читающая команда не нужна");
 			}
 		}
-		const refreshType = REFRESH_AFTER[row.type];
-		// Эхо уже принесло ровно то, что прочитала бы эта команда, — второй вход в базу не нужен.
-		const alreadyFresh = refreshType === "IB_LIST_USERS" ? applied.users
-			: refreshType === "IB_LIST_EXTENSIONS" ? applied.extensions
-				: false;
-		if (p.data.status === "SUCCESS" && refreshType && row.base_key && !alreadyFresh) {
+		// Что эхо не принесло — читаем (onec/writeState.readsAfter): загрузка из выгрузки меняет и
+		// пользователей, и расширения; второй вход в базу за тем, что уже пришло, не нужен.
+		const reads = p.data.status === "SUCCESS" && row.base_key
+			? readsAfter(row.type, (row.payload ?? {}) as Record<string, unknown>, applied)
+			: [];
+		for (const refreshType of reads) {
 			await queue.enqueue({
 				agentId: req.agent!.agentId,
 				organizationUuid: row.organization_uuid,
-				baseKey: row.base_key,
+				baseKey: row.base_key!,
 				type: refreshType,
 				payload: { baseKey: row.base_key },
 				requestId: `refresh:${refreshType}:${row.base_key}`,

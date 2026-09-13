@@ -11,6 +11,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
+import { parseLock, type ConfigState, type LockState } from "../onec/writeState.ts";
 
 /** Псевдо-база агента старого протокола (v1): у него база одна и она не названа. */
 export const DEFAULT_BASE_KEY = "default";
@@ -41,6 +42,8 @@ export type BaseState = {
 	 * «Обновить» показывает фантомы сама, не потратив ни одной команды внутрь базы.
 	 */
 	dbMissing?: boolean | null;
+	/** Блокировка начала сеансов, если кластер отдаёт её без входа в базу (E1). Нет — не знаем. */
+	lock?: unknown;
 };
 
 export type BaseRow = {
@@ -50,6 +53,15 @@ export type BaseRow = {
 	publish_seen_at: Date | null;
 	ib_unreachable_at: Date | null;
 	ib_unreachable_reason: string | null;
+	sessions_denied?: boolean | null;
+	sessions_denied_message?: string | null;
+	sessions_denied_from?: string | null;
+	sessions_denied_to?: string | null;
+	sessions_denied_seen_at?: Date | null;
+	sessions_denied_source?: string | null;
+	config_name?: string | null;
+	config_version?: string | null;
+	config_seen_at?: Date | null;
 	public_host?: string | null;
 	extensions_count: number | null;
 	extensions_seen_at: Date | null;
@@ -68,6 +80,17 @@ export type BaseRow = {
 };
 
 export type BaseView = {
+	/** Блокировка начала сеансов (S1): null — не знаем; источник — кластер или команда панели. */
+	sessionsDenied: boolean | null;
+	sessionsDeniedMessage: string | null;
+	sessionsDeniedFrom: string | null;
+	sessionsDeniedTo: string | null;
+	sessionsDeniedSeenAt: string | null;
+	sessionsDeniedSource: "cluster" | "command" | null;
+	/** Конфигурация базы (S3); onecVersion — версия платформы, это другое. */
+	configName: string | null;
+	configVersion: string | null;
+	configSeenAt: string | null;
 	id: string;
 	serverId: string;
 	serverName: string;
@@ -287,6 +310,8 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	-- бизнес-агента, и то лишь про своё расширение bpapi.
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
 	b.ib_unreachable_reason,
+	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,
+	b.sessions_denied_seen_at, b.sessions_denied_source, b.config_name, b.config_version, b.config_seen_at,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -475,6 +500,11 @@ export class BaseService {
 			);
 			// Определённые ответы про базу данных в СУБД — общим путём с проверкой по кнопке (S3).
 			await this.applyDbPresence(serverId, rows);
+			// Блокировка сеансов из среза — только у тех строк, где кластер её сообщил (E1).
+			for (const s of rows) {
+				const lock = parseLock(s.lock);
+				if (lock) await this.setSessionsLock(serverId, s.key, lock, "cluster");
+			}
 		}
 
 		// Полный срез от того, кто владеет списком (админ-агент), закрывает пропавшие базы.
@@ -656,11 +686,48 @@ export class BaseService {
 	 * прислали» значит «не знаю». Здесь ровно наоборот — команда ЗНАЕТ результат, и снятие
 	 * публикации обязано СТЕРЕТЬ адрес, а не оставить ссылку на страницу, которой больше нет.
 	 */
-	async setPublication(serverId: string, key: string, published: boolean, url: string | null): Promise<void> {
+	async setPublication(serverId: string, key: string, published: boolean, url: string | null, seenAt: string | null = null): Promise<void> {
 		await this.db.query(
-			`UPDATE bases SET published = $3, publish_url = $4, publish_seen_at = now()
+			`UPDATE bases SET published = $3, publish_url = $4, publish_seen_at = COALESCE($5::timestamptz, now())
 			 WHERE server_id = $1 AND key = $2`,
-			[serverId, key, published, url],
+			[serverId, key, published, url, seenAt],
+		);
+	}
+
+	/**
+	 * Блокировка начала сеансов (S1). Прямой UPDATE, как у публикации: команда ЗНАЕТ результат,
+	 * и снятие обязано стереть сообщение и окно, а не оставить текст прежней блокировки.
+	 */
+	async setSessionsLock(serverId: string, key: string, lock: LockState, source: "cluster" | "command"): Promise<void> {
+		await this.db.query(
+			`UPDATE bases SET sessions_denied = $3, sessions_denied_message = $4, sessions_denied_from = $5,
+			        sessions_denied_to = $6, sessions_denied_seen_at = COALESCE($7::timestamptz, now()),
+			        sessions_denied_source = $8
+			  WHERE server_id = $1 AND key = $2`,
+			[serverId, key, lock.enabled, lock.enabled ? lock.message : null,
+				lock.enabled ? lock.from : null, lock.enabled ? lock.to : null, lock.seenAt, source],
+		);
+	}
+
+	/**
+	 * Регистрацию базы удалили (S2): агент делает это, только убедившись, что базы данных нет, —
+	 * значит, в кластере её больше нет. Тот же статус, что ставит полный срез без базы.
+	 */
+	async markMissing(serverId: string, key: string): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE bases SET status = 'MISSING' WHERE server_id = $1 AND key = $2 AND status <> 'MISSING'`,
+			[serverId, key],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/** Конфигурация базы после загрузки или обновления (S3). Имя без эха не затираем. */
+	async setConfig(serverId: string, key: string, config: ConfigState): Promise<void> {
+		await this.db.query(
+			`UPDATE bases SET config_name = COALESCE($3, config_name), config_version = COALESCE($4, config_version),
+			        config_seen_at = COALESCE($5::timestamptz, now())
+			  WHERE server_id = $1 AND key = $2`,
+			[serverId, key, config.name, config.version, config.seenAt],
 		);
 	}
 
@@ -802,6 +869,15 @@ export class BaseService {
 			sessionsCount: r.sessions_count,
 			lastSeenAt: r.last_seen_at?.toISOString() ?? null,
 			disabled: !!r.disabled_at,
+			sessionsDenied: r.sessions_denied ?? null,
+			sessionsDeniedMessage: r.sessions_denied_message ?? null,
+			sessionsDeniedFrom: r.sessions_denied_from ?? null,
+			sessionsDeniedTo: r.sessions_denied_to ?? null,
+			sessionsDeniedSeenAt: r.sessions_denied_seen_at?.toISOString() ?? null,
+			sessionsDeniedSource: (r.sessions_denied_source as "cluster" | "command" | null | undefined) ?? null,
+			configName: r.config_name ?? null,
+			configVersion: r.config_version ?? null,
+			configSeenAt: r.config_seen_at?.toISOString() ?? null,
 		};
 	}
 }

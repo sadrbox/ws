@@ -113,3 +113,19 @@
 3. Загрузка `_transition` из выгрузки → «Пользователи» показывают пользователей выгрузки без «Проверить».
 4. Обновление конфигурации копии → версия в карточке новая.
 5. Снятие процесса → строки нет сразу.
+
+---
+
+## Сделано — 14.09 (сервис и панель)
+
+| № | Что | Где |
+|---|---|---|
+| S1 + P1 | миграция `024_base_state_echo.sql` (`sessions_denied*`, источник `cluster`/`command`); `bases.setSessionsLock`; блокировка из эха (E1) и из строки среза (`lock`), без эха — по payload команды; API `sessionsDenied*`. «Сеансы»: метка «Вход закрыт/открыт/не проверялся», кнопка одна по известному состоянию; эхо «не изменилось» — предупреждение. Карточка базы: метка и строка «Блокировка сеансов» | `onec/writeState.ts`, `bases/service.ts`, `agentRouter.ts`, `models/OneCAdmin/sessionsLock.ts`, `SessionsTab.tsx`, `OneCBases/index.tsx` |
+| S2 + P2 | полный срез из эха (E2) → `bases.sync`; без него → `bases.markMissing` (статус «Нет в кластере») | `writeState.ts`, `bases/service.ts` |
+| S3 + P3 | `config_name`/`config_version`/`config_seen_at`; эхо `state.config` (E3/E4) → `bases.setConfig`; обновление без эха — `versionTo`; чтения после — `readsAfter` вместо `REFRESH_AFTER` (загрузка: пользователи и расширения, обновление: расширения — только то, чего эхо не принесло; `dryRun` — ничего). Карточка базы: строка «Конфигурация» | `writeState.ts`, `agentRouter.ts`, `OneCBases/index.tsx` |
+| S4 + P4 | `state.processes` (E5) → `agents.setProcesses`; живое чтение `AGENT_LIST_PROCESSES` тоже сохраняется снимком. «Процессы»: с эхом — перечитать снимок, без эха — живое чтение; `stillRunning` — предупреждение | `writeState.ts`, `agentRouter.ts`, `ProcessesTab.tsx` |
+| S5 | `state.publication` (E6) → `setPublication` с `readAt`; без эха — по факту команды, как было | `writeState.ts`, `agentRouter.ts` |
+
+Тесты: `ai/tests/write_state.test.ts` (8), `frontend/src/__tests__/onecSessionsLock.test.ts` (3).
+Развернуть: `pm2 restart all` — миграция 024 применится при старте сервиса.
+Не покрыто тестом: SQL новых методов реестра (проверяется живым сценарием «Как проверить»).

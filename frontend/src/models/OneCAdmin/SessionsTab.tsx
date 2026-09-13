@@ -33,6 +33,8 @@ import {
 } from "src/services/onec/api";
 import { errorNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { finishOp, startOp } from "./progress";
+import { sessionsLockView } from "./sessionsLock";
+import { StateChip } from "src/components/StateChip";
 import { echoList } from "./clusterEcho";
 import { useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
@@ -171,8 +173,13 @@ export const SessionsTab: FC = () => {
 				.then((r) => { finishOp(op); return r; })
 				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e }); throw e; });
 		},
-		onSuccess: (_d, p) => {
-			showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");
+		onSuccess: (r, p) => {
+			// Кластер прочитал состояние после команды (агент E1) и оно не то, что просили, —
+			// говорим это, а не «вход закрыт»: иначе человек уйдёт с открытой базой.
+			const echo = r?.state?.lock;
+			if (echo && echo.enabled !== p.enabled) showToast(translate("onecLockNotApplied"), "warning");
+			else showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");
+			// Реестр сервис уже обновил — перечитываем, и метка покажет новое состояние.
 			void bases.refetch();
 		},
 		onError: failed,
@@ -281,13 +288,26 @@ export const SessionsTab: FC = () => {
 								// держит одну высоту элементов.
 								style={{ width: "200px" }}
 							/>
-							{canWrite && selectedBase && (
+							{/*
+							  * СОСТОЯНИЕ ВХОДА — МЕТКОЙ, И КНОПКА ОДНА ПО СОСТОЯНИЮ. Раньше стояли обе
+							  * всегда, а включена ли блокировка, не было видно нигде. Состояние
+							  * неизвестно (кластер его не сообщал) — обе кнопки, как прежде.
+							  */}
+							{selectedBase && (() => {
+								const lockView = sessionsLockView(selectedBase);
+								return (
+									<StateChip tone={lockView.tone} title={lockView.details || undefined}>
+										{lockView.label}
+									</StateChip>
+								);
+							})()}
+							{canWrite && selectedBase && !(sessionsLockView(selectedBase).known && sessionsLockView(selectedBase).enabled) && (
 								<Button variant="secondary"
 									onClick={() => { setLockMessage(""); setConfirm({ kind: "lock", base: selectedBase, enabled: true }); }}>
 									{translate("onecLockSessions")}
 								</Button>
 							)}
-							{canWrite && selectedBase && (
+							{canWrite && selectedBase && !(sessionsLockView(selectedBase).known && !sessionsLockView(selectedBase).enabled) && (
 								<Button variant="secondary"
 									onClick={() => setConfirm({ kind: "lock", base: selectedBase, enabled: false })}>
 									{translate("onecUnlockSessions")}

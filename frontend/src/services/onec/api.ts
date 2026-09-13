@@ -42,6 +42,20 @@ export type OnecBase = {
 	/** Когда состояние публикации проверяли; null — не проверяли никогда. */
 	publishSeenAt: string | null;
 	/**
+	 * Блокировка начала сеансов: null — не знаем. Источник `cluster` — прочитано у кластера,
+	 * `command` — записано по последней команде панели, когда кластер состояние не сообщил.
+	 */
+	sessionsDenied?: boolean | null;
+	sessionsDeniedMessage?: string | null;
+	sessionsDeniedFrom?: string | null;
+	sessionsDeniedTo?: string | null;
+	sessionsDeniedSeenAt?: string | null;
+	sessionsDeniedSource?: "cluster" | "command" | null;
+	/** Конфигурация базы (имя и версия); onecVersion — версия платформы. */
+	configName?: string | null;
+	configVersion?: string | null;
+	configSeenAt?: string | null;
+	/**
 	 * База ЧИСЛИТСЯ в кластере, но войти в неё нельзя: последняя команда внутрь ответила
 	 * «база не найдена». Отдельно от `status`: тот отвечает на вопрос «зарегистрирована ли
 	 * она», а это — «можно ли с ней работать», и знают их разные источники.
@@ -153,11 +167,14 @@ export type TerminateResult = { ok: boolean; state?: { sessions?: ClusterListEch
 export type DisconnectResult = { ok: boolean; state?: { connections?: ClusterListEcho } };
 
 /** Блокировка начала сеансов: пользователи не смогут войти в базу, уже вошедшие продолжат работу. */
+/** Ответ на блокировку: `state.lock` — состояние, прочитанное у кластера после команды (агент E1). */
+export type SessionsLockResult = { ok: boolean; state?: { lock?: { enabled: boolean; message?: string | null } } };
+
 export const setSessionsLock = (baseKey: string, enabled: boolean, message?: string) =>
-	aiFetch<{ ok: boolean } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/lock`, {
+	aiFetch<SessionsLockResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/lock`, {
 		method: "POST",
 		body: JSON.stringify({ enabled, ...(message ? { message } : {}) }),
-	}).then((d) => awaitCommand<{ ok: boolean }>(d));
+	}).then((d) => awaitCommand<SessionsLockResult>(d));
 
 // ── Содержимое базы: пользователи ИБ и расширения (E15/A3-P1) ───────────────
 // Списки спрашиваются у 1С вживую (это команда агенту), сводки — из кэша сервиса.
@@ -483,10 +500,16 @@ export const fetchAgentProcesses = (live?: boolean) =>
 		.then((d) => awaitCommand<{ items: AgentProcess[] }>(d));
 
 /** Снять процесс. `force` — согласие снять конфигуратор: он этого не переживёт безболезненно. */
+/** Ответ на снятие: `state.processes` — список после снятия (агент E5), сервис его уже сохранил. */
+export type KillProcessResult = {
+	ok: boolean; note?: string;
+	state?: { processes?: { items: AgentProcess[]; stillRunning?: boolean } };
+};
+
 export const killAgentProcess = (pid: number, force?: boolean) =>
-	aiFetch<{ ok: boolean; note?: string } | Pending>(`/v1/onec/agent-processes/${pid}/kill`, {
+	aiFetch<KillProcessResult | Pending>(`/v1/onec/agent-processes/${pid}/kill`, {
 		method: "POST", body: JSON.stringify({ force: !!force }),
-	}).then((d) => awaitCommand<{ ok: boolean; note?: string }>(d));
+	}).then((d) => awaitCommand<KillProcessResult>(d));
 
 // ── Агенты, которых видит панель ────────────────────────────────────────────
 // Способности решают, что вообще возможно: без `ib.admin` операции ВНУТРИ баз
