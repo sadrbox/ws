@@ -58,6 +58,12 @@ export type AdminCommandSpec = {
 	schema: z.ZodType<Record<string, unknown>>;
 	/** Короткое описание для карточки подтверждения и аудита. */
 	title: string;
+	/**
+	 * Ключ склейки ЧТЕНИЙ, когда адресат — не одна база. По умолчанию одинаковые чтения
+	 * склеиваются по `baseKey`; у команды без базы это «-» на всех, и проверка одной базы
+	 * отдала бы ответ проверке всех. Такая команда называет свой ключ сама.
+	 */
+	readKey?: (payload: Record<string, unknown>) => string;
 };
 
 const baseKey = z.string().min(1).max(200);
@@ -77,6 +83,24 @@ const ibName = z.string().min(1).max(200);
  * штатной работы: две тысячи ролей — это больше, чем есть в любой известной конфигурации.
  */
 const roleList = z.array(z.string().max(200)).max(2000);
+
+/**
+ * Короткий отпечаток строки — для ключа склейки. Список из тысячи баз целиком в `request_id`
+ * не кладём: колонка стоит под уникальным индексом, а у строки btree-индекса есть предел.
+ * Криптостойкость не нужна — нужна устойчивость: один и тот же набор даёт один и тот же ключ.
+ */
+const fingerprint = (s: string): string => {
+	let h1 = 0xdeadbeef;
+	let h2 = 0x41c6ce57;
+	for (let i = 0; i < s.length; i++) {
+		const c = s.charCodeAt(i);
+		h1 = Math.imul(h1 ^ c, 2654435761);
+		h2 = Math.imul(h2 ^ c, 1597334677);
+	}
+	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+};
 
 export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 	{
@@ -484,6 +508,28 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			baseKey,
 			confirm: z.literal(true),
 		}).strict(),
+	},
+	{
+		type: "CLUSTER_CHECK_BASES",
+		title: "Проверить наличие баз данных",
+		operation: "READ",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: false,
+		/*
+		 * ПАРА К УДАЛЕНИЮ РЕГИСТРАЦИИ (S3). Фоновая проверка агента узнаёт о базе без базы
+		 * данных за сутки; эта — за минуту на сотне баз, одним запросом к СУБД. Пустой список
+		 * — все базы кластера. Ответ `{ items: [{ key, dbMissing? }], checked, skipped, note }`:
+		 * поля `dbMissing` нет — проверить не удалось, и прежнее знание не трогаем. Применяется
+		 * при приёме результата (agentRouter), а не в HTTP-обработчике: проверка всех баз
+		 * дольше ONEC_COMMAND_TIMEOUT_SECS, и панель получает 202 раньше, чем придёт ответ.
+		 */
+		schema: z.object({ baseKeys: z.array(baseKey).max(1000).optional() }).strict(),
+		// Проверка одной базы и проверка всех — разные вопросы, склеивать их нельзя.
+		readKey: (p) => {
+			const keys = Array.isArray(p.baseKeys) ? [...new Set(p.baseKeys as string[])].sort() : [];
+			return keys.length ? `keys:${keys.length}:${fingerprint(keys.join("\n"))}` : "all";
+		},
 	},
 	{
 		type: "CLUSTER_SET_SESSIONS_LOCK",

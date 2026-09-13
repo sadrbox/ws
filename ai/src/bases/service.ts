@@ -473,28 +473,8 @@ export class BaseService {
 					rows.map((s) => s.dbMissing ?? null),
 				],
 			);
-			// Снятие отметки «нет в СУБД» — отдельным запросом: в UPSERT его не выразить,
-			// не запутав ветку «поля нет вовсе». Задевает только те базы, что помечены NO_DB,
-			// и только те, про которые агент сказал `false`.
-			const alive = rows.filter((s) => s.dbMissing === false).map((s) => s.key);
-			if (alive.length) {
-				await this.db.query(
-					`UPDATE bases SET ib_unreachable_at = NULL, ib_unreachable_reason = NULL
-					  WHERE server_id = $1 AND key = ANY($2::text[]) AND ib_unreachable_reason = 'NO_DB'`,
-					[serverId, alive],
-				);
-			}
-			// Положительный ответ ставит причину: в UPSERT она попадает только при вставке.
-			const dead = rows.filter((s) => s.dbMissing === true).map((s) => s.key);
-			if (dead.length) {
-				await this.db.query(
-					`UPDATE bases
-					    SET ib_unreachable_at = COALESCE(ib_unreachable_at, now()), ib_unreachable_reason = 'NO_DB'
-					  WHERE server_id = $1 AND key = ANY($2::text[])
-					    AND ib_unreachable_reason IS DISTINCT FROM 'NO_DB'`,
-					[serverId, dead],
-				);
-			}
+			// Определённые ответы про базу данных в СУБД — общим путём с проверкой по кнопке (S3).
+			await this.applyDbPresence(serverId, rows);
 		}
 
 		// Полный срез от того, кто владеет списком (админ-агент), закрывает пропавшие базы.
@@ -506,6 +486,56 @@ export class BaseService {
 				[serverId, keys],
 			);
 		}
+	}
+
+	/**
+	 * Отметки «нет базы данных в СУБД» по определённым ответам агента.
+	 *
+	 * Общий путь для среза баз (heartbeat, «Обновить из кластера») и для проверки по кнопке
+	 * (`CLUSTER_CHECK_BASES`, S3): правила одни, и расходиться им нельзя. Признак ТРЁХЗНАЧНЫЙ:
+	 * `true` ставит причину NO_DB, `false` снимает ТОЛЬКО её (агент отвечал про данные в СУБД,
+	 * а не про учётные записи), поля нет — база не трогается.
+	 */
+	async applyDbPresence(serverId: string, items: { key: string; dbMissing?: boolean | null }[]): Promise<void> {
+		// Снятие отметки «нет в СУБД» — отдельным запросом: в UPSERT его не выразить,
+		// не запутав ветку «поля нет вовсе». Задевает только те базы, что помечены NO_DB,
+		// и только те, про которые агент сказал `false`.
+		const alive = items.filter((s) => s.dbMissing === false).map((s) => s.key);
+		if (alive.length) {
+			await this.db.query(
+				`UPDATE bases SET ib_unreachable_at = NULL, ib_unreachable_reason = NULL
+				  WHERE server_id = $1 AND key = ANY($2::text[]) AND ib_unreachable_reason = 'NO_DB'`,
+				[serverId, alive],
+			);
+		}
+		// Положительный ответ ставит причину: в UPSERT она попадает только при вставке.
+		const dead = items.filter((s) => s.dbMissing === true).map((s) => s.key);
+		if (dead.length) {
+			await this.db.query(
+				`UPDATE bases
+				    SET ib_unreachable_at = COALESCE(ib_unreachable_at, now()), ib_unreachable_reason = 'NO_DB'
+				  WHERE server_id = $1 AND key = ANY($2::text[])
+				    AND ib_unreachable_reason IS DISTINCT FROM 'NO_DB'`,
+				[serverId, dead],
+			);
+		}
+	}
+
+	/**
+	 * Применить ответ `CLUSTER_CHECK_BASES` (S3). Не через `sync`: в строках только `key` и
+	 * `dbMissing`, а `sync` рассчитан на полный срез и затёр бы остальное знание о базах.
+	 * Строки без признака и с мусорным ключом отбрасываются — «проверить не удалось» не факт.
+	 */
+	async applyCheckResult(serverId: string, result: unknown): Promise<number> {
+		const raw = (result as { items?: unknown } | null)?.items;
+		if (!Array.isArray(raw)) return 0;
+		const answered = raw.flatMap((i) => {
+			const o = i as { key?: unknown; dbMissing?: unknown } | null;
+			const key = typeof o?.key === "string" ? o.key.trim() : "";
+			return key && typeof o?.dbMissing === "boolean" ? [{ key, dbMissing: o.dbMissing }] : [];
+		});
+		if (answered.length) await this.applyDbPresence(serverId, answered);
+		return answered.length;
 	}
 
 	async listByOrganization(organizationUuid: string): Promise<BaseView[]> {

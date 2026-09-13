@@ -217,7 +217,9 @@ export function onecRouter(deps: Deps) {
 			 * Только для READ: у изменяющих команд «повторить» — это законное намерение,
 			 * и склеивать их молча нельзя.
 			 */
-			...(spec.operation === "READ" ? { requestId: `${spec.type}:${built.baseKey ?? "-"}` } : {}),
+			...(spec.operation === "READ"
+				? { requestId: `${spec.type}:${spec.readKey ? spec.readKey(built.payload) : (built.baseKey ?? "-")}` }
+				: {}),
 		});
 		await audit.write({
 			event: "onec.admin",
@@ -351,6 +353,19 @@ export function onecRouter(deps: Deps) {
 		// ни сервера, ни счётчика расширений), и панель на сыром ответе рисовала пустые
 		// колонки. Если применить было нечего — вернём то, что знаем сейчас.
 		send(res, { status: 200, body: { success: true, data: { items: await bases.listAll() } } });
+	});
+
+	/**
+	 * «Проверить базы данных» (S3): есть ли у зарегистрированных баз их база данных в СУБД.
+	 *
+	 * Тело `{ baseKeys? }` — отмеченные базы; пусто — все базы кластера. Отметки в реестре
+	 * ставит приём результата (agentRouter), а не этот обработчик: на сотне баз ответ идёт
+	 * дольше ONEC_COMMAND_TIMEOUT_SECS, и панель получит 202 и дождётся команды сама.
+	 * Чтение: пути нет в списке разрушающих, и проверка доступна уровню `readonly`.
+	 */
+	r.post("/bases/check-db", async (req, res) => {
+		const raw = (req.body as { baseKeys?: unknown } | undefined)?.baseKeys;
+		send(res, await run(req, "CLUSTER_CHECK_BASES", Array.isArray(raw) && raw.length ? { baseKeys: raw } : {}));
 	});
 
 	r.get("/bases/:key/info", async (req, res) => {

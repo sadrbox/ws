@@ -479,6 +479,12 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
 			}
 		}
+		// Проверка наличия баз данных (S3) — здесь же и по той же причине: на сотне баз она
+		// дольше, чем панель ждёт ответа, и обработчик HTTP-запроса результата не увидит.
+		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_CHECK_BASES") {
+			const me = await agents.findById(req.agent!.agentId);
+			if (me?.serverId) await bases.applyCheckResult(me.serverId, p.data.result);
+		}
 		// Экземпляр из details ошибки БОЛЬШЕ НЕ ЗАВОДИМ. Это была замена ещё не
 		// реализованного X-Agent-Instance; теперь агент шлёт заголовок, а «host#pid»
 		// заводил ВТОРУЮ запись для того же процесса — и список экземпляров показывал
