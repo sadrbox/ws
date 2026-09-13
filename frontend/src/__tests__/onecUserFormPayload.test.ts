@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-	applyRoleChanges, buildSavePlan, buildUserUpdate, roleCatalog,
+	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog,
 } from "src/models/OneCAdmin/userUpdate";
 
 const current = { fullName: "Оператор бухгалтер", disabled: false, showInList: null as boolean | null };
@@ -234,5 +234,42 @@ describe("справочник ролей карточки", () => {
 		// предлагали бы снять одну и оставить другую. Написание — от выданного в базе.
 		expect(roleCatalog(["Кассир", "Кассир", " "], ["кассир", "Бухгалтер"]))
 			.toEqual(["Бухгалтер", "кассир"]);
+	});
+});
+
+/**
+ * Массовая правка ролей просит подтверждения.
+ *
+ * ЖИВОЙ СЛУЧАЙ (12–13.09): одной записью пользователю выдали все 331 роль конфигурации, а
+ * утром одной записью попытались снять все. Оба действия — один щелчок по заголовку таблицы,
+ * и оба меняют права человека целиком.
+ */
+describe("массовая правка ролей", () => {
+	const roles = (n: number, prefix = "Роль") => Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
+
+	it("снять ВСЕ роли — подтверждение, даже если ролей было немного", () => {
+		const v = massRoleChange(["Кассир", "БазовыеПрава"], { add: [], remove: ["Кассир", "БазовыеПрава"] });
+		expect(v).toEqual({ kind: "removeAll", added: 0, removed: 2, before: 2, after: 0 });
+	});
+
+	it("выдать все 331 роль разом — подтверждение", () => {
+		const v = massRoleChange(roles(102), { add: roles(331), remove: [] });
+		expect(v?.kind).toBe("many");
+		expect(v?.added).toBe(229);
+		expect(v?.after).toBe(331);
+	});
+
+	it("мелкая правка проходит без вопросов", () => {
+		// Окно на каждое нажатие приучило бы нажимать «Да» не читая.
+		expect(massRoleChange(roles(10), { add: ["ПолныеПрава"], remove: ["Роль1"] })).toBeNull();
+	});
+
+	it("граница — ровно MASS_ROLES изменений ещё без подтверждения", () => {
+		expect(massRoleChange([], { add: roles(MASS_ROLES), remove: [] })).toBeNull();
+		expect(massRoleChange([], { add: roles(MASS_ROLES + 1), remove: [] })?.kind).toBe("many");
+	});
+
+	it("пользователь без ролей — «снять все» не бывает: снимать нечего", () => {
+		expect(massRoleChange([], { add: [], remove: [] })).toBeNull();
 	});
 });

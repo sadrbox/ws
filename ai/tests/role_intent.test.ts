@@ -28,11 +28,10 @@ describe("проверка намерения по ролям", () => {
 		if (v.ok) return;
 		assert.deepEqual(v.notAdded, ["АдминистраторСистемы", "Администрирование"]);
 		assert.deepEqual(v.notRemoved, []);
-		// Текст называет и что не сошлось, и что с этим делать.
+		// Текст называет, что не сошлось, — числом и именами, как их отдаёт 1С.
 		const text = roleVerdictMessage(v);
 		assert.match(text, /роли в базе не изменились/);
-		assert.match(text, /АдминистраторСистемы/);
-		assert.match(text, /addRoles\/removeRoles/);
+		assert.match(text, /не выданы 2: АдминистраторСистемы, Администрирование/);
 	});
 
 	it("роли выданы — успех", () => {
@@ -90,6 +89,40 @@ describe("проверка намерения по ролям", () => {
 			[user(["ПолныеПрава", "Кассир"])],
 		);
 		assert.equal(v.ok, false);
-		if (!v.ok) assert.deepEqual(v.notRemoved, ["кассир"]);
+		// Имя — как его отдала 1С, а не нормализованное: человек ищет его в конфигураторе.
+		if (!v.ok) assert.deepEqual(v.notRemoved, ["Кассир"]);
+	});
+
+	// ── Живой случай 13.09: «снять все роли» не применилось ─────────────────
+	//
+	// Сборка агента 23:48 приняла `roles: []`, ответила SUCCESS и оставила пользователю все
+	// 331 роль. Сверка это поймала — но отказ перечислял все 331 имя строчными буквами одной
+	// строкой. Прочитать такое нельзя; нужное в нём — что именно не легло и сколько.
+
+	it("пустой полный набор не применился — отказ говорит это прямо", () => {
+		const have = Array.from({ length: 331 }, (_, i) => `Роль${i + 1}`);
+		const v = checkRoleIntent({ name: "Оператор бухгалтер", roles: [] }, [user(have)]);
+		assert.equal(v.ok, false);
+		if (v.ok) return;
+		assert.equal(v.emptySet, true);
+		assert.equal(v.notRemoved.length, 331);
+
+		const text = roleVerdictMessage(v);
+		assert.match(text, /снять все роли/);
+		assert.match(text, /осталось 331/);
+		// Показываем десяток имён для примера, остальное — числом.
+		assert.match(text, /Роль1, Роль2/);
+		assert.match(text, /и ещё 321/);
+		assert.ok(!text.includes("Роль331"), "полный список в текст не попадает");
+	});
+
+	it("длинный список расхождений укорачивается и в обычном отказе", () => {
+		const want = Array.from({ length: 25 }, (_, i) => `Новая${i + 1}`);
+		const v = checkRoleIntent({ name: "Оператор бухгалтер", addRoles: want }, [user([])]);
+		assert.equal(v.ok, false);
+		if (v.ok) return;
+		const text = roleVerdictMessage(v);
+		assert.match(text, /не выданы 25/);
+		assert.match(text, /и ещё 15/);
 	});
 });

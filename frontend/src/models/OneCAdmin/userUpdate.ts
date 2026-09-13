@@ -138,6 +138,46 @@ export function buildSavePlan(input: {
 }
 
 /**
+ * МАССОВАЯ ПРАВКА РОЛЕЙ — то, что нужно подтвердить словами, прежде чем отправлять.
+ *
+ * ЖИВОЙ СЛУЧАЙ (12–13.09). Пользователю «Оператор бухгалтер» в базе `_transition` за одну
+ * запись выдали ВСЕ 331 роль конфигурации (было 102), а утром одной записью попытались снять
+ * все до единой. Оба действия делаются одним щелчком по заголовку таблицы ролей, выглядят в
+ * интерфейсе как любая другая правка — и оба меняют права человека целиком. Агент второе не
+ * применил, но это случайность сборки, а не защита.
+ *
+ * Правило: подтверждение просим, когда правка снимает ВСЕ роли или трогает больше
+ * MASS_ROLES ролей разом. Мелкая правка («выдать „Кассир“») проходит без вопросов — окно на
+ * каждое нажатие приучило бы нажимать «Да» не читая.
+ */
+export const MASS_ROLES = 20;
+
+export type MassRoleChange = {
+	/** removeAll — после правки у пользователя не останется ни одной роли. */
+	kind: "removeAll" | "many";
+	added: number;
+	removed: number;
+	/** Сколько ролей у пользователя сейчас и сколько станет. */
+	before: number;
+	after: number;
+};
+
+export function massRoleChange(
+	current: string[], changes: { add: string[]; remove: string[] },
+): MassRoleChange | null {
+	const after = applyRoleChanges(current, changes);
+	const norm = (s: string) => s.trim().toLowerCase();
+	const had = new Set(current.map(norm));
+	const now = new Set(after.map(norm));
+	const added = [...now].filter((r) => !had.has(r)).length;
+	const removed = [...had].filter((r) => !now.has(r)).length;
+	const base = { added, removed, before: current.length, after: after.length };
+	if (current.length > 0 && after.length === 0) return { kind: "removeAll", ...base };
+	if (added + removed > MASS_ROLES) return { kind: "many", ...base };
+	return null;
+}
+
+/**
  * Полный набор ролей после правки: что было в базе, минус снятое, плюс выданное.
  *
  * Порядок сохраняем — сначала прежние роли, затем новые: набор уходит в 1С и попадает в

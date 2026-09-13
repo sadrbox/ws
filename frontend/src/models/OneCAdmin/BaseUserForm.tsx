@@ -20,6 +20,7 @@ import { useAppContext } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
+import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
@@ -47,7 +48,7 @@ import { useOpenOnecBase } from "src/models/OneCBases";
 import {
 	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps, withOp,
 } from "./progress";
-import { buildSavePlan, buildUserUpdate, roleCatalog } from "./userUpdate";
+import { buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog } from "./userUpdate";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
@@ -530,17 +531,37 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 
 	const changedCount = draft.size + (dirtyProfile ? 1 : 0);
 
+	/**
+	 * МАССОВАЯ ПРАВКА — ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ СЛОВАМИ (см. userUpdate.massRoleChange).
+	 * Живой случай 12–13.09: за один щелчок по заголовку таблицы пользователю выдали все
+	 * 331 роль, а утром тем же жестом попытались снять все. Считаем по ролям, которые реестр
+	 * знает для базы карточки: это оценка «что увидит человек», а точный набор форма
+	 * перечитает у 1С перед записью.
+	 */
+	const massChange = useMemo(() => {
+		const own = [...changedByBase.entries()]
+			.find(([base]) => base.toLowerCase() === baseKey.toLowerCase())?.[1];
+		return own ? massRoleChange(here?.roles ?? [], own) : null;
+	}, [changedByBase, baseKey, here]);
+	const [confirmMass, setConfirmMass] = useState(false);
+	/** «Применить»: мелкая правка уходит сразу, массовая — через окно подтверждения. */
+	const apply = useCallback(() => {
+		if (massChange) { setConfirmMass(true); return; }
+		save.mutate();
+	}, [massChange, save]);
+
 	// «Закрыть» — штатное закрытие пейна (с проверкой несохранённого), а не пустышка.
 	const close = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
 
 	return (
+		<>
 		<ModelForm
 			paneId={paneProps.uniqId}
 			// Пока по паре идёт операция, кнопки формы заблокированы вместе с полями.
 			isLoading={occurrences.isLoading || locked || save.isPending}
-			onSave={() => save.mutate()}
+			onSave={apply}
 			onSaveAndClose={() => { save.mutate(undefined, { onSuccess: close }); }}
 			onClose={close}
 			tabs={[
@@ -712,7 +733,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									</Button>
 									<Button variant="primary" disabled={!changedCount || save.isPending || locked}
 										title={changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNothingToApply")}
-										onClick={() => save.mutate()}>
+										onClick={apply}>
 										{/* Счёт правок — на кнопке: он про неё и есть. */}
 										<Icon name="save" /> {translate("apply")}{changedCount ? ` (${changedCount})` : ""}
 									</Button>
@@ -750,6 +771,33 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 				},
 			]}
 		/>
+
+		{/*
+		  * ПОДТВЕРЖДЕНИЕ МАССОВОЙ ПРАВКИ РОЛЕЙ. Числа — до и после, и отдельной строкой, если
+		  * снимается всё: права человека меняются целиком, и это должно быть сказано словами,
+		  * а не угадано по счётчику на кнопке «Применить (331)».
+		  */}
+		{confirmMass && massChange && (
+			<Modal title={translate("onecRolesMassTitle")}
+				onClose={() => setConfirmMass(false)}
+				onApply={() => { setConfirmMass(false); save.mutate(); }}>
+				<GroupCol>
+					<div>{userName} — {baseKey}</div>
+					<Notice inline items={[{
+						type: "attention",
+						text: massChange.kind === "removeAll"
+							? translate("onecRolesRemoveAll")
+							: translate("onecRolesMany"),
+					}]} />
+					<div>
+						{translate("onecRolesBefore")}: {massChange.before} · {translate("onecRolesAfter")}: {massChange.after}
+						{" · "}{translate("onecRolesAdded")}: {massChange.added}
+						{" · "}{translate("onecRolesRemoved")}: {massChange.removed}
+					</div>
+				</GroupCol>
+			</Modal>
+		)}
+		</>
 	);
 };
 BaseUserForm.displayName = "BaseUserForm";

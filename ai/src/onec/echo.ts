@@ -152,7 +152,15 @@ export function parseEcho(result: unknown): Echo | null {
 export type RoleVerdict =
 	| { ok: true }
 	/** Что не сошлось: роли, которые просили выдать, но их нет, и снятые, но оставшиеся. */
-	| { ok: false; notAdded: string[]; notRemoved: string[] };
+	| {
+		ok: false; notAdded: string[]; notRemoved: string[];
+		/**
+		 * Просили ПУСТОЙ полный набор — «снять все роли». Отдельный признак, потому что и
+		 * отказ здесь отдельный: не «часть ролей не легла», а «команда снятия всех прав
+		 * целиком не применилась» (живой случай 13.09, сборка агента 23:48).
+		 */
+		emptySet?: boolean;
+	};
 
 /** Сравнение имён ролей — как их присылает 1С: без учёта регистра и краевых пробелов. */
 const norm = (s: string) => s.trim().toLowerCase();
@@ -182,9 +190,14 @@ export function checkRoleIntent(
 	// «привести к эталону» могло бы оставить роль, которую велено было снять.
 	if (whole) {
 		const want = new Set(whole.map(norm));
-		const extra = [...have].filter((r) => !want.has(r));
+		// Лишние роли называем ТАК, КАК ИХ ОТДАЛА 1С («ПолныеПрава»), а не нормализованными
+		// («полныеправа»): сравнение без регистра — внутренняя кухня, а человеку нужно имя,
+		// которое он найдёт в конфигураторе.
+		const extra = found.roles.filter((r) => !want.has(norm(r)));
 		const lost = whole.filter((r) => !have.has(norm(r)));
-		if (extra.length || lost.length) return { ok: false, notAdded: lost, notRemoved: extra };
+		if (extra.length || lost.length) {
+			return { ok: false, notAdded: lost, notRemoved: extra, emptySet: whole.length === 0 };
+		}
 	}
 	if (notAdded.length || notRemoved.length) return { ok: false, notAdded, notRemoved };
 	return { ok: true };
@@ -192,10 +205,25 @@ export function checkRoleIntent(
 
 /** Отказ словами — он уходит в панель как ошибка команды. */
 export function roleVerdictMessage(v: Extract<RoleVerdict, { ok: false }>): string {
+	/*
+	 * СПИСОК РОЛЕЙ — С ПРЕДЕЛОМ. Живой случай 13.09: отказ перечислял все 331 роль
+	 * пользователя строчными буквами, одной строкой на экран. Прочитать такое нельзя, а
+	 * нужное в нём — число и несколько имён для примера. Полный список остаётся в `details`
+	 * отказа и в журнале сервиса.
+	 */
+	const SHOW = 10;
+	const list = (names: string[]) => names.length > SHOW
+		? `${names.slice(0, SHOW).join(", ")} и ещё ${names.length - SHOW}`
+		: names.join(", ");
+
+	if (v.emptySet) {
+		return `Агент сообщил об успехе, но роли не сняты: у пользователя осталось ${v.notRemoved.length}`
+			+ ` (${list(v.notRemoved)}). Команду «снять все роли» (пустой набор) эта сборка агента`
+			+ " не применяет — права остались прежними. Остальные реквизиты команды могли примениться.";
+	}
 	const parts: string[] = [];
-	if (v.notAdded.length) parts.push(`не выданы: ${v.notAdded.join(", ")}`);
-	if (v.notRemoved.length) parts.push(`не сняты: ${v.notRemoved.join(", ")}`);
+	if (v.notAdded.length) parts.push(`не выданы ${v.notAdded.length}: ${list(v.notAdded)}`);
+	if (v.notRemoved.length) parts.push(`не сняты ${v.notRemoved.length}: ${list(v.notRemoved)}`);
 	return `Агент сообщил об успехе, но роли в базе не изменились (${parts.join("; ")}).`
-		+ " Команда выполнена лишь частично: остальные реквизиты могли примениться."
-		+ " Нужна сборка агента, применяющая addRoles/removeRoles.";
+		+ " Команда выполнена лишь частично: остальные реквизиты могли примениться.";
 }
