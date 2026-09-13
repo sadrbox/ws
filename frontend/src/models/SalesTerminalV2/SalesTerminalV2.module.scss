@@ -539,6 +539,18 @@
 	flex-shrink: 0;
 }
 
+// Почему кнопка оплаты выключена — строкой прямо под ней, там, куда смотрит кассир.
+.PayBlockReason {
+	flex-shrink: 0;
+	padding: 0 16px 12px;
+	margin-top: -8px;
+	background: var(--t-card);
+	font-size: 13px;
+	font-weight: 600;
+	color: $warnAccent;
+	text-align: right;
+}
+
 .PayBtn {
 	flex: 1 1 auto;
 	border: none;

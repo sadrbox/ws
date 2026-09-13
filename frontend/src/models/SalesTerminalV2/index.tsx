@@ -10,11 +10,11 @@
  * намеренное и ограничено этой папкой — общие Button/Field/Table не тронуты.
  *
  */
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
-import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
+import Notice from "src/components/Notice";
 import LookupField from "src/components/Field/LookupField";
 import { Field } from "src/components/Field";
 import FieldActionButton from "src/components/Field/FieldActionButton";
@@ -68,12 +68,16 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
 
   // Розничный покупатель + договор по умолчанию (для submit; имя не отображаем).
   const retailRef = useRef<RetailRef | null>(null);
+  // Готов ли розничный покупатель — состоянием, а не только ссылкой: от него зависит,
+  // можно ли оплатить, и кнопка должна узнать об этом без нажатия.
+  const [retailReady, setRetailReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
     api.get<{ counterparty?: { uuid: string; name: string }; contract?: { uuid: string } }>("counterparties/retail")
       .then((r) => {
         if (cancelled || !r?.counterparty) return;
         retailRef.current = { counterpartyUuid: r.counterparty.uuid, counterpartyName: r.counterparty.name, contractUuid: r.contract?.uuid ?? "" };
+        setRetailReady(true);
       })
       .catch(() => { });
     return () => { cancelled = true; };
@@ -195,9 +199,20 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
 
   const clearCart = useCallback(() => { cartApiRef.current?.clear(); setBasisSale(null); }, []);
 
+  /*
+   * Нулевое количество держит кнопку выключенной; нехватка остатка висит над кнопкой, пока
+   * корзину не поправят. Снимаем нехватку только при РЕАЛЬНОЙ смене содержимого: итог
+   * пересчитывается и без правок, и сообщение исчезало бы раньше, чем его прочтут.
+   */
+  const [badQty, setBadQty] = useState(false);
+  const [shortage, setShortage] = useState<string[]>([]);
+  const cartKeyRef = useRef("");
   const handleTableTotal = useCallback((t: number, items?: TDataItem[]) => {
     setTotal(t);
     setCartCount((items ?? []).length);
+    setBadQty((items ?? []).some((r) => !!r.productUuid && !(Number(r.quantity) > 0)));
+    const key = JSON.stringify((items ?? []).map((r) => [r.productUuid, r.quantity]));
+    if (key !== cartKeyRef.current) { cartKeyRef.current = key; setShortage([]); }
   }, []);
 
   // ── Просмотр недавней продажи (activeRow) ────────────────────────────────
@@ -274,16 +289,32 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
     void openFormByRef({ endpoint, uuid }, addPane, label);
   }, [addPane]);
 
+  /*
+   * ПОЧЕМУ НЕЛЬЗЯ ОПЛАТИТЬ — заранее и словами под кнопкой (M11).
+   *
+   * Раньше каждая недостача была тостом ПОСЛЕ нажатия: кассир жал F9, тост мигал четыре
+   * секунды, и что именно не так, приходилось ловить глазами. Всё это известно до нажатия,
+   * поэтому кнопка выключена, пока причина есть, и причина написана рядом с ней. Пустая
+   * корзина причиной не считается: подсказка об этом уже стоит в самой корзине.
+   */
+  const blockReason = useMemo((): string => {
+    if (!orgUuid) return `${translate("organization")} — ${translate("required")}`;
+    if (!warehouseUuid) return `${translate("warehouse")} — ${translate("required")}`;
+    if (!buyerUuid && !retailReady) return translate("retailBuyerNotReady");
+    if (!isReturn && payment === "cash" && !cashboxUuid) return `${translate("cashbox")} — ${translate("terminalPickInRequisites")}`;
+    if (badQty) return translate("terminalBadQty");
+    return "";
+  }, [orgUuid, warehouseUuid, buyerUuid, retailReady, isReturn, payment, cashboxUuid, badQty]);
+  const payReasonId = useId();
+
   const submit = useCallback(async () => {
     const rows = (cartApiRef.current?.getRows() ?? []).filter((r) => r.productUuid);
     const cpUuid = buyerUuid || retailRef.current?.counterpartyUuid || "";
     const ctUuid = contractUuid || retailRef.current?.contractUuid || "";
-    if (!orgUuid) { showToast(translate("organization") + " — " + translate("required"), "error"); return; }
-    if (!warehouseUuid) { showToast(translate("warehouse") + " — " + translate("required"), "error"); return; }
-    if (!cpUuid) { showToast(translate("retailBuyerNotReady"), "error"); return; }
-    if (!isReturn && payment === "cash" && !cashboxUuid) { showToast(translate("cashbox") + " — " + translate("terminalPickInRequisites"), "error"); return; }
-    if (rows.length === 0) { showToast(translate("terminalEmptyCart"), "error"); return; }
-    if (rows.some((r) => !(Number(r.quantity) > 0))) { showToast(translate("terminalBadQty"), "error"); return; }
+    // Страховка для F9: он зовёт submit в обход выключенной кнопки. Сказать ничего не нужно —
+    // причина уже написана под кнопкой.
+    if (blockReason || !cpUuid || rows.length === 0 || rows.some((r) => !(Number(r.quantity) > 0))) return;
+    setShortage([]);
 
     // Best practice: контроль остатка ДО создания документа — не оставляем «висящий»
     // непроведённый черновик, а сразу показываем, каких товаров не хватает.
@@ -294,7 +325,8 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
         warehouseUuid: warehouseUuid || null,
         items: rows.map((r) => ({ productUuid: String(r.productUuid), quantity: Number(r.quantity) || 0 })),
       });
-      if (shortages.length) { showToast(formatStockShortages(shortages), "error", 9000); return; }
+      // Нехватка — списком над кнопкой, пока корзину не поправят: за 9 секунд тоста не прочитать.
+      if (shortages.length) { setShortage(formatStockShortages(shortages).split("\n").filter(Boolean)); return; }
     }
 
     const docEndpoint = isReturn ? "sale-returns" : "sales";
@@ -388,7 +420,7 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [orgUuid, warehouseUuid, buyerUuid, contractUuid, managerUuid, priceTypeUuid, total, vatRate, payment, cashboxUuid, isReturn, basisSale, addPane, orgName, saleLabel, showBanner, loadRecent, comment]);
+  }, [orgUuid, warehouseUuid, buyerUuid, contractUuid, managerUuid, priceTypeUuid, total, vatRate, payment, cashboxUuid, isReturn, basisSale, addPane, orgName, saleLabel, showBanner, loadRecent, comment, blockReason]);
 
   // Горячие клавиши: F9 — провести, F4 — очистить.
   useEffect(() => {
@@ -587,12 +619,17 @@ const SalesTerminalV2: FC<Partial<TPane>> = () => {
                     </div>
                   )}
 
+                  <Notice inline wide items={shortage.map((text) => ({ type: "error" as const, text }))} />
+
                   <div className={styles.Actions}>
                     <Button variant="secondary" onClick={clearCart} disabled={submitting || cartCount === 0}>{translate("terminalClear")} (F4)</Button>
-                    <button type="button" className={[styles.PayBtn, isReturn && styles.PayBtnReturn].filter(Boolean).join(" ")} onClick={() => void submit()} disabled={submitting || cartCount === 0}>
+                    <button type="button" className={[styles.PayBtn, isReturn && styles.PayBtnReturn].filter(Boolean).join(" ")} onClick={() => void submit()}
+                      disabled={submitting || cartCount === 0 || !!blockReason}
+                      title={blockReason || undefined} aria-describedby={blockReason ? payReasonId : undefined}>
                       {submitting ? translate("loading") : `${translate(isReturn ? "terminalCheckoutReturn" : "terminalCheckout")} (F9)`}
                     </button>
                   </div>
+                  {blockReason && <div id={payReasonId} className={styles.PayBlockReason}>{blockReason}</div>}
                 </div>
               ),
             },
