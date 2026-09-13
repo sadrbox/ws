@@ -113,6 +113,41 @@
 	white-space: nowrap;
 }
 
+// Время и отказы команд агента (S5). Числа читают столбцами — поэтому таблица, но простая:
+// строк десяток, и тулбар с настройкой колонок здесь только мешал бы.
+.StatsTitle {
+	font-weight: 600;
+	color: $color6;
+	padding: 6px 6px 0;
+}
+
+.StatsTable {
+	border-collapse: collapse;
+	font-size: $fontsize;
+	color: $color6;
+
+	th,
+	td {
+		padding: 3px 12px 3px 6px;
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	th:first-child,
+	td:first-child {
+		text-align: left;
+	}
+
+	th {
+		font-weight: 600;
+		border-bottom: 1px solid $color30;
+	}
+
+	tbody tr:nth-child(even) {
+		background: $color30;
+	}
+}
+
 // Выбор ролей: строка поиска, прокручиваемый список отметок, ручное добавление.
 // Список ограничен по высоте: ролей в типовой конфигурации сотни, и без ограничения
 // форма превращалась бы в километровую ленту.

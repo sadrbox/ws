@@ -14,6 +14,7 @@ import type { Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import { requireAgent } from "../auth/index.ts";
 import { decideInstance, instanceConflictMessage, isFarewell } from "../agents/instances.ts";
+import { parseCommandStats } from "../agents/commandStats.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand } from "../commands/admin.ts";
@@ -95,6 +96,13 @@ const heartbeatSchema = z.object({
 		ageSecs: z.number().int().nonnegative().optional(),
 		orphan: z.boolean().optional(),
 	})).max(200).optional(),
+	/**
+	 * Отказы по кодам и время команд (S5) — `unknown` НАМЕРЕННО: разбирает их
+	 * agents/commandStats.ts. Строгая схема здесь превратила бы кривой снимок в 400 на весь
+	 * heartbeat, и агент перестал бы считаться на связи из-за диагностики.
+	 */
+	failuresByCode: z.unknown().optional(),
+	durationsByType: z.unknown().optional(),
 });
 
 const resultSchema = z.object({
@@ -312,6 +320,14 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// Список процессов приходит попутно с heartbeat: отдельная команда нужна только
 		// кнопке «Обновить сейчас», а раз в полминуты панель узнаёт о них бесплатно.
 		if (p.data.processes) await agents.setProcesses(req.agent!.agentId, p.data.processes);
+		// Отказы и время команд (S5) — тем же попутным снимком. Поля нет — прежний снимок не
+		// затираем (старая сборка); не разобралось — пропускаем и называем, heartbeat принят.
+		const commandStats = parseCommandStats(p.data);
+		if (commandStats.rejected.length) {
+			log.warn({ agentId: req.agent!.agentId, fields: commandStats.rejected },
+				"статистика команд в heartbeat не разобрана — пропущена");
+		}
+		if (commandStats.stats) await agents.setCommandStats(req.agent!.agentId, commandStats.stats);
 
 		const me = await agents.get(req.agent!.agentId);
 		if (p.data.bases?.length && me?.serverId) {

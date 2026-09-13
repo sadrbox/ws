@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 import { newToken, sha256 } from "../auth/index.ts";
 import { DEFAULT_BASE_KEY } from "../bases/service.ts";
+import type { CommandStats, DurationStat } from "./commandStats.ts";
 
 /**
  * Сколько ждать новый long-poll после закрытия прежнего, прежде чем считать агента
@@ -27,6 +28,10 @@ const POLL_GAP_MS = 10_000;
  * администратора кластера. Две роли в одном процессе дали бы разделение только на бумаге.
  */
 export type AgentRole = "business" | "admin";
+
+/** jsonb-объект из строки базы; не объект — пусто, а не падение представления. */
+const asRecord = (v: unknown): Record<string, unknown> =>
+	v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 export type AgentRow = {
 	id: string;
@@ -48,6 +53,10 @@ export type AgentRow = {
 	/** Снимок процессов агента из heartbeat (см. AgentProcess). */
 	processes: unknown;
 	processes_seen_at: Date | null;
+	/** Снимок отказов и времени команд из heartbeat (S5). */
+	failures_by_code: unknown;
+	durations_by_type: unknown;
+	command_stats_seen_at: Date | null;
 };
 
 /** Процесс, запущенный агентом на сервере 1С (TASK_SERVICE_PROCESSES). */
@@ -75,6 +84,15 @@ export type AgentView = {
 	/** Что агент запустил на сервере 1С прямо сейчас (снимок из heartbeat). */
 	processes: AgentProcess[];
 	processesSeenAt: string | null;
+	/**
+	 * Отказы по кодам и время команд с последнего запуска службы агента (S5). null — снимка
+	 * не было: сборка агента старше 13.09 15:21.
+	 */
+	commandStats: {
+		failuresByCode: Record<string, number>;
+		durationsByType: Record<string, DurationStat>;
+		seenAt: string | null;
+	} | null;
 	onec: { reachable: boolean; version: string | null };
 	/**
 	 * Агент ЗАБРАЛ команду и ещё не ответил.
@@ -92,7 +110,7 @@ export type AgentView = {
 
 const COLS = `id, organization_uuid, server_id, role, bases_synced_at, name, version, os, capabilities,
 	status, onec_reachable, onec_version, last_seen_at, registered_at, disabled_at, created_at,
-	processes, processes_seen_at`;
+	processes, processes_seen_at, failures_by_code, durations_by_type, command_stats_seen_at`;
 
 export class AgentService {
 	private readonly db: Db;
@@ -556,6 +574,25 @@ export class AgentService {
 		);
 	}
 
+	/**
+	 * Последний снимок отказов и времени команд (S5). Поле, которого в снимке нет, не
+	 * затирается (COALESCE): сборка, шлющая только отказы, не должна стирать время команд.
+	 */
+	async setCommandStats(id: string, stats: CommandStats): Promise<void> {
+		await this.db.query(
+			`UPDATE agents
+			    SET failures_by_code = COALESCE($2::jsonb, failures_by_code),
+			        durations_by_type = COALESCE($3::jsonb, durations_by_type),
+			        command_stats_seen_at = now()
+			  WHERE id = $1`,
+			[
+				id,
+				stats.failuresByCode ? JSON.stringify(stats.failuresByCode) : null,
+				stats.durationsByType ? JSON.stringify(stats.durationsByType) : null,
+			],
+		);
+	}
+
 	async touch(id: string): Promise<void> {
 		await this.db.query(`UPDATE agents SET last_seen_at = now() WHERE id = $1`, [id]);
 	}
@@ -585,6 +622,14 @@ export class AgentService {
 			// — это её прошлое, а не то, что сейчас происходит на сервере.
 			processes: online && Array.isArray(r.processes) ? (r.processes as AgentProcess[]) : [],
 			processesSeenAt: r.processes_seen_at?.toISOString() ?? null,
+			// Статистику показываем и у молчащего агента: «что было до остановки» — тоже ответ.
+			commandStats: r.command_stats_seen_at
+				? {
+					failuresByCode: asRecord(r.failures_by_code) as Record<string, number>,
+					durationsByType: asRecord(r.durations_by_type) as Record<string, DurationStat>,
+					seenAt: r.command_stats_seen_at.toISOString(),
+				}
+				: null,
 			lastSeenAt: r.last_seen_at?.toISOString() ?? null,
 			registeredAt: r.registered_at?.toISOString() ?? null,
 			disabled: !!r.disabled_at,

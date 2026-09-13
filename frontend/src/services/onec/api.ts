@@ -523,6 +523,18 @@ export type OnecAgent = {
 	 * получают отказ и не выполняют ни одной команды.
 	 */
 	owner: { instanceId: string | null; seenAt: string | null };
+	/**
+	 * Отказы по кодам и время команд с последнего запуска службы агента (S5). null — агент
+	 * снимка не присылал (сборка старше 13.09 15:21); поля нет — сервис старее панели.
+	 */
+	commandStats?: {
+		failuresByCode: Record<string, number>;
+		durationsByType: Record<string, {
+			count: number; avgMs: number; maxMs: number; p95LeSecs: number | null;
+			buckets?: Record<string, number>;
+		}>;
+		seenAt: string | null;
+	} | null;
 };
 
 /**

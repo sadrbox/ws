@@ -22,6 +22,7 @@ import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import { durationRows, failureRows } from "./agentStats";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
@@ -330,6 +331,66 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 									);
 								})}
 								{!instances.length && <div className={styles.Hint}>{translate("onecAgentNoInstances")}</div>}
+							</div>
+						),
+					},
+					{
+						/*
+						 * ВРЕМЯ И ОТКАЗЫ КОМАНД (S5) — числами вместо «агент тормозит».
+						 *
+						 * Агент считает их сам и шлёт в каждом heartbeat: «IB_BUSY: 87», «IB_LIST_USERS
+						 * в среднем 28 с». Без этой вкладки каждое «медленно» мерили вручную, а
+						 * настройке параллельности агента не на что было опереться.
+						 */
+						id: "stats", label: translate("onecAgentStats"),
+						component: (
+							<div className={styles.Instances}>
+								<div className={styles.Hint}>{translate("onecAgentStatsHint")}</div>
+								{!agent?.commandStats
+									? <div className={styles.Hint}>{translate("onecAgentStatsNone")}</div>
+									: (() => {
+										const durations = durationRows(agent.commandStats.durationsByType);
+										const failures = failureRows(agent.commandStats.failuresByCode);
+										return (
+											<>
+												<div className={styles.StatsTitle}>{translate("onecStatDurations")}</div>
+												{durations.length ? (
+													<table className={styles.StatsTable}>
+														<thead>
+															<tr>
+																<th>{translate("onecStatType")}</th>
+																<th>{translate("onecStatCount")}</th>
+																<th>{translate("onecStatAvg")}</th>
+																<th>{translate("onecStatP95")}</th>
+																<th>{translate("onecStatMax")}</th>
+															</tr>
+														</thead>
+														<tbody>
+															{durations.map((r) => (
+																<tr key={r.type}>
+																	<td>{r.type}</td><td>{r.count}</td><td>{r.avg}</td><td>{r.p95}</td><td>{r.max}</td>
+																</tr>
+															))}
+														</tbody>
+													</table>
+												) : <div className={styles.Hint}>{translate("onecStatNoDurations")}</div>}
+
+												<div className={styles.StatsTitle}>{translate("onecStatFailures")}</div>
+												{failures.length ? (
+													<table className={styles.StatsTable}>
+														<thead>
+															<tr><th>{translate("onecStatCode")}</th><th>{translate("onecStatCount")}</th></tr>
+														</thead>
+														<tbody>
+															{failures.map((r) => (
+																<tr key={r.code}><td>{r.code}</td><td>{r.count}</td></tr>
+															))}
+														</tbody>
+													</table>
+												) : <div className={styles.Hint}>{translate("onecStatNoFailures")}</div>}
+											</>
+										);
+									})()}
 							</div>
 						),
 					},
