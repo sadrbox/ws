@@ -530,17 +530,24 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			.find(([base]) => base.toLowerCase() === baseKey.toLowerCase())?.[1];
 		return own ? massRoleChange(here?.roles ?? [], own) : null;
 	}, [changedByBase, baseKey, here]);
-	const [confirmMass, setConfirmMass] = useState(false);
-	/** «Применить»: мелкая правка уходит сразу, массовая — через окно подтверждения. */
-	const apply = useCallback(() => {
-		if (massChange) { setConfirmMass(true); return; }
-		save.mutate();
-	}, [massChange, save]);
+	/** Окно массовой правки открыто; значение — что сделать после записи: остаться или закрыть. */
+	const [confirmMass, setConfirmMass] = useState<null | "stay" | "close">(null);
 
 	// «Закрыть» — штатное закрытие пейна (с проверкой несохранённого), а не пустышка.
 	const close = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
+
+	/*
+	 * «ЗАПИСАТЬ» И «ЗАПИСАТЬ И ЗАКРЫТЬ» — ОДИН ПУТЬ. Раньше у вкладки «Права» была своя кнопка
+	 * «Применить» с подтверждением массовой правки, а «Записать и закрыть» писало напрямую —
+	 * мимо подтверждения. Кнопки дублировали друг друга и расходились в правилах; «Применить»
+	 * убрана, правила перешли на кнопки формы.
+	 */
+	const apply = useCallback((thenClose = false) => {
+		if (massChange) { setConfirmMass(thenClose ? "close" : "stay"); return; }
+		save.mutate(undefined, thenClose ? { onSuccess: close } : undefined);
+	}, [massChange, save, close]);
 
 	return (
 		<>
@@ -548,9 +555,26 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			paneId={paneProps.uniqId}
 			// Пока по паре идёт операция, кнопки формы заблокированы вместе с полями.
 			isLoading={occurrences.isLoading || locked || save.isPending}
-			onSave={apply}
-			onSaveAndClose={() => { save.mutate(undefined, { onSuccess: close }); }}
+			onSave={() => apply()}
+			onSaveAndClose={() => apply(true)}
 			onClose={close}
+			// Агент без ib.roles правку ролей не применит (C5): записать нельзя, и сказано почему.
+			saveDisabled={rolesBlocked}
+			saveTitle={rolesBlocked
+				? translate("onecRolesAgentOutdated")
+				: changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : undefined}
+			/*
+			 * «ОТМЕНИТЬ ИЗМЕНЕНИЯ» — ПОСЛЕ «ЗАКРЫТЬ», в ряду кнопок формы. Отменяет ВСЁ несохранённое
+			 * карточки — и отметки ролей, и реквизиты «Основного»; поэтому место ей не во вкладке
+			 * «Права», а рядом с «Записать», для всей формы.
+			 */
+			afterCloseButtons={canWrite ? (
+				<Button variant="secondary" disabled={!changedCount || locked}
+					title={changedCount ? translate("onecResetDraft") : translate("onecNoChanges")}
+					onClick={() => { setDraft(new Map()); setForm(baseline); }}>
+					{translate("onecResetDraft")}
+				</Button>
+			) : undefined}
 			tabs={[
 				{
 					id: "main", label: translate("general"),
@@ -709,32 +733,6 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									if (now !== isOn(baseKey, role)) toggle(baseKey, role);
 								}
 							},
-							// Права смотрят и правом «просмотр»; записывать их в 1С — только полному
-							// доступу (F5). Без кнопок карточка остаётся тем, чем и была: сводкой.
-							extraButtons: !canWrite ? undefined : (
-								<>
-									{/*
-									  * Отменяет ВСЁ несохранённое карточки — и отметки ролей, и реквизиты
-									  * с соседней вкладки. Пока она сбрасывала только роли, переключённый
-									  * тумблер «Отключен» нельзя было вернуть иначе как закрыв карточку,
-									  * и «Применить» оставалось зажжённым по правке, которой человек уже
-									  * не хотел.
-									  */}
-									<Button variant="secondary" disabled={!changedCount || locked}
-										title={changedCount ? translate("onecResetDraft") : translate("onecNoChanges")}
-										onClick={() => { setDraft(new Map()); setForm(baseline); }}>
-										<Icon name="restore" /> {translate("onecResetDraft")}
-									</Button>
-									<Button variant="primary" disabled={!changedCount || save.isPending || locked || rolesBlocked}
-										title={rolesBlocked
-											? translate("onecRolesAgentOutdated")
-											: changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : translate("onecNothingToApply")}
-										onClick={apply}>
-										{/* Счёт правок — на кнопке: он про неё и есть. */}
-										<Icon name="save" /> {translate("apply")}{changedCount ? ` (${changedCount})` : ""}
-									</Button>
-								</>
-							),
 						})} />
 					),
 				},
@@ -775,8 +773,12 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		  */}
 		{confirmMass && massChange && (
 			<Modal title={translate("onecRolesMassTitle")}
-				onClose={() => setConfirmMass(false)}
-				onApply={() => { setConfirmMass(false); save.mutate(); }}>
+				onClose={() => setConfirmMass(null)}
+				onApply={() => {
+					const then = confirmMass;
+					setConfirmMass(null);
+					save.mutate(undefined, then === "close" ? { onSuccess: close } : undefined);
+				}}>
 				<GroupCol>
 					<div>{userName} — {baseKey}</div>
 					<Notice inline items={[{

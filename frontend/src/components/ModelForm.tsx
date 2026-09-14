@@ -87,6 +87,12 @@ interface ModelFormProps {
   /** Скрыть авто-область меток под табами: форма рендерит её сама внутри вкладки
    *  (напр. Todos размещает метки рядом с полем «Источник»). */
   hideMarks?: boolean;
+  /** Записать нельзя по правилу формы: кнопки записи недоступны (см. FormPanel). */
+  saveDisabled?: boolean;
+  /** Подсказка кнопок записи. */
+  saveTitle?: string;
+  /** Кнопки после «Закрыть» (см. FormPanel). */
+  afterCloseButtons?: ReactNode;
 }
 
 const ModelForm: FC<ModelFormProps> = ({
@@ -105,6 +111,9 @@ const ModelForm: FC<ModelFormProps> = ({
   marksUuid,
   marksOrganizationUuid,
   hideMarks = false,
+  saveDisabled,
+  saveTitle,
+  afterCloseButtons,
 }) => {
   // Рендерим кнопки формы в заголовок панели через портал
   const toolbarPortal = usePaneToolbar(
@@ -116,6 +125,9 @@ const ModelForm: FC<ModelFormProps> = ({
       onClose={onClose}
       readonly={readonly}
       isLoading={isLoading}
+      saveDisabled={saveDisabled}
+      saveTitle={saveTitle}
+      afterClose={afterCloseButtons}
     // showReload={showReload}
     />,
   );
