@@ -33,7 +33,7 @@ import type { BatchService } from "../onec/batches.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
-	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, findAdminCommand, payloadRefusal,
+	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
 } from "../commands/admin.ts";
 
 type Deps = {
@@ -223,12 +223,13 @@ export function onecRouter(deps: Deps) {
 			 * очередь умеет это с самого начала (частично-уникальный индекс среди
 			 * незавершённых), просто им никто не пользовался.
 			 *
-			 * Только для READ: у изменяющих команд «повторить» — это законное намерение,
-			 * и склеивать их молча нельзя.
+			 * Изменяющие склеиваются только долгие по базе (загрузка, обновление, проверка —
+			 * С8): повтор после «слишком долго» ставил вторую загрузку поверх идущей.
 			 */
-			...(spec.operation === "READ"
-				? { requestId: `${spec.type}:${spec.readKey ? spec.readKey(built.payload) : (built.baseKey ?? "-")}` }
-				: {}),
+			...((): { requestId?: string } => {
+				const requestId = commandRequestId(spec, built.payload, built.baseKey);
+				return requestId ? { requestId } : {};
+			})(),
 		});
 		await audit.write({
 			event: "onec.admin",

@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, rebaseForm, roleCatalog,
+	MASS_ROLES, applyRoleChanges, buildGroupUserUpdate, buildSavePlan, buildUserUpdate, diffRoles, massRoleChange, rebaseForm, roleCatalog,
 } from "src/models/OneCAdmin/userUpdate";
 
 const current = { fullName: "Оператор бухгалтер", disabled: false, showInList: null as boolean | null };
@@ -331,6 +331,43 @@ describe("данные базы обновились, пока форму пра
 
 	it("введённый пароль не теряется при перечитывании", () => {
 		expect(rebaseForm(base, { ...base }, { ...base, password: "секрет" }).password).toBe("секрет");
+	});
+});
+
+/**
+ * Групповая правка пользователя по многим базам — только изменённое (П1, аудит 14.09).
+ *
+ * Общая форма отправляла во все отмеченные базы `disabled` всегда и `roles` целиком — набором из
+ * одной базы: правка полного имени перезаписывала права и доступ везде.
+ */
+describe("групповая правка пользователя: только изменённое", () => {
+	const original = { fullName: "Оператор бухгалтер", disabled: false, roles: ["Кассир", "БазовыеПрава"] };
+	const draft = (over: Partial<Parameters<typeof buildGroupUserUpdate>[2]> = {}) => ({
+		name: "Оператор", fullName: "Оператор бухгалтер", password: "", disabled: false, roles: ["Кассир", "БазовыеПрава"], ...over,
+	});
+
+	it("изменили только полное имя — ни ролей, ни «Отключён» в команде", () => {
+		expect(buildGroupUserUpdate("Оператор", original, draft({ fullName: "Бухгалтер" })))
+			.toEqual({ name: "Оператор", fullName: "Бухгалтер" });
+	});
+
+	it("роли — поправками относительно показанного набора", () => {
+		expect(buildGroupUserUpdate("Оператор", original, draft({ roles: ["кассир", "ПолныеПрава"] })))
+			.toEqual({ name: "Оператор", addRoles: ["ПолныеПрава"], removeRoles: ["БазовыеПрава"] });
+	});
+
+	it("«Отключён» — только если переключили", () => {
+		expect(buildGroupUserUpdate("Оператор", original, draft({ disabled: true }))).toEqual({ name: "Оператор", disabled: true });
+	});
+
+	it("ничего не изменилось — команды нет", () => {
+		expect(buildGroupUserUpdate("Оператор", original, draft())).toBeNull();
+		// Пустое полное имя — «не трогать», а не «очистить».
+		expect(buildGroupUserUpdate("Оператор", original, draft({ fullName: "" }))).toBeNull();
+	});
+
+	it("разница ролей без учёта регистра", () => {
+		expect(diffRoles(["Кассир"], ["кассир"])).toEqual({ add: [], remove: [] });
 	});
 });
 

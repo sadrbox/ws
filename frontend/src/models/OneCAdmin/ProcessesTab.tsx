@@ -34,6 +34,7 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchAgentProcesses, killAgentProcess } from "src/services/onec/api";
+import { AiServiceError } from "src/services/ai/endpoint";
 import { CapabilityGuard, QueryError, useAgents, useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -90,9 +91,18 @@ export const ProcessesTab: FC = () => {
 		},
 		onError: (e, vars) => {
 			const text = e instanceof Error ? e.message : String(e);
-			// Конфигуратор агент без согласия не снимает: показываем ЕГО объяснение и
-			// предлагаем повтор с согласием — решение принимает человек.
-			if (/AGENT_PROCESS_UNSAFE|конфигуратор/i.test(text) && !vars.force) {
+			/*
+			 * СОГЛАСИЕ — ПО КОДУ ОТКАЗА, А НЕ ПО ТЕКСТУ (П3). Агент не снимает без согласия
+			 * конфигуратор (AGENT_PROCESS_UNSAFE) и процесс, которого нет в его списке
+			 * (AGENT_PROCESS_NOT_FOUND) — второе раньше не предлагалось вовсе. Показываем ЕГО
+			 * объяснение и предлагаем повтор с согласием: решение за человеком. Текст — запасной
+			 * путь только для ответа без кода.
+			 */
+			const code = e instanceof AiServiceError ? e.code : undefined;
+			const needsConsent = code
+				? code === "AGENT_PROCESS_UNSAFE" || code === "AGENT_PROCESS_NOT_FOUND"
+				: /AGENT_PROCESS_UNSAFE|AGENT_PROCESS_NOT_FOUND/.test(text);
+			if (needsConsent && !vars.force) {
 				setConfirm({ pid: vars.pid, force: true, note: text });
 				return;
 			}

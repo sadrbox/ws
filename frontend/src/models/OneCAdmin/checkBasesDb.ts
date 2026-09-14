@@ -28,7 +28,17 @@ export function checkDbOutcome(d: CheckBasesResult): CheckDbOutcome {
 		: items.filter((i) => typeof i.dbMissing === "boolean").length;
 	const summary = `${translate("onecBasesDbChecked")}: ${checked}, ${translate("onecBasesDbMissing")}: ${missing}`;
 	const note = typeof d.note === "string" ? d.note.trim() : "";
-	return note
-		? { severity: "warning", text: `${summary}. ${note}`, checked, missing }
-		: { severity: "success", text: summary, checked, missing };
+	/*
+	 * КАКИЕ БАЗЫ НЕ ПРОВЕРЕНЫ И ПОЧЕМУ (П6). Число пропущенных приходило, но не показывалось, а
+	 * базы без признака читались как «всё в порядке». Называем их — с причиной, если агент её дал.
+	 */
+	const unchecked = items.filter((i) => typeof i.dbMissing !== "boolean");
+	const skipped = typeof d.skipped === "number" ? d.skipped : unchecked.length;
+	const LIST = 10;
+	const named = unchecked.slice(0, LIST).map((i) => (i.reason ? `${i.key} — ${i.reason}` : i.key));
+	const skippedText = skipped > 0
+		? `${translate("onecBasesDbNotChecked")}: ${skipped}${named.length ? ` (${named.join("; ")}${unchecked.length > LIST ? "; …" : ""})` : ""}`
+		: "";
+	const text = [summary, skippedText, note].filter(Boolean).join(". ");
+	return { severity: note || skipped > 0 ? "warning" : "success", text, checked, missing };
 }

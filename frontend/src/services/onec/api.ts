@@ -97,12 +97,16 @@ const isPending = (d: unknown): d is Pending =>
  * консоли это выглядит как непрерывный поток, а узнаём мы из него ровно то же самое.
  * С нарастанием до 10 секунд их остаётся около шестидесяти.
  */
-async function awaitCommand<T>(first: T | Pending, limitMs = 15 * 60_000): Promise<T> {
+async function awaitCommand<T>(
+	first: T | Pending, limitMs = 15 * 60_000, keepWaiting?: () => boolean,
+): Promise<T> {
 	let data = first;
 	let pauseMs = 1000;
 	const until = Date.now() + limitMs;
 	while (isPending(data)) {
 		if (Date.now() > until) throw new Error("Команда 1С выполняется слишком долго");
+		// Наблюдение сняли («Скрыть» у операции) — ждать дальше некому.
+		if (keepWaiting && !keepWaiting()) throw new Error("Наблюдение за командой прекращено");
 		await new Promise((r) => setTimeout(r, pauseMs));
 		pauseMs = Math.min(10_000, Math.round(pauseMs * 1.5));
 		data = await aiFetch<T | Pending>(`/v1/onec/commands/${encodeURIComponent(data.commandId)}`);
@@ -290,7 +294,14 @@ export type PublicationReport = {
 export const refreshPublications = () =>
 	aiFetch<{ items: OnecBase[]; report?: PublicationReport } | Pending>(
 		"/v1/onec/publications/refresh", { method: "POST" },
-	).then((d) => awaitCommand<{ items: OnecBase[]; report?: PublicationReport }>(d));
+	).then(async (d) => {
+		if (!isPending(d)) return d;
+		// Долгая проверка (П7): результат команды — строки ПУБЛИКАЦИЙ, а не баз, и класть их в
+		// список баз нельзя. Срез сервис применил при приёме ответа — перечитываем реестр.
+		await awaitCommand<unknown>(d);
+		const bases = await fetchBases();
+		return { items: bases.items, report: undefined as PublicationReport | undefined };
+	});
 
 /**
  * Ответ агента на проверку наличия баз данных (`CLUSTER_CHECK_BASES`). Поля `dbMissing` у
@@ -298,7 +309,8 @@ export const refreshPublications = () =>
  * агента нет пароля СУБД).
  */
 export type CheckBasesResult = {
-	items?: { key: string; dbMissing?: boolean }[];
+	/** `reason` — почему базу не проверили (агент 22:05); признака `dbMissing` у неё нет. */
+	items?: { key: string; dbMissing?: boolean; reason?: string }[];
 	checked?: number;
 	skipped?: number;
 	note?: string;
@@ -369,9 +381,8 @@ export type BatchType =
 	| "IB_BACKUP"
 	// Проверка базы — единственная из обслуживания, которую имеет смысл гнать группой:
 	// она ничего не меняет без флага «Исправлять».
-	| "IB_CHECK"
-	// Чтение тоже пакетное: наполнить сводку по ста базам поштучно нереально.
-	| "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
+	// Типов чтения здесь нет (П8): `/batch` их не принимает (сервис, BATCHABLE).
+	| "IB_CHECK";
 
 export type BatchStart = {
 	batchId: string; total: number; queued: number;
@@ -397,11 +408,23 @@ export const cancelCommands = (ids: string[]) =>
  * Только чтения и только у агента с `agent.cancel`: сервис откажет в остальном. Ответ
  * `aborted: false` с `reason: "NOT_RUNNING"` — команда успела закончиться сама, это не ошибка.
  */
+export type AbortAnswer = { aborted: boolean; killed?: boolean; note?: string | null; reason?: string };
+
+/**
+ * Прервать начатую команду. Агент не ответил за время запроса (202) — ДОЖИДАЕМСЯ его ответа
+ * (П5): раньше 202 читалось как «прерывать нечего», хотя прерывание ещё шло.
+ */
 export const abortCommand = (id: string, force?: boolean) =>
-	aiFetch<{ aborted: boolean; killed?: boolean; note?: string | null; reason?: string }>(
+	aiFetch<AbortAnswer | Pending>(
 		`/v1/onec/commands/${encodeURIComponent(id)}/abort`,
 		{ method: "POST", body: JSON.stringify(force ? { force: true } : {}) },
-	);
+	).then(async (d): Promise<AbortAnswer> => {
+		if (!isPending(d)) return d;
+		const a = await awaitCommand<{ ok?: boolean; killed?: boolean; note?: string; reason?: string } | null>(d, 2 * 60_000);
+		return a?.ok === true
+			? { aborted: true, killed: a.killed === true, note: a.note ?? null }
+			: { aborted: false, reason: a?.reason ?? "NOT_RUNNING" };
+	});
 
 /** Остановить групповую операцию: отменяются все её команды, которые ещё не начаты. */
 export const cancelBatch = (batchId: string) =>
@@ -447,11 +470,42 @@ export type IbPlan = string | string[];
 export type IbCheckResult = {
 	ok?: boolean; issues?: number; repaired?: number; repairMode?: boolean;
 	report?: string; plan?: IbPlan;
+	/** Что агент не выполнил без «Исправлять» (агент 22:05): `reindex`, `recalcTotals`. */
+	skipped?: string[];
+	/** С какими ключами шёл конфигуратор. */
+	keys?: string[];
 };
 
 /** План к показу человеку: строки с новой строки, как их прислал агент. */
 export const planText = (plan: IbPlan | undefined): string =>
 	Array.isArray(plan) ? plan.join("\n") : (plan ?? "");
+
+/**
+ * ДОЛГАЯ КОМАНДА ПО БАЗЕ — НЕ ЖДАТЬ В ЗАПРОСЕ (П2, аудит 14.09).
+ *
+ * Загрузка, обновление и проверка базы идут до четырёх часов, а ожидание `awaitCommand`
+ * ограничено 15 минутами: операция показывалась упавшей, номер команды терялся, повтор ставил
+ * вторую. Теперь ответ «ещё идёт» возвращается номером — операцию дальше ведёт «Прогресс»
+ * (`followCommand`), без предела.
+ */
+export type Started<T> = { done: T } | { commandId: string };
+
+const startJob = <T>(path: string, body: unknown): Promise<Started<T>> =>
+	aiFetch<T | Pending>(path, { method: "POST", body: JSON.stringify(body) })
+		.then((d) => (isPending(d) ? { commandId: d.commandId } : { done: d }));
+
+/** Следить за командой по номеру, пока `keepWaiting()` — без предела по времени. */
+export const followCommand = <T>(commandId: string, keepWaiting: () => boolean): Promise<T> =>
+	awaitCommand<T>({ pending: true, commandId }, Number.POSITIVE_INFINITY, keepWaiting);
+
+export const startCheckBase = (baseKey: string, p: IbCheckPayload) =>
+	startJob<IbCheckResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/check`, p);
+
+export const startRestoreBase = (baseKey: string, p: { path: string; lockSessions?: boolean }) =>
+	startJob<IbRestoreResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/restore`, p);
+
+export const startApplyUpdate = (baseKey: string, p: { path: string; backup?: boolean; lockSessions?: boolean }) =>
+	startJob<IbApplyUpdateResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/apply-update`, p);
 
 export const checkBase = (baseKey: string, p: IbCheckPayload) =>
 	aiFetch<IbCheckResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/check`, {

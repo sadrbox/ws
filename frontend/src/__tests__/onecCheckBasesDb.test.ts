@@ -18,13 +18,16 @@ describe("итог проверки наличия баз данных", () => {
 			items: [{ key: "aibek", dbMissing: true }, { key: "abdali", dbMissing: false }, { key: "x" }],
 			checked: 110, skipped: 1,
 		});
-		expect(o).toEqual({ severity: "success", text: summary(110, 1), checked: 110, missing: 1 });
+		// Непроверенная база названа (П6): «всё в порядке» здесь было бы неправдой.
+		expect(o).toEqual({
+			severity: "warning", text: `${summary(110, 1)}. ${translate("onecBasesDbNotChecked")}: 1 (x)`, checked: 110, missing: 1,
+		});
 	});
 
 	it("проверить нечем — предупреждение с причиной, а не успех", () => {
 		const o = checkDbOutcome({ items: [{ key: "aibek" }], note: "у агента нет пароля СУБД" });
 		expect(o.severity).toBe("warning");
-		expect(o.text).toBe(`${summary(0, 0)}. у агента нет пароля СУБД`);
+		expect(o.text).toBe(`${summary(0, 0)}. ${translate("onecBasesDbNotChecked")}: 1 (aibek). у агента нет пароля СУБД`);
 	});
 
 	it("ответ без счётчика — считаем строки с признаком", () => {
@@ -36,4 +39,14 @@ describe("итог проверки наличия баз данных", () => {
 	it("пустой ответ не падает", () => {
 		expect(checkDbOutcome({})).toEqual({ severity: "success", text: summary(0, 0), checked: 0, missing: 0 });
 	});
+
+	it("непроверенные базы — с причиной от агента, длинный список обрезан", () => {
+		const items = Array.from({ length: 12 }, (_, k) => ({ key: `b${k + 1}`, reason: "нет доступа к СУБД" }));
+		const o = checkDbOutcome({ items, checked: 0, skipped: 12 });
+		expect(o.severity).toBe("warning");
+		expect(o.text).toContain(`${translate("onecBasesDbNotChecked")}: 12 (b1 — нет доступа к СУБД;`);
+		expect(o.text).toContain("b10 — нет доступа к СУБД; …)");
+		expect(o.text).not.toContain("b11");
+	});
 });
+

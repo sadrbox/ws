@@ -59,6 +59,46 @@ export function rebaseForm<T extends Record<string, unknown>>(prev: T, next: T, 
 	return out;
 }
 
+/** Какие роли выдать и какие снять, чтобы из `before` получилось `after` (без учёта регистра). */
+export function diffRoles(before: string[], after: string[]): { add: string[]; remove: string[] } {
+	const norm = (s: string) => s.trim().toLowerCase();
+	const had = new Set(before.map(norm));
+	const now = new Set(after.map(norm));
+	return {
+		add: after.filter((r) => !had.has(norm(r))),
+		remove: before.filter((r) => !now.has(norm(r))),
+	};
+}
+
+/**
+ * ГРУППОВАЯ ПРАВКА ПОЛЬЗОВАТЕЛЯ ПО МНОГИМ БАЗАМ — ТОЛЬКО ИЗМЕНЁННОЕ (П1, аудит 14.09).
+ *
+ * Общая форма элемента отправляла во все отмеченные базы `disabled` ВСЕГДА и `roles` ЦЕЛИКОМ —
+ * набором, взятым из одной базы. Изменил человек полное имя — а в каждой базе заодно перезаписались
+ * права и доступ. Теперь: реквизит уходит, только если изменён; роли — поправками (`addRoles`/
+ * `removeRoles`) относительно показанного набора, и в каждой базе меняется ровно то, что тронули.
+ * Пустое полное имя и пустой пароль — «не трогать». Ничего не изменилось — `null`.
+ */
+export function buildGroupUserUpdate(
+	userName: string,
+	original: { fullName: string; disabled: boolean; roles: string[] },
+	draft: { name: string; fullName: string; password: string; disabled: boolean; roles: string[] },
+): Record<string, unknown> | null {
+	const newName = draft.name.trim() && draft.name.trim() !== userName ? draft.name.trim() : "";
+	const fullName = draft.fullName.trim() && draft.fullName.trim() !== original.fullName.trim() ? draft.fullName.trim() : "";
+	const { add, remove } = diffRoles(original.roles, draft.roles);
+	const payload: Record<string, unknown> = {
+		name: userName,
+		...(newName ? { newName } : {}),
+		...(fullName ? { fullName } : {}),
+		...(draft.password ? { password: draft.password } : {}),
+		...(draft.disabled !== original.disabled ? { disabled: draft.disabled } : {}),
+		...(add.length ? { addRoles: add } : {}),
+		...(remove.length ? { removeRoles: remove } : {}),
+	};
+	return Object.keys(payload).length > 1 ? payload : null;
+}
+
 export function buildUserUpdate(
 	userName: string, current: UserCurrent, draft: UserDraft,
 ): Record<string, unknown> | null {

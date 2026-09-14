@@ -28,10 +28,12 @@ import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { CapabilityGuard, ReadonlyNotice, useOnecWrite } from "src/models/OneCAdmin/shared";
-import { attachBatch, finishOp, startOp } from "src/models/OneCAdmin/progress";
+import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/progress";
+import { useRunningWork } from "src/components/TechMessages/operations";
 import {
-	applyBaseUpdate, checkBase, planText, restoreBase, runBatch,
-	type IbApplyUpdateResult, type IbCheckResult, type IbRestoreResult,
+	applyBaseUpdate, checkBase, followCommand, planText, restoreBase, runBatch,
+	startApplyUpdate, startCheckBase, startRestoreBase,
+	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type Started,
 } from "src/services/onec/api";
 import main from "src/styles/main.module.scss";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
@@ -43,7 +45,16 @@ type Confirm = { job: Job; plan: string };
 
 export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const canWrite = useOnecWrite();
-	const [check, setCheck] = useState({ reindex: true, logicalIntegrity: true, recalcTotals: false, repair: false });
+	// Переиндексация и пересчёт итогов меняют базу: агент выполняет их только с «Исправлять» (П9),
+	// поэтому по умолчанию они выключены и без «Исправлять» не отправляются.
+	const [check, setCheck] = useState({ reindex: false, logicalIntegrity: true, recalcTotals: false, repair: false });
+	const checkPayload = (): IbCheckPayload => ({
+		logicalIntegrity: check.logicalIntegrity, repair: check.repair,
+		...(check.repair ? { reindex: check.reindex, recalcTotals: check.recalcTotals } : {}),
+	});
+	/** Работа по этой базе уже идёт — повторить её нельзя, пока команда жива (П2). */
+	const workKey = `onec-maint:${baseKey.toLowerCase()}`;
+	const workRunning = useRunningWork(workKey);
 	const [backupDir, setBackupDir] = useState("");
 	const [restorePath, setRestorePath] = useState("");
 	const [restoreLock, setRestoreLock] = useState(true);
@@ -53,26 +64,51 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const [confirm, setConfirm] = useState<Confirm | null>(null);
 	const [report, setReport] = useState("");
 
-	/** Долгая операция в реестре прогресса: она идёт часами, и место ей — на своей вкладке. */
-	const track = async <T,>(job: Job, title: string, run: () => Promise<T>): Promise<T> => {
-		const op = startOp({ kind: job === "check" ? "read" : "update", title, target: baseKey, total: 1, scope: { bases: [baseKey] } });
+	const fail = (e: unknown) => reportError(e, { source: translate("onecBase") });
+
+	/**
+	 * ДОЛГАЯ ОПЕРАЦИЯ — В «ПРОГРЕССЕ», И ВЕДЁТСЯ ТАМ ДО КОНЦА (П2). Загрузка, обновление и проверка
+	 * идут до четырёх часов. Ответил за время запроса — итог сразу; «ещё идёт» — операция следит
+	 * за командой по номеру без предела, итог приходит тостом, а повтор до конца недоступен
+	 * (`workKey`). Сервис к тому же склеивает повтор с идущей командой (С8).
+	 */
+	const runLong = async <T,>(job: Job, title: string, start: () => Promise<Started<T>>, describe: (r: T) => string): Promise<string> => {
+		const op = startOp({
+			kind: job === "check" ? "read" : "update", title, target: baseKey, total: 1,
+			scope: { bases: [baseKey] }, workKey,
+		});
+		let started: Started<T>;
 		try {
-			const r = await run();
-			finishOp(op);
-			return r;
+			started = await start();
 		} catch (e) {
 			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 			throw e;
 		}
+		if ("done" in started) { finishOp(op); return describe(started.done); }
+		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
+		void followCommand<T>(started.commandId, watched)
+			.then((r) => { finishOp(op); showToast(describe(r), "success"); })
+			.catch((e: unknown) => {
+				if (!watched()) return; // наблюдение сняли — сообщать некому
+				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+				fail(e);
+			});
+		return translate("onecMaintRunning");
 	};
 
-	const fail = (e: unknown) => reportError(e, { source: translate("onecBase") });
+	/** Итог проверки: найдено, исправлено и что не выполнено без «Исправлять» (П9). */
+	const checkText = (r: IbCheckResult): string => {
+		const found = `${translate("onecMaintIssues")}: ${r.issues ?? 0}${r.repairMode ? `, ${translate("onecMaintRepaired")}: ${r.repaired ?? 0}` : ""}`;
+		const skipped = (r.skipped ?? []).map((k) => (k === "reindex" ? translate("onecMaintReindex")
+			: k === "recalcTotals" ? translate("onecMaintTotals") : k));
+		return skipped.length ? `${found}. ${translate("onecMaintSkipped")}: ${skipped.join(", ")}` : found;
+	};
 
 	/** Сухой прогон: спрашиваем агента, что произойдёт, и показываем ЕГО текст. */
 	const plan = useMutation({
 		mutationFn: async (job: Job): Promise<Confirm> => {
 			if (job === "check") {
-				const r: IbCheckResult = await checkBase(baseKey, { ...check, dryRun: true });
+				const r: IbCheckResult = await checkBase(baseKey, { ...checkPayload(), dryRun: true });
 				return { job, plan: planText(r.plan) || r.report || translate("onecMaintCheckPlan") };
 			}
 			if (job === "restore") {
@@ -94,9 +130,8 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const apply = useMutation({
 		mutationFn: async (job: Job) => {
 			if (job === "check") {
-				const r = await track("check", translate("onecMaintCheck"), () => checkBase(baseKey, check));
-				setReport(r.report || "");
-				return `${translate("onecMaintIssues")}: ${r.issues ?? 0}${r.repairMode ? `, ${translate("onecMaintRepaired")}: ${r.repaired ?? 0}` : ""}`;
+				return runLong("check", translate("onecMaintCheck"), () => startCheckBase(baseKey, checkPayload()),
+					(r: IbCheckResult) => { setReport(r.report || ""); return checkText(r); });
 			}
 			if (job === "backup") {
 				// Выгрузка идёт заданием, как и раньше: она же доступна группой по списку баз.
@@ -106,19 +141,20 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 				return translate("onecBatchQueued");
 			}
 			if (job === "restore") {
-				const r = await track("restore", translate("onecMaintRestore"),
-					() => restoreBase(baseKey, { path: restorePath.trim(), lockSessions: restoreLock }));
-				return `${translate("onecMaintRestored")}: ${r.path || restorePath.trim()}`;
+				const path = restorePath.trim();
+				return runLong("restore", translate("onecMaintRestore"),
+					() => startRestoreBase(baseKey, { path, lockSessions: restoreLock }),
+					(r: IbRestoreResult) => `${translate("onecMaintRestored")}: ${r.path || path}`);
 			}
-			const r = await track("update", translate("onecMaintUpdate"),
-				() => applyBaseUpdate(baseKey, { path: updatePath.trim(), backup: updateBackup, lockSessions: updateLock }));
-			return `${translate("onecMaintUpdated")}: ${r.versionFrom || "—"} → ${r.versionTo || "—"}`;
+			return runLong("update", translate("onecMaintUpdate"),
+				() => startApplyUpdate(baseKey, { path: updatePath.trim(), backup: updateBackup, lockSessions: updateLock }),
+				(r: IbApplyUpdateResult) => `${translate("onecMaintUpdated")}: ${r.versionFrom || "—"} → ${r.versionTo || "—"}`);
 		},
 		onSuccess: (text) => { showToast(text, "success"); setConfirm(null); },
 		onError: (e) => { fail(e); setConfirm(null); },
 	});
 
-	const busy = plan.isPending || apply.isPending;
+	const busy = plan.isPending || apply.isPending || workRunning;
 	/** Проверка без исправления ничего не меняет — её запускают сразу, без подтверждения. */
 	const runCheck = () => (check.repair ? plan.mutate("check") : apply.mutate("check"));
 
@@ -133,12 +169,17 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 					<FormArea title={translate("onecMaintCheck")}>
 						<GroupCol>
 							<GroupRow>
-								<FieldToggle name="mnt_reindex" label={translate("onecMaintReindex")} value={check.reindex}
-									disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, reindex: v }))} />
+								{/* Меняют базу — только с «Исправлять» (П9): без него агент их пропускает. */}
+								<FieldToggle name="mnt_reindex"
+									label={`${translate("onecMaintReindex")}${check.repair ? "" : ` (${translate("onecMaintWithRepair")})`}`}
+									value={check.repair && check.reindex}
+									disabled={busy || !check.repair} onChange={(v) => setCheck((c) => ({ ...c, reindex: v }))} />
 								<FieldToggle name="mnt_logical" label={translate("onecMaintLogical")} value={check.logicalIntegrity}
 									disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, logicalIntegrity: v }))} />
-								<FieldToggle name="mnt_totals" label={translate("onecMaintTotals")} value={check.recalcTotals}
-									disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, recalcTotals: v }))} />
+								<FieldToggle name="mnt_totals"
+									label={`${translate("onecMaintTotals")}${check.repair ? "" : ` (${translate("onecMaintWithRepair")})`}`}
+									value={check.repair && check.recalcTotals}
+									disabled={busy || !check.repair} onChange={(v) => setCheck((c) => ({ ...c, recalcTotals: v }))} />
 							</GroupRow>
 							<GroupRow>
 								{/* Исправление — отдельный флаг и отдельное подтверждение: оно меняет данные,

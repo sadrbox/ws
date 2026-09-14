@@ -46,6 +46,8 @@ import {
 } from "./shared";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
+import { buildGroupUserUpdate } from "./userUpdate";
+import { showToast } from "src/components/UIToast";
 
 export type ElementKind = "user" | "extension";
 
@@ -94,6 +96,8 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 	// «снять все роли» пришлось бы делать отдельной командой, и это к лучшему: случайно
 	// разослать «без ролей» на сотню баз здесь невозможно.
 	const [roles, setRoles] = useState<string[]>(Array.isArray(row.roles) ? (row.roles as string[]) : []);
+	/** Набор ролей, от которого считаются поправки (П1): что показали человеку до его правок. */
+	const [rolesOriginal, setRolesOriginal] = useState<string[]>(Array.isArray(row.roles) ? (row.roles as string[]) : []);
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	// «Где заведён» для пользователя — из кэша реестра, без обращения к 1С.
@@ -114,7 +118,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 		const src = scope
 			? occurrences.data.items.find((o) => o.baseKey === scope)
 			: occurrences.data.items.find((o) => (o.roles ?? []).length);
-		if (src?.roles?.length) { setRoles(src.roles); setRolesFrom(src.baseKey); }
+		if (src?.roles?.length) { setRoles(src.roles); setRolesOriginal(src.roles); setRolesFrom(src.baseKey); }
 	}, [isUser, roles.length, occurrences.data, row.scopeBase]);
 
 	const present = useMemo(() => {
@@ -143,16 +147,13 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 					? "IB_UPDATE_USER"
 					: (isUser ? "IB_CREATE_USER" : "IB_INSTALL_EXTENSION");
 
-			const payload: Record<string, unknown> =
+			const payload: Record<string, unknown> | null =
 				dialog === "delete" ? { name: elementName || name.trim() }
-					: dialog === "update" ? {
-						name: elementName,
-						...(name.trim() && name.trim() !== elementName ? { newName: name.trim() } : {}),
-						...(fullName.trim() ? { fullName: fullName.trim() } : {}),
-						...(password ? { password } : {}),
-						...(roles.length ? { roles } : {}),
-						disabled,
-					}
+					// Только изменённое, роли — поправками (П1): иначе права и доступ перезаписывались во
+					// всех отмеченных базах набором из одной.
+					: dialog === "update" ? buildGroupUserUpdate(elementName,
+						{ fullName: asText(row.fullName), disabled: row.disabledFlag === true, roles: rolesOriginal },
+						{ name, fullName, password, disabled, roles })
 						: isUser ? {
 							name: name.trim(),
 							...(fullName.trim() ? { fullName: fullName.trim() } : {}),
@@ -161,9 +162,11 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 						}
 							: { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" };
 
+			if (!payload) return null;
 			return runBatch(type, picked, payload);
 		},
 		onSuccess: (d) => {
+			if (!d) { showToast(translate("onecNothingToApply"), "warning"); setDialog(null); return; }
 			void qc.invalidateQueries({ queryKey: ["onec"] });
 			setDialog(null);
 			// Итог называет то, что есть: поставили всё / часть / ничего — и почему.

@@ -607,6 +607,25 @@ export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spe
 }
 
 /**
+ * КЛЮЧ, ПО КОТОРОМУ ПОВТОР ПРИСОЕДИНЯЕТСЯ К УЖЕ ИДУЩЕЙ КОМАНДЕ (очередь склеивает команды с
+ * одинаковым `requestId` среди незавершённых).
+ *
+ * ЧТЕНИЯ — всегда: два «Обновить» подряд не должны давать два входа в базу.
+ * ДОЛГИЕ ИЗМЕНЯЮЩИЕ КОМАНДЫ ПО БАЗЕ (загрузка, обновление, проверка — срок LONG_COMMAND_TTL_SECS)
+ * — тоже (С8, аудит 14.09): панель ждала их 15 минут и объявляла упавшими, а повтор ставил вторую
+ * загрузку поверх идущей. Сухой прогон (`dryRun`) базу не меняет и не склеивается. Прочие
+ * изменения — нет: у них «повторить» — законное намерение.
+ */
+export function commandRequestId(
+	spec: Pick<AdminCommandSpec, "type" | "operation" | "ttlSeconds" | "readKey">,
+	payload: Record<string, unknown>, baseKey: string | null,
+): string | undefined {
+	if (spec.operation === "READ") return `${spec.type}:${spec.readKey ? spec.readKey(payload) : (baseKey ?? "-")}`;
+	if (spec.ttlSeconds === LONG_COMMAND_TTL_SECS && baseKey && payload.dryRun !== true) return `${spec.type}:${baseKey}`;
+	return undefined;
+}
+
+/**
  * СПОСОБНОСТЬ, КОТОРУЮ ТРЕБУЕТ САМО СОДЕРЖИМОЕ КОМАНДЫ, а не её тип.
  *
  * `IB_UPDATE_USER` правит и реквизиты, и роли, и по типу ему достаточно `ib.admin`. Но роли
