@@ -32,6 +32,7 @@ import {
 	opSucceeded, useOnecOps,
 } from "./progress";
 import { formatDuration, queueReason, useQueueStats } from "./queueStats";
+import QueueHolders from "./QueueHolders";
 import styles from "./OneCAdmin.module.scss";
 
 const opColumns = (): TColumn[] => ([
@@ -107,6 +108,8 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		<>
 			{/* Строка состояния очереди: молчит, когда очереди нет — сообщать «пусто» незачем. */}
 			{queueLine && <div className={styles.Hint}>{translate("onecQueueState")}: {queueLine}</div>}
+			{/* Кто держит очередь и время по типам (R5). */}
+			<QueueHolders stats={stats.data} />
 			<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ops", rows: view.rows, columns: cols, setColumns: setCols,
 			sorting: view.sorting, search: view.search, isLoading: false,

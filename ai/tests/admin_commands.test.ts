@@ -56,8 +56,10 @@ test("опасные операции помечены CRITICAL — они ид�
 	// подтверждать её целиком нельзя — иначе привыкнут подтверждать не читая, а
 	// подтверждение нужно именно на исправление.
 	const rest = ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL");
-	assert.deepEqual(rest.filter((c) => c.operation === "WRITE").map((c) => c.type), ["IB_CHECK"]);
-	assert.ok(rest.filter((c) => c.type !== "IB_CHECK").every((c) => c.operation === "READ"));
+	assert.deepEqual(rest.filter((c) => c.operation === "WRITE").map((c) => c.type), [// Самопроверка агента (R4) создаёт и удаляет временного пользователя — это запись в базу,
+		// но обратимая самим прогоном: подтверждение — в интерфейсе, как у проверки.
+		"IB_SELFTEST", "IB_CHECK"]);
+	assert.ok(rest.filter((c) => c.type !== "IB_CHECK" && c.type !== "IB_SELFTEST").every((c) => c.operation === "READ"));
 });
 
 test("гейт: админ-команду получает только агент с cluster.admin", () => {

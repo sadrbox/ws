@@ -18,6 +18,8 @@
 import { humanizeAgentError } from "../onec/errorHints.ts";
 import { isDestructive } from "../onec/access.ts";
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
+import { agentBuild, buildOutdated, missingFeatures } from "../agents/features.ts";
+import { mergeDurationStats } from "../agents/commandStats.ts";
 import { isDue, type MaintenanceSchedule, type ScheduleStore } from "../onec/schedules.ts";
 import { Router, type Request, type Response } from "express";
 import type { Db } from "../db/pool.ts";
@@ -537,6 +539,7 @@ export function onecRouter(deps: Deps) {
 	 */
 	r.get("/queue-stats", async (_req, res) => {
 		const stats = await queue.stats();
+		const holders = await queue.runningCommands();
 		// «Некому забрать» и «занят» — разные ответы, и различает их наличие живого
 		// админ-агента, а не длина очереди.
 		const live = (await agents.listAll()).filter((a) => a.role === "admin" && a.online && !a.disabled);
@@ -547,7 +550,38 @@ export function onecRouter(deps: Deps) {
 			// Сколько команд внутрь базы агент получает одновременно: из него и считается
 			// оценка времени массовой операции.
 			ibParallel: cfg.AGENT_IB_PARALLEL,
+			// Кто держит очередь (R5): прервать панель предлагает только чтения — как и маршрут abort.
+			runningCommands: holders.map((c) => ({ ...c, abortable: findAdminCommand(c.type)?.operation === "READ" })),
+			// Время по типам — сводно по снимкам живых агентов (S5).
+			agentDurations: mergeDurationStats(live.map((a) => a.commandStats?.durationsByType)),
 		} });
+	});
+
+	/**
+	 * СОСТОЯНИЕ СЕРВЕРА И ЖУРНАЛ АГЕНТА (R1, R2) — ЭТОМУ агенту, а не выбранному по базе: карточка
+	 * агента спрашивает о нём самом. Чтения — полного доступа не требуют (GET).
+	 */
+	/** Самопроверка операций агента в базе (R4): временный пользователь создаётся и удаляется. */
+	r.post("/bases/:key/selftest", async (req, res) => {
+		send(res, await run(req, "IB_SELFTEST", { baseKey: req.params.key }));
+	});
+
+	r.get("/agents/:id/health", async (req, res) => {
+		send(res, await run(req, "AGENT_HEALTH", {}, { agentId: req.params.id }));
+	});
+
+	r.get("/agents/:id/log", async (req, res) => {
+		const q = req.query as Record<string, unknown>;
+		const text = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+		const lines = text(q.lines);
+		const level = text(q.level);
+		const contains = text(q.contains);
+		// Параметры проверяет схема команды: «lines=abc» — отказ VALIDATION_ERROR, а не молчаливые 200 строк.
+		send(res, await run(req, "AGENT_LOG_TAIL", {
+			...(lines !== undefined ? { lines: Number(lines) } : {}),
+			...(level !== undefined ? { level } : {}),
+			...(contains !== undefined ? { contains } : {}),
+		}, { agentId: req.params.id }));
 	});
 
 	r.get("/agents", async (_req, res) => {
@@ -558,6 +592,11 @@ export function onecRouter(deps: Deps) {
 		const items = await Promise.all(all.map(async (a) => ({
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			capabilities: a.capabilities, lastSeenAt: a.lastSeenAt, disabled: a.disabled,
+			// Сборка и её отставание (R3): «Устарел» — по эталону AGENT_LATEST_BUILD, «нет в этой
+			// сборке» — по способностям, которые агент объявил.
+			version: a.version, build: agentBuild(a.version),
+			buildOutdated: buildOutdated(a.version, cfg.AGENT_LATEST_BUILD),
+			missingFeatures: missingFeatures(a),
 			// Версия платформы 1С на сервере агента. Панель показывает её в карточке базы,
 			// когда сам агент не прислал версию по базе: платформа у всех баз одного
 			// сервера одна, и «неизвестно» здесь — отсутствие ответа, а не разнобой.

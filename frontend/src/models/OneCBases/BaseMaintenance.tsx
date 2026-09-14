@@ -32,8 +32,8 @@ import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/pro
 import { useRunningWork } from "src/components/TechMessages/operations";
 import {
 	applyBaseUpdate, checkBase, followCommand, planText, restoreBase, runBatch,
-	startApplyUpdate, startCheckBase, startRestoreBase,
-	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type Started,
+	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest,
+	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelftestResult, type Started,
 } from "src/services/onec/api";
 import main from "src/styles/main.module.scss";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
@@ -63,6 +63,8 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const [updateLock, setUpdateLock] = useState(true);
 	const [confirm, setConfirm] = useState<Confirm | null>(null);
 	const [report, setReport] = useState("");
+	const [confirmSelftest, setConfirmSelftest] = useState(false);
+	const [selftest, setSelftest] = useState<SelftestResult | null>(null);
 
 	const fail = (e: unknown) => reportError(e, { source: translate("onecBase") });
 
@@ -153,6 +155,42 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		onSuccess: (text) => { showToast(text, "success"); setConfirm(null); },
 		onError: (e) => { fail(e); setConfirm(null); },
 	});
+
+	/**
+	 * САМОПРОВЕРКА ОПЕРАЦИЙ АГЕНТА (R4). Идёт минуту и дольше — ведётся в «Прогрессе» по номеру
+	 * команды, как долгие операции. `ok: false` — не «Выполнено», а предупреждение: прогон состоялся,
+	 * но часть шагов не удалась, и таблица шагов говорит какие.
+	 */
+	const runSelftest = async () => {
+		setSelftest(null);
+		const title = translate("onecSelftest");
+		const op = startOp({ kind: "update", title, target: baseKey, total: 1, scope: { bases: [baseKey] }, workKey });
+		const settle = (r: SelftestResult) => {
+			setSelftest(r);
+			const failed = (r.steps ?? []).filter((s) => !s.ok).length;
+			const bad = failed > 0 || r.ok === false;
+			const text = bad ? `${translate("onecSelftestFailedSteps")}: ${failed}` : translate("onecSelftestPassed");
+			finishOp(op, bad ? { failed: 1, note: text } : undefined);
+			showToast(text, bad ? "warning" : "success");
+		};
+		let started: Started<SelftestResult>;
+		try {
+			started = await startSelftest(baseKey);
+		} catch (e) {
+			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+			fail(e);
+			return;
+		}
+		if ("done" in started) { settle(started.done); return; }
+		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
+		void followCommand<SelftestResult>(started.commandId, watched)
+			.then(settle)
+			.catch((e: unknown) => {
+				if (!watched()) return;
+				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+				fail(e);
+			});
+	};
 
 	const busy = plan.isPending || apply.isPending || workRunning;
 	/** Проверка без исправления ничего не меняет — её запускают сразу, без подтверждения. */
@@ -246,6 +284,38 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 								</GroupRow>
 							</GroupCol>
 						</FormArea>
+
+						{/* Самопроверка (R4) создаёт и удаляет временного пользователя — только полному доступу. */}
+						<FormArea title={translate("onecSelftest")}>
+							<GroupCol>
+								<GroupRow>
+									<Button variant="secondary" disabled={busy} title={translate("onecSelftest")}
+										onClick={() => setConfirmSelftest(true)}>
+										<Icon name="recalc" /> {translate("onecSelftest")}
+									</Button>
+								</GroupRow>
+								{selftest && (
+									<table className={styles.StatsTable}>
+										<thead>
+											<tr>
+												<th>{translate("onecSelftestStep")}</th>
+												<th>{translate("onecSelftestResult")}</th>
+												<th>{translate("onecSelftestNote")}</th>
+											</tr>
+										</thead>
+										<tbody>
+											{(selftest.steps ?? []).map((s, i) => (
+												<tr key={`${i}-${s.name}`}>
+													<td>{s.name}</td>
+													<td>{s.ok ? translate("onecSelftestOk") : translate("onecSelftestFail")}</td>
+													<td>{s.note ?? ""}</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								)}
+							</GroupCol>
+						</FormArea>
 					</>)}
 
 				</GroupCol>
@@ -265,6 +335,16 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 					]} />
 				</GroupCol>
 			</div>
+
+			{confirmSelftest && (
+				<Modal title={translate("onecSelftest")} onClose={() => setConfirmSelftest(false)}
+					onApply={() => { setConfirmSelftest(false); void runSelftest(); }}>
+					<div className={styles.ConfirmText}>
+						<div className={styles.ConfirmDetails}>{translate("onecBase")}: {baseKey}</div>
+						<Notice inline items={[{ type: "attention", text: translate("onecSelftestPlan") }]} />
+					</div>
+				</Modal>
+			)}
 
 			{confirm && (
 				<Modal title={translate("onecMaintConfirmTitle")} onClose={() => setConfirm(null)}

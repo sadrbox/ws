@@ -509,6 +509,13 @@ export const startRestoreBase = (baseKey: string, p: { path: string; lockSession
 export const startApplyUpdate = (baseKey: string, p: { path: string; backup?: boolean; lockSessions?: boolean }) =>
 	startJob<IbApplyUpdateResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/apply-update`, p);
 
+/** Итог самопроверки (R4): `ok: false` — есть неудачные шаги, а не отказ команды. */
+export type SelftestResult = { ok: boolean; steps?: { name: string; ok: boolean; note?: string }[] };
+
+/** Самопроверка операций агента в базе (R4): минута и дольше — ведётся по номеру команды. */
+export const startSelftest = (baseKey: string) =>
+	startJob<SelftestResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/selftest`, {});
+
 export const checkBase = (baseKey: string, p: IbCheckPayload) =>
 	aiFetch<IbCheckResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/check`, {
 		method: "POST", body: JSON.stringify(p),
@@ -584,6 +591,14 @@ export type OnecAgent = {
 	 * здесь он как раз молчит — и молчание ожидаемо, пока идёт взятая им работа.
 	 */
 	busy: boolean;
+	/** Версия агента со сборкой: «0.1.0+2026-09-14 23:16 (+05)». Нет — сервис старее панели. */
+	version?: string | null;
+	/** Сборка «ГГГГ-ММ-ДД чч:мм» (R3); null — не разобрана. */
+	build?: string | null;
+	/** Старше эталона сервиса (R3); null — сравнивать не с чем. */
+	buildOutdated?: boolean | null;
+	/** Функции панели, которых нет в этой сборке (R3): abort, roles, commandStats, health, log, selftest. */
+	missingFeatures?: string[];
 	/**
 	 * Экземпляры (процессы) агента, отзывавшиеся за последнее время. Больше одного — авария:
 	 * два процесса под одним токеном разбирают одну очередь команд, и стоит их настройкам
@@ -650,6 +665,53 @@ export const updateServer = (id: string, patch: {
 	aiFetch<{ items: OnecServer[] }>(`/v1/onec/servers/${encodeURIComponent(id)}`, {
 		method: "PATCH", body: JSON.stringify(patch),
 	});
+
+/**
+ * Ответ `AGENT_HEALTH` — «Состояние сервера 1С» (R1, контракт агента 23:16). Все поля необязательны:
+ * у бизнес-агента нет кластера, у старой сборки — части признаков.
+ */
+export type AgentHealth = {
+	collectedAt?: string;
+	agent?: {
+		version?: string; build?: string; instance?: string; role?: string; server?: string;
+		serviceName?: string; state?: string; lastError?: string | null; uptimeSecs?: number;
+		ibReady?: boolean; maxParallel?: number; persistentBridge?: boolean;
+		commandTimeoutSecs?: number; longCommandTimeoutSecs?: number;
+	};
+	capabilities?: string[];
+	readiness?: { items?: { key: string; ok: boolean; note?: string }[] };
+	commands?: { done?: number; failed?: number; failuresByCode?: Record<string, number> };
+	processes?: { pid: number; tool?: string; what?: string; base?: string | null; ageSecs?: number; orphan?: boolean }[];
+	cluster?: null | {
+		platform?: string | null;
+		clusters?: { name?: string; host?: string; port?: string }[] | { error: string };
+		bases?: { known?: number; dbChecked?: number; dbMissing?: string[] };
+		publications?: null | { found?: number; complete?: boolean; ageSecs?: number };
+		dbPassword?: boolean;
+		dbLoginFailure?: unknown;
+		queryLoginFailure?: unknown;
+		dbmsClients?: { name: string; path: string | null }[];
+	};
+	logProblems?: string[];
+};
+
+/** Состояние сервера 1С — командой ЭТОМУ агенту (R1). */
+export const fetchAgentHealth = (agentId: string) =>
+	aiFetch<AgentHealth | Pending>(`/v1/onec/agents/${encodeURIComponent(agentId)}/health`)
+		.then((d) => (isPending(d) ? awaitCommand<AgentHealth>(d, 2 * 60_000) : d));
+
+/** Ответ `AGENT_LOG_TAIL` (R2); файлов журнала ещё нет — `{file: null, lines: [], note}`. */
+export type AgentLogTail = { file: string | null; lines: string[]; matched?: number; truncated?: boolean; note?: string };
+
+/** Хвост журнала агента (R2): отбирает агент, пароли и токены вырезаны до отбора. */
+export const fetchAgentLog = (agentId: string, p: { lines?: number; level?: "all" | "problems"; contains?: string }) => {
+	const q = new URLSearchParams();
+	if (p.lines) q.set("lines", String(p.lines));
+	if (p.level) q.set("level", p.level);
+	if (p.contains) q.set("contains", p.contains);
+	return aiFetch<AgentLogTail | Pending>(`/v1/onec/agents/${encodeURIComponent(agentId)}/log?${q.toString()}`)
+		.then((d) => (isPending(d) ? awaitCommand<AgentLogTail>(d, 2 * 60_000) : d));
+};
 
 export const fetchAgents = () =>
 	aiFetch<{
@@ -725,6 +787,14 @@ export type OnecQueueStats = {
 	agentsBusy: number;
 	/** Сколько команд внутрь базы агент получает одновременно — делитель в оценке времени. */
 	ibParallel: number;
+	/** Кто держит очередь (R5): выданные и не ответившие команды. Нет — сервис старее панели. */
+	runningCommands?: {
+		commandId: string; type: string; baseKey: string | null; agentId: string; ageSecs: number;
+		/** Прервать можно только чтение. */
+		abortable: boolean;
+	}[];
+	/** Время по типам команд — сводно по снимкам живых агентов (R5). */
+	agentDurations?: Record<string, { count: number; avgMs: number; maxMs: number; p95LeSecs: number | null }>;
 };
 
 export const fetchQueueStats = () => aiFetch<OnecQueueStats>("/v1/onec/queue-stats");

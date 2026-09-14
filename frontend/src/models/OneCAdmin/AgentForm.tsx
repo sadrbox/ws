@@ -23,6 +23,9 @@ import { Field } from "src/components/Field";
 import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { durationRows, failureRows } from "./agentStats";
+import { agentBuildLabel, featureLabels } from "./agentHealth";
+import AgentHealthTab from "./AgentHealthTab";
+import AgentLogTab from "./AgentLogTab";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { useScopeObject } from "src/components/TechMessages/store";
@@ -254,10 +257,19 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 										    строки висели бы вечно и не убирались очисткой — она щадит то,
 										    что источник продолжает сообщать. Рисуем на месте: колонка под
 										    пояснения в форме и так отведена, разметка не двигается. */}
-										<Notice inline items={[{
-											type: "info",
-											text: `${translate("onecAgentCapabilities")}: ${agent?.capabilities.join(", ") || "—"}`,
-										}]} />
+										<Notice inline items={[
+											{
+												type: "info",
+												text: `${translate("onecAgentCapabilities")}: ${agent?.capabilities.join(", ") || "—"}`,
+											},
+											// Сборка и чего в ней нет (R3): «Устарел» — по эталону сервиса, недостающее — по
+											// способностям. Иначе «кнопка не работает» читается как поломка, а не как старая сборка.
+											...(agent?.build ? [{ type: "info" as const, text: `${translate("buildLabel")}: ${agentBuildLabel(agent)}` }] : []),
+											...(agent?.missingFeatures?.length ? [{
+												type: "warning" as const,
+												text: `${translate("onecAgentMissing")}: ${featureLabels(agent.missingFeatures).join(", ")}. ${translate("onecAgentUpdateHint")}`,
+											}] : []),
+										]} />
 									</GroupCol>
 								</div>
 							</div>
@@ -400,6 +412,16 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 									})()}
 							</div>
 						),
+					},
+					{
+						// Состояние сервера (R1) и журнал агента (R2) — по кнопке: вкладки формы отрисованы
+						// все сразу, и запрос при открытии карточки слал бы команду агенту на каждый взгляд.
+						id: "health", label: translate("onecAgentHealth"),
+						component: <AgentHealthTab agentId={agentId} agentName={agentName} />,
+					},
+					{
+						id: "log", label: translate("onecAgentLog"),
+						component: <AgentLogTab agentId={agentId} agentName={agentName} />,
 					},
 				]}
 			/>

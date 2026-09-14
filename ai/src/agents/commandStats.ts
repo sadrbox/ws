@@ -32,6 +32,31 @@ export type DurationStat = z.infer<typeof durationStatSchema>;
 const failuresSchema = z.record(code, count).refine((r) => Object.keys(r).length <= 500);
 const durationsSchema = z.record(code, durationStatSchema).refine((r) => Object.keys(r).length <= 500);
 
+/**
+ * Время по типам команд СВОДНО по агентам (R5): для экрана очереди неважно, какой из агентов
+ * мерил, важно, сколько тип обычно идёт. Среднее — взвешенное по числу команд, максимум — общий,
+ * корзина 95-го перцентиля — худшая (null, «дольше 300 с», побеждает).
+ */
+export function mergeDurationStats(
+	list: (Record<string, DurationStat> | null | undefined)[],
+): Record<string, Omit<DurationStat, "buckets">> {
+	const acc: Record<string, { count: number; totalMs: number; maxMs: number; p95LeSecs: number | null }> = {};
+	for (const one of list) {
+		for (const [type, s] of Object.entries(one ?? {})) {
+			if (!s || !s.count) continue;
+			const cur = acc[type] ?? { count: 0, totalMs: 0, maxMs: 0, p95LeSecs: 0 };
+			cur.count += s.count;
+			cur.totalMs += s.avgMs * s.count;
+			cur.maxMs = Math.max(cur.maxMs, s.maxMs);
+			cur.p95LeSecs = cur.p95LeSecs === null || s.p95LeSecs === null ? null : Math.max(cur.p95LeSecs, s.p95LeSecs);
+			acc[type] = cur;
+		}
+	}
+	return Object.fromEntries(Object.entries(acc).map(([type, v]) => [type, {
+		count: v.count, avgMs: Math.round(v.totalMs / v.count), maxMs: v.maxMs, p95LeSecs: v.p95LeSecs,
+	}]));
+}
+
 export type CommandStats = {
 	failuresByCode?: Record<string, number>;
 	durationsByType?: Record<string, DurationStat>;

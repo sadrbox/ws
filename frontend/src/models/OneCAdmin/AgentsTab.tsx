@@ -26,6 +26,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { createAgent } from "src/services/onec/api";
 import { stateLabel, useOpenAgent } from "./AgentForm";
+import { agentBuildLabel } from "./agentHealth";
 import { QueryError, useAgents, useOnecWrite } from "./shared";
 import styles from "./OneCAdmin.module.scss";
 
@@ -33,6 +34,8 @@ const columns = (): TColumn[] => ([
 	{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "role", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "onlineLabel", type: "string", width: "130px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
+	// Сборка агента и «Устарел» (R3).
+	{ identifier: "buildLabel", type: "string", width: "190px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "lastSeenAt", type: "datetime", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "capabilitiesCount", type: "number", width: "130px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
 	{ identifier: "instancesCount", type: "number", width: "140px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
@@ -72,6 +75,7 @@ export const AgentsTab: FC = () => {
 		// Отключённый агент не «оффлайн»: его исключили намеренно, и это разные вещи.
 		// Три состояния, а не два: «выполняет команду» — не «на связи» (см. stateLabel).
 		onlineLabel: stateLabel(a),
+		buildLabel: agentBuildLabel(a),
 		lastSeenAt: a.lastSeenAt,
 		capabilitiesCount: a.capabilities.length,
 		// Считаем РАБОТАЮЩИЕ, а не всю историю: идентификатор меняется при каждом

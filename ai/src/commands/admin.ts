@@ -264,6 +264,55 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		/*
+		 * СОСТОЯНИЕ СЕРВЕРА 1С (R1, docs/TASKS_DEV_2026-09-14.md): сборка, готовность, кластер,
+		 * процессы, последние ошибки журнала. Исполняет служба агента, пропуска на исполнение не
+		 * ждёт — отвечает и тогда, когда все места заняты. Адресуется КОНКРЕТНОМУ агенту
+		 * (маршрут `/agents/:id/health`); склейка одинаковых чтений — в пределах агента
+		 * (уникальный индекс очереди — по агенту).
+		 */
+		type: "AGENT_HEALTH",
+		title: "Состояние сервера 1С",
+		operation: "READ",
+		capability: "agent.procs",
+		role: "admin",
+		requiresBase: false,
+		schema: z.object({}).strict(),
+	},
+	{
+		/*
+		 * ХВОСТ ЖУРНАЛА АГЕНТА (R2). Пароли и токены агент вырезает ДО отбора по тексту. Чтения с
+		 * разными параметрами — разные ответы, поэтому ключ склейки включает параметры.
+		 */
+		type: "AGENT_LOG_TAIL",
+		title: "Журнал агента",
+		operation: "READ",
+		capability: "agent.procs",
+		role: "admin",
+		requiresBase: false,
+		schema: z.object({
+			lines: z.number().int().min(1).max(1000).optional(),
+			level: z.enum(["all", "problems"]).optional(),
+			contains: z.string().max(100).optional(),
+		}).strict(),
+		readKey: (p) => `${p.lines ?? 200}:${p.level ?? "all"}:${typeof p.contains === "string" ? p.contains : ""}`,
+	},
+	{
+		/*
+		 * САМОПРОВЕРКА ОПЕРАЦИЙ В БАЗЕ (R4). Создаёт и удаляет временного пользователя
+		 * `bpapi_selftest_<процесс>` — поэтому WRITE и только полному доступу. Реестр не трогает:
+		 * пользователь временный, эхо внутри прогона сервису не уходит. Неудачный шаг — не отказ,
+		 * а `ok: false` в ответе.
+		 */
+		type: "IB_SELFTEST",
+		title: "Проверить операции агента в базе",
+		operation: "WRITE",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey }).strict(),
+	},
+	{
 		type: "IB_LIST_ROLES",
 		title: "Роли конфигурации базы",
 		operation: "READ",

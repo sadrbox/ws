@@ -1,0 +1,29 @@
+@use "src/styles/variables" as *;
+
+// Строки журнала агента: моноширинно, с переносом, прокрутка внутри блока.
+.LogLines {
+  margin: 0;
+  padding: 6px;
+  max-height: 60vh;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid $color33;
+  border-radius: 3px;
+}
+
+// Строка состояния, требующая внимания (не готово, нет базы данных, отказ входа).
+.RowWarn td {
+  font-weight: 600;
+}
+
+// Блок «Кто держит очередь» над таблицей операций.
+.QueueHolders {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 12px;
+}

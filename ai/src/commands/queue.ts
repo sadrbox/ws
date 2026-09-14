@@ -627,6 +627,28 @@ export class CommandQueue {
 	 * По каждому типу отдельно: чтение расширений из базы и команда кластера отличаются на
 	 * два порядка, и общее среднее не значило бы ничего.
 	 */
+	/**
+	 * КТО ДЕРЖИТ ОЧЕРЕДЬ (R5): выданные агентам и ещё не ответившие команды — сколько идут.
+	 * Раньше экран очереди говорил «идёт 1», но не что именно и сколько: зависшее чтение и
+	 * четырёхчасовая загрузка выглядели одинаково.
+	 */
+	async runningCommands(limit = 50): Promise<{
+		commandId: string; type: string; baseKey: string | null; agentId: string; ageSecs: number;
+	}[]> {
+		const r = await this.db.query<{ id: string; type: string; base_key: string | null; agent_id: string; age_secs: string | null }>(
+			`SELECT id, type, base_key, agent_id,
+			        round(extract(epoch FROM (now() - dispatched_at)))::text AS age_secs
+			   FROM commands
+			  WHERE state = 'dispatched'
+			  ORDER BY dispatched_at
+			  LIMIT $1`,
+			[limit],
+		);
+		return r.rows.map((x) => ({
+			commandId: x.id, type: x.type, baseKey: x.base_key, agentId: x.agent_id, ageSecs: Number(x.age_secs) || 0,
+		}));
+	}
+
 	async stats(): Promise<{
 		types: { type: string; avgSecs: number; samples: number }[];
 		queued: number;
