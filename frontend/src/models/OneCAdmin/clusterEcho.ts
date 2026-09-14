@@ -17,8 +17,8 @@ import type { ClusterListEcho } from "src/services/onec/api";
  * должна опустеть.
  */
 export function echoList(
-	result: { state?: Partial<Record<"sessions" | "connections", ClusterListEcho>> } | undefined,
-	what: "sessions" | "connections",
+	result: { state?: Partial<Record<"sessions" | "connections" | "locks", ClusterListEcho>> } | undefined,
+	what: "sessions" | "connections" | "locks",
 ): ClusterListEcho | null {
 	const echo = result?.state?.[what];
 	return echo && echo.complete === true && Array.isArray(echo.items) ? echo : null;

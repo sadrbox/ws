@@ -106,6 +106,8 @@ export function planWriteState(
 				? [{ kind: "config", config: { name: null, version: to, seenAt: null } }]
 				: [];
 		}
+		// Прерывание начатой команды, снявшее процесс (killed), тоже приносит список (аудит 14.09, T3).
+		case "AGENT_CANCEL_COMMAND":
 		case "AGENT_KILL_PROCESS": {
 			const list = stateOf(result, "processes");
 			const items = isObj(list) ? parseProcesses(list.items) : null;
@@ -145,7 +147,8 @@ export function readsAfter(
 		IB_INSTALL_EXTENSION: ["IB_LIST_EXTENSIONS"],
 		IB_DELETE_EXTENSION: ["IB_LIST_EXTENSIONS"],
 		IB_RESTORE: ["IB_LIST_USERS", "IB_LIST_EXTENSIONS"],
-		IB_APPLY_UPDATE: ["IB_LIST_EXTENSIONS"],
+		// Новая конфигурация может не знать ролей, выданных в старой (агент R7-А5): пользователи тоже (T4).
+		IB_APPLY_UPDATE: ["IB_LIST_USERS", "IB_LIST_EXTENSIONS"],
 	};
 	if (dryRun(payload)) return [];
 	return (MAP[type] ?? []).filter((t) => !(t === "IB_LIST_USERS" ? applied.users : applied.extensions));

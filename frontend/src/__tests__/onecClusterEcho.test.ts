@@ -42,4 +42,10 @@ describe("список кластера из ответа на снятие", ()
 		const r = echoList({ state: { sessions: { items: [], complete: true } } }, "sessions");
 		expect(r?.items).toEqual([]);
 	});
+
+	it("блокировки из ответа на разрыв — отдельным списком (агент R7-А3)", () => {
+		const r = { state: { connections: { items: [], complete: true }, locks: { items: [row], complete: true } } };
+		expect(echoList(r, "locks")?.items).toEqual([row]);
+		expect(echoList({ state: { connections: { items: [], complete: true } } }, "locks")).toBeNull();
+	});
 });

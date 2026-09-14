@@ -164,7 +164,8 @@ export type ClusterListEcho = {
 };
 
 export type TerminateResult = { ok: boolean; state?: { sessions?: ClusterListEcho } };
-export type DisconnectResult = { ok: boolean; state?: { connections?: ClusterListEcho } };
+/** `state.locks` — блокировки всего кластера после разрыва (агент R7-А3). */
+export type DisconnectResult = { ok: boolean; state?: { connections?: ClusterListEcho; locks?: ClusterListEcho } };
 
 /** Блокировка начала сеансов: пользователи не смогут войти в базу, уже вошедшие продолжат работу. */
 /** Ответ на блокировку: `state.lock` — состояние, прочитанное у кластера после команды (агент E1). */

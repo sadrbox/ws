@@ -23,7 +23,7 @@ import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, parseEcho, roleVerdictMessage } from "../onec/echo.ts";
 import { listItems } from "../onec/listShape.ts";
 import { writeBackOf } from "../onec/writeBack.ts";
-import { planWriteState, readsAfter } from "../onec/writeState.ts";
+import { parseLock, planWriteState, readsAfter } from "../onec/writeState.ts";
 
 /** Объект, а не массив и не скаляр: только у такого результата есть поле items. */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -119,6 +119,17 @@ const resultSchema = z.object({
 	onecHttpStatus: z.number().int().optional(),
 });
 
+/**
+ * СКОЛЬКО БАЗ ПОЛНОГО СРЕЗА ПРИШЛО С СОСТОЯНИЕМ БЛОКИРОВКИ СЕАНСОВ (аудит 14.09, T1).
+ *
+ * Агент обещает поле `lock` в строках среза (E1, фоновое чтение), сервис его применяет, а в
+ * реестре у 111 баз из 111 состояние пустое. Heartbeat не журналируется, и по данным не
+ * различить «агент не прислал» и «сервис не записал». Число в журнале отвечает на это сразу.
+ */
+function logLockCoverage(log: Logger, agentId: string, rows: readonly unknown[]): void {
+	const withLock = rows.filter((b) => !!parseLock((b as { lock?: unknown } | null)?.lock)).length;
+	log.info({ agentId, bases: rows.length, withLock }, "полный срез баз: строк с блокировкой сеансов");
+}
 export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: AgentService; bases: BaseService; queue: CommandQueue; audit: Audit; registry: OnecRegistry }) {
 	const { db, cfg, log, agents, bases, queue, audit, registry } = deps;
 	const r = Router();
@@ -260,6 +271,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		if (p.data.bases?.length) {
 			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
 			await agents.markBasesSynced(req.agent!.agentId);
+			logLockCoverage(log, req.agent!.agentId, p.data.bases);
 		}
 		/**
 		 * Потеря способностей при обновлении агента — авария, которую иначе не заметить.
@@ -336,7 +348,10 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		if (p.data.bases?.length && me?.serverId) {
 			await bases.sync(me.serverId, p.data.bases as BaseState[],
 				{ complete: p.data.basesComplete === true, authoritative: me.role === "admin" });
-			if (p.data.basesComplete) await agents.markBasesSynced(req.agent!.agentId);
+			if (p.data.basesComplete) {
+				await agents.markBasesSynced(req.agent!.agentId);
+				logLockCoverage(log, req.agent!.agentId, p.data.bases);
+			}
 		}
 		// Сервер сам решает, когда ему нужен полный срез: агенту остаётся только слушаться.
 		// Так интервал меняется в конфигурации сервиса, а не переустановкой службы на сервере 1С,

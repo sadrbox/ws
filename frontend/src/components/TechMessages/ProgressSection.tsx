@@ -265,7 +265,12 @@ export const ProgressSection: FC<{
 	errorsOnly?: boolean;
 	/** Срез «Текущая форма»: операции других пейнов скрыты, операции без пейна — видны. */
 	pane?: string;
-}> = ({ mode, needle = "", errorsOnly = false, pane }) => {
+	/**
+	 * Показывать завершённые операции. Без «Истории» — только идущие (аудит 14.09, T6):
+	 * сообщения закрытых форм уходили в историю сами, а завершённые операции висели до «Очистить».
+	 */
+	history?: boolean;
+}> = ({ mode, needle = "", errorsOnly = false, pane, history = true }) => {
 	const ops = useOps();
 	const slow = useSlowFetching();
 	const [collapsed, setCollapsed] = useState(false);
@@ -278,6 +283,7 @@ export const ProgressSection: FC<{
 	const q = needle.trim().toLowerCase();
 	const shown = ops.filter((o) => {
 		if (pane && o.pane && o.pane !== pane) return false;
+		if (!history && o.state !== "running") return false;
 		if (errorsOnly && o.state !== "failed") return false;
 		if (q && !`${o.title} ${o.target} ${o.note}`.toLowerCase().includes(q)) return false;
 		return true;

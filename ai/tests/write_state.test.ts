@@ -57,6 +57,9 @@ describe("состояние после изменяющей команды", ()
 		assert.equal(planWriteState("AGENT_LIST_PROCESSES", {}, { items: [] })[0].kind, "processes");
 		assert.deepEqual(planWriteState("AGENT_KILL_PROCESS", { pid: 10 },
 			{ ok: true, state: { processes: { items: [{ pid: "x", tool: "rac" }] } } }), []);
+		// Прерывание со снятием процесса (killed) — тот же список (T3).
+		assert.equal(planWriteState("AGENT_CANCEL_COMMAND", { commandId: "cmd_1" },
+			{ ok: true, killed: true, state: { processes: { items: [] } } })[0]?.kind, "processes");
 	});
 
 	it("публикация: только с эхом; снятие стирает адрес", () => {
@@ -72,6 +75,9 @@ describe("состояние после изменяющей команды", ()
 		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b" }, { users: true, extensions: false }), ["IB_LIST_EXTENSIONS"]);
 		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b", dryRun: true }, { users: false, extensions: false }), []);
 		assert.deepEqual(readsAfter("IB_UPDATE_USER", { baseKey: "b" }, { users: true, extensions: false }), []);
+		// Обновление конфигурации без эха: и расширения, и пользователи — роли могли пропасть (T4).
+		assert.deepEqual(readsAfter("IB_APPLY_UPDATE", { baseKey: "b" }, { users: false, extensions: false }),
+			["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]);
 		assert.deepEqual(readsAfter("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b" }, { users: false, extensions: false }), []);
 	});
 });

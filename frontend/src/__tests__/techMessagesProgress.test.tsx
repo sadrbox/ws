@@ -80,6 +80,8 @@ describe("Технические сообщения: прогресс запро
 			const id = startOp({ kind: "read", title: "Проверить пользователей", target: "базы: 2", total: 2 });
 			finishOp(id);
 		});
+		// Завершённая операция — история (T6): её строка видна с включённой «Историей».
+		localStorage.setItem("tech_messages_history", "1");
 		show();
 		expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
 		expect(screen.getByText(translate("onecOpDone"))).toBeTruthy();
@@ -194,5 +196,33 @@ describe("Технические сообщения: очистка убирае
 		expect(screen.getByText(/Идущая запись/)).toBeTruthy();
 		// Осталась только идущая работа — убирать нечего.
 		expect((clearButton() as HTMLButtonElement).disabled).toBe(true);
+	});
+});
+
+// ── Завершённые операции — в истории (аудит 14.09, T6) ─────────────────────
+//
+// Сообщения закрытых форм уходили в историю сами, а завершённые операции висели в «Прогрессе»,
+// пока их не уберут руками. Теперь без «Истории» видна только идущая работа.
+describe("Технические сообщения: завершённые операции — история", () => {
+	/** Подписанная витрина: хук хранилища — внутри компонента. */
+	const Board = () => <MessagesView messages={useScopedNotices(APP_SCOPE)} />;
+
+	beforeEach(() => {
+		act(() => { getOps().slice().forEach((o) => abandonOp(o.id)); });
+		localStorage.setItem("tech_messages_group", "object");
+		localStorage.removeItem("tech_messages_history");
+	});
+
+	it("без «Истории» завершённая скрыта, идущая видна; число — на кнопке «История»", () => {
+		act(() => {
+			finishOp(startOp({ kind: "read", title: "Завершённая проверка", target: "базы: 1", total: 1 }));
+			startOp({ kind: "read", title: "Идущая проверка", target: "базы: 1", total: 1 });
+		});
+		render(<TestWrapper><Board /></TestWrapper>);
+		expect(screen.queryByText("Завершённая проверка")).toBeNull();
+		expect(screen.getByText("Идущая проверка")).toBeTruthy();
+		const history = screen.getByRole("button", { name: new RegExp(`^${translate("techMsgHistory")}\\s*1$`) });
+		fireEvent.click(history);
+		expect(screen.getByText("Завершённая проверка")).toBeTruthy();
 	});
 });

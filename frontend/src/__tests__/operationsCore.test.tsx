@@ -63,6 +63,8 @@ describe("Общий реестр длительной работы", () => {
 			op("Идущая сверка");
 			finishOp(op("Упавшая сверка"), { failed: 1, note: "нет доступа" });
 		});
+		// Завершённая операция — история (T6): смотрим с включённой «Историей».
+		localStorage.setItem("tech_messages_history", "1");
 		show();
 		fireEvent.click(screen.getByRole("button", { name: translate("techMsgErrorsOnly") }));
 		expect(screen.queryByText(/Идущая сверка/)).toBeNull();

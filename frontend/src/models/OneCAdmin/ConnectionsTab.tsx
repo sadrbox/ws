@@ -68,8 +68,13 @@ export const ConnectionsTab: FC = () => {
 			let lastEcho: ReturnType<typeof echoList> = null;
 			for (const id of ids) {
 				try {
-					lastEcho = echoList(await disconnectConnection(id), "connections");
+					const r = await disconnectConnection(id);
+					lastEcho = echoList(r, "connections");
 					if (lastEcho) qc.setQueryData(["onec", "connections"], { items: lastEcho.items });
+					// Блокировки после разрыва (агент R7-А3): соединение держало блокировку — её
+					// больше нет, и таблица «Блокировки» не должна показывать её до «Обновить» (T2).
+					const locks = echoList(r, "locks");
+					if (locks) qc.setQueryData(["onec", "locks"], { items: locks.items });
 					ok += 1;
 				} catch { failed.push(id); }
 			}
@@ -79,7 +84,7 @@ export const ConnectionsTab: FC = () => {
 			showToast(`${translate("onecDisconnected")}: ${r.ok}${r.failed.length ? ` / ${r.ok + r.failed.length}` : ""}`,
 				r.failed.length ? "warning" : "success");
 			setPicked([]);
-			// Блокировки в ответ не входят и после разрыва, как и прежде, не перечитываются.
+			// Без эха — перечитываем соединения; блокировки старой сборкой не перечитываются, как прежде.
 			if (!r.fresh) void connections.refetch();
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabConnections") }),

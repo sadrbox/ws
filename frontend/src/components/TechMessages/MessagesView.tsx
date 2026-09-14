@@ -247,7 +247,9 @@ export const MessagesView: FC<{
 	}, [messages, ops]);
 	// Неактуальное — только в истории; сколько его, сказано счётчиком, чтобы не гадать, куда делось.
 	const visible = useMemo(() => (history ? deduped : deduped.filter((m) => m.active)), [deduped, history]);
-	const inHistory = deduped.length - deduped.filter((m) => m.active).length;
+	// В истории и завершённые операции: без «Истории» «Прогресс» показывает только идущие (T6).
+	const finishedOps = ops.filter((o) => o.state !== "running" && !(pane && o.pane && o.pane !== pane)).length;
+	const inHistory = deduped.length - deduped.filter((m) => m.active).length + finishedOps;
 	const [needle, setNeedle] = useState("");
 	const [errorsOnly, setErrorsOnly] = useState(false);
 	const shown = useMemo(() => {
@@ -375,7 +377,7 @@ export const MessagesView: FC<{
 				  */}
 				<div className={styles.Rows} role="log" aria-live="off" aria-label={translate("techMessages")}>
 					{/* Идущая работа — над случившимся: она про «сейчас», и она меняется. */}
-					<ProgressSection mode={mode} needle={needle} errorsOnly={errorsOnly} pane={pane} />
+					<ProgressSection mode={mode} needle={needle} errorsOnly={errorsOnly} pane={pane} history={history} />
 
 					{!groups.length && (
 						<span className={styles.Empty}>
