@@ -29,4 +29,10 @@ describe("состояние блокировки сеансов", () => {
 		expect(v).toMatchObject({ enabled: false, tone: "ok" });
 		expect(v.details).toBe(translate("onecSessionsLockByCommand"));
 	});
+
+	it("включена, но не действует — не «закрыт»: окно прошлой блокировки оставило вход открытым", () => {
+		const v = sessionsLockView({ sessionsDenied: true, sessionsDeniedActive: false, sessionsDeniedSource: "cluster" });
+		expect(v).toMatchObject({ known: true, enabled: true, tone: "unknown", label: translate("onecSessionsLockInactive") });
+		expect(v.details).toBe(translate("onecSessionsLockInactiveHint"));
+	});
 });

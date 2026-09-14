@@ -51,6 +51,11 @@ export type OnecBase = {
 	sessionsDeniedTo?: string | null;
 	sessionsDeniedSeenAt?: string | null;
 	sessionsDeniedSource?: "cluster" | "command" | null;
+	/**
+	 * Включена, но действует ли СЕЙЧАС (агент 23:16): окно прошлой блокировки может оставить вход
+	 * открытым. null — не сообщал.
+	 */
+	sessionsDeniedActive?: boolean | null;
 	/** Конфигурация базы (имя и версия); onecVersion — версия платформы. */
 	configName?: string | null;
 	configVersion?: string | null;
@@ -173,7 +178,12 @@ export type DisconnectResult = { ok: boolean; state?: { connections?: ClusterLis
 
 /** Блокировка начала сеансов: пользователи не смогут войти в базу, уже вошедшие продолжат работу. */
 /** Ответ на блокировку: `state.lock` — состояние, прочитанное у кластера после команды (агент E1). */
-export type SessionsLockResult = { ok: boolean; state?: { lock?: { enabled: boolean; message?: string | null } } };
+export type SessionsLockResult = {
+	ok: boolean;
+	state?: { lock?: { enabled: boolean; active?: boolean; message?: string | null } };
+	/** Включили, а вход не закрыт: агент называет оставшееся окно прошлой блокировки (23:16). */
+	warning?: string;
+};
 
 export const setSessionsLock = (baseKey: string, enabled: boolean, message?: string) =>
 	aiFetch<SessionsLockResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/lock`, {

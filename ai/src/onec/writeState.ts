@@ -12,6 +12,8 @@ import type { AgentProcess } from "../agents/service.ts";
 
 export type LockState = {
 	enabled: boolean;
+	/** Действует ли сейчас (агент 23:16): включена И время внутри окна; null — не сообщал. */
+	active: boolean | null;
 	message: string | null;
 	from: string | null;
 	to: string | null;
@@ -39,6 +41,7 @@ export function parseLock(v: unknown): LockState | null {
 	if (!isObj(v) || typeof v.enabled !== "boolean") return null;
 	return {
 		enabled: v.enabled,
+		active: typeof v.active === "boolean" ? v.active : null,
 		message: str(v.message),
 		from: str(v.from),
 		to: str(v.to),
@@ -78,6 +81,8 @@ export function planWriteState(
 				kind: "lock", source: "command",
 				lock: {
 					enabled: payload.enabled,
+					// Без эха кластера — не знаем: окно прошлой блокировки могло остаться.
+					active: null,
 					message: payload.enabled ? str(payload.message) : null,
 					from: payload.enabled ? str(payload.from) : null,
 					to: payload.enabled ? str(payload.to) : null,

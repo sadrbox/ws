@@ -7,14 +7,15 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
+import { parseLock, planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
+import { humanizeAgentError } from "../src/onec/errorHints.ts";
 
 describe("состояние после изменяющей команды", () => {
 	it("блокировка: эхо кластера — источник cluster", () => {
 		const a = planWriteState("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b", enabled: true },
 			{ ok: true, state: { lock: { enabled: true, message: "Обслуживание", from: null, to: null, readAt: "2026-09-14T10:00:00Z" } } });
 		assert.deepEqual(a, [{ kind: "lock", source: "cluster",
-			lock: { enabled: true, message: "Обслуживание", from: null, to: null, seenAt: "2026-09-14T10:00:00Z" } }]);
+			lock: { enabled: true, active: null, message: "Обслуживание", from: null, to: null, seenAt: "2026-09-14T10:00:00Z" } }]);
 	});
 
 	it("блокировка без эха — по команде; снятие стирает сообщение", () => {
@@ -88,5 +89,19 @@ describe("S3: чтение после отказа «признак не при�
 		assert.deepEqual(readsAfterFailure("IB_CREATE_USER", "IB_FIELD_NOT_APPLIED"), ["IB_LIST_USERS"]);
 		assert.deepEqual(readsAfterFailure("IB_UPDATE_USER", "IB_BUSY"), []);
 		assert.deepEqual(readsAfterFailure("IB_RESTORE", "IB_FIELD_NOT_APPLIED"), []);
+	});
+});
+
+describe("блокировка включена, но не действует (агент 23:16)", () => {
+	it("`active` сохраняется как прочитано; нет поля — не знаем", () => {
+		assert.equal(parseLock({ enabled: true, active: false, from: "2026-09-01T08:00:00", to: "2026-09-01T09:00:00" })?.active, false);
+		assert.equal(parseLock({ enabled: true })?.active, null);
+		const byCommand = planWriteState("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b", enabled: true }, { ok: true });
+		assert.equal(byCommand[0].kind === "lock" && byCommand[0].lock.active, null);
+	});
+
+	it("SESSIONS_LOCK_NOT_ACTIVE — с подсказкой, что делать", () => {
+		const e = humanizeAgentError({ code: "SESSIONS_LOCK_NOT_ACTIVE", message: "Блокировка не действует" });
+		assert.match(e!.message, /Снимите блокировку/);
 	});
 });

@@ -20,7 +20,8 @@ export type SessionsLockView = {
 	details: string;
 };
 
-type LockFields = Pick<OnecBase, "sessionsDenied" | "sessionsDeniedMessage" | "sessionsDeniedFrom" | "sessionsDeniedTo" | "sessionsDeniedSource">;
+type LockFields = Pick<OnecBase, "sessionsDenied" | "sessionsDeniedMessage" | "sessionsDeniedFrom" | "sessionsDeniedTo" | "sessionsDeniedSource"
+	| "sessionsDeniedActive">;
 
 export function sessionsLockView(base: LockFields | null | undefined): SessionsLockView {
 	const v = base?.sessionsDenied;
@@ -33,11 +34,18 @@ export function sessionsLockView(base: LockFields | null | undefined): SessionsL
 		parts.push(`${base?.sessionsDeniedFrom ?? "…"} — ${base?.sessionsDeniedTo ?? "…"}`);
 	}
 	if (base?.sessionsDeniedSource === "command") parts.push(translate("onecSessionsLockByCommand"));
+	/*
+	 * ВКЛЮЧЕНА, НО НЕ ДЕЙСТВУЕТ (агент 23:16, `lock.active`). В кластере осталось окно прошлой
+	 * блокировки, и вход сейчас открыт. «Вход закрыт» здесь было бы неправдой: человек ушёл бы,
+	 * думая, что в базу не войти, а пользователи входили бы посреди работ.
+	 */
+	const inactive = v && base?.sessionsDeniedActive === false;
+	if (inactive) parts.unshift(translate("onecSessionsLockInactiveHint"));
 	return {
 		known: true,
 		enabled: v,
-		tone: v ? "bad" : "ok",
-		label: translate(v ? "onecSessionsLockOn" : "onecSessionsLockOff"),
+		tone: inactive ? "unknown" : v ? "bad" : "ok",
+		label: translate(inactive ? "onecSessionsLockInactive" : v ? "onecSessionsLockOn" : "onecSessionsLockOff"),
 		details: parts.join(". "),
 	};
 }

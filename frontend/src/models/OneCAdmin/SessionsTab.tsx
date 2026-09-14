@@ -178,7 +178,11 @@ export const SessionsTab: FC = () => {
 			// говорим это, а не «вход закрыт»: иначе человек уйдёт с открытой базой.
 			const echo = r?.state?.lock;
 			if (echo && echo.enabled !== p.enabled) showToast(translate("onecLockNotApplied"), "warning");
-			else showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");
+			// Включили, но вход не закрыт (агент 23:16): осталось окно прошлой блокировки. Текст агента
+			// называет это окно; нет текста — наш.
+			else if (p.enabled && (r?.warning || echo?.active === false)) {
+				showToast(r?.warning || translate("onecLockNotActive"), "warning");
+			} else showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");
 			// Реестр сервис уже обновил — перечитываем, и метка покажет новое состояние.
 			void bases.refetch();
 		},

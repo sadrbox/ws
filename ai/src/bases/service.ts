@@ -59,6 +59,7 @@ export type BaseRow = {
 	sessions_denied_to?: string | null;
 	sessions_denied_seen_at?: Date | null;
 	sessions_denied_source?: string | null;
+	sessions_denied_active?: boolean | null;
 	config_name?: string | null;
 	config_version?: string | null;
 	config_seen_at?: Date | null;
@@ -87,6 +88,8 @@ export type BaseView = {
 	sessionsDeniedTo: string | null;
 	sessionsDeniedSeenAt: string | null;
 	sessionsDeniedSource: "cluster" | "command" | null;
+	/** Включена, но действует ли сейчас (агент 23:16); null — не сообщал. */
+	sessionsDeniedActive: boolean | null;
 	/** Конфигурация базы (S3); onecVersion — версия платформы, это другое. */
 	configName: string | null;
 	configVersion: string | null;
@@ -313,7 +316,7 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
 	b.ib_unreachable_reason,
 	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,
-	b.sessions_denied_seen_at, b.sessions_denied_source, b.config_name, b.config_version, b.config_seen_at,
+	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.config_name, b.config_version, b.config_seen_at,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -704,10 +707,12 @@ export class BaseService {
 		await this.db.query(
 			`UPDATE bases SET sessions_denied = $3, sessions_denied_message = $4, sessions_denied_from = $5,
 			        sessions_denied_to = $6, sessions_denied_seen_at = COALESCE($7::timestamptz, now()),
-			        sessions_denied_source = $8
+			        sessions_denied_source = $8, sessions_denied_active = $9
 			  WHERE server_id = $1 AND key = $2`,
 			[serverId, key, lock.enabled, lock.enabled ? lock.message : null,
-				lock.enabled ? lock.from : null, lock.enabled ? lock.to : null, lock.seenAt, source],
+				lock.enabled ? lock.from : null, lock.enabled ? lock.to : null, lock.seenAt, source,
+				// «Действует» имеет смысл только у включённой блокировки.
+				lock.enabled ? lock.active : null],
 		);
 	}
 
@@ -877,6 +882,7 @@ export class BaseService {
 			sessionsDeniedTo: r.sessions_denied_to ?? null,
 			sessionsDeniedSeenAt: r.sessions_denied_seen_at?.toISOString() ?? null,
 			sessionsDeniedSource: (r.sessions_denied_source as "cluster" | "command" | null | undefined) ?? null,
+			sessionsDeniedActive: r.sessions_denied_active ?? null,
 			configName: r.config_name ?? null,
 			configVersion: r.config_version ?? null,
 			configSeenAt: r.config_seen_at?.toISOString() ?? null,
