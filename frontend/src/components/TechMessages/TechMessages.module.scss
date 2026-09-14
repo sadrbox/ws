@@ -59,7 +59,7 @@
 	align-items: center;
 	gap: 6px;
 	padding: 6px 3px;
-	// Границы нет: слева стоит разделитель (VSplitBar) — тот же, что у раскрытой области.
+	border-left: 1px solid $color34;
 	background: var(--sv-color60);
 
 	// Стрелка раскрытия смотрит влево: область выезжает оттуда.
