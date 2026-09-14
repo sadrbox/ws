@@ -43,6 +43,33 @@ export function writeBackOf(type: string, payload: Record<string, unknown>): Wri
 	return { name, showInList: payload.showInList };
 }
 
+const FIELD_LABEL: Record<string, string> = {
+	showInList: "«Показывать в списке выбора»",
+	fullName: "«Полное имя»",
+	disabled: "«Вход запрещён»",
+	password: "пароль",
+};
+
+/**
+ * УСПЕХ С ОГОВОРКОЙ у записи пользователя (П12, агент с 14.09 12:46): `unverified` — записано, но
+ * перечитать не удалось; `skipped` — необязательные свойства, которые платформа не приняла (полное
+ * имя и т. п.). Команда при этом «Выполнено», и без предупреждения человек уходит, считая записанным
+ * всё. `null` — оговорок нет.
+ */
+export function userWriteWarning(result: { unverified?: unknown; skipped?: unknown } | null | undefined): string | null {
+	if (!result) return null;
+	const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x) : []);
+	const label = (k: string) => FIELD_LABEL[k] ?? k;
+	const parts: string[] = [];
+	const unverified = list(result.unverified);
+	if (unverified.length) {
+		parts.push(`записано, но перечитать не удалось: ${unverified.map(label).join(", ")} — проверьте в Конфигураторе`);
+	}
+	const skipped = list(result.skipped);
+	if (skipped.length) parts.push(`платформа не приняла: ${skipped.map(label).join(", ")}`);
+	return parts.length ? parts.join("; ") : null;
+}
+
 /**
  * Запоминать ли записанное ПОСЛЕ применения эха (S2). Эхо принесло признак этого пользователя —
  * прочитанное у 1С важнее памяти о своей записи: запомненное перетёрло бы правду отметкой

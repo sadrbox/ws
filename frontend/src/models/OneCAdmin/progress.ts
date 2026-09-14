@@ -210,6 +210,9 @@ export function mergeBatch(p: BatchProgress): void {
 	const justFinished = !running && target.state === "running";
 	if (justFinished) refreshAfterWork();
 	const failedItem = p.items.find((i) => i.error);
+	// Успех с оговоркой (П12): признак не перечитан или свойства не приняты — поимённо, до трёх баз.
+	const warned = p.items.filter((i) => i.warning).map((i) => `${i.baseKey ? `${i.baseKey}: ` : ""}${i.warning}`);
+	const warning = warned.length > 3 ? `${warned.slice(0, 3).join("; ")}; …` : warned.join("; ");
 	updateOp(target.id, (o) => ({
 		...o,
 		total: p.total,
@@ -220,7 +223,8 @@ export function mergeBatch(p: BatchProgress): void {
 		finishedAt: running ? null : (o.finishedAt ?? Date.now()),
 		note: p.failed > 0 && failedItem?.error
 			? `${failedItem.baseKey ?? ""}: ${failedItem.error.message}`.trim()
-			: o.note,
+			: (warning || o.note),
+		...(warning ? { warning } : {}),
 	}));
 	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к
 	// одному концу не должны оставлять разный след.

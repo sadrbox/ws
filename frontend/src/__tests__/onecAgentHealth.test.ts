@@ -29,6 +29,20 @@ describe("healthSections", () => {
 		expect(s[3].rows[0].warn).toBe(true);
 	});
 
+	it("чтение блокировок (П11): отставание и пауза — с отметкой, последний отказ — отдельной строкой", () => {
+		const s = healthSections({
+			cluster: { locks: { known: 111, fresh: 90, enabled: 3, paused: 2, lastRefusal: { base: "aibek", reason: "нет входа" } } },
+		});
+		const rows = s[0].rows;
+		expect(rows[0].value).toContain("90 / 111");
+		expect(rows[0].warn).toBe(true);
+		expect(rows[1]).toMatchObject({ warn: true });
+		expect(rows[1].value).toContain("aibek — нет входа");
+		const calm = healthSections({ cluster: { locks: { known: 5, fresh: 5, enabled: 0, paused: 0, lastRefusal: null } } });
+		expect(calm[0].rows).toHaveLength(1);
+		expect(calm[0].rows[0].warn).toBeUndefined();
+	});
+
 	it("бизнес-агент без кластера и пустые поля — разделов и строк нет", () => {
 		const s = healthSections({ agent: { state: "ONLINE", lastError: null }, cluster: null, readiness: { items: [] } });
 		expect(s).toHaveLength(1);

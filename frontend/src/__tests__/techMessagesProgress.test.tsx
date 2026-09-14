@@ -153,6 +153,20 @@ describe("Технические сообщения: прогресс запро
 		expect(screen.getByText(/almaz67: нет связи/)).toBeTruthy();
 	});
 
+	it("успех с оговоркой (П12): предупреждение агента — в итог операции, а не «Выполнено» молча", () => {
+		act(() => {
+			const id = startOp({ kind: "update", title: "Изменить пользователя", target: "Оператор — _transition", total: 1 });
+			attachBatch(id, "b2", 1);
+			mergeBatch({
+				id: "b2", total: 1, done: 1, failed: 0, pending: 0, cancelable: 0,
+				items: [{ baseKey: "_transition", error: null, warning: "платформа не приняла: «Полное имя»" }],
+			} as unknown as Parameters<typeof mergeBatch>[0]);
+		});
+		const op = getOps().find((o) => o.batchId === "b2");
+		expect(op?.state).toBe("done");
+		expect(op?.warning).toMatch(/_transition: платформа не приняла/);
+	});
+
 	it("«Без группировки» — операции без заголовка секции, но видны", () => {
 		// Сплошная лента не должна держать единственный заголовок — у «Прогресса».
 		localStorage.setItem("tech_messages_group", "none");

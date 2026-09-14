@@ -9,6 +9,7 @@
  * дублировать их колонками — значит держать две правды в согласии, а команда может
  * завершиться, истечь по TTL или быть переставлена в очереди.
  */
+import { userWriteWarning } from "./writeBack.ts";
 import { humanizeAgentError } from "./errorHints.ts";
 import { isAbortable } from "../commands/admin.ts";
 import { randomUUID } from "node:crypto";
@@ -35,6 +36,8 @@ export type BatchProgress = {
 		outcome: string | null;
 		/** Начатую команду можно прервать: это чтение, и агент умеет отмену (S4). */
 		abortable?: boolean;
+		/** Выполнено с оговоркой: признак не перечитан или свойства не приняты платформой (П12). */
+		warning?: string | null;
 	}[];
 	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
 	cancelable: number;
@@ -154,12 +157,17 @@ export class BatchService {
 			batch_id: string; id: string; base_key: string | null; state: string;
 			error: { code: string; message: string } | null; outcome: string | null;
 			type: string; can_abort: boolean | null;
+			user_result: { unverified?: unknown; skipped?: unknown } | null;
 		}>(
 			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
 			// Тип команды и способность агента — для признака «можно прервать» (S4).
 			`SELECT c.batch_id, c.id, c.base_key, c.state, c.error,
 			        COALESCE(c.result->>'path', c.result->>'url') AS outcome,
+			        -- Оговорки записи пользователя (П12): только эти два поля, а не весь ответ.
+			        CASE WHEN c.type IN ('IB_CREATE_USER', 'IB_UPDATE_USER') AND c.state = 'done'
+			             THEN jsonb_build_object('unverified', c.result->'unverified', 'skipped', c.result->'skipped')
+			        END AS user_result,
 			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort
 			   FROM commands c LEFT JOIN agents a ON a.id = c.agent_id
 			  -- Повторённая при занятой базе (С10) — не строка отчёта: её место заняла новая попытка.
@@ -207,6 +215,7 @@ export class BatchService {
 						: {}),
 					outcome: r.outcome,
 					abortable: isAbortable(r.state, r.type, r.can_abort === true),
+					warning: userWriteWarning(r.user_result),
 				}));
 
 				/*

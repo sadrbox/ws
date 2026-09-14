@@ -11,7 +11,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { rememberAfterEcho, writeBackOf } from "../src/onec/writeBack.ts";
+import { rememberAfterEcho, userWriteWarning, writeBackOf } from "../src/onec/writeBack.ts";
 
 describe("что запомнить после успешной команды", () => {
 	it("признак из IB_UPDATE_USER запоминается за этим пользователем", () => {
@@ -67,5 +67,18 @@ describe("S2: запоминать после эха — только если �
 	it("эхо без признака или без пользователя — запоминаем", () => {
 		assert.equal(rememberAfterEcho(back, [{ name: "Оператор" }]), true);
 		assert.equal(rememberAfterEcho(back, [{ name: "Другой", showInList: true }]), true);
+	});
+});
+
+describe("П12: успех с оговоркой у записи пользователя", () => {
+	it("не перечитано и не принято — называется словами", () => {
+		const w = userWriteWarning({ unverified: ["showInList"], skipped: ["fullName", "someNew"] });
+		assert.match(w ?? "", /перечитать не удалось: «Показывать в списке выбора»/);
+		assert.match(w ?? "", /платформа не приняла: «Полное имя», someNew/);
+	});
+	it("оговорок нет или поля другого вида — молчим", () => {
+		assert.equal(userWriteWarning({ unverified: null, skipped: [] }), null);
+		assert.equal(userWriteWarning(null), null);
+		assert.equal(userWriteWarning({ skipped: "fullName" }), null);
 	});
 });

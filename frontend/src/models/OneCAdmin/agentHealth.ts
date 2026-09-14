@@ -10,6 +10,7 @@
  */
 import { translate } from "src/i18";
 import type { AgentHealth, OnecAgent } from "src/services/onec/api";
+import { getFormatDate } from "src/utils/datetime";
 import { formatDuration } from "./queueStats";
 
 export type HealthRow = { label: string; value: string; warn?: boolean };
@@ -90,6 +91,25 @@ export function healthSections(h: AgentHealth): HealthSection[] {
 				translate(c.publications.complete ? "onecHealthComplete" : "onecHealthPartial"),
 				typeof c.publications.ageSecs === "number" ? secs(c.publications.ageSecs) : "",
 			].filter(Boolean).join(" · "), c.publications.complete === false);
+		}
+		/*
+		 * ЧТЕНИЕ БЛОКИРОВОК (П11). По нему разбирается, почему в срезе баз мало строк с блокировкой
+		 * (А6): прочитано меньше, чем баз, или часть баз на паузе после отказа — это не «блокировок
+		 * нет», а «не знаем».
+		 */
+		if (c.locks) {
+			const l = c.locks;
+			const behind = typeof l.known === "number" && typeof l.fresh === "number" && l.fresh < l.known;
+			push(translate("onecHealthLocks"), [
+				`${translate("onecHealthLocksRead")}: ${l.fresh ?? "—"} / ${l.known ?? "—"}`,
+				`${translate("onecHealthLocksEnabled")}: ${l.enabled ?? 0}`,
+				`${translate("onecHealthLocksPaused")}: ${l.paused ?? 0}`,
+			].join(" · "), behind || (l.paused ?? 0) > 0);
+			if (l.lastRefusal) {
+				const r = l.lastRefusal;
+				push(translate("onecHealthLocksRefusal"),
+					`${[r.base, r.reason].filter(Boolean).join(" — ")}${r.at ? ` (${getFormatDate(r.at)})` : ""}`, true);
+			}
 		}
 		if (c.dbPassword !== undefined) push(translate("onecHealthDbPassword"), yesNo(c.dbPassword), c.dbPassword === false);
 		push(translate("onecHealthDbLoginFailure"), failureText(c.dbLoginFailure), true);

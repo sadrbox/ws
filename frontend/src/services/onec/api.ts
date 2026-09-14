@@ -468,6 +468,8 @@ export type BatchProgress = {
 		outcome: string | null;
 		/** Начатую команду можно прервать: это чтение, и агент умеет отмену (S4). */
 		abortable?: boolean;
+		/** Выполнено с оговоркой: признак не перечитан или свойства не приняты платформой (П12). */
+		warning?: string | null;
 	}[];
 };
 
@@ -703,6 +705,14 @@ export type AgentHealth = {
 		clusters?: { name?: string; host?: string; port?: string }[] | { error: string };
 		bases?: { known?: number; dbChecked?: number; dbMissing?: string[] };
 		publications?: null | { found?: number; complete?: boolean; ageSecs?: number };
+		/**
+		 * Фоновое чтение блокировок (П11, агент 00:12): баз в кластере, прочитано за 30 мин, из них с
+		 * включённой блокировкой, на паузе 6 ч после отказа, последний отказ.
+		 */
+		locks?: null | {
+			known?: number; fresh?: number; enabled?: number; paused?: number;
+			lastRefusal?: { base?: string; at?: string; reason?: string } | null;
+		};
 		dbPassword?: boolean;
 		dbLoginFailure?: unknown;
 		queryLoginFailure?: unknown;

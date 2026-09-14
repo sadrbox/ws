@@ -52,6 +52,11 @@ export type Op = {
 	/** Короткий итог или причина отказа. */
 	note: string;
 	/**
+	 * Выполнено С ОГОВОРКОЙ (П12): агент записал, но признак не перечитал или платформа не приняла
+	 * часть свойств. Итог тогда — предупреждение, а не «Выполнено».
+	 */
+	warning?: string;
+	/**
 	 * НАД ЧЕМ идёт работа. Пока операция выполняется, эти объекты правке не подлежат:
 	 * значения меняются прямо сейчас, и форма, позволяющая писать поверх, отправила бы
 	 * команду по данным, которых уже нет.
@@ -181,6 +186,7 @@ function noteOutcome(op: Op): void {
 	const failed = op.failed > 0;
 	const ok = op.done - op.failed;
 	const why = humanErrorText(op.note);
+	const warned = !(failed && ok === 0) && !!op.warning;
 
 	/*
 	 * ЧИТАЕТСЯ КАК ФРАЗА, А НЕ КАК СТРОКА ЖУРНАЛА: ЧТО делали, ЧЕМ кончилось, ПОЧЕМУ (если не
@@ -199,8 +205,8 @@ function noteOutcome(op: Op): void {
 	// Итог знает свою операцию (M14): по `opId` область не показывает его, пока строка операции
 	// ещё на экране, — строка уже говорит то же самое (MessagesView).
 	notify({
-		severity: failed ? "error" : "success",
-		text: `${op.title}. ${result}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
+		severity: failed ? "error" : warned ? "warning" : "success",
+		text: `${op.title}. ${result}${warned ? `. ${op.warning}` : ""}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
 		source: op.target || op.title,
 		scope: op.pane,
 		ref: op.ref,
