@@ -179,9 +179,13 @@ export const SessionsTab: FC = () => {
 			const echo = r?.state?.lock;
 			if (echo && echo.enabled !== p.enabled) showToast(translate("onecLockNotApplied"), "warning");
 			// Включили, но вход не закрыт (агент 23:16): осталось окно прошлой блокировки. Текст агента
-			// называет это окно; нет текста — наш.
-			else if (p.enabled && (r?.warning || echo?.active === false)) {
-				showToast(r?.warning || translate("onecLockNotActive"), "warning");
+			// называет это окно; нет текста — наш. И сброшено ли прежнее (П10, агент 23:52): не `all` —
+			// прежние окно, сообщение или код разрешения остались, и человек должен об этом знать.
+			else if (p.enabled && (r?.warning || echo?.active === false || (r?.reset && r.reset !== "all"))) {
+				showToast([
+					r?.warning || (echo?.active === false ? translate("onecLockNotActive") : translate("onecLockEnabled")),
+					r?.reset && r.reset !== "all" ? (r.note || translate("onecLockResetPartial")) : "",
+				].filter(Boolean).join(". "), "warning");
 			} else showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");
 			// Реестр сервис уже обновил — перечитываем, и метка покажет новое состояние.
 			void bases.refetch();

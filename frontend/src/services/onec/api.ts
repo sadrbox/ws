@@ -183,6 +183,12 @@ export type SessionsLockResult = {
 	state?: { lock?: { enabled: boolean; active?: boolean; message?: string | null } };
 	/** Включили, а вход не закрыт: агент называет оставшееся окно прошлой блокировки (23:16). */
 	warning?: string;
+	/**
+	 * Что агент сбросил при включении (23:52): `all` — прежние окно, сообщение и код; `dates` — только
+	 * окно; `none` — ничего (rac не принял пустые значения). Не `all` — в `note` сказано, что осталось.
+	 */
+	reset?: "all" | "dates" | "none";
+	note?: string;
 };
 
 export const setSessionsLock = (baseKey: string, enabled: boolean, message?: string) =>

@@ -9,6 +9,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseLock, planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
 import { humanizeAgentError } from "../src/onec/errorHints.ts";
+import { ibFailureReason } from "../src/bases/service.ts";
 
 describe("состояние после изменяющей команды", () => {
 	it("блокировка: эхо кластера — источник cluster", () => {
@@ -103,5 +104,17 @@ describe("блокировка включена, но не действует (�
 	it("SESSIONS_LOCK_NOT_ACTIVE — с подсказкой, что делать", () => {
 		const e = humanizeAgentError({ code: "SESSIONS_LOCK_NOT_ACTIVE", message: "Блокировка не действует" });
 		assert.match(e!.message, /Снимите блокировку/);
+	});
+});
+
+describe("С15: обрыв связи с рабочим процессом кластера (агент 23:52)", () => {
+	it("подсказка есть, а база не помечается недоступной даже при совпавших словах", () => {
+		const error = {
+			code: "IB_CONNECTION_LOST",
+			message: "Тестирование начато… server_addr=tcp://SERVER:1560 descr=10054 forcibly closed. "
+				+ "Процессы после начала: rphost 7692. Недостаточно прав у процесса? база данных отсутствует?",
+		};
+		assert.match(humanizeAgentError(error)!.message, /рабочим процессом кластера/);
+		assert.equal(ibFailureReason(error), null);
 	});
 });
