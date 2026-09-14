@@ -307,49 +307,49 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
 
   return (
     <NoticeScope.Provider value={origin}>
-    <div
-      ref={paneRootRef}
-      className={[
-        styles.PaneItem,
-        isActive && styles.PaneItemActive,
-        revealing && styles.PaneItemEntering,
-      ].filter(Boolean).join(" ")}
-      onAnimationEnd={handleAnimationEnd}
-    >
-      <div className={styles.PaneItemHeader}>
-        <h2 className={styles.PaneItemHeaderLabel}>
-          {p.label}
-          {isDirty && (
-            <span
-              className={styles.PaneItemDirtyDot}
-              aria-label={translate("unsavedChanges")}
-              title={translate("hasUnsavedChanges")}
-            />
-          )}
-        </h2>
-        <div className={styles.PaneItemHeaderToolbar}>
-          {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
+      <div
+        ref={paneRootRef}
+        className={[
+          styles.PaneItem,
+          isActive && styles.PaneItemActive,
+          revealing && styles.PaneItemEntering,
+        ].filter(Boolean).join(" ")}
+        onAnimationEnd={handleAnimationEnd}
+      >
+        <div className={styles.PaneItemHeader}>
+          <h2 className={styles.PaneItemHeaderLabel}>
+            {p.label}
+            {isDirty && (
+              <span
+                className={styles.PaneItemDirtyDot}
+                aria-label={translate("unsavedChanges")}
+                title={translate("hasUnsavedChanges")}
+              />
+            )}
+          </h2>
+          <div className={styles.PaneItemHeaderToolbar}>
+            {/* Слот для дополнительных кнопок от конкретной формы (напр. «Печать»).
               Регистрируются через usePaneHeaderActions(paneId, <…/>). */}
-          <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
-          {p.restore && (
-            <IconButton
-              icon="link"
-              title="Копировать ссылку на эту форму"
-              aria-label="Копировать ссылку"
-              onClick={() => void copyPaneLink(p.restore!)}
-            />
-          )}
-          {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode || isBusy} loading={isBusy} />}
-          <CloseButton onClick={onClose} />
+            <div ref={headerSlot} className={styles.PaneItemHeaderActionsSlot} />
+            {p.restore && (
+              <IconButton
+                icon="link"
+                title="Копировать ссылку на эту форму"
+                aria-label="Копировать ссылку"
+                onClick={() => void copyPaneLink(p.restore!)}
+              />
+            )}
+            {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode || isBusy} loading={isBusy} />}
+            <CloseButton onClick={onClose} />
+          </div>
         </div>
+        {hasToolbar && <div className={styles.PaneItemToolbar}>
+          <ToolbarSlot ref={slot} />
+        </div>}
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <Component {...p} />
+        </React.Suspense>
       </div>
-      {hasToolbar && <div className={styles.PaneItemToolbar}>
-        <ToolbarSlot ref={slot} />
-      </div>}
-      <React.Suspense fallback={<LoadingSpinner />}>
-        <Component {...p} />
-      </React.Suspense>
-    </div>
     </NoticeScope.Provider>
   );
 }

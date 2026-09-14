@@ -25,9 +25,9 @@
 // широкой (18px — в неё попадают мышью не целясь), а видимая полоса — тонкой, потому что
 // фон рисуется только по content-box.
 .VSplitBar {
-	flex: 0 0 18px;
+	flex: 0 0 6px;
 	box-sizing: border-box;
-	padding: 0 6px;
+	// padding: 0 6px;
 	align-self: stretch;
 	cursor: col-resize;
 	background: $color34;
@@ -39,7 +39,11 @@
 	transition: background 0.12s;
 
 	&:hover,
-	&:focus-visible { background: $primary; background-clip: content-box; outline: none; }
+	&:focus-visible {
+		background: $primary;
+		background-clip: content-box;
+		outline: none;
+	}
 }
 
 // Тот же разделитель для областей, стоящих ОДНА ПОД ДРУГОЙ: делит высоту, а не ширину.
@@ -57,7 +61,11 @@
 	transition: background 0.12s;
 
 	&:hover,
-	&:focus-visible { background: $primary; background-clip: content-box; outline: none; }
+	&:focus-visible {
+		background: $primary;
+		background-clip: content-box;
+		outline: none;
+	}
 }
 
 // В печать разделитель не идёт — это элемент управления.
