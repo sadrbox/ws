@@ -14,7 +14,7 @@
  * базы человека и где она есть. Правку в этих строках делать можно: она копится тем же
  * черновиком, что и отметки на текущей базе.
  */
-import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
@@ -50,7 +50,7 @@ import { useOpenOnecBase } from "src/models/OneCBases";
 import {
 	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps,
 } from "./progress";
-import { buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog } from "./userUpdate";
+import { buildSavePlan, buildUserUpdate, massRoleChange, rebaseForm, roleCatalog } from "./userUpdate";
 
 const rightsColumns = (): TColumn[] => ([
 	{ identifier: "role", type: "string", width: "320px", minWidth: "180px", alignment: "left", visible: true, inlist: true },
@@ -209,8 +209,25 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		showInList: here?.showInList ?? null,
 	}), [here, userName]);
 
-	// Реквизиты следуют за выбранной базой: в другой базе у человека своё полное имя.
-	useEffect(() => { setForm(baseline); }, [baseline]);
+	/*
+	 * Реквизиты следуют за выбранной базой: в другой базе у человека своё полное имя — там
+	 * форма заполняется заново. А вот обновление данных ТОЙ ЖЕ базы (список пользователей
+	 * перечитывается после каждой операции) не должно затирать то, что человек уже изменил:
+	 * иначе переключённый тумблер пропадал до «Записать» (см. userUpdate.rebaseForm).
+	 */
+	const identity = `${baseKey.toLowerCase()}|${userName.toLowerCase()}`;
+	const baselineRef = useRef<typeof baseline | null>(null);
+	const identityRef = useRef(identity);
+	useEffect(() => {
+		const prev = baselineRef.current;
+		baselineRef.current = baseline;
+		if (!prev || identityRef.current !== identity) {
+			identityRef.current = identity;
+			setForm(baseline);
+			return;
+		}
+		setForm((f) => rebaseForm(prev, baseline, f));
+	}, [baseline, identity]);
 
 	/**
 	 * База карточки всегда есть в списке — даже когда реестр про неё ещё не знает.
@@ -431,6 +448,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			}
 			showToast(`${translate("onecBatchQueued")}: ${r.length}`, "success");
 			setDraft(new Map());
+			// Пароль записан — в поле ему больше не место: иначе он ушёл бы и следующей записью.
+			setForm((f) => ({ ...f, password: "" }));
 			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
 			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
 		},

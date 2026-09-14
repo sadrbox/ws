@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, roleCatalog,
+	MASS_ROLES, applyRoleChanges, buildSavePlan, buildUserUpdate, massRoleChange, rebaseForm, roleCatalog,
 } from "src/models/OneCAdmin/userUpdate";
 
 const current = { fullName: "Оператор бухгалтер", disabled: false, showInList: null as boolean | null };
@@ -300,3 +300,37 @@ describe("административные роли в подтверждени�
 		expect(massRoleChange(["ПолныеПрава", "Кассир"], { add: [], remove: ["ПолныеПрава"] })).toBeNull();
 	});
 });
+
+/**
+ * Обновление данных базы не затирает изменённое в форме.
+ *
+ * Живой случай 14.09: переключённое «Показывать в списке выбора» пропадало до «Записать» —
+ * форма сбрасывалась к данным базы при каждом перечитывании списка пользователей.
+ */
+describe("данные базы обновились, пока форму правят", () => {
+	const base = { name: "Оператор", fullName: "Оператор бухгалтер", password: "", disabled: false, showInList: true };
+
+	it("изменённое человеком остаётся", () => {
+		const form = { ...base, showInList: false };
+		// Перечитали список — значения в базе прежние, но объект новый.
+		expect(rebaseForm(base, { ...base }, form).showInList).toBe(false);
+	});
+
+	it("нетронутое берёт новое значение из базы", () => {
+		const form = { ...base, showInList: false };
+		const next = { ...base, fullName: "Бухгалтер (новое имя)" };
+		expect(rebaseForm(base, next, form)).toEqual({ ...form, fullName: "Бухгалтер (новое имя)" });
+	});
+
+	it("изменение дошло до базы — форма и база совпадают, правка исчезает сама", () => {
+		const form = { ...base, showInList: false };
+		const next = { ...base, showInList: false };
+		const merged = rebaseForm(base, next, form);
+		expect(buildUserUpdate("Оператор", { fullName: next.fullName, disabled: next.disabled, showInList: next.showInList }, merged)).toBeNull();
+	});
+
+	it("введённый пароль не теряется при перечитывании", () => {
+		expect(rebaseForm(base, { ...base }, { ...base, password: "секрет" }).password).toBe("секрет");
+	});
+});
+
