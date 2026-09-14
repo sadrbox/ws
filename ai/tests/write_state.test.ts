@@ -7,7 +7,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { planWriteState, readsAfter } from "../src/onec/writeState.ts";
+import { planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
 
 describe("состояние после изменяющей команды", () => {
 	it("блокировка: эхо кластера — источник cluster", () => {
@@ -79,5 +79,14 @@ describe("состояние после изменяющей команды", ()
 		assert.deepEqual(readsAfter("IB_APPLY_UPDATE", { baseKey: "b" }, { users: false, extensions: false }),
 			["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]);
 		assert.deepEqual(readsAfter("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b" }, { users: false, extensions: false }), []);
+	});
+});
+
+describe("S3: чтение после отказа «признак не принят»", () => {
+	it("IB_FIELD_NOT_APPLIED у пользователя — перечитать пользователей, прочие отказы — нет", () => {
+		assert.deepEqual(readsAfterFailure("IB_UPDATE_USER", "IB_FIELD_NOT_APPLIED"), ["IB_LIST_USERS"]);
+		assert.deepEqual(readsAfterFailure("IB_CREATE_USER", "IB_FIELD_NOT_APPLIED"), ["IB_LIST_USERS"]);
+		assert.deepEqual(readsAfterFailure("IB_UPDATE_USER", "IB_BUSY"), []);
+		assert.deepEqual(readsAfterFailure("IB_RESTORE", "IB_FIELD_NOT_APPLIED"), []);
 	});
 });

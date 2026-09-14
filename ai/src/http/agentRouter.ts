@@ -21,10 +21,10 @@ import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from ".
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
-import { checkRoleIntent, parseEcho, roleVerdictMessage } from "../onec/echo.ts";
+import { checkRoleIntent, checkShowInListIntent, parseEcho, roleVerdictMessage, showInListVerdictMessage } from "../onec/echo.ts";
 import { listItems } from "../onec/listShape.ts";
-import { writeBackOf } from "../onec/writeBack.ts";
-import { parseLock, planWriteState, readsAfter } from "../onec/writeState.ts";
+import { rememberAfterEcho, writeBackOf } from "../onec/writeBack.ts";
+import { parseLock, planWriteState, readsAfter, readsAfterFailure } from "../onec/writeState.ts";
 
 /** Объект, а не массив и не скаляр: только у такого результата есть поле items. */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -475,19 +475,36 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 * Порядок важен: панель узнаёт о завершении по состоянию команды и сразу перечитывает
 		 * реестр — значение обязано быть там уже к этому моменту.
 		 */
-		if (pending?.base_key && wire.status === "SUCCESS") {
-			const remember = writeBackOf(pending.type, pending.payload);
-			if (remember) {
-				const base = await bases.findByKeyGlobal(pending.base_key);
-				if (base) {
-					const saved = await registry.rememberShowInList(base.id, remember.name, remember.showInList);
-					if (!saved) {
-						log.warn({
-							commandId: p.data.commandId, baseKey: pending.base_key, name: remember.name,
-						}, "признак «показывать в списке» запомнить не удалось: пользователя нет в реестре");
-					}
-				}
+		// Признак из эха не равен записанному — отказ, как у ролей (S1).
+		if (echo?.state.users && pending && wire.status === "SUCCESS") {
+			const shown = checkShowInListIntent(pending.payload, echo.state.users);
+			if (!shown.ok) {
+				wire = {
+					...wire,
+					status: "ERROR",
+					error: { code: "AGENT_FIELD_NOT_APPLIED", message: showInListVerdictMessage(shown), details: shown },
+				};
+				log.warn({
+					commandId: p.data.commandId, type: pending.type, baseKey: pending.base_key,
+					name: shown.name, wanted: shown.wanted, actual: shown.actual,
+				}, "агент доложил об успехе, но «показывать в списке выбора» в базе другое");
 			}
+		}
+		const remember = pending?.base_key && wire.status === "SUCCESS" ? writeBackOf(pending.type, pending.payload) : null;
+		const rememberShow = async (baseId: string) => {
+			if (!remember) return;
+			const saved = await registry.rememberShowInList(baseId, remember.name, remember.showInList);
+			if (!saved) {
+				log.warn({
+					commandId: p.data.commandId, baseKey: pending?.base_key, name: remember.name,
+				}, "признак «показывать в списке» запомнить не удалось: пользователя нет в реестре");
+			}
+		};
+		// Без эха пользователей (старая сборка) — сразу, до «выполнено». С эхом — ниже, ПОСЛЕ
+		// его применения (S2): строка пользователя уже есть, а прочитанное у 1С важнее памяти.
+		if (remember && pending?.base_key && !echo?.state.users) {
+			const base = await bases.findByKeyGlobal(pending.base_key);
+			if (base) await rememberShow(base.id);
 		}
 
 		const row = await queue.complete(req.agent!.agentId, wire);
@@ -627,7 +644,11 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			const base = await bases.findByKeyGlobal(row.base_key);
 			// Базы нет в реестре — применять некуда; тогда ниже отработает обычное чтение.
 			if (base) {
-				if (echo.state.users) { await registry.syncUsers(base.id, echo.state.users); applied.users = true; }
+				if (echo.state.users) {
+					await registry.syncUsers(base.id, echo.state.users);
+					applied.users = true;
+					if (remember && rememberAfterEcho(remember, echo.state.users)) await rememberShow(base.id);
+				}
 				if (echo.state.extensions) {
 					await registry.syncExtensions(base.id, echo.state.extensions);
 					applied.extensions = true;
@@ -640,9 +661,11 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		}
 		// Что эхо не принесло — читаем (onec/writeState.readsAfter): загрузка из выгрузки меняет и
 		// пользователей, и расширения; второй вход в базу за тем, что уже пришло, не нужен.
-		const reads = p.data.status === "SUCCESS" && row.base_key
-			? readsAfter(row.type, (row.payload ?? {}) as Record<string, unknown>, applied)
-			: [];
+		// После отказа «признак не принят» остальное уже записано — тоже читаем (S3).
+		const reads = !row.base_key ? []
+			: p.data.status === "SUCCESS"
+				? readsAfter(row.type, (row.payload ?? {}) as Record<string, unknown>, applied)
+				: readsAfterFailure(row.type, p.data.error?.code);
 		for (const refreshType of reads) {
 			await queue.enqueue({
 				agentId: req.agent!.agentId,

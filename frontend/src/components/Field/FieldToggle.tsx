@@ -23,6 +23,11 @@ export interface FieldToggleProps {
   className?: string;
   /** Подсказка title. */
   title?: string;
+  /**
+   * Значение не известно: бегунок посередине. Щелчок включает. Для трёхзначных полей, где
+   * «выключено» по умолчанию выдавало бы незнание за факт.
+   */
+  indeterminate?: boolean;
 }
 
 /**
@@ -50,6 +55,7 @@ const FieldToggle: FC<FieldToggleProps> = ({
   size = "md",
   className,
   title,
+  indeterminate = false,
 }) => {
   const id = useId();
   const handleChange = () => {
@@ -64,7 +70,8 @@ const FieldToggle: FC<FieldToggleProps> = ({
         styles.FieldToggle,
         styles[`size_${size}`],
         styles[`variant_${variant}`],
-        value && styles.checked,
+        value && !indeterminate && styles.checked,
+        indeterminate && styles.indeterminate,
         disabled && styles.disabled,
         className,
       ]
@@ -76,7 +83,8 @@ const FieldToggle: FC<FieldToggleProps> = ({
         id={id}
         name={name}
         type="checkbox"
-        checked={value}
+        checked={value && !indeterminate}
+        aria-checked={indeterminate ? "mixed" : undefined}
         disabled={disabled}
         onChange={handleChange}
         className={styles.input}

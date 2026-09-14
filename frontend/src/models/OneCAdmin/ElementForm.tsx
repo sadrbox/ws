@@ -17,7 +17,7 @@
  * отдельной командой, где незаполненное поле значит «не трогать».
  */
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
@@ -44,6 +44,7 @@ import { useOpenOnecBase } from "src/models/OneCBases";
 import {
 	QueryError, isApplicable, publishLabel, reportBatchStart, useOnecWrite,
 } from "./shared";
+import { attachBatch, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 import { buildGroupUserUpdate } from "./userUpdate";
@@ -75,7 +76,6 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 	const isUser = kind === "user";
 	const elementName = asText(row.name);
 
-	const qc = useQueryClient();
 	const openBase = useOpenOnecBase();
 	const [dialog, setDialog] = useState<Op | null>(null);
 	const [picked, setPicked] = useState<string[]>(() => {
@@ -163,11 +163,31 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 							: { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" };
 
 			if (!payload) return null;
-			return runBatch(type, picked, payload);
+			return { ...(await runBatch(type, picked, payload)), bases: picked };
 		},
 		onSuccess: (d) => {
 			if (!d) { showToast(translate("onecNothingToApply"), "warning"); setDialog(null); return; }
-			void qc.invalidateQueries({ queryKey: ["onec"] });
+			/*
+			 * ПЕРЕЧИТЫВАТЬ — ПО ЗАВЕРШЕНИИ, А НЕ СРАЗУ ПОСЛЕ ПОСТАНОВКИ (R7-П3).
+			 *
+			 * Раньше здесь сбрасывался весь кэш `["onec"]`: в реестре ещё прежнее, а заодно заново
+			 * шли живые списки кластера и ролей — лишние обращения к агенту. Теперь задание
+			 * становится операцией в «Прогрессе»; её окончание перечитывает только ключи реестра
+			 * (attachBatch → refreshAfterWork).
+			 */
+			if (d.queued) {
+				const target = elementName || name.trim();
+				const op = startOp({
+					kind: dialog === "delete" ? "delete" : dialog === "update" ? "update" : "create",
+					title: dialog === "delete"
+						? (isUser ? translate("onecUserDelete") : translate("onecExtRemove"))
+						: dialog === "update" ? translate("onecUserUpdate")
+							: (isUser ? translate("onecUserCreate") : translate("onecExtInstall")),
+					target, total: d.total,
+					...(isUser ? { scope: { user: target, bases: d.bases } } : {}),
+				});
+				attachBatch(op, d.batchId, d.total);
+			}
 			setDialog(null);
 			// Итог называет то, что есть: поставили всё / часть / ничего — и почему.
 			reportBatchStart(d, isUser ? translate("onecUser") : translate("onecExtension"));

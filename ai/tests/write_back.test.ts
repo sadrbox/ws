@@ -11,7 +11,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { writeBackOf } from "../src/onec/writeBack.ts";
+import { rememberAfterEcho, writeBackOf } from "../src/onec/writeBack.ts";
 
 describe("что запомнить после успешной команды", () => {
 	it("признак из IB_UPDATE_USER запоминается за этим пользователем", () => {
@@ -56,5 +56,16 @@ describe("что запомнить после успешной команды",
 
 	it("пустое имя — не факт, а мусор", () => {
 		assert.equal(writeBackOf("IB_UPDATE_USER", { name: "   ", showInList: true }), null);
+	});
+});
+
+describe("S2: запоминать после эха — только если эхо признака не принесло", () => {
+	const back = { name: "Оператор", showInList: true };
+	it("эхо прочитало признак — прочитанное важнее памяти", () => {
+		assert.equal(rememberAfterEcho(back, [{ name: "оператор", showInList: false }]), false);
+	});
+	it("эхо без признака или без пользователя — запоминаем", () => {
+		assert.equal(rememberAfterEcho(back, [{ name: "Оператор" }]), true);
+		assert.equal(rememberAfterEcho(back, [{ name: "Другой", showInList: true }]), true);
 	});
 });

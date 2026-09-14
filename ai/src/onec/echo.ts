@@ -204,6 +204,35 @@ export function checkRoleIntent(
 }
 
 /** Отказ словами — он уходит в панель как ошибка команды. */
+/**
+ * «ПОКАЗЫВАТЬ В СПИСКЕ ВЫБОРА» — СВЕРКА ЗАПИСАННОГО С ПРОЧИТАННЫМ (S1, TASK_SERVICE_SHOW_IN_LIST.md).
+ *
+ * Агент до 12:46 писал признак молча: платформа не приняла — команда всё равно «Выполнено», а
+ * эхо приносило прежнее значение, и тумблер в панели возвращался назад без объяснений. Как и у
+ * ролей: признак в эхе есть и не равен записанному — это отказ, а не успех. Поля в эхе нет
+ * (сборка его не читает) или пользователя в эхе нет — судить не о чем, молчим.
+ */
+export type ShowInListVerdict = { ok: true } | { ok: false; name: string; wanted: boolean; actual: boolean };
+
+export function checkShowInListIntent(payload: Record<string, unknown>, users: IbUser[]): ShowInListVerdict {
+	if (typeof payload.showInList !== "boolean") return { ok: true };
+	const wantedName = typeof payload.newName === "string" && payload.newName.trim()
+		? payload.newName.trim()
+		: typeof payload.name === "string" ? payload.name : "";
+	const found = users.find((u) => norm(u.name) === norm(wantedName));
+	if (!found || typeof found.showInList !== "boolean") return { ok: true };
+	return found.showInList === payload.showInList
+		? { ok: true }
+		: { ok: false, name: found.name, wanted: payload.showInList, actual: found.showInList };
+}
+
+export function showInListVerdictMessage(v: Extract<ShowInListVerdict, { ok: false }>): string {
+	const yn = (b: boolean) => (b ? "да" : "нет");
+	return `Признак «Показывать в списке выбора» не сохранился: записано «${yn(v.wanted)}», в базе «${yn(v.actual)}».`
+		+ " Остальные реквизиты команды могли примениться. Если повторная запись не помогает — значение"
+		+ " не сохраняет сама база: проверьте флажок в Конфигураторе (Администрирование → Пользователи).";
+}
+
 export function roleVerdictMessage(v: Extract<RoleVerdict, { ok: false }>): string {
 	/*
 	 * СПИСОК РОЛЕЙ — С ПРЕДЕЛОМ. Живой случай 13.09: отказ перечислял все 331 роль

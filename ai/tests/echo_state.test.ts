@@ -8,7 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseEcho } from "../src/onec/echo.ts";
+import { checkShowInListIntent, parseEcho, showInListVerdictMessage } from "../src/onec/echo.ts";
 
 test("полный список пользователей применяется и вырезается из результата", () => {
 	const echo = parseEcho({
@@ -79,4 +79,17 @@ test("трёхзначный showInList доезжает как есть: null �
 	assert.equal(echo.state.users?.[0].showInList, true);
 	assert.equal(echo.state.users?.[1].showInList, null);
 	assert.equal(echo.state.users?.[2].showInList, undefined);
+});
+
+test("S1: «показывать в списке» в эхе не равен записанному — отказ с обоими значениями", () => {
+	const users = [{ name: "Оператор", showInList: false }];
+	const v = checkShowInListIntent({ name: "оператор", showInList: true }, users);
+	assert.equal(v.ok, false);
+	if (!v.ok) assert.match(showInListVerdictMessage(v), /записано «да», в базе «нет»/);
+	assert.equal(checkShowInListIntent({ name: "Оператор", showInList: false }, users).ok, true);
+	// Поля в эхе нет (старая сборка) или признака в команде нет — судить не о чем.
+	assert.equal(checkShowInListIntent({ name: "Оператор", showInList: true }, [{ name: "Оператор" }]).ok, true);
+	assert.equal(checkShowInListIntent({ name: "Оператор" }, users).ok, true);
+	// Переименование: сверяем по новому имени.
+	assert.equal(checkShowInListIntent({ name: "Старый", newName: "Оператор", showInList: true }, users).ok, false);
 });

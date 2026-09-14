@@ -18,6 +18,8 @@
  * чтение принесёт истину, и расхождение будет видно.
  */
 
+import type { IbUser } from "./registry.ts";
+
 /** Что запомнить: пользователь в базе и значение непрочитываемого признака. */
 export type WriteBack = { name: string; showInList: boolean };
 
@@ -39,4 +41,16 @@ export function writeBackOf(type: string, payload: Record<string, unknown>): Wri
 	if (!name) return null;
 
 	return { name, showInList: payload.showInList };
+}
+
+/**
+ * Запоминать ли записанное ПОСЛЕ применения эха (S2). Эхо принесло признак этого пользователя —
+ * прочитанное у 1С важнее памяти о своей записи: запомненное перетёрло бы правду отметкой
+ * «по записи панели». Не принесло (старая сборка) — запоминаем: строка пользователя после эха
+ * уже есть, в том числе у только что созданного.
+ */
+export function rememberAfterEcho(back: WriteBack, echoUsers: IbUser[]): boolean {
+	const key = back.name.toLowerCase();
+	const found = echoUsers.find((u) => u.name.trim().toLowerCase() === key);
+	return !(found && typeof found.showInList === "boolean");
 }

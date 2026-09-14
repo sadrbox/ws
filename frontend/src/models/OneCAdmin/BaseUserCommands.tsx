@@ -17,7 +17,7 @@
  * другом.
  */
 import { FC, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
@@ -42,7 +42,6 @@ export const BaseUserCommands: FC<{
 	onDone?: () => void;
 }> = ({ baseKey, activeUser, onDone }) => {
 	const canWrite = useOnecWrite();
-	const qc = useQueryClient();
 	const openCard = useOpenBaseUser();
 	const [dialog, setDialog] = useState<null | "create" | "delete">(null);
 	const [name, setName] = useState("");
@@ -70,8 +69,8 @@ export const BaseUserCommands: FC<{
 
 	const done = () => {
 		showToast(translate("onecBatchQueued"), "success");
-		void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached", baseKey] });
-		void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
+		// Кэш реестра не сбрасываем сразу после постановки — в нём ещё прежнее: перечитает
+		// окончание задания (attachBatch → refreshAfterWork, R7-П1).
 		onDone?.();
 		close();
 	};

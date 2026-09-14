@@ -132,6 +132,16 @@ export function planWriteState(
 export type ReadAfter = "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
 
 /**
+ * Какие чтения поставить после ОТКАЗА (S3). `IB_FIELD_NOT_APPLIED` после записи: остальные поля
+ * команды в базе уже записаны (у создания — пользователь создан), а эха у отказа нет — без
+ * чтения реестр остался бы с тем, что было до команды.
+ */
+export function readsAfterFailure(type: string, code: string | undefined): ReadAfter[] {
+	if (code !== "IB_FIELD_NOT_APPLIED") return [];
+	return type === "IB_CREATE_USER" || type === "IB_UPDATE_USER" ? ["IB_LIST_USERS"] : [];
+}
+
+/**
  * Какие чтения поставить после изменения — только то, чего эхо не принесло.
  *
  * Загрузка из выгрузки заменяет базу целиком: и пользователей, и расширения. Обновление

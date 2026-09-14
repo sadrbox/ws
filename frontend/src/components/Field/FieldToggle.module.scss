@@ -72,6 +72,15 @@
     left: calc(100% - 18px);
   }
 
+  // Значение не известно — бегунок посередине, дорожка пунктиром.
+  &.indeterminate .track {
+    border: 1px dashed $color6;
+  }
+
+  &.indeterminate .thumb {
+    left: calc(50% - 8px);
+  }
+
   // Цветовая схема — успех (зелёный).
   &.variant_success.checked .track {
     background: $indicatorPosted;
@@ -95,6 +104,10 @@
 
   &.size_sm.checked .thumb {
     left: calc(100% - 15px);
+  }
+
+  &.size_sm.indeterminate .thumb {
+    left: calc(50% - 6.5px);
   }
 
   // Заблокирован.

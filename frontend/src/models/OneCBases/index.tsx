@@ -269,8 +269,10 @@ const useBaseTabs = (row: TDataItem) => {
 						onActiveRowChange: (r) => setActiveUser(r ? asText(r.name) : ""),
 						// Создать, изменить, удалить — по ЭТОЙ базе; роли читаются из неё же.
 						extraButtons: (
-							<BaseUserCommands baseKey={baseKey} activeUser={activeUser}
-								onDone={() => void usersCheck.run([baseKey])} />
+							// После создания и удаления таблица обновится из реестра по завершении
+							// команды (R7-П1): живое чтение базы здесь лишнее, а склеенное с раньше
+							// поставленным отдавало список ДО изменения.
+							<BaseUserCommands baseKey={baseKey} activeUser={activeUser} />
 						),
 					})} />
 				</>
