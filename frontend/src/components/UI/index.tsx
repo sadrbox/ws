@@ -12,7 +12,7 @@ import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import TechMessages from 'src/components/TechMessages/TechMessages';
-import { NoticeScope, retireScope, setScopeObject, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
+import { NoticeScope, retireScope, setScopeObject, setTechMessagesOpen, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
 import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
@@ -137,8 +137,10 @@ export const Container: FC = () => {
    * и делится высота. Сворачивается область своим размером, оставаясь на месте: накладка
    * (position: absolute) закрывала бы содержимое формы ровно там, где с ним работают.
    *
-   * Разделитель стоит между ними и только при РАСКРЫТОЙ области: у свёрнутой полосы
-   * ширины нет, и тянуть там нечего — разделитель предлагал бы действие без смысла.
+   * Разделитель стоит между ними всегда, когда область справа: и у раскрытой, и у свёрнутой
+   * полосы (вместо её левой границы — один вид разделителя на всё приложение). Потянуть его
+   * у свёрнутой полосы — значит раскрыть область и сразу задать ей ширину; двойной щелчок и
+   * стрелки тоже раскрывают. Внизу у свёрнутой полосы разделителя нет — как и прежде.
    * Долю область читает переменной --tech-width: так ширину задаёт рабочее
    * пространство (оно одно знает про обе области), а открыта область или свёрнута —
    * по-прежнему знает она сама.
@@ -156,12 +158,12 @@ export const Container: FC = () => {
             } as CSSProperties}
           >
             <Panes />
-            {techOpen && (
+            {(techOpen || !techBottom) && (
               <VSplitBar
                 orientation={techBottom ? "horizontal" : "vertical"}
-                onPointerDown={split.startResize}
-                onDoubleClick={split.reset}
-                onNudge={split.nudge}
+                onPointerDown={(e) => { if (!techOpen) setTechMessagesOpen(true); split.startResize(e); }}
+                onDoubleClick={() => { if (!techOpen) setTechMessagesOpen(true); split.reset(); }}
+                onNudge={(d) => { if (!techOpen) setTechMessagesOpen(true); split.nudge(d); }}
                 title={translate("resizePanels")}
               />
             )}

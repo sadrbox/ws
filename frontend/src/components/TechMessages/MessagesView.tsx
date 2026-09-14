@@ -259,7 +259,8 @@ export const MessagesView: FC<{
 		});
 	}, [visible, needle, errorsOnly]);
 	const groups = useMemo(() => groupMessages(shown, mode), [shown, mode]);
-	const active = useMemo(() => visible.filter((m) => m.active).length, [visible]);
+	// Сколько ошибок среди видимого — числом на кнопке «Только ошибки»: оно про неё и есть.
+	const errorsCount = useMemo(() => visible.filter((m) => m.type === "error" || m.type === "attention").length, [visible]);
 
 	/*
 	 * Свёрнутость. Ключи групп в разных режимах разные («ref:sales» и «day:12.09.2026»),
@@ -306,26 +307,33 @@ export const MessagesView: FC<{
 								aria-label={translate("search")}
 								onChange={(e) => setNeedle(e.target.value)}
 							/>
+							{/*
+							  * ЧИСЛО — НА КНОПКЕ, К КОТОРОЙ ОНО ОТНОСИТСЯ (вариант Г, 14.09). Строка
+							  * «Актуальные: 2 · Всего: 5 · в истории: 3» занимала полосу словами, которые
+							  * повторяли кнопки рядом. Теперь «История 3» — сколько она покажет,
+							  * «Только ошибки 1» — сколько ошибок среди видимого; число актуальных уже
+							  * есть на значке свёрнутой области.
+							  */}
 							<Button size="sm" variant="secondary" active={errorsOnly}
-								title={translate("techMsgErrorsOnlyHint")}
+								title={`${translate("techMsgErrorsOnlyHint")}${errorsCount ? `: ${errorsCount}` : ""}`}
 								onClick={() => setErrorsOnly((v) => !v)}>
 								{translate("techMsgErrorsOnly")}
+								{errorsCount > 0 && <span className={styles.BtnCount}>{errorsCount}</span>}
 							</Button>
 							<Button size="sm" variant="secondary" active={history}
-								title={translate("techMsgHistoryHint")}
+								title={`${translate("techMsgHistoryHint")}${inHistory ? ` (${translate("techMsgInHistory")}: ${inHistory})` : ""}`}
 								onClick={toggleHistory}>
 								{translate("techMsgHistory")}
+								{inHistory > 0 && <span className={styles.BtnCount}>{inHistory}</span>}
 							</Button>
-							{/* Когда отбор что-то отсёк, счётчик говорит об этом: «12 из 200».
-							    Иначе человек считает, что видит всё. */}
-							<span className={styles.ViewCount}>
-								{translate("techMsgActive")}: {active} · {translate("total")}: {
-									shown.length === visible.length
-										? visible.length
-										: `${shown.length} / ${visible.length}`
-								}
-								{!history && inHistory > 0 && ` · ${translate("techMsgInHistory")}: ${inHistory}`}
-							</span>
+							{/* «Показано из» — только когда поиск или отбор что-то отсёк: иначе человек
+							    считает, что видит всё, а без отбора число ничего не добавляет. */}
+							{shown.length !== visible.length && (
+								<span className={styles.ViewCount}
+									title={`${translate("techMsgShown")}: ${shown.length} / ${visible.length}`}>
+									{shown.length} / {visible.length}
+								</span>
+							)}
 						</>
 					)}
 				</div>

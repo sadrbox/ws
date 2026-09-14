@@ -2080,6 +2080,7 @@
   "onecQueueOldest": "ең ескісі күтуде",
   "techMsgErrorsOnly": "Тек қателер",
   "techMsgHistory": "Тарих",
+  "techMsgShown": "Көрсетілді",
   "techMsgHistoryHint": "Өзекті емес хабарламаларды да көрсету: жабылған формалар, түзетілген қателер, өткен оқиғалар",
   "techMsgInHistory": "тарихта",
   "techMsgNoActual": "Өзекті хабарлама жоқ — өткендері тарихта",

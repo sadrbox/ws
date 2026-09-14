@@ -41,6 +41,7 @@ import {
 	useOps, type Op,
 } from "./operations";
 import type { GroupMode } from "./grouping";
+import { waitingSummary, type QueryLike } from "./fetchLabels";
 import styles from "./TechMessages.module.scss";
 
 /** Сколько ждать, прежде чем назвать ожидание заметным, и сколько держать строку после. */
@@ -55,34 +56,43 @@ const LINGER_MS = 600;
  * показывают и в проверках, и в полноэкранном виде). Клиент в приложении один и тот же
  * модуль — тот же, которым пользуется реестр операций.
  */
-const useFetchingCount = (): number => useSyncExternalStore(
+const useWaitingKey = (): string => useSyncExternalStore(
 	(cb) => queryClient.getQueryCache().subscribe(cb),
-	() => queryClient.isFetching(),
-	() => 0,
+	// Строка, а не объект: снимок обязан быть стабильным между вызовами без изменений.
+	() => {
+		const w = waitingSummary(
+			queryClient.getQueryCache().findAll({ fetchStatus: "fetching" }) as unknown as QueryLike[],
+		);
+		return w.count ? `${w.count}\u0000${w.names.join("\u0000")}` : "";
+	},
+	() => "",
 );
 
 /**
  * Заметное ожидание: число запросов, если ждём дольше SLOW_MS, иначе ноль.
  * Возвращает и момент, с которого ждём, — строке нужно время начала, как и операции.
  */
-function useSlowFetching(): { count: number; since: number } | null {
-	const count = useFetchingCount();
-	const [slow, setSlow] = useState<{ count: number; since: number } | null>(null);
+function useSlowFetching(): { count: number; names: string[]; since: number } | null {
+	const key = useWaitingKey();
+	const [countText, ...names] = key ? key.split("\u0000") : ["0"];
+	const count = Number(countText) || 0;
+	const [slow, setSlow] = useState<{ count: number; names: string[]; since: number; key: string } | null>(null);
 
 	useEffect(() => {
 		if (count > 0) {
-			// Уже показываем — только обновляем число, не сдвигая начало ожидания.
+			// Уже показываем — только обновляем число и имена, не сдвигая начало ожидания.
 			if (slow) {
-				if (slow.count !== count) setSlow({ ...slow, count });
+				if (slow.key !== key) setSlow({ ...slow, count, names, key });
 				return;
 			}
-			const t = window.setTimeout(() => setSlow({ count, since: Date.now() }), SLOW_MS);
+			const t = window.setTimeout(() => setSlow({ count, names, since: Date.now(), key }), SLOW_MS);
 			return () => window.clearTimeout(t);
 		}
 		if (!slow) return;
 		const t = window.setTimeout(() => setSlow(null), LINGER_MS);
 		return () => window.clearTimeout(t);
-	}, [count, slow]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- names выводятся из key
+	}, [count, key, slow]);
 
 	return slow;
 }
@@ -329,6 +339,8 @@ export const ProgressSection: FC<{
 							<div className={styles.RowBody}>
 								<div className={styles.MsgText}>
 									{translate("techMsgRequests")}: {slowShown.count}
+									{/* Чего ждём — разделами: число без имён не говорило ничего. */}
+									{slowShown.names.length > 0 && ` — ${slowShown.names.join(", ")}`}
 								</div>
 								{/* Сколько осталось, сервер не сообщает — значит, спиннер, а не полоса. */}
 								<Progress percent={null} />

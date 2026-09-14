@@ -59,7 +59,7 @@
 	align-items: center;
 	gap: 6px;
 	padding: 6px 3px;
-	border-left: 1px solid $color34;
+	// Границы нет: слева стоит разделитель (VSplitBar) — тот же, что у раскрытой области.
 	background: var(--sv-color60);
 
 	// Стрелка раскрытия смотрит влево: область выезжает оттуда.
@@ -199,6 +199,15 @@
 
 // Счётчики — здесь же, справа от кнопок: они про тот самый список, которым эти кнопки
 // распоряжаются. Цифры читают, сравнивая, — моноширинные разряды не пляшут.
+// Число на кнопке панели команд («История 3»): то, что кнопка покажет или отберёт.
+.BtnCount {
+	margin-left: 6px;
+	padding: 0 3px;
+	border-radius: 3px;
+	background: $color34;
+	font-variant-numeric: tabular-nums;
+}
+
 .ViewCount {
 	margin-left: auto;
 	color: $color51;

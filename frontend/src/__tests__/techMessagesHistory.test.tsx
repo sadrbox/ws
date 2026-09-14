@@ -52,9 +52,10 @@ describe("актуальные сообщения и история", () => {
 		render(<TestWrapper><Live /></TestWrapper>);
 		expect(screen.queryByText(text)).toBeNull();
 		expect(screen.getByText("Нет связи")).toBeTruthy();
-		expect(screen.getByText(new RegExp(`${translate("techMsgInHistory")}: 1`))).toBeTruthy();
+		// Сколько в истории — числом на самой кнопке «История» (вариант Г).
+		const historyButton = screen.getByRole("button", { name: new RegExp(`^${translate("techMsgHistory")}\\s*1$`) });
 
-		fireEvent.click(screen.getByRole("button", { name: translate("techMsgHistory") }));
+		fireEvent.click(historyButton);
 		expect(screen.getByText(text)).toBeTruthy();
 		// Выбор запомнен — это настройка рабочего места.
 		expect(localStorage.getItem("tech_messages_history")).toBe("1");

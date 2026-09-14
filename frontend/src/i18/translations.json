@@ -2080,6 +2080,7 @@
   "onecQueueOldest": "самая старая ждёт",
   "techMsgErrorsOnly": "Только ошибки",
   "techMsgHistory": "История",
+  "techMsgShown": "Показано",
   "techMsgHistoryHint": "Показать и неактуальные сообщения: закрытых форм, исправленных ошибок, прошедших событий",
   "techMsgInHistory": "в истории",
   "techMsgNoActual": "Актуальных сообщений нет — прошлые в истории",
