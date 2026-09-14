@@ -17,7 +17,7 @@
 
 import { humanizeAgentError } from "../onec/errorHints.ts";
 import { isDestructive } from "../onec/access.ts";
-import { BATCHABLE, isBatchError, startBatch } from "../onec/batchRunner.ts";
+import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
 import { isDue, type MaintenanceSchedule, type ScheduleStore } from "../onec/schedules.ts";
 import { Router, type Request, type Response } from "express";
 import type { Db } from "../db/pool.ts";
@@ -34,6 +34,7 @@ import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
 	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
+	runsInsideBase, validateSchedulePayload,
 } from "../commands/admin.ts";
 
 type Deps = {
@@ -142,7 +143,7 @@ export function onecRouter(deps: Deps) {
 	 * от «права хватает только на просмотр» — это разные сообщения человеку.
 	 */
 	r.use((req, res, next) => {
-		if (isDestructive(req.method, req.path) && !req.erpUser!.canOnecWrite) {
+		if (isDestructive(req.method, req.path, req.body) && !req.erpUser!.canOnecWrite) {
 			res.status(403).json({
 				success: false,
 				error: {
@@ -209,12 +210,18 @@ export function onecRouter(deps: Deps) {
 			// организации пользователя: журнал команд должен показывать, где выполнено.
 			organizationUuid: agent.organizationUuid,
 			baseKey: built.baseKey,
+			// Кластерная команда с базой не занимает место базы (С1).
+			inBase: runsInsideBase(spec),
 			type: spec.type,
 			payload: built.payload,
 			userUuid: u.uuid,
 			// Срок берётся из спецификации: выгрузка базы идёт часами, и общие 15 минут
 			// объявляли её просроченной посреди работы (см. LONG_COMMAND_TTL_SECS).
-			ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
+			// Сухой прогон ничего не меняет и ждётся на экране (С5): короткий срок и вперёд очереди.
+			ttlSeconds: built.payload.dryRun === true ? DEFAULT_COMMAND_TTL_SECS : (spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS),
+			...(built.payload.dryRun === true ? { priority: -1 } : {}),
+			// Одиночную команду человек ждёт на экране — ждать очереди ей не дольше обычного срока (С2).
+			queueWaitSeconds: DEFAULT_COMMAND_TTL_SECS,
 			/**
 			 * ЧТЕНИЯ НЕ ДУБЛИРУЮТСЯ. Одна и та же база показана на нескольких экранах, и
 			 * два «Обновить» подряд создавали ДВЕ команды: два входа в базу по десятку
@@ -312,15 +319,13 @@ export function onecRouter(deps: Deps) {
 	 * ли список полным, принят ли он — и где агент искал. По этим полям панель пишет
 	 * человеку правду, включая неприятную.
 	 */
-	r.post("/publications/refresh", async (req, res) => {
-		const outcome = await run(req, "CLUSTER_LIST_PUBLICATIONS", {});
-		if (outcome.status !== 200) { send(res, outcome); return; }
-
-		// Применять здесь нечего: срез уже применён на общем пути приёма результатов
-		// (agentRouter), куда он попадает раньше, чем run() возвращает управление. Второе
-		// применение было бы не ошибкой, а лишней парой мест, которые обязаны совпадать.
-		// А вот РАЗБОР среза повторяем — теми же правилами, той же функцией.
-		const data = outcome.data as {
+	/**
+	 * Ответ на проверку публикаций — реестром и разбором среза, одним способом для ответа сразу и
+	 * для ответа после ожидания (`GET /commands/:id`, С7): сырые строки агента другой формы, и
+	 * панель клала их в список баз.
+	 */
+	const publicationsAnswer = async (raw: unknown) => {
+		const data = raw as {
 			items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
 		} | null;
 		const items = Array.isArray(data?.items) ? data.items : [];
@@ -329,18 +334,18 @@ export function onecRouter(deps: Deps) {
 			lookedIn: Array.isArray(data?.lookedIn) ? data.lookedIn.length : 0,
 		};
 		const report = publicationReport(items, data?.complete === true, evidence);
+		return { items: await bases.listAll(), report: { ...report, ...evidence } };
+	};
 
-		// Отвечаем реестром, как и обновление баз: панели нужен готовый список, а не сырой
-		// ответ агента, у которого другая форма.
-		res.json({
-			success: true,
-			data: {
-				items: await bases.listAll(),
-				// Где искали — единственный способ отличить «не опубликовано» от
-				// «смотрели не в том каталоге», не заходя на сервер.
-				report: { ...report, ...evidence },
-			},
-		});
+	r.post("/publications/refresh", async (req, res) => {
+		const outcome = await run(req, "CLUSTER_LIST_PUBLICATIONS", {});
+		if (outcome.status !== 200) { send(res, outcome); return; }
+
+		// Применять здесь нечего: срез уже применён на общем пути приёма результатов
+		// (agentRouter), куда он попадает раньше, чем run() возвращает управление. Второе
+		// применение было бы не ошибкой, а лишней парой мест, которые обязаны совпадать.
+		// А вот РАЗБОР среза повторяем — теми же правилами, той же функцией.
+		res.json({ success: true, data: await publicationsAnswer(outcome.data) });
 	});
 
 	// Ручное обновление реестра: спрашиваем список у кластера и сразу применяем к базе сервиса,
@@ -806,7 +811,7 @@ export function onecRouter(deps: Deps) {
 
 	/** Разбор тела расписания: одно место на создание и на правку. */
 	const parseSchedule = (
-		body: Record<string, unknown>, partial: boolean,
+		body: Record<string, unknown>, partial: boolean, existing?: MaintenanceSchedule | null,
 	): { ok: true; value: Partial<MaintenanceSchedule> } | { ok: false; message: string } => {
 		const out: Partial<MaintenanceSchedule> = {};
 
@@ -853,6 +858,14 @@ export function onecRouter(deps: Deps) {
 		if (body.enabled !== undefined) out.enabled = body.enabled !== false;
 		else if (!partial) out.enabled = true;
 
+		// Payload — по схеме команды и без секретов (С12): и при смене типа, и при смене payload.
+		if (out.type !== undefined || out.payload !== undefined) {
+			const type = out.type ?? existing?.type ?? "";
+			const base = (out.baseKeys ?? existing?.baseKeys ?? [])[0] ?? "base";
+			const problem = validateSchedulePayload(type, out.payload ?? existing?.payload ?? {}, base);
+			if (problem) return { ok: false, message: problem };
+		}
+
 		return { ok: true, value: out };
 	};
 
@@ -898,7 +911,7 @@ export function onecRouter(deps: Deps) {
 		if (!existing || existing.organizationUuid !== (u.organizationUuid ?? "")) {
 			send(res, fail(404, "NOT_FOUND", "Расписание не найдено")); return;
 		}
-		const parsed = parseSchedule((req.body ?? {}) as Record<string, unknown>, true);
+		const parsed = parseSchedule((req.body ?? {}) as Record<string, unknown>, true, existing);
 		if (!parsed.ok) { send(res, fail(400, "VALIDATION_ERROR", parsed.message)); return; }
 
 		const saved = await schedules.update(existing.id, parsed.value);
@@ -994,6 +1007,11 @@ export function onecRouter(deps: Deps) {
 		}
 		// Списки содержимого базы кладутся в кэш на общем пути приёма (agentRouter),
 		// здесь только отдаём готовое.
+		// Проверка публикаций после ожидания отвечает так же, как сразу (С7).
+		if (row.type === "CLUSTER_LIST_PUBLICATIONS") {
+			res.json({ success: true, data: await publicationsAnswer(row.result) });
+			return;
+		}
 		res.json({ success: true, data: row.result ?? null });
 	});
 
@@ -1122,7 +1140,8 @@ export function onecRouter(deps: Deps) {
 			const fresh = await queue.enqueue({
 				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: cmd.base_key,
 				type: cmd.type, payload: cmd.payload, userUuid: u.uuid,
-				ttlSeconds: findAdminCommand(cmd.type)?.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
+				ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
+				queueWaitSeconds: BATCH_QUEUE_WAIT_SECS, inBase: runsInsideBase(spec), priority: 10,
 			});
 			await batches.attach(batchId, fresh.id);
 			queued += 1;

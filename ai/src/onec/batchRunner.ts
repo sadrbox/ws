@@ -12,7 +12,13 @@
  * запуска по расписанию разные субъекты (человек с правом `full` против самого сервиса), и
  * решать это должен вызывающий.
  */
-import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, buildAdminPayload, findAdminCommand, payloadRefusal } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, buildAdminPayload, findAdminCommand, payloadRefusal, runsInsideBase } from "../commands/admin.ts";
+
+/**
+ * Сколько команда группового задания может ждать очереди (С2). Сто баз при одном месте идут
+ * часами, и задание, запущенное вечером, законно ждёт до утра — но не бесконечно.
+ */
+export const BATCH_QUEUE_WAIT_SECS = 12 * 3600;
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { BatchService } from "./batches.ts";
@@ -110,6 +116,8 @@ export async function startBatch(
 			agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: key,
 			type: spec.type, payload: built.payload, userUuid: input.userUuid,
 			ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
+			queueWaitSeconds: BATCH_QUEUE_WAIT_SECS,
+			inBase: runsInsideBase(spec),
 			// Пачку по многим базам запускают и уходят: она не должна загораживать
 			// одиночный запрос человека, который ждёт ответа на экране.
 			priority: 10,

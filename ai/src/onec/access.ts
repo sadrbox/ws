@@ -58,7 +58,11 @@ const DESTRUCTIVE: RegExp[] = [
  * `GET` не бывает разрушающим: часть путей читают и меняют одно и то же (GET
  * `/bases/:key/credentials` отдаёт признак «задан», PUT того же пути — записывает пароль).
  */
-export function isDestructive(method: string, path: string): boolean {
+export function isDestructive(method: string, path: string, body?: unknown): boolean {
 	if (method.toUpperCase() === "GET") return false;
+	// Проверка базы — чтение, пока не просят исправлять (С4): «Исправлять» меняет данные базы.
+	if (/^\/bases\/[^/]+\/check$/.test(path)) {
+		return (body as { repair?: unknown } | null | undefined)?.repair === true;
+	}
 	return DESTRUCTIVE.some((re) => re.test(path));
 }

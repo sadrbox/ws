@@ -298,7 +298,9 @@ export const refreshPublications = () =>
 		if (!isPending(d)) return d;
 		// Долгая проверка (П7): результат команды — строки ПУБЛИКАЦИЙ, а не баз, и класть их в
 		// список баз нельзя. Срез сервис применил при приёме ответа — перечитываем реестр.
-		await awaitCommand<unknown>(d);
+		const r = await awaitCommand<{ items?: OnecBase[]; report?: PublicationReport } | null>(d);
+		// Сервис с С7 отвечает после ожидания реестром и разбором — берём их; старый — сырыми строками.
+		if (r && Array.isArray(r.items) && r.report) return { items: r.items, report: r.report };
 		const bases = await fetchBases();
 		return { items: bases.items, report: undefined as PublicationReport | undefined };
 	});

@@ -28,7 +28,18 @@ export type EnqueueInput = {
 	requestId?: string | null;
 	userUuid?: string | null;
 	conversationId?: string | null;
+	/** Срок ВЫПОЛНЕНИЯ, от выдачи агенту (С2). */
 	ttlSeconds?: number;
+	/**
+	 * Сколько команда может ЖДАТЬ ОЧЕРЕДИ до выдачи (С2). По умолчанию — как срок выполнения.
+	 * Групповые задания ждут дольше: сто баз при одном месте идут часами.
+	 */
+	queueWaitSeconds?: number;
+	/**
+	 * Идёт ли команда внутрь базы (С1) — занимает место базы и агента. По умолчанию — есть ли
+	 * база, как прежде; кластерные команды с базой обязаны передавать `false`.
+	 */
+	inBase?: boolean;
 	/**
 	 * Меньше — раньше. 0 (по умолчанию) — то, что человек запросил сейчас и ждёт на
 	 * экране; 10 — пакетные операции по многим базам: их запускают и уходят, и они не
@@ -56,7 +67,32 @@ export type CommandRow = {
 	dispatched_at: Date | null;
 	finished_at: Date | null;
 	expires_at: Date;
+	batch_id?: string | null;
+	in_base?: boolean | null;
+	ttl_seconds?: number | null;
+	attempt?: number;
+	retried_by?: string | null;
 };
+
+/** Сколько попыток даётся команде задания, когда база занята (IB_BUSY, С10). */
+export const BUSY_MAX_ATTEMPTS = 3;
+
+/** Внутрь базы: явный признак, а у старых команд — как прежде, по наличию базы (С1). */
+const IN_BASE = (a: string) => `COALESCE(${a}.in_base, ${a}.base_key IS NOT NULL)`;
+
+/**
+ * ЗАНИМАЕТ ЛИ КОМАНДА МЕСТО (С3). Выданная — да. Истёкшая по сроку, но выданная и без ответа —
+ * тоже, ещё `grace` секунд: агент мог продолжать работу, и выдать ему вторую команду внутрь базы
+ * поверх первой значит повторить заклинивание, от которого место и защищает.
+ */
+const OCCUPIES = (a: string, graceParam: string) => `(${a}.state = 'dispatched' OR (
+	${a}.state = 'expired' AND ${a}.dispatched_at IS NOT NULL AND ${a}.result_status IS NULL
+	AND ${a}.error->>'code' = 'COMMAND_EXPIRED'
+	AND ${a}.finished_at > now() - make_interval(secs => ${graceParam}::int)))`;
+
+/** Текст истечения: не дождалась очереди — это не «агент не на связи» (С2). */
+const QUEUE_TIMEOUT_MESSAGE = "Команда не дождалась своей очереди у агента: он был занят другими командами. "
+	+ "Повторите позже или разделите задание на части.";
 
 /** Команда в формате протокола агента. */
 export type WireCommand = { id: string; requestId?: string; baseKey?: string; type: string; payload: Record<string, unknown> };
@@ -94,9 +130,13 @@ export class CommandQueue {
 	 */
 	private readonly ibParallel: number;
 
-	constructor(db: Db, ibParallel = 1) {
+	/** Сколько секунд истёкшая, но выданная команда ещё держит место (С3). */
+	private readonly lateGraceSecs: number;
+
+	constructor(db: Db, ibParallel = 1, lateGraceSecs = 600) {
 		this.db = db;
 		this.ibParallel = Math.max(1, ibParallel);
+		this.lateGraceSecs = Math.max(0, lateGraceSecs);
 		this.bell.setMaxListeners(1000);
 	}
 
@@ -124,20 +164,24 @@ export class CommandQueue {
 	async enqueue(input: EnqueueInput): Promise<CommandRow> {
 		const id = "cmd_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
 		const ttl = Math.max(30, input.ttlSeconds ?? 3600);
+		const queueWait = Math.max(30, input.queueWaitSeconds ?? ttl);
 		const baseKey = input.baseKey ?? null;
+		const inBase = input.inBase ?? baseKey !== null;
 		// ON CONFLICT — по частичному уникальному индексу (agent_id, base_key, request_id) среди
 		// НЕЗАВЕРШЁННЫХ команд: повторная постановка той же команды (двойное нажатие, ретрай HTTP)
 		// возвращает уже стоящую в очереди, а не создаёт вторую. Идемпотентность самой операции
 		// в 1С обеспечивает requestId — здесь мы защищаем только очередь.
 		const r = await this.db.query<CommandRow>(
-			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at, priority)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11)
+			// expires_at при постановке — предел ОЖИДАНИЯ очереди; срок выполнения (ttl_seconds)
+			// отсчитывается заново при выдаче агенту (С2).
+			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at, priority, in_base, ttl_seconds)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11, $12, $13)
 			 ON CONFLICT (agent_id, COALESCE(base_key, ''), request_id)
 			     WHERE request_id IS NOT NULL AND state IN ('queued', 'dispatched') DO NOTHING
 			 RETURNING *`,
 			[id, input.agentId, input.organizationUuid, baseKey, input.requestId ?? null, input.type,
-				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(ttl),
-				input.priority ?? 0],
+				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(queueWait),
+				input.priority ?? 0, inBase, ttl],
 		);
 		if (!r.rows[0]) {
 			const existing = await this.db.query<CommandRow>(
@@ -257,15 +301,18 @@ export class CommandQueue {
 			 * операция дольше отведённого ей срока. Советовать чинить связь во втором
 			 * случае — отправлять человека не туда.
 			 */
+			// Агента нет на связи — это закрывает expireOrphaned со своей причиной; здесь очередь
+			// просто не дошла (С2).
 			`UPDATE commands
 			    SET state = 'expired', finished_at = now(),
 			        error = COALESCE(error, jsonb_build_object(
-			          'code', 'COMMAND_EXPIRED',
+			          'code', CASE WHEN state = 'queued' THEN 'COMMAND_QUEUE_TIMEOUT' ELSE 'COMMAND_EXPIRED' END,
 			          'message', CASE WHEN state = 'queued'
-			            THEN 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'
+			            THEN $1::text
 			            ELSE 'Агент забрал команду, но не ответил за отведённое ей время. Связь тут ни при чём: проверьте базу и журнал агента — операция могла идти дольше своего срока.'
 			          END))
 			  WHERE state IN ('queued', 'dispatched') AND expires_at < now()`,
+			[QUEUE_TIMEOUT_MESSAGE],
 		);
 		return r.rowCount ?? 0;
 	}
@@ -339,11 +386,9 @@ export class CommandQueue {
 		await this.db.query(
 			`UPDATE commands
 			    SET state = 'expired', finished_at = now(),
-			        error = COALESCE(error, jsonb_build_object(
-			          'code', 'COMMAND_EXPIRED',
-			          'message', 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'))
+			        error = COALESCE(error, jsonb_build_object('code', 'COMMAND_QUEUE_TIMEOUT', 'message', $2::text))
 			  WHERE agent_id = $1 AND state = 'queued' AND expires_at < now()`,
-			[agentId],
+			[agentId, QUEUE_TIMEOUT_MESSAGE],
 		);
 		/*
 		 * ПО ОДНОЙ КОМАНДЕ НА БАЗУ ЗА РАЗ.
@@ -373,46 +418,50 @@ export class CommandQueue {
 		 * rac, в базы не заходят и друг другу не мешают.
 		 */
 		const busy = await this.db.query<{ n: string }>(
-			`SELECT count(*) AS n FROM commands
-			  WHERE agent_id = $1 AND state = 'dispatched' AND base_key IS NOT NULL`,
-			[agentId],
+			`SELECT count(*) AS n FROM commands d
+			  WHERE d.agent_id = $1 AND ${IN_BASE("d")} AND ${OCCUPIES("d", "$2")}`,
+			[agentId, this.lateGraceSecs],
 		);
 		const slots = Math.max(0, this.ibParallel - Number(busy.rows[0]?.n ?? 0));
 
 		const r = await this.db.query<CommandRow>(
 			`WITH candidates AS (
-			      SELECT c.id, c.priority, c.created_at, c.base_key,
+			      SELECT c.id, c.priority, c.created_at, c.base_key, ${IN_BASE("c")} AS ib,
 			             row_number() OVER (
-			               PARTITION BY COALESCE(c.base_key, c.id)
+			               -- Очередь базы — только у команд внутрь базы; кластерные независимы (С1).
+			               PARTITION BY CASE WHEN ${IN_BASE("c")} THEN c.base_key ELSE c.id END
 			               -- Внутри базы порядок ТОЛЬКО по времени: приоритет не должен
 			               -- переставлять зависимые операции над одним объектом местами.
 			               ORDER BY c.created_at
 			             ) AS rn
 			        FROM commands c
 			       WHERE c.agent_id = $1 AND c.state = 'queued'
-			         AND (c.base_key IS NULL OR NOT EXISTS (
+			         AND (NOT ${IN_BASE("c")} OR NOT EXISTS (
 			               SELECT 1 FROM commands d
-			                WHERE d.agent_id = c.agent_id AND d.state = 'dispatched'
-			                  AND d.base_key = c.base_key))
+			                WHERE d.agent_id = c.agent_id AND d.base_key = c.base_key
+			                  AND ${IN_BASE("d")} AND ${OCCUPIES("d", "$4")}))
 			 ), ranked AS (
 			      SELECT id, priority, created_at, base_key,
 			             -- Очередь ВНУТРИБАЗОВЫХ между собой: приоритет, затем время.
 			             row_number() OVER (ORDER BY priority, created_at) AS ib_rank
 			        FROM candidates
-			       WHERE rn = 1 AND base_key IS NOT NULL
+			       WHERE rn = 1 AND ib
 			 )
 			 -- Запоминаем ПРОЦЕСС, который забрал команду: по нему при регистрации нового
 			 -- процесса видно, чей ответ уже не придёт (см. failLostByRestart).
-			 UPDATE commands SET state = 'dispatched', dispatched_at = now(), dispatched_instance = $3
+			 -- Срок выполнения — от ВЫДАЧИ (С2): ожидание очереди в него не входит.
+			 UPDATE commands SET state = 'dispatched', dispatched_at = now(), dispatched_instance = $3,
+			        expires_at = CASE WHEN ttl_seconds IS NOT NULL
+			                          THEN now() + make_interval(secs => ttl_seconds) ELSE expires_at END
 			  WHERE id IN (
 			    -- Кластерные — все, они дешёвые и независимые.
-			    SELECT id FROM candidates WHERE rn = 1 AND base_key IS NULL
+			    SELECT id FROM candidates WHERE rn = 1 AND NOT ib
 			    UNION ALL
 			    -- Внутрибазовые — только сколько осталось свободных мест у агента.
 			    SELECT id FROM ranked WHERE ib_rank <= $2
 			  )
 			  RETURNING *`,
-			[agentId, slots, instanceId],
+			[agentId, slots, instanceId, this.lateGraceSecs],
 		);
 		const wire = r.rows.map((c) => ({
 			id: c.id,
@@ -484,6 +533,44 @@ export class CommandQueue {
 		return row;
 	}
 
+	/**
+	 * ПОВТОРИТЬ КОМАНДУ ЗАДАНИЯ, КОГДА БАЗА ЗАНЯТА (IB_BUSY, С10).
+	 *
+	 * Агент прямо советует повторить такие базы, а задание и обслуживание по расписанию этого не
+	 * делали: ночная выгрузка пропускала базу, в которую кто-то зашёл в ту же минуту. Копия встаёт в
+	 * конец очереди того же задания; у исходной отмечается, кем она повторена — отчёт задания и
+	 * «Повторить неуспешные» видят только последнюю попытку. Не больше BUSY_MAX_ATTEMPTS попыток.
+	 *
+	 * Возвращает номер новой команды или `null`, если повторять нечего.
+	 */
+	async retryBusy(id: string, queueWaitSeconds: number): Promise<string | null> {
+		const next = "cmd_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+		const r = await this.db.query<{ id: string; agent_id: string }>(
+			`WITH src AS (
+			    SELECT * FROM commands
+			     WHERE id = $1 AND state = 'failed' AND batch_id IS NOT NULL
+			       AND retried_by IS NULL AND attempt < $3
+			 ), ins AS (
+			    INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload,
+			                          user_uuid, conversation_id, expires_at, priority, batch_id,
+			                          in_base, ttl_seconds, attempt)
+			    SELECT $2, agent_id, organization_uuid, base_key, NULL, type, payload,
+			           user_uuid, conversation_id, now() + make_interval(secs => $4::int), priority, batch_id,
+			           in_base, ttl_seconds, attempt + 1
+			      FROM src
+			    RETURNING id, agent_id
+			 ), mark AS (
+			    UPDATE commands SET retried_by = $2 WHERE id IN (SELECT id FROM src) AND EXISTS (SELECT 1 FROM ins)
+			 )
+			 SELECT id, agent_id FROM ins`,
+			[id, next, BUSY_MAX_ATTEMPTS, Math.max(30, queueWaitSeconds)],
+		);
+		const row = r.rows[0];
+		if (!row) return null;
+		this.bell.emit(row.agent_id);
+		return row.id;
+	}
+
 	async get(id: string): Promise<CommandRow | null> {
 		const r = await this.db.query<CommandRow>(`SELECT * FROM commands WHERE id = $1`, [id]);
 		return r.rows[0] ?? null;
@@ -495,7 +582,8 @@ export class CommandQueue {
 		for (;;) {
 			const row = await this.get(id);
 			if (!row) return null;
-			if (row.state === "done" || row.state === "failed" || row.state === "expired") return row;
+			// Отменённая и прерванная — тоже конец: ждать дальше нечего (С11).
+			if (row.state === "done" || row.state === "failed" || row.state === "expired" || row.state === "canceled") return row;
 			const remaining = deadline - Date.now();
 			if (remaining <= 0) return row;
 			await new Promise<void>((resolve) => {

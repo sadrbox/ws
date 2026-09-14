@@ -17,7 +17,8 @@ import { decideInstance, instanceConflictMessage, isFarewell } from "../agents/i
 import { parseCommandStats } from "../agents/commandStats.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
-import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
+import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, parseEcho, roleVerdictMessage } from "../onec/echo.ts";
@@ -503,6 +504,15 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			res.json({ success: true, data: { ok: true, ignored: true } });
 			return;
 		}
+		// База занята — команде задания даётся ещё попытка в конце очереди (С10): агент сам советует
+		// повторить такие базы, а ночное обслуживание иначе пропускало базу из-за одного входа.
+		if (wire.status === "ERROR" && wire.error?.code === "IB_BUSY" && row.batch_id) {
+			const again = await queue.retryBusy(row.id, BATCH_QUEUE_WAIT_SECS);
+			if (again) {
+				log.info({ commandId: row.id, retry: again, baseKey: row.base_key, attempt: (row.attempt ?? 1) + 1 },
+					"база занята — команда задания поставлена повторно");
+			}
+		}
 		// Полный срез баз применяем к реестру ЗДЕСЬ же. Панель могла не дождаться ответа
 		// (запрос ограничен 20 с, а rac по сотне баз бывает дольше) — тогда синхронизация
 		// в её обработчике не выполнится, и «Обновить из кластера» тихо ничего не сделает.
@@ -638,6 +648,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				agentId: req.agent!.agentId,
 				organizationUuid: row.organization_uuid,
 				baseKey: row.base_key!,
+				inBase: true,
 				type: refreshType,
 				payload: { baseKey: row.base_key },
 				requestId: `refresh:${refreshType}:${row.base_key}`,
@@ -667,7 +678,8 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		if (row.base_key && (p.data.status === "SUCCESS" || failReason)) {
 			const spec = findAdminCommand(row.type);
 			// Только команды ВНУТРЬ базы: срез кластера об этом ничего не знает.
-			if (spec?.requiresBase && spec.capability === "ib.admin") {
+			// И не по сухому прогону (С5): он в базу не входил, его успех ничего не доказывает.
+			if (spec && marksReachability(spec, (row.payload ?? {}) as Record<string, unknown>)) {
 				const me = await agents.findById(req.agent!.agentId);
 				if (me?.serverId) {
 					await bases.markIbReachable(

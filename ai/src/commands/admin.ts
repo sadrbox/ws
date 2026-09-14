@@ -362,7 +362,8 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			// Всё необязательно: агент подставляет свои умолчания (alias = имя базы).
 			alias: z.string().max(200).optional(),
 			dir: z.string().max(500).optional(),
-			webServer: z.enum(["iis", "apache24"]).optional(),
+			// apache22 агент умеет наравне с apache24 (С14).
+			webServer: z.enum(["iis", "apache22", "apache24"]).optional(),
 		}).strict(),
 	},
 	{
@@ -474,7 +475,8 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		schema: z.object({
 			baseKey,
 			alias: z.string().max(200).optional(),
-			webServer: z.enum(["iis", "apache24"]).optional(),
+			// apache22 агент умеет наравне с apache24 (С14).
+			webServer: z.enum(["iis", "apache22", "apache24"]).optional(),
 		}).strict(),
 	},
 	{
@@ -604,6 +606,38 @@ export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spe
 	// полезнее, чем round-trip ради того же вывода.
 	const declaresTypes = agent.capabilities.some((c) => /^[A-Z][A-Z0-9_]+$/.test(c));
 	return declaresTypes ? agent.capabilities.includes(spec.type) : true;
+}
+
+/**
+ * КОМАНДА ИДЁТ ВНУТРЬ БАЗЫ — занимает место базы и агента в очереди (С1, аудит 14.09).
+ *
+ * Только `ib.admin`: вход в базу через ibcmd/COM. Кластерные команды (`cluster.admin`) идут через
+ * rac, в базы не заходят — даже когда адресованы базе (снятие сеанса, блокировка входа, удаление
+ * регистрации). Считать их «внутрь базы» значило ставить их в очередь за загрузкой той же базы:
+ * загрузка ждёт выхода пользователей, а снятие их сеансов — загрузку.
+ */
+export const runsInsideBase = (spec: Pick<AdminCommandSpec, "capability">): boolean => spec.capability === "ib.admin";
+
+/**
+ * Меняет ли ответ отметку «в базу не войти» (С5): только команды внутрь базы и не сухой прогон —
+ * `dryRun` в базу по-настоящему не входит, и его успех не доказывает, что войти можно.
+ */
+export const marksReachability = (
+	spec: Pick<AdminCommandSpec, "capability" | "requiresBase">, payload: Record<string, unknown>,
+): boolean => spec.requiresBase && runsInsideBase(spec) && payload.dryRun !== true;
+
+/**
+ * Payload расписания — по схеме его команды и без секретов (С12). Расписание хранится в базе и
+ * видно в панели: пароль или содержимое файла в нём оседали бы навсегда.
+ */
+export function validateSchedulePayload(type: string, payload: Record<string, unknown>, baseKey: string): string | null {
+	for (const secret of ["password", "contentBase64", "auth"]) {
+		if (secret in payload) return `payload: «${secret}» в расписании не хранится`;
+	}
+	const spec = findAdminCommand(type);
+	if (!spec) return `type: команда ${type} не поддерживается`;
+	const built = buildAdminPayload(spec, { ...payload, baseKey });
+	return built.ok ? null : `payload: ${built.message}`;
 }
 
 /**

@@ -132,9 +132,10 @@ export class BatchService {
 			`UPDATE commands
 			    SET state = 'expired', finished_at = now(),
 			        error = COALESCE(error, jsonb_build_object(
-			          'code', 'COMMAND_EXPIRED',
+			          'code', CASE WHEN state = 'queued' THEN 'COMMAND_QUEUE_TIMEOUT' ELSE 'COMMAND_EXPIRED' END,
 			          'message', CASE WHEN state = 'queued'
-			            THEN 'Агент не забрал команду до истечения срока — служба 1С-агента не на связи.'
+			            -- Не дождалась очереди — не «агент не на связи» (С2): это закрывает expireOrphaned.
+			            THEN 'Команда не дождалась своей очереди у агента: он был занят другими командами. Повторите позже или разделите задание на части.'
 			            ELSE 'Агент забрал команду, но не ответил за отведённое ей время. Проверьте базу и журнал агента.'
 			          END))
 			  WHERE batch_id = ANY($1::uuid[]) AND state IN ('queued','dispatched') AND expires_at < now()`,
@@ -161,7 +162,8 @@ export class BatchService {
 			        COALESCE(c.result->>'path', c.result->>'url') AS outcome,
 			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort
 			   FROM commands c LEFT JOIN agents a ON a.id = c.agent_id
-			  WHERE c.batch_id = ANY($1::uuid[]) ORDER BY c.batch_id, c.created_at`,
+			  -- Повторённая при занятой базе (С10) — не строка отчёта: её место заняла новая попытка.
+			  WHERE c.batch_id = ANY($1::uuid[]) AND c.retried_by IS NULL ORDER BY c.batch_id, c.created_at`,
 			[ids],
 		);
 
@@ -283,7 +285,7 @@ export class BatchService {
 		const narrow = baseKeys?.length ? baseKeys : null;
 		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown> }>(
 			`SELECT base_key, type, payload FROM commands
-			  WHERE batch_id = $1 AND state IN ('failed', 'expired')
+			  WHERE batch_id = $1 AND state IN ('failed', 'expired') AND retried_by IS NULL
 			    AND ($2::text[] IS NULL OR base_key = ANY($2::text[]))
 			  ORDER BY created_at`,
 			[batchId, narrow],
