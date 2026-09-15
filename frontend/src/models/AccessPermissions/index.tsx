@@ -12,6 +12,7 @@ import styles from "src/styles/main.module.scss";
 import SubTable, { type SubTableApi, type SubTableContext } from "src/components/SubTable";
 import { Button } from "src/components/Button";
 import { AGENTS_KEY, ONEC_NESTED_PERMISSIONS, nestedDepth, nestedLevelOptions } from "src/models/OneCAdmin/onecPermissions";
+import type { RowGroup } from "src/components/SubTable/rowModel";
 import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import ModelList from "src/components/ModelList";
 
@@ -91,6 +92,16 @@ export const MODEL_NAME_OPTIONS = [
   ...ONEC_NESTED_PERMISSIONS.map((x) => ({ value: x.key, label: x.label })),
 ];
 
+/*
+ * ГРУППА «АДМИНИСТРИРОВАНИЕ 1С»: общее право и вложенные разрешения стоят вместе при любой сортировке — сначала
+ * «Администрирование 1С», затем агенты, расширения, пользователи баз в порядке ONEC_NESTED_PERMISSIONS.
+ */
+const ONEC_GROUP_ORDER = new Map<string, number>([["OneCAdmin", 0], ...ONEC_NESTED_PERMISSIONS.map((x, i) => [x.key, i + 1] as [string, number])]);
+const accessPermissionGroup = (row: TDataItem): RowGroup | null => {
+  const order = ONEC_GROUP_ORDER.get(row.modelName as string);
+  return order === undefined ? null : { key: "OneCAdmin", order };
+};
+
 interface TItemFields {
   id?: number;
   uuid?: string;
@@ -167,7 +178,7 @@ const AccessPermissionsForm: FC<Partial<TPane>> = (paneProps) => {
           <div className={styles.Form}>
             <GroupCol>
               <Group>
-                <FieldSelect label={translate("model")} name={`${form.formUid}_modelName`} options={MODEL_NAME_OPTIONS}
+                <FieldSelect label={translate("model")} name={`${form.formUid}_modelName`} options={MODEL_NAME_OPTIONS} sortOptions
                   value={form.fields.modelName} onChange={e => form.setField("modelName", e.target.value)} disabled={form.isLoading || form.isEditMode} />
                 <FieldSelect label={translate("accessLevel")} name={`${form.formUid}_accessLevel`} options={ACCESS_LEVEL_OPTIONS}
                   value={form.fields.accessLevel} onChange={e => form.setField("accessLevel", e.target.value)} disabled={form.isLoading} />
@@ -281,20 +292,22 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "modelName") {
+      // Вложенные строки — с отступом под «Администрированием 1С» (и в редактировании, и в просмотре).
+      const depth = nestedDepth(row.modelName as string);
       if (ctx.inlineEditing) {
         const availableOptions = getAvailableOptions(ctx.rows, row.modelName as string);
         return (
           <FieldSelect
             name={`inline_model_${row.id}`}
             options={availableOptions}
+            sortOptions
             value={(row.modelName as string) ?? ""}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "modelName", e.target.value)}
             variant="table"
+            style={depth ? { paddingLeft: depth * 12 } : undefined}
           />
         );
       }
-      // Вложенные строки — с отступом под «Администрированием 1С».
-      const depth = nestedDepth(row.modelName as string);
       return <span style={depth ? { paddingLeft: depth * 12 } : undefined}>{depth ? "↳ " : ""}{modelNameMap[row.modelName as string] ?? row.modelName}</span>;
     }
     if (col.identifier === "accessLevel") {
@@ -346,9 +359,16 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
     if (row.modelName !== "OneCAdmin" || !ctx.inlineEditing || ctx.disabled) return null;
     const missing = ONEC_NESTED_PERMISSIONS.some((x) => !ctx.rows.some((r) => r.modelName === x.key));
     return missing ? (
-      <Button variant="secondary" onClick={() => addNested(ctx)}>{translate("onecPermAddNested")}</Button>
+      <Button variant="secondary" size="sm" onClick={() => addNested(ctx)}>{translate("onecPermAddNested")}</Button>
     ) : null;
   }, [addNested]);
+
+  // Сортировка по тому, что видно в ячейке: подписи модели и уровня, а не ключи `Sale`/`full`.
+  const sortValue = useMemo(() => ({
+    modelName: (r: TDataItem) => modelNameMap[r.modelName as string] ?? r.modelName,
+    accessLevel: (r: TDataItem) =>
+      (nestedLevelOptions(r.modelName as string) ?? ACCESS_LEVEL_OPTIONS).find((o) => o.value === r.accessLevel)?.label ?? r.accessLevel,
+  }), [modelNameMap]);
 
   const defaultNewRow = useMemo(() => {
     if (!userUuid) return undefined;
@@ -378,6 +398,8 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
       disabled={!userUuid}
       apiRef={apiRef}
       rowActions={rowActions}
+      sortValue={sortValue}
+      groupRows={accessPermissionGroup}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}

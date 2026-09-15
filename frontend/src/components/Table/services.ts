@@ -16,12 +16,15 @@ const getNestedValue = <T>(obj: T, path: string): unknown =>
  * @param arr - массив элементов для сортировки
  * @param sort - объект вида { "name": "asc", "id": "desc" } или пустой объект
  * @param locale - локаль для строкового сравнения (по умолчанию "default")
+ * @param getValue - значение для сравнения; по умолчанию — поле строки по пути колонки. Нужен колонкам, где
+ *   хранится ключ, а видна подпись (FieldSelect): сортировать надо по тому, что видит человек.
  * @returns новый отсортированный массив (оригинал не меняется)
  */
 export function sortTableRows<T>(
 	arr: readonly T[] | null | undefined,
 	sort: Record<string, "asc" | "desc">,
 	locale: string = "default",
+	getValue: (item: T, columnID: string) => unknown = getNestedValue,
 ): T[] {
 	// Защита от некорректных входных данных
 	if (!arr || arr.length === 0) {
@@ -38,8 +41,8 @@ export function sortTableRows<T>(
 	return [...arr].sort((a, b) => {
 		// Проходим по всем полям сортировки по порядку (multi-sort)
 		for (const [columnID, direction] of sortKeys) {
-			const aValue = getNestedValue(a, columnID);
-			const bValue = getNestedValue(b, columnID);
+			const aValue = getValue(a, columnID);
+			const bValue = getValue(b, columnID);
 
 			// null / undefined → в конец независимо от направления
 			if (aValue == null && bValue == null) continue;

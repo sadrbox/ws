@@ -43,6 +43,9 @@ export const contactTypeLabel = (value: string | null | undefined): string => {
   return translate(`ct_${value}`) || value;
 };
 
+/** Сортировка «Вида контакта» по подписи, а не по ключу. */
+const CONTACTS_SORT = { contactType: (r: TDataItem) => contactTypeLabel(r.contactType as string) };
+
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface TContactFields {
@@ -266,6 +269,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
           label="" name={`contact_type_${row.id}`}
           value={(row.contactType as string) ?? ""}
           options={CONTACT_TYPE_OPTIONS}
+          sortOptions
           onChange={e => ctx.handleInlineChange(row, "contactType", e.target.value)}
           disabled={ctx.disabled}
           variant="table"
@@ -299,6 +303,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
     <SubTable
       model={MODEL_ENDPOINT}
       componentName={CT_TABLE_COMPONENT}
+      sortValue={CONTACTS_SORT}
       columnsJson={adjustedColumns}
       parentKey="ownerUuid"
       parentUuid={parentUuid}

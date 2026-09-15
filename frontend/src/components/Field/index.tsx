@@ -330,9 +330,20 @@ type TypeFieldSelectProps = {
   size?: 'sm';
   /** Видимая подсказка-help ПОД полем. */
   hint?: React.ReactNode;
+  /**
+   * Варианты по алфавиту подписи (пустой вариант «—» остаётся первым). Для справочных списков — разделы,
+   * типы; не для смысловых шкал (уровни доступа, «нет → просмотр → управление»), поэтому не по умолчанию.
+   */
+  sortOptions?: boolean;
 };
 
-export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default', size, hint }) => {
+/** Варианты FieldSelect по алфавиту подписи; пустое значение — первым. */
+export const sortSelectOptions = <O extends { value: string; label: string }>(options: O[]): O[] =>
+  [...options].sort((a, b) =>
+    (a.value === "" ? 0 : 1) - (b.value === "" ? 0 : 1)
+    || a.label.localeCompare(b.label, "default", { numeric: true, sensitivity: "base" }));
+
+export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, value = '', onChange, disabled = false, required = false, error = false, style, variant = 'default', size, hint, sortOptions = false }) => {
   const uid = useId();
   const hintId = hint ? `${uid}-hint` : undefined;
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
@@ -343,7 +354,7 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, va
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldSelectWrapper}>
         <select name={name} id={uid} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled} aria-describedby={hintId}>
-          {options.map((option) => (
+          {(sortOptions ? sortSelectOptions(options) : options).map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>

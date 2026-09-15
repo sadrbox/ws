@@ -101,6 +101,43 @@ export const applyEditMarker = (r: PendingRow, patch: Record<string, unknown>): 
  *   4) поиск (кастомный filterRows либо по видимым колонкам).
  * Чистая функция — тестируется отдельно (computeDisplayRows.test.ts).
  */
+/** Группа строки: `key` — общий для группы, `order` — место внутри группы (0 — головная строка). */
+export type RowGroup = { key: string; order: number };
+
+const getNestedValue = (obj: unknown, path: string): unknown =>
+  path.split(".").reduce<unknown>((acc, key) => (acc as Record<string, unknown> | null | undefined)?.[key], obj);
+
+/**
+ * СТРОКИ ГРУППЫ — ВМЕСТЕ. Группа встаёт на место своей первой строки в общем порядке (сортировка по колонке
+ * двигает группу целиком), внутри — по `order`. Новые (ещё не сохранённые) строки группы тоже попадают к ней,
+ * а не в конец таблицы. Строки без группы остаются на своих местах.
+ */
+export function groupDisplayRows<T extends TDataItem>(rows: T[], groupOf: (row: TDataItem) => RowGroup | null | undefined): T[] {
+  const groups = new Map<string, { row: T; order: number; idx: number }[]>();
+  const info = rows.map((row, idx) => {
+    const g = groupOf(row);
+    if (g) {
+      const list = groups.get(g.key) ?? [];
+      list.push({ row, order: g.order, idx });
+      groups.set(g.key, list);
+    }
+    return g;
+  });
+  if (!groups.size) return rows;
+  const out: T[] = [];
+  const placed = new Set<string>();
+  rows.forEach((row, idx) => {
+    const g = info[idx];
+    if (!g) { out.push(row); return; }
+    if (placed.has(g.key)) return;
+    placed.add(g.key);
+    const list = groups.get(g.key) ?? [];
+    list.sort((a, b) => a.order - b.order || a.idx - b.idx);
+    for (const x of list) out.push(x.row);
+  });
+  return out;
+}
+
 export function computeDisplayRows(params: {
   rows: PendingRow[];
   deferRemoteChanges: boolean;
@@ -112,8 +149,12 @@ export function computeDisplayRows(params: {
   search: string;
   filterRows?: (rows: TDataItem[], search: string) => TDataItem[];
   columns: TColumn[];
+  /** Значение для сортировки по колонке — вместо сырого поля (см. SubTableProps.sortValue). */
+  sortValue?: Record<string, (row: TDataItem) => unknown>;
+  /** Группа строки — строки группы стоят вместе (см. SubTableProps.groupRows). */
+  groupRows?: (row: TDataItem) => RowGroup | null | undefined;
 }): PendingRow[] {
-  const { rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns } = params;
+  const { rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns, sortValue, groupRows } = params;
 
   let visible: PendingRow[] = deferRemoteChanges
     ? rows.filter(r => r._pendingAction !== "delete")
@@ -133,8 +174,12 @@ export function computeDisplayRows(params: {
     (typeof r.uuid === "string" && r.uuid.startsWith("tmp-"));
   const pendingCreates = clientSort ? [] : enriched.filter(isTmpRow);
   const others = pendingCreates.length ? enriched.filter(r => !isTmpRow(r)) : enriched;
-  const sortedOthers = sortTableRows(others, sort);
-  const sorted = pendingCreates.length ? [...sortedOthers, ...pendingCreates] : sortedOthers;
+  const getValue = sortValue
+    ? (r: PendingRow, id: string) => (sortValue[id] ? sortValue[id](r) : getNestedValue(r, id))
+    : undefined;
+  const sortedOthers = sortTableRows(others, sort, "default", getValue);
+  const flat = pendingCreates.length ? [...sortedOthers, ...pendingCreates] : sortedOthers;
+  const sorted = groupRows ? groupDisplayRows(flat, groupRows) : flat;
 
   if (!search) return sorted;
   if (filterRows) return filterRows(sorted, search) as PendingRow[];

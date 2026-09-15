@@ -362,6 +362,9 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
     return undefined;
   }, [roleMap]);
 
+  // Сортировка роли по подписи, а не по ключу `member`/`admin`.
+  const roleSort = useMemo(() => ({ role: (r: TDataItem) => roleMap[r.role as string] ?? r.role }), [roleMap]);
+
   const openFormFor = useCallback((data: TDataItem | undefined, ctx: SubTableContext, sourceRow?: TDataItem) => {
     openSubFormPane({
       addPane,
@@ -384,6 +387,7 @@ const AccessRightsTable: FC<AccessRightsTableProps> = ({
     <SubTable
       model={ENDPOINT}
       componentName="AccessRightsTable_part"
+      sortValue={roleSort}
       columnsJson={subColumnsJson}
       parentKey="userUuid"
       parentUuid={userUuid}

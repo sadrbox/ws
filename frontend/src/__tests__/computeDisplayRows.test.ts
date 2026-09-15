@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeDisplayRows } from "src/components/SubTable/rowModel";
+import { sortSelectOptions } from "src/components/Field";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 
 // ── Хелперы ────────────────────────────────────────────────────────────────
@@ -141,5 +142,38 @@ describe("computeDisplayRows — конвейер отображаемых ст�
       row({ id: 2, uuid: "b", name: "B" }),
     ];
     expect(base({ rows, search: "" })).toHaveLength(2);
+  });
+});
+
+describe("сортировка по подписи и группы строк", () => {
+  const LABEL: Record<string, string> = { Sale: "Продажи", Contract: "Договоры", OneCAdmin: "Администрирование 1С" };
+
+  it("sortValue: колонка с ключом сортируется по подписи, а не по ключу", () => {
+    const rows = [row({ id: 1, uuid: "a", modelName: "Sale" }), row({ id: 2, uuid: "b", modelName: "Contract" })];
+    const byKey = base({ rows, sort: { modelName: "asc" } });
+    expect(byKey.map(r => r.modelName)).toEqual(["Contract", "Sale"]);
+    const byLabel = base({ rows: [...rows].reverse(), sort: { modelName: "desc" }, sortValue: { modelName: r => LABEL[r.modelName as string] } });
+    expect(byLabel.map(r => r.modelName)).toEqual(["Sale", "Contract"]); // «Продажи» > «Договоры»
+  });
+
+  it("groupRows: группа стоит на месте первой строки, внутри — по order; новые строки группы не уходят в конец", () => {
+    const group = (r: TDataItem) => {
+      const m = r.modelName as string;
+      return m.startsWith("OneCAdmin") ? { key: "1c", order: m === "OneCAdmin" ? 0 : m === "OneCAdmin.Agents" ? 1 : 2 } : null;
+    };
+    const rows = [
+      row({ id: 1, uuid: "a", modelName: "OneCAdmin.Extensions.edit", name: "a" }),
+      row({ id: 2, uuid: "b", modelName: "Sale", name: "b" }),
+      row({ id: 3, uuid: "c", modelName: "OneCAdmin", name: "c" }),
+      row({ id: -1, uuid: "tmp-1", modelName: "OneCAdmin.Agents", name: "d", _pendingAction: "create" }),
+      row({ id: 4, uuid: "e", modelName: "Contract", name: "e" }),
+    ];
+    const out = base({ rows, sort: { name: "asc" }, groupRows: group });
+    expect(out.map(r => r.modelName)).toEqual(["OneCAdmin", "OneCAdmin.Agents", "OneCAdmin.Extensions.edit", "Sale", "Contract"]);
+  });
+
+  it("sortSelectOptions: по алфавиту подписи, пустой вариант первым", () => {
+    const sorted = sortSelectOptions([{ value: "b", label: "Телефон" }, { value: "", label: "—" }, { value: "a", label: "Адрес" }]);
+    expect(sorted.map(o => o.value)).toEqual(["", "a", "b"]);
   });
 });

@@ -236,6 +236,8 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
   const { addPane } = useAppContext().windows;
   const queryClient = useQueryClient();
   const eventTypeMap = useMemo(() => Object.fromEntries(EVENT_TYPE_OPTIONS.map(o => [o.value, o.label])), []);
+  // Сортировка события по подписи, а не по ключу `hire`/`fire`.
+  const eventSort = useMemo(() => ({ eventType: (r: TDataItem) => eventTypeMap[r.eventType as string] ?? r.eventType }), [eventTypeMap]);
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {
     if (col.identifier === "eventDate") {
@@ -244,7 +246,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
       return <span>{val ? getFormatDateOnly(val) : ""}</span>;
     }
     if (col.identifier === "eventType") {
-      if (ctx.inlineEditing) return <FieldSelect name={`hist_event_${row.id}`} options={EVENT_TYPE_OPTIONS} value={(row.eventType as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "eventType", e.target.value)} disabled={ctx.disabled} variant="table" />;
+      if (ctx.inlineEditing) return <FieldSelect name={`hist_event_${row.id}`} options={EVENT_TYPE_OPTIONS} sortOptions value={(row.eventType as string) ?? ""} onChange={e => ctx.handleInlineChange(row, "eventType", e.target.value)} disabled={ctx.disabled} variant="table" />;
       return <span>{eventTypeMap[row.eventType as string] ?? row.eventType}</span>;
     }
     if (col.identifier === "organization.name") {
@@ -305,6 +307,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
     <SubTable
       model={EH_MODEL}
       componentName={EH_COMPONENT}
+      sortValue={eventSort}
       columnsJson={historyColumnsJson}
       parentKey="employeeUuid"
       parentUuid={employeeUuid}

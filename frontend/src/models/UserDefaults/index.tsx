@@ -25,6 +25,9 @@ export const PERMISSION_DEFAULT_TYPE_OPTIONS = [
   { value: "purchasePriceType", label: translate("purchasePriceType") },
 ];
 
+/** Сортировка «Вида» по подписи, а не по ключу `bankAccount`/`cashbox`. */
+const USER_DEFAULTS_SORT = { valueType: (r: TDataItem) => typeOptMap[r.valueType as string] ?? r.valueType };
+
 const PERMISSION_DEFAULT_TYPE_ENDPOINT: Record<string, string> = {
   bankAccount: "bankaccounts",
   contract: "contracts",
@@ -88,6 +91,7 @@ const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
           <FieldSelect
             name={`upd_type_${row.id}`}
             options={availableOptions}
+            sortOptions
             value={(row.valueType as string) ?? ""}
             onChange={e => {
               void ctx.handleInlineChange(row, "valueType", e.target.value);
@@ -166,6 +170,7 @@ const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
     <SubTable
       model="user-defaults"
       componentName="UserDefaultsTable_part"
+      sortValue={USER_DEFAULTS_SORT}
       columnsJson={DEFAULTS_COLUMNS}
       parentKey="userUuid"
       parentUuid={userUuid}

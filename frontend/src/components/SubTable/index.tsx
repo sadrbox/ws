@@ -27,6 +27,7 @@ export type { ReadOnlyCellProps };
 import {
   applyEditMarker, computeDisplayRows, isSameRow, isUnsavedRow, type PendingRow,
 } from "./rowModel";
+import type { RowGroup } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
 import { useSubTableColumns } from "./useSubTableColumns";
 import { useSubTableToolbar } from "./useSubTableToolbar";
@@ -193,6 +194,17 @@ export interface SubTableProps {
   rowActions?: (row: TDataItem, ctx: SubTableContext) => ReactNode;
   /** false — скрыть колонку чекбоксов выбора строк (напр. таблица-настройка). По умолчанию true. */
   selectable?: boolean;
+  /**
+   * Значение для сортировки по колонке, если в строке ключ, а в ячейке подпись (FieldSelect): без него
+   * «Модель» сортировалась бы по `Sale`/`Contract`, а не по «Продажи»/«Договоры».
+   * Пример: `{ modelName: (row) => MODEL_LABEL[row.modelName] }`.
+   */
+  sortValue?: Record<string, (row: TDataItem) => unknown>;
+  /**
+   * Группировка строк: строки с одним `key` стоят вместе, в порядке `order`, при любой сортировке —
+   * напр. «Администрирование 1С» и его вложенные разрешения.
+   */
+  groupRows?: (row: TDataItem) => RowGroup | null | undefined;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -311,6 +323,8 @@ const SubTable: FC<SubTableProps> = ({
   apiRef,
   rowActions,
   selectable = true,
+  sortValue,
+  groupRows,
 }) => {
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
@@ -680,8 +694,8 @@ const SubTable: FC<SubTableProps> = ({
   // Конвейер отображаемых строк вынесен в чистую computeDisplayRows (см. выше),
   // useMemo лишь кеширует результат по тем же зависимостям.
   const displayRows = useMemo(
-    () => computeDisplayRows({ rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns }),
-    [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort],
+    () => computeDisplayRows({ rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns, sortValue, groupRows }),
+    [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort, sortValue, groupRows],
   );
 
   // Синхронизируем ref c актуальным displayRows (используется в ctx.rows
