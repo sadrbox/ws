@@ -47,6 +47,8 @@ const DEFAULTS_COLUMNS = [
 export interface UserDefaultsTableProps {
   userUuid: string;
   organizationUuid: string;
+  /** Имя организации карточки прав — владелец нового элемента, созданного из поля выбора. */
+  organizationName?: string;
   disabled?: boolean;
   deferRemoteChanges?: boolean;
   initialPendingRows?: TDataItem[];
@@ -60,6 +62,7 @@ export interface UserDefaultsTableProps {
 const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
   userUuid,
   organizationUuid,
+  organizationName = "",
   disabled = false,
   deferRemoteChanges = true,
   initialPendingRows,
@@ -101,14 +104,25 @@ const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
 
     if (col.identifier === "valueName") {
       const endpoint = PERMISSION_DEFAULT_TYPE_ENDPOINT[row.valueType as string] ?? "";
+      /*
+       * ОТБОР И ВЛАДЕЛЕЦ — ОРГАНИЗАЦИЯ КАРТОЧКИ ПРАВ. Выбор показывает только значения этой организации (и общие),
+       * а новый элемент, созданный прямо из поля, получает её владельцем. Раньше кассам и складам уходили
+       * `ownerType`/`ownerUuid`, которых их маршруты не знают: срабатывал общий отбор по активной организации
+       * текущего пользователя, и в выборе оказывались значения чужих организаций.
+       *
+       * Банковские счета и контакты привязаны к владельцу (`ownerType`/`ownerUuid`); склады, кассы и договоры —
+       * к организации (`organizationUuid`). Типы цен организации не принадлежат.
+       */
       let lookupParams: Record<string, string> | undefined;
+      let createDefaults: Record<string, unknown> | undefined;
       if (organizationUuid) {
-        // bankAccount, cashbox, warehouse, contact используют ownerType/ownerUuid
-        // (иначе фильтр по организации не применяется в Lookup)
-        if (["bankAccount", "cashbox", "warehouse", "contact"].includes(row.valueType as string)) {
+        const t = row.valueType as string;
+        if (t === "bankAccount" || t === "contact") {
           lookupParams = { ownerType: "organization", ownerUuid: organizationUuid };
-        } else {
+          createDefaults = { ownerName: organizationName };
+        } else if (t === "cashbox" || t === "warehouse" || t === "contract") {
           lookupParams = { organizationUuid };
+          createDefaults = { organizationName };
         }
       }
       if (ctx.inlineEditing && endpoint) {
@@ -121,6 +135,7 @@ const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
             value={(row.valueUuid as string) ?? ""}
             displayValue={(row.valueName as string) ?? ""}
             extraParams={lookupParams}
+            createDefaults={createDefaults}
             onSelect={(uuid, dv) => {
               void ctx.handleLookupChange(row, "valueUuid", uuid, { valueName: dv });
             }}
@@ -137,7 +152,7 @@ const UserDefaultsTable: FC<UserDefaultsTableProps> = ({
     }
 
     return undefined;
-  }, [organizationUuid, getAvailableOptions]);
+  }, [organizationUuid, organizationName, getAvailableOptions]);
 
   const defaultNewRow = useMemo(() => {
     return (rows: TDataItem[]) => {

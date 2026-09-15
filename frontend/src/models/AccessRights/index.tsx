@@ -231,6 +231,7 @@ const AccessRightsForm: FC<Partial<TPane>> = (paneProps) => {
           <UserDefaultsTable
             userUuid={form.fields.userUuid}
             organizationUuid={form.fields.organizationUuid}
+            organizationName={form.fields.orgShortName}
             disabled={!canWrite}
             deferRemoteChanges={true}
             initialPendingRows={userDefaults.pending}

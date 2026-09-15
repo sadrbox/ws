@@ -56,7 +56,14 @@ const CashboxesForm: FC<Partial<TPane>> = (paneProps) => {
   const form = useFormStore<TFields>({
     endpoint: MODEL_ENDPOINT, storageKey: "cashboxes-form", paneProps,
     defaultFields: DEFAULT_FIELDS,
-    initialFields: { ...DEFAULT_FIELDS, organizationUuid: defaultOrg.organizationUuid, organizationName: defaultOrg.organizationName },
+    // Организация из данных пейна (создание из поля выбора, например в «Предопределённых значениях» прав) важнее
+    // организации по умолчанию: новый элемент принадлежит той организации, из формы которой его создали.
+    initialFields: {
+      ...DEFAULT_FIELDS,
+      organizationUuid: (paneProps.data?.organizationUuid as string | undefined) || defaultOrg.organizationUuid,
+      organizationName: (paneProps.data?.organizationUuid ? (paneProps.data?.organizationName as string | undefined) ?? "" : "")
+        || defaultOrg.organizationName,
+    },
     mapServerToForm: (d: CashboxServerRecord, prev) => ({
       ...(prev ?? DEFAULT_FIELDS),
       name: d.name ?? "",
