@@ -5,10 +5,12 @@
  * Таблица баз с отметками отсюда убрана: она осталась от прежнего устройства панели и не
  * вызывалась ниоткуда — выбор баз давно живёт там, где базы и показывают.
  */
-import { FC, useCallback, useState } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
+import { useAppContext } from "src/app/context";
+import { buildOnecPermissions, type OnecPermissions } from "./onecPermissions";
 import type { NoticeItem } from "src/components/Notice";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
@@ -378,6 +380,16 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
  * Уровень берётся из того же права, что открывает панель, поэтому отдельного запроса нет.
  */
 export const useOnecWrite = (): boolean => useAccessPermission("OneCAdmin").canWrite;
+
+/** Вложенные разрешения «Администрирования 1С» текущего пользователя (onecPermissions.ts). */
+export function useOnecPermissions(): OnecPermissions {
+	const user = useAppContext().auth.user;
+	const hasSection = useAccessPermission("OneCAdmin").canRead;
+	return useMemo(() => buildOnecPermissions(
+		user?.accessPermissions ?? user?.employee?.accessPermissions ?? [],
+		{ isSuperAdmin: !!user?.isSuperAdmin, hasSection },
+	), [user, hasSection]);
+}
 
 /**
  * ПОЧЕМУ КОМАНД НЕ ВИДНО — сказать один раз на экран, а не молчать.

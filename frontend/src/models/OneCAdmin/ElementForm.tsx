@@ -42,8 +42,9 @@ import {
 import RolesPicker from "./RolesPicker";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import {
-	QueryError, isApplicable, publishLabel, reportBatchStart, useOnecWrite,
+	QueryError, isApplicable, publishLabel, reportBatchStart, useOnecPermissions,
 } from "./shared";
+import { deniedText, sectionAllows } from "./onecPermissions";
 import { attachBatch, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
@@ -71,11 +72,16 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 type Op = "create" | "update" | "delete";
 
 export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
-	const canWrite = useOnecWrite();
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const kind: ElementKind = asText(row.kind) === "user" ? "user" : "extension";
 	const isUser = kind === "user";
 	const elementName = asText(row.name);
+	const perms = useOnecPermissions();
+	const section = isUser ? "baseUsers" as const : "extensions" as const;
+	/** Действие доступно хотя бы для одной базы — кнопку показываем; число баз проверяется при применении. */
+	const canCreate = sectionAllows(perms, section, "create", 1);
+	const canUpdate = isUser && sectionAllows(perms, section, "edit", 1);
+	const canDelete = sectionAllows(perms, section, "delete", 1);
 
 	const openBase = useOpenOnecBase();
 	const [dialog, setDialog] = useState<Op | null>(null);
@@ -213,6 +219,13 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 
 	const apply = () => {
 		if (missing.length) return;
+		// Вложенное разрешение (решение 15.09): действие и, для нескольких баз, групповое редактирование.
+		const action = dialog === "delete" ? "delete" as const : dialog === "update" ? "edit" as const : "create" as const;
+		if (!sectionAllows(perms, section, action, picked.length)) {
+			const text = deniedText(perms, section, action, picked.length);
+			notify({ severity: "warning", text, source: translate(isUser ? "onecUser" : "onecExtension"), toast: text });
+			return;
+		}
 		/*
 		 * ПУСТОЕ ПОЛНОЕ ИМЯ НЕ ПРИНИМАЕТСЯ (П19, решение 15.09). В групповом изменении оно и раньше не уходило
 		 * («не трогать»), но молча: человек стирал имя и думал, что очистил его во всех базах. Теперь — предупреждение
@@ -322,13 +335,13 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 										{picked.length ? ` (${picked.slice(0, 3).join(", ")}${picked.length > 3 ? "…" : ""})` : ""}
 									</span>
 									{/* Раскатка прав по базам — изменение 1С: только полный доступ (F5). */}
-									{canWrite && (
+									{canUpdate && (
 										<Button variant="primary" disabled={!picked.length || !elementName}
 											onClick={() => setDialog("update")}>
 											{translate("onecUserUpdate")}
 										</Button>
 									)}
-									{canWrite && !picked.length && (
+									{canUpdate && !picked.length && (
 										<span className={styles.Hint}>{translate("onecPickBasesFirst")}</span>
 									)}
 								</GroupRow>
@@ -374,21 +387,23 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 										<>
 											{/* Создание, правка и удаление элемента в отмеченных базах — изменения 1С:
 											    правом «только просмотр» видно, где элемент есть, но не меняют (F5). */}
-											{canWrite && (<>
+											{canCreate && (
 												<Button variant="secondary" disabled={!picked.length} onClick={() => setDialog("create")}>
 													{isUser ? translate("onecUserCreate") : translate("onecExtInstall")}
 												</Button>
-												{isUser && (
-													<Button variant="secondary" disabled={!picked.length || !elementName}
-														onClick={() => setDialog("update")}>
-														{translate("onecUserUpdate")}
-													</Button>
-												)}
+											)}
+											{canUpdate && (
+												<Button variant="secondary" disabled={!picked.length || !elementName}
+													onClick={() => setDialog("update")}>
+													{translate("onecUserUpdate")}
+												</Button>
+											)}
+											{canDelete && (
 												<Button variant="danger" disabled={!picked.length || !elementName}
 													onClick={() => setDialog("delete")}>
 													{isUser ? translate("onecUserDelete") : translate("onecExtRemove")}
 												</Button>
-											</>)}
+											)}
 											{(hidden > 0 || showAll) && (
 												<Button variant="secondary" active={showAll} onClick={() => setShowAll((v) => !v)}>
 													{translate("onecShowInapplicable")}{hidden > 0 && !showAll ? ` (${hidden})` : ""}

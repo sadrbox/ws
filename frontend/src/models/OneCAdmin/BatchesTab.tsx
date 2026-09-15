@@ -44,7 +44,10 @@ import { useAppContext } from "src/app/context";
 import { notify } from "src/components/TechMessages/store";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { reportBatchStart, useOnecWrite } from "./shared";
+import {
+	reportBatchStart, useOnecWrite, useOnecPermissions,
+} from "./shared";
+import { agentsAllow } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -161,6 +164,8 @@ const notQueued = (b: { items: { state: string }[] }): number =>
 
 export const BatchesTab: FC = () => {
 	const canWrite = useOnecWrite();
+	// Прерывание начатых команд — «управление» агентами (вложенное разрешение).
+	const canAbort = agentsAllow(useOnecPermissions(), "manage");
 	const qc = useQueryClient();
 	const { actions: { confirm } } = useAppContext();
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -391,7 +396,7 @@ export const BatchesTab: FC = () => {
 							<Icon name="close" /> {translate("onecBatchCancelQueued")}
 							{cancelable.length ? ` (${cancelable.length})` : ""}
 						</Button>
-						<Button variant="danger" disabled={!abortable.length || abort.isPending}
+						<Button variant="danger" disabled={!canAbort || !abortable.length || abort.isPending}
 							title={abortable.length ? `${translate("onecAbort")}: ${abortable.length}` : translate("onecAbortNone")}
 							onClick={() => void askAbort(abortable)}>
 							<Icon name="close" /> {translate("onecAbort")}

@@ -45,7 +45,10 @@ import {
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
 import { Icon } from "src/components/IconButton/icons";
-import { QueryError, useAgents, useOnecWrite } from "./shared";
+import {
+	QueryError, useAgents, useOnecPermissions,
+} from "./shared";
+import { deniedText, sectionAllows } from "./onecPermissions";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import {
 	attachBatch, finishOp, opBlocks, startOp, useBatchWatch, useOnecOps,
@@ -70,7 +73,9 @@ type Draft = Map<string, boolean>;
 const draftKey = (baseKey: string, role: string) => `${baseKey.toLowerCase()}|${role}`;
 
 export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
-	const canWrite = useOnecWrite();
+	const perms = useOnecPermissions();
+	// Запись пользователя базы — «редактирование» (вложенное разрешение); несколько баз — ещё и групповое.
+	const canWrite = sectionAllows(perms, "baseUsers", "edit", 1);
 	const row = (paneProps.data ?? {}) as TDataItem;
 	/**
 	 * ИМЯ ВХОДА — ИДЕНТИЧНОСТЬ КАРТОЧКИ, и она может смениться.
@@ -567,9 +572,15 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 */
 	const apply = useCallback((thenClose = false) => {
 		if (fullNameEmpty) return;
+		const bases = Math.max(changedByBase.size, 1);
+		if (!sectionAllows(perms, "baseUsers", "edit", bases)) {
+			const text = deniedText(perms, "baseUsers", "edit", bases);
+			notify({ severity: "warning", text, source: translate("onecUser"), toast: text });
+			return;
+		}
 		if (massChange) { setConfirmMass(thenClose ? "close" : "stay"); return; }
 		save.mutate(undefined, thenClose ? { onSuccess: close } : undefined);
-	}, [fullNameEmpty, massChange, save, close]);
+	}, [fullNameEmpty, massChange, save, close, changedByBase, perms]);
 
 	return (
 		<>
@@ -581,7 +592,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			onSaveAndClose={() => apply(true)}
 			onClose={close}
 			// Агент без ib.roles правку ролей не применит (C5): записать нельзя, и сказано почему.
-			saveDisabled={rolesBlocked || fullNameEmpty}
+			saveDisabled={rolesBlocked || fullNameEmpty || !canWrite}
 			saveTitle={rolesBlocked
 				? translate("onecRolesAgentOutdated")
 				: fullNameEmpty ? translate("onecUserFullNameEmpty")

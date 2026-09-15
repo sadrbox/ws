@@ -49,6 +49,8 @@ import {
 	fetchRoles, fetchUserOccurrences, runBatch, type UserOccurrence,
 } from "src/services/onec/api";
 import { attachBatch, finishOp, startOp } from "./progress";
+import { useOnecPermissions } from "./shared";
+import { deniedText, sectionAllows } from "./onecPermissions";
 import { useOpenBaseUser } from "./BaseUserForm";
 import main from "src/styles/main.module.scss";
 
@@ -87,6 +89,7 @@ const ATTR_TITLE: Record<Attr, string> = {
 };
 
 export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
+	const perms = useOnecPermissions();
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const userName = asText(row.userName) || asText(row.name);
 	const qc = useQueryClient();
@@ -432,7 +435,10 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 			<Wizard
 				steps={steps}
 				finishLabel={translate("apply")}
-				finishBlockedReason={changedBases.length ? "" : translate("onecNothingToApply")}
+				finishBlockedReason={!changedBases.length ? translate("onecNothingToApply")
+					// Вложенное разрешение: «редактирование» и, для нескольких баз, «групповое редактирование».
+					: !sectionAllows(perms, "baseUsers", "edit", changedBases.length)
+						? deniedText(perms, "baseUsers", "edit", changedBases.length) : ""}
 				finishing={apply.isPending}
 				onFinish={() => apply.mutate()}
 				onCancel={paneProps.uniqId ? () => void requestClose(paneProps.uniqId!) : undefined}

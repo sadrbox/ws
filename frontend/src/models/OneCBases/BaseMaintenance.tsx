@@ -28,7 +28,10 @@ import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
-import { CapabilityGuard, ReadonlyNotice, useOnecWrite } from "src/models/OneCAdmin/shared";
+import {
+	CapabilityGuard, ReadonlyNotice, useOnecWrite, useOnecPermissions,
+} from "src/models/OneCAdmin/shared";
+import { agentsAllow } from "src/models/OneCAdmin/onecPermissions";
 import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/progress";
 import { updateOp, useRunningWork } from "src/components/TechMessages/operations";
 import { getFormatDate } from "src/utils/datetime";
@@ -48,6 +51,7 @@ type Confirm = { job: Job; plan: string };
 
 export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const canWrite = useOnecWrite();
+	const canAbort = agentsAllow(useOnecPermissions(), "manage");
 	// Переиндексация и пересчёт итогов меняют базу: агент выполняет их только с «Исправлять» (П9),
 	// поэтому по умолчанию они выключены и без «Исправлять» не отправляются.
 	const [check, setCheck] = useState({ reindex: false, logicalIntegrity: true, recalcTotals: false, repair: false });
@@ -324,7 +328,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 								text: `${live.title}: ${liveText(live.pending)}`
 									+ (liveProc ? `. ${translate("onecOpProcess")}: ${liveProc.tool} ${liveProc.pid} (${translate("onecOpProcessHint")})` : ""),
 							}]} />
-							{canWrite && live.pending.abortable && (
+							{canAbort && live.pending.abortable && (
 								<Button variant="danger" disabled={abortLive.isPending} title={translate("onecQueueAbort")}
 									onClick={() => abortLive.mutate(live.commandId)}>
 									<Icon name="close" /> {translate("onecQueueAbort")}

@@ -8,6 +8,7 @@
 // список доступных читаются из базы ERP при КАЖДОМ запросе — как это делает tenantMiddleware
 // бэкенда. Кэшировать нельзя: отзыв доступа должен действовать сразу.
 
+import { buildOnecPermissions, type OnecPermissions } from "../onec/permissions.ts";
 import { createHash, timingSafeEqual, randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
@@ -37,6 +38,8 @@ export type ErpUser = {
 	 * существовал и раньше, но ничего не значил: сервис его не различал.
 	 */
 	canOnecWrite: boolean;
+	/** Вложенные разрешения: агенты, расширения, пользователи баз (onec/permissions.ts). */
+	onec: OnecPermissions;
 };
 
 export type AgentIdentity = { agentId: string; organizationUuid: string };
@@ -185,6 +188,13 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 		    AND "accessLevel" IN ('full', 'readonly') AND "deletedAt" IS NULL`,
 		[uuid],
 	);
+	// Вложенные разрешения «Администрирования 1С» — со всех организаций, как и общее право.
+	const nested = await erp.query<{ model_name: string; access_level: string }>(
+		`SELECT "modelName" AS model_name, "accessLevel" AS access_level
+		   FROM access_permissions
+		  WHERE "userUuid" = $1 AND "modelName" LIKE 'OneCAdmin.%' AND "deletedAt" IS NULL`,
+		[uuid],
+	);
 	let active = row.organization_uuid;
 	if (active && !row.is_super_admin && !allowed.includes(active)) active = null;
 	const activeRole = rights.rows.find((r) => r.organization_uuid === active)?.role;
@@ -197,5 +207,9 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 		isOrgAdmin: activeRole === "admin",
 		canOnecAdmin: row.is_super_admin || Number(onec.rows[0]?.any ?? 0) > 0,
 		canOnecWrite: row.is_super_admin || Number(onec.rows[0]?.full ?? 0) > 0,
+		onec: buildOnecPermissions(
+			nested.rows.map((r) => ({ modelName: r.model_name, accessLevel: r.access_level })),
+			{ isSuperAdmin: row.is_super_admin, hasSection: row.is_super_admin || Number(onec.rows[0]?.any ?? 0) > 0 },
+		),
 	};
 }

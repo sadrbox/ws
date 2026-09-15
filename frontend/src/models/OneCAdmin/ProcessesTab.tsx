@@ -35,7 +35,10 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchAgentProcesses, killAgentProcess } from "src/services/onec/api";
 import { AiServiceError } from "src/services/ai/endpoint";
-import { CapabilityGuard, QueryError, useAgents, useOnecWrite } from "./shared";
+import {
+	CapabilityGuard, QueryError, useAgents, useOnecPermissions,
+} from "./shared";
+import { agentsAllow } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
@@ -58,7 +61,8 @@ const age = (secs?: number): string => {
 };
 
 export const ProcessesTab: FC = () => {
-	const canWrite = useOnecWrite();
+	// Снятие процесса — «управление» агентами (вложенное разрешение).
+	const canWrite = agentsAllow(useOnecPermissions(), "manage");
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_procs"));
 	const [active, setActive] = useState<number | null>(null);
 	const [confirm, setConfirm] = useState<null | { pid: number; force: boolean; note?: string }>(null);

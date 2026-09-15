@@ -17,12 +17,15 @@ import { reportError } from "src/services/errors/route";
 import { abortCommand, type OnecQueueStats } from "src/services/onec/api";
 import { durationRows } from "./agentStats";
 import { formatDuration } from "./queueStats";
-import { useOnecWrite } from "./shared";
+import {
+	useOnecPermissions,
+} from "./shared";
+import { agentsAllow } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 import diag from "./AgentDiag.module.scss";
 
 export const QueueHolders: FC<{ stats: OnecQueueStats | undefined }> = ({ stats }) => {
-	const canWrite = useOnecWrite();
+	const canAbort = agentsAllow(useOnecPermissions(), "manage");
 	const qc = useQueryClient();
 	const [showTimes, setShowTimes] = useState(false);
 
@@ -63,7 +66,7 @@ export const QueueHolders: FC<{ stats: OnecQueueStats | undefined }> = ({ stats 
 									<td>{c.baseKey ?? "—"}</td>
 									<td>{formatDuration(c.ageSecs) || `0 ${translate("secShort")}`}</td>
 									<td>
-										{c.abortable && canWrite && (
+										{c.abortable && canAbort && (
 											<Button variant="secondary" disabled={abort.isPending}
 												onClick={() => abort.mutate(c.commandId)}>
 												{translate("onecQueueAbort")}

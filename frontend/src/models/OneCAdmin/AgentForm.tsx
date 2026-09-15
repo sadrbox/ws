@@ -39,7 +39,10 @@ import {
 	deleteAgent, fetchServers, releaseAgentInstance, renameAgent, rotateAgentToken,
 	setAgentDisabled, setAgentOwner,
 } from "src/services/onec/api";
-import { QueryError, useAgents, useOnecWrite } from "./shared";
+import {
+	QueryError, useAgents, useOnecPermissions,
+} from "./shared";
+import { agentsAllow } from "./onecPermissions";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
@@ -59,7 +62,9 @@ export const stateLabel = (a: { disabled: boolean; online: boolean; busy?: boole
 			: a.online ? translate("onecAgentOnline") : translate("onecAgentOffline");
 
 export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
-	const canWrite = useOnecWrite();
+	const perms = useOnecPermissions();
+	const canEditAgent = agentsAllow(perms, "edit");
+	const canManageAgent = agentsAllow(perms, "manage");
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const agentId = asText(row.agentId) || asText(row.uuid);
 	const qc = useQueryClient();
@@ -194,7 +199,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 														value={agent?.lastSeenAt ? getFormatDate(agent.lastSeenAt) : "—"}
 														disabled onChange={() => {}} width={FIELD_WIDTH.date} />
 													{/* Переименование агента — изменение: правом «просмотр» карточка читается. */}
-													{canWrite && (
+													{canEditAgent && (
 														<Button disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
 															onClick={() => rename.mutate()}>
 															<Icon name="editInline" /> {translate("onecAgentRename")}
@@ -218,7 +223,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 										    видно, НАД КЕМ они выполняются.
 										    Все они — про доступ к серверу 1С (токен, отключение, удаление),
 										    поэтому праву «только просмотр» области не видно вовсе (F5). */}
-										{canWrite && (
+										{canManageAgent && (
 										<FormArea title={translate("onecCommands")}>
 											<GroupRow>
 												<Button variant="danger" disabled={rotate.isPending} onClick={() => setConfirm("rotate")}>
@@ -340,7 +345,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											<span>{inst.live ? translate("onecAgentOnline") : translate("onecAgentOffline")}</span>
 											{isOwner
 												? <span className={styles.InstanceOwnerMark}>{translate("onecAgentOwnerNow")}</span>
-												: canWrite && (
+												: canManageAgent && (
 													<Button variant="primary" disabled={assign.isPending}
 														onClick={() => assign.mutate(inst.instanceId)}>
 														<Icon name="makePrimary" /> {translate("onecAgentMakeOwner")}

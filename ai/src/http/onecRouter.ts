@@ -17,6 +17,7 @@
 
 import { humanizeAgentError } from "../onec/errorHints.ts";
 import { isDestructive } from "../onec/access.ts";
+import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAllows } from "../onec/permissions.ts";
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
 import { agentBuild, buildOutdated, missingFeatures } from "../agents/features.ts";
 import { mergeDurationStats } from "../agents/commandStats.ts";
@@ -144,7 +145,40 @@ export function onecRouter(deps: Deps) {
 	 * Отдельный код ошибки `FORBIDDEN_READONLY`: панель по нему отличает «права нет вовсе»
 	 * от «права хватает только на просмотр» — это разные сообщения человеку.
 	 */
+	/*
+	 * ВЛОЖЕННЫЕ РАЗРЕШЕНИЯ (решение 15.09): агенты — по уровню, пользователи баз и расширения — по действию и числу
+	 * баз. Где они участвуют, общий «полный доступ» не нужен и не достаточен: действует вложенное разрешение.
+	 */
+	r.use(async (req, res, next) => {
+		try {
+			const u = req.erpUser!;
+			const need = onecRequirement(req.method, req.path, req.body);
+			if (!need || need.kind === "deferred") { next(); return; }
+			let check = need;
+			// Установка расширения туда, где оно уже есть, — обновление: это «редактирование», а не «создание».
+			if (need.kind === "section" && need.type === "IB_INSTALL_EXTENSION") {
+				const name = String(((req.body ?? {}) as { payload?: { name?: unknown } }).payload?.name ?? "").trim().toLowerCase();
+				if (name && need.baseKeys.length) {
+					const all = await bases.listAll();
+					const has = (key: string) => all.find((b) => b.key.toLowerCase() === key.toLowerCase())
+						?.extensionNames.some((n) => n.toLowerCase() === name) === true;
+					if (need.baseKeys.every(has)) check = { ...need, action: "edit" };
+				}
+			}
+			const allowed = check.kind === "agents"
+				? agentsAllow(u.onec, check.level)
+				: sectionAllows(u.onec, check.section, check.action, check.bases);
+			if (!allowed) {
+				res.status(403).json({ success: false, error: { code: "FORBIDDEN_ONEC_PERMISSION", message: deniedMessage(check, u.onec) } });
+				return;
+			}
+			next();
+		} catch (e) { next(e); }
+	});
+
 	r.use((req, res, next) => {
+		// Вложенное разрешение уже проверено выше — общий гейт «полный доступ» к таким запросам не применяется.
+		if (onecRequirement(req.method, req.path, req.body)) { next(); return; }
 		if (isDestructive(req.method, req.path, req.body) && !req.erpUser!.canOnecWrite) {
 			res.status(403).json({
 				success: false,
@@ -1210,6 +1244,19 @@ export function onecRouter(deps: Deps) {
 
 		const spec = findAdminCommand(src.type);
 		if (!spec) { send(res, fail(400, "UNKNOWN_COMMAND", `Команда ${src.type} больше не поддерживается`)); return; }
+		// Повтор — то же действие, что и задание: пользователи и расширения — по вложенным разрешениям, прочее — полный доступ.
+		{
+			const section = SECTION_OF_TYPE[src.type];
+			if (section) {
+				const need = { kind: "section" as const, ...section, bases: failed.length, type: src.type, baseKeys: [] };
+				if (!sectionAllows(u.onec, section.section, section.action, failed.length)) {
+					send(res, fail(403, "FORBIDDEN_ONEC_PERMISSION", deniedMessage(need, u.onec))); return;
+				}
+			} else if (!u.canOnecWrite) {
+				send(res, fail(403, "FORBIDDEN_READONLY", "Доступ только на просмотр: для повтора нужно право «Администрирование 1С» с полным доступом"));
+				return;
+			}
+		}
 
 		const batchId = await batches.create({
 			organizationUuid: u.organizationUuid ?? "",

@@ -31,7 +31,10 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
-import { useOnecWrite } from "./shared";
+import {
+	useOnecPermissions,
+} from "./shared";
+import { agentsAllow } from "./onecPermissions";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { updateServer, type OnecServer } from "src/services/onec/api";
@@ -49,7 +52,7 @@ export const previewUrl = (host: string): string => {
 };
 
 export const ServerParams: FC<{ server: OnecServer; showName?: boolean }> = ({ server, showName = true }) => {
-	const canWrite = useOnecWrite();
+	const canWrite = agentsAllow(useOnecPermissions(), "edit");
 	const qc = useQueryClient();
 	const [name, setName] = useState(server.name);
 	const [host, setHost] = useState(server.publicHost ?? "");

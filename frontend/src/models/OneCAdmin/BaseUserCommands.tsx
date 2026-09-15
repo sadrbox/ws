@@ -31,7 +31,10 @@ import { runBatch, type BatchType } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { attachBatch, finishOp, startOp, type OpKind } from "./progress";
 import { useOpenBaseUser } from "./BaseUserForm";
-import { useOnecWrite } from "./shared";
+import {
+	useOnecPermissions,
+} from "./shared";
+import { sectionAllows } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 
 export const BaseUserCommands: FC<{
@@ -41,7 +44,9 @@ export const BaseUserCommands: FC<{
 	/** Список прочитан — можно перечитать после команды. */
 	onDone?: () => void;
 }> = ({ baseKey, activeUser, onDone }) => {
-	const canWrite = useOnecWrite();
+	const perms = useOnecPermissions();
+	const canCreateUser = sectionAllows(perms, "baseUsers", "create", 1);
+	const canDeleteUser = sectionAllows(perms, "baseUsers", "delete", 1);
 	const openCard = useOpenBaseUser();
 	const [dialog, setDialog] = useState<null | "create" | "delete">(null);
 	const [name, setName] = useState("");
@@ -99,7 +104,7 @@ export const BaseUserCommands: FC<{
 		<>
 			{/* Создание и удаление пользователя ИБ — разрушающее (F5). «Изменить» открывает
 			    карточку: смотреть права правом «просмотр» можно, записывать — нет. */}
-			{canWrite && (
+			{canCreateUser && (
 				<Button variant="secondary" disabled={!baseKey || busy}
 					title={baseKey ? translate("onecUserCreate") : translate("onecPickBaseFirst")}
 					onClick={() => setDialog("create")}>
@@ -111,7 +116,7 @@ export const BaseUserCommands: FC<{
 				onClick={() => openCard(activeUser, baseKey)}>
 				<Icon name="open" /> {translate("onecUserEdit")}
 			</Button>
-			{canWrite && (
+			{canDeleteUser && (
 				<Button variant="secondary" disabled={!activeUser || busy}
 					title={activeUser ? `${translate("onecUserDelete")}: ${activeUser}` : translate("onecPickUserFirst")}
 					onClick={() => setDialog("delete")}>

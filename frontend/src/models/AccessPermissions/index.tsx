@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useRef } from "react";
 import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -9,7 +9,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FieldSelect } from "src/components/Field";
 import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import SubTable, { type SubTableContext } from "src/components/SubTable";
+import SubTable, { type SubTableApi, type SubTableContext } from "src/components/SubTable";
+import { Button } from "src/components/Button";
+import { AGENTS_KEY, ONEC_NESTED_PERMISSIONS, nestedDepth, nestedLevelOptions } from "src/models/OneCAdmin/onecPermissions";
 import { openSubFormPane } from "src/components/SubTable/subFormOpener";
 import ModelList from "src/components/ModelList";
 
@@ -84,6 +86,9 @@ export const MODEL_NAME_OPTIONS = [
     // невозможно выдать в интерфейсе, и раздел видел бы только суперадмин.
     { value: "OneCAdmin", i18: "OneCAdmin" },
   ].map(({ value, i18 }) => ({ value, label: translate(i18) || value })),
+  // Вложенные разрешения «Администрирования 1С» (решение 15.09): без них в «Агентах», «Расширениях» и «Пользователях
+  // баз» только просмотр. Показываются под строкой «Администрирование 1С».
+  ...ONEC_NESTED_PERMISSIONS.map((x) => ({ value: x.key, label: x.label })),
 ];
 
 interface TItemFields {
@@ -288,21 +293,25 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
           />
         );
       }
-      return <span>{modelNameMap[row.modelName as string] ?? row.modelName}</span>;
+      // Вложенные строки — с отступом под «Администрированием 1С».
+      const depth = nestedDepth(row.modelName as string);
+      return <span style={depth ? { paddingLeft: depth * 12 } : undefined}>{depth ? "↳ " : ""}{modelNameMap[row.modelName as string] ?? row.modelName}</span>;
     }
     if (col.identifier === "accessLevel") {
+      // У вложенных разрешений свои уровни: агенты — просмотр/редактирование/управление, действия — разрешено/запрещено.
+      const levelOptions = nestedLevelOptions(row.modelName as string) ?? ACCESS_LEVEL_OPTIONS;
       if (ctx.inlineEditing) {
         return (
           <FieldSelect
             name={`inline_level_${row.id}`}
-            options={ACCESS_LEVEL_OPTIONS}
+            options={levelOptions}
             value={(row.accessLevel as string) ?? "none"}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => ctx.handleInlineChange(row, "accessLevel", e.target.value)}
             variant="table"
           />
         );
       }
-      return <span>{accessLevelMap[row.accessLevel as string] ?? row.accessLevel}</span>;
+      return <span>{levelOptions.find((o) => o.value === row.accessLevel)?.label ?? accessLevelMap[row.accessLevel as string] ?? row.accessLevel}</span>;
     }
     return undefined;
   }, [modelNameMap, accessLevelMap, getAvailableOptions]);
@@ -317,6 +326,29 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
       blockNew: () => disableAddProp ?? false,
     }, data, ctx, sourceRow);
   }, [addPane, userUuid, organizationUuid, queryClient, disableAddProp]);
+
+  /*
+   * «ДОБАВИТЬ ВЛОЖЕННЫЕ» — на строке «Администрирование 1С»: недостающие вложенные разрешения добавляются разом, агенты —
+   * «просмотр», действия — «запрещено». Выдавать их по одной через «Добавить» можно и дальше.
+   */
+  const apiRef = useRef<SubTableApi | null>(null);
+  const addNested = useCallback((ctx: SubTableContext) => {
+    const have = new Set(ctx.rows.map((r) => r.modelName as string));
+    for (const x of ONEC_NESTED_PERMISSIONS) {
+      if (have.has(x.key)) continue;
+      apiRef.current?.addRow({
+        modelName: x.key, accessLevel: x.key === AGENTS_KEY ? "view" : "none",
+        userUuid, ...(organizationUuid ? { organizationUuid } : {}),
+      });
+    }
+  }, [userUuid, organizationUuid]);
+  const rowActions = useCallback((row: TDataItem, ctx: SubTableContext) => {
+    if (row.modelName !== "OneCAdmin" || !ctx.inlineEditing || ctx.disabled) return null;
+    const missing = ONEC_NESTED_PERMISSIONS.some((x) => !ctx.rows.some((r) => r.modelName === x.key));
+    return missing ? (
+      <Button variant="secondary" onClick={() => addNested(ctx)}>{translate("onecPermAddNested")}</Button>
+    ) : null;
+  }, [addNested]);
 
   const defaultNewRow = useMemo(() => {
     if (!userUuid) return undefined;
@@ -339,10 +371,13 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
       columnsJson={columnsJson}
       parentKey="userUuid"
       parentUuid={userUuid ?? ""}
-      defaultSort={{ id: "asc" }}
+      // По имени модели: вложенные «OneCAdmin.…» стоят сразу за «Администрированием 1С».
+      defaultSort={{ modelName: "asc" }}
       defaultInlineEditing={true}
       showEditModeToggle={false}
       disabled={!userUuid}
+      apiRef={apiRef}
+      rowActions={rowActions}
       deferRemoteChanges={deferRemoteChanges}
       initialPendingRows={initialPendingRows}
       onItemsChange={onItemsChange}

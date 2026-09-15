@@ -32,8 +32,9 @@ import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import {
-	CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseUsersCheck, useOnecWrite,
+	CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseUsersCheck, useOnecPermissions,
 } from "./shared";
+import { sectionAllows } from "./onecPermissions";
 import { useOpenBaseUser } from "./BaseUserForm";
 import { useOpenBaseUserWizard } from "./BaseUserWizard";
 import BaseGroupCommands from "./BaseGroupCommands";
@@ -62,7 +63,8 @@ const userColumns = (): TColumn[] => ([
  * исполнял.
  */
 export const UsersTab: FC = () => {
-	const canWrite = useOnecWrite();
+	// Групповая правка человека в нескольких базах — «редактирование» и «групповое редактирование» пользователей баз.
+	const canWrite = sectionAllows(useOnecPermissions(), "baseUsers", "edit", 2);
 	/** Что слева: базы (по умолчанию) или пользователи. Правая таблица — связанная. */
 	const [primary, setPrimary] = useState<"bases" | "users">("bases");
 	const [activeBase, setActiveBase] = useState("");

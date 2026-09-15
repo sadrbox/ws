@@ -65,7 +65,10 @@ import ProcessesTab from "./ProcessesTab";
 import ProgressTab from "./ProgressTab";
 import { useBatchWatch } from "./progress";
 import main from "src/styles/main.module.scss";
-import { ReadonlyNotice } from "./shared";
+import {
+	ReadonlyNotice, useOnecPermissions,
+} from "./shared";
+import { agentsAllow } from "./onecPermissions";
 
 type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "schedules" | "progress";
 
@@ -138,6 +141,7 @@ export const OneCAdminList: FC = () => {
 	const watch = useBatchWatch();
 	const running = watch.running;
 
+	const perms = useOnecPermissions();
 	const tabs = useMemo(() => [
 		{
 			id: "bases",
@@ -162,11 +166,12 @@ export const OneCAdminList: FC = () => {
 			label: translate("onecTabUsers"),
 			component: tab === "users" ? <UsersTab /> : null,
 		},
-		{
+		// Без просмотра агентов (вложенное разрешение) вкладки нет.
+		...(agentsAllow(perms, "view") ? [{
 			id: "agents",
 			label: translate("onecTabAgents"),
 			component: tab === "agents" ? <AgentsTab /> : null,
-		},
+		}] : []),
 		{
 			// Обслуживание по расписанию — рядом с агентами: и то и другое про то, как
 			// панель работает САМА, без человека за экраном. Прогоны при этом видны в
@@ -183,7 +188,7 @@ export const OneCAdminList: FC = () => {
 			label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
 			component: tab === "progress" ? <ProgressSection watch={watch} /> : null,
 		},
-	], [tab, running, watch]);
+	], [tab, running, watch, perms]);
 
 	return (
 		<div className={main.PaneFill}>

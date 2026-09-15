@@ -24,8 +24,11 @@ import { checkBasesDb, refreshPublications } from "src/services/onec/api";
 import { withOp } from "./progress";
 import { noteNotice, notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
-import { useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
-import { useOnecWrite } from "./shared";
+import { GROUP_OPS, useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
+import {
+	useOnecWrite, useOnecPermissions,
+} from "./shared";
+import { SECTION_OF_TYPE, sectionAllows } from "./onecPermissions";
 
 export type CommandGroup = "publication" | "maintenance" | "users" | "extensions";
 
@@ -44,6 +47,12 @@ export const BaseGroupCommands: FC<{
 	presetName?: string;
 }> = ({ selected, groups = ["publication", "maintenance"], presetName }) => {
 	const canWrite = useOnecWrite();
+	const perms = useOnecPermissions();
+	/** Пользователи и расширения — по вложенным разрешениям, прочие операции — по общему праву. */
+	const opAllowed = (o: GroupOp) => {
+		const need = SECTION_OF_TYPE[GROUP_OPS[o].type];
+		return need ? sectionAllows(perms, need.section, need.action, 1) : canWrite;
+	};
 	const qc = useQueryClient();
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
@@ -140,7 +149,7 @@ export const BaseGroupCommands: FC<{
 				const options = [
 					// Изменения (публикация, пользователи, расширения, выгрузка) — только полному
 					// доступу: правом «только просмотр» их не показываем вовсе (F5).
-					...(canWrite ? spec.ops.map((o) => ({ id: o, label: translate(OP_LABEL[o]) })) : []),
+					...spec.ops.filter(opAllowed).map((o) => ({ id: o, label: translate(OP_LABEL[o]) })),
 					// Чтения — всем, кому открыта панель.
 					...(g === "publication"
 						? [

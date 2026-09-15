@@ -39,8 +39,9 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
 import { fetchBases, runBatch, type BatchType, type OnecBase } from "src/services/onec/api";
 import {
-	isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation,
+	isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation, useOnecPermissions,
 } from "./shared";
+import { SECTION_OF_TYPE, deniedText, sectionAllows } from "./onecPermissions";
 import { estimateSecs, formatDuration, useQueueStats } from "./queueStats";
 import { attachBatch, finishOp, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
@@ -98,6 +99,7 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	const data = (paneProps.data ?? {}) as TDataItem;
 	const op = asText(data.op) as GroupOp;
+	const perms = useOnecPermissions();
 	const spec = GROUP_OPS[op];
 	const qc = useQueryClient();
 	const { requestClose } = useAppContext().windows;
@@ -336,6 +338,12 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 		},
 	];
 
+	const sectionNeed = SECTION_OF_TYPE[spec.type];
+	// Переустановка уже установленного расширения — «редактирование»: какие базы его имеют, точно решит сервис.
+	const installByEdit = spec.type === "IB_INSTALL_EXTENSION" && sectionAllows(perms, "extensions", "edit", targets.length);
+	const permissionBlock = sectionNeed && !installByEdit && !sectionAllows(perms, sectionNeed.section, sectionNeed.action, targets.length)
+		? deniedText(perms, sectionNeed.section, sectionNeed.action, targets.length) : "";
+
 	return (
 		<div className={main.PaneFill}>
 			<Wizard
@@ -343,6 +351,8 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 				finishLabel={translate(spec.title)}
 				finishBlockedReason={
 					!targets.length ? translate("onecPickBasesFirst")
+						// Пользователи и расширения — по вложенным разрешениям (действие и групповое редактирование).
+						: permissionBlock ? permissionBlock
 						: paramsMissing ? `${translate("onecWizNeed")}: ${paramsMissing}` : ""
 				}
 				finishing={run.isPending}

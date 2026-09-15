@@ -30,7 +30,10 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchBases, fetchExtensionSummary } from "src/services/onec/api";
 import { Icon } from "src/components/IconButton/icons";
-import { CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseContentCheck } from "./shared";
+import {
+	CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseContentCheck, useOnecPermissions,
+} from "./shared";
+import { sectionAllows } from "./onecPermissions";
 import { useOpenGroupCommand } from "./GroupCommandWizard";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import styles from "./OneCAdmin.module.scss";
@@ -99,6 +102,10 @@ export const ExtensionsTab: FC = () => {
 	 * «какое расширение в каких базах стоит».
 	 */
 	const openWizard = useOpenGroupCommand();
+	// Установка и удаление расширений — вложенные разрешения (групповое редактирование проверит помощник).
+	const extPerms = useOnecPermissions();
+	const canCreateExt = sectionAllows(extPerms, "extensions", "create", 1) || sectionAllows(extPerms, "extensions", "edit", 1);
+	const canDeleteExt = sectionAllows(extPerms, "extensions", "delete", 1);
 
 	// Чтение расширений баз — тем же механизмом, что и пользователей (см.
 	// useBaseContentCheck): операция видна в «Прогрессе запросов и команд», её итог
@@ -129,7 +136,7 @@ export const ExtensionsTab: FC = () => {
 						 * где она настоящая, — в выборе БАЗ ниже.
 						 */
 						onActiveRowChange: (r) => setPickedExt(r ? [asText(r.name)] : []),
-						extraButtons: (
+						extraButtons: !canCreateExt ? undefined : (
 							<Button variant="secondary"
 								title={translate("onecExtInstall")}
 								onClick={() => { setPickedExt([]); openWizard("installExt", pickedBases, ""); }}>
@@ -187,12 +194,12 @@ export const ExtensionsTab: FC = () => {
 								 */
 								extraButtons: (
 									<>
-										<Button variant="primary" disabled={!missing.length}
+										<Button variant="primary" disabled={!canCreateExt || !missing.length}
 											title={missing.length ? translate("onecExtInstall") : translate("onecExtAlreadyEverywhere")}
 											onClick={() => openWizard("installExt", missing, current)}>
 											<Icon name="download" /> {translate("onecExtInstall")}
 										</Button>
-										<Button variant="danger" disabled={!present.length}
+										<Button variant="danger" disabled={!canDeleteExt || !present.length}
 											title={present.length ? translate("onecExtRemove") : translate("onecPickBasesFirst")}
 											onClick={() => openWizard("deleteExt", present, current)}>
 											<Icon name="trash" /> {translate("onecExtRemove")}
