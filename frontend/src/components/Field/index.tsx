@@ -264,7 +264,7 @@ export const FieldGroup: FC<TypeFieldGroupProps & {
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value, isDirty });
 
   return (
-    <div className={wrapperClass} style={style}>
+    <div data-field="" className={wrapperClass} style={style}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldInputWrapper}>
         <input
@@ -350,7 +350,7 @@ export const FieldSelect: FC<TypeFieldSelectProps> = ({ label, name, options, va
   const className = size === 'sm' ? `${wrapperClass} ${styles.FieldSizeSm}` : wrapperClass;
 
   return (
-    <div className={className} style={style}>
+    <div data-field="" className={className} style={style}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
       <div className={styles.FieldSelectWrapper}>
         <select name={name} id={uid} className={styles.FieldSelect} value={value} onChange={onChange} disabled={disabled} aria-describedby={hintId}>

@@ -748,6 +748,7 @@ const LookupField: FC<LookupFieldProps> = ({
   return (
     <>
       <div
+        data-field=""
         className={wrapperClass}
         style={wrapperStyle}
         ref={wrapperRef}

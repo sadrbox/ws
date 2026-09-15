@@ -8,7 +8,7 @@
  * Вынесено из Table/index.tsx (T4) БЕЗ изменения логики — модульные memo-компоненты
  * self-contained (контекст + локальный стейт + константы), поэтому перенос чистый.
  */
-import { focusAtEnd } from "src/components/SubTable/caret";
+import { controlAt, enterControl, fieldOf, isControlDisabled, isTextControl } from "src/components/SubTable/fieldDom";
 import {
   memo, Fragment,
   useState, useCallback, useEffect, useMemo, useRef, useLayoutEffect,
@@ -451,7 +451,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     }
     // Для всех остальных кликов — снимаем фокус с любого активного поля ввода
     const active = document.activeElement as HTMLElement | null;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT') && (active as HTMLInputElement).type !== 'checkbox') {
+    if (active && (isTextControl(active) || active instanceof HTMLSelectElement || fieldOf(active))) {
       active.blur();
     }
     // Гарантируем, что фокус остаётся на scroll-контейнере таблицы, чтобы
@@ -485,18 +485,18 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
       return;
     }
     const target = e.target as HTMLElement;
-    const isEditableInput =
-      (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'checkbox') ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT';
-    if (!isEditableInput) {
+    // Поле — по обёртке data-field (любая его часть); кнопки поля — не поле (SubTable/fieldDom).
+    const control = controlAt(target);
+    if (!control) {
       clickedFocusedInputRef.current = false;
       return;
     }
     // Одиночный клик по полю — только activeCell (выбор ячейки), фокус НЕ ставится: фокус — по двойному клику
     // (handleDoubleClick). Стандартное поведение — лишь у поля, которое уже в фокусе (курсор, выделение мышью).
-    if (target === document.activeElement) {
+    if (control === document.activeElement) {
       clickedFocusedInputRef.current = true;
+      // Клик мимо самого элемента ввода (отступ, значок слева) не должен уводить из поля фокус.
+      if (!control.contains(target)) e.preventDefault();
     } else {
       clickedFocusedInputRef.current = false;
       e.preventDefault();
@@ -505,21 +505,16 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     if (inlineEditingRef?.current) {
-      // В inline-режиме: двойной клик по полю ввода — фокусируем его
+      // В inline-режиме: двойной клик по ПОЛЮ (любая часть обёртки data-field) без фокуса — вход в поле без выделения;
+      // по полю в фокусе — выделить весь текст. Кнопки (действия поля, ✕ строки) двойной клик не трогает.
       const target = e.target as HTMLElement;
-      const isEditableField =
-        (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'checkbox') ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT';
-      if (isEditableField) {
-        // Двойной клик по полю без фокуса — вход в поле: фокус без выделения, курсор в конце значения.
-        // Двойной клик по полю, которое уже в фокусе, — выделить весь текст.
-        if (target.tagName === 'SELECT') {
-          (target as HTMLSelectElement).focus();
-        } else if (target !== document.activeElement) {
-          focusAtEnd(target as HTMLInputElement);
-        } else {
-          try { (target as HTMLInputElement).select(); } catch { /* ignore */ }
+      if (target.closest('button')) return;
+      const control = controlAt(target);
+      if (control && !isControlDisabled(control)) {
+        if (control !== document.activeElement) {
+          enterControl(control);
+        } else if (isTextControl(control)) {
+          try { control.select(); } catch { /* ignore */ }
         }
       } else {
         // Двойной клик по нередактируемой ячейке — пульс-индикация

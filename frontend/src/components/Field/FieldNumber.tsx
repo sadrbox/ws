@@ -222,7 +222,7 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
   const { isTable, wrapperClass, effectiveRequired } = useFieldBase({ name, variant, required, error, value });
 
   return (
-    <div className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
+    <div data-field="" className={wrapperClass} style={{ width: width ?? 'auto', ...(width ? { flex: '0 0 auto' } : {}), maxWidth: maxWidth ?? 'none', minWidth: minWidth ?? 'none' }}>
       <FieldLabelNode htmlFor={uid} label={label} required={effectiveRequired} isTable={isTable} />
 
       <div className={styles.FieldInputWrapper}>

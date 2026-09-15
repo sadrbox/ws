@@ -6,6 +6,7 @@
  * компонент лишь передаёт входы (значения + refs + колбэки).
  */
 import { focusAtEnd } from "./caret";
+import { enterControl, fieldControl, isControlDisabled } from "./fieldDom";
 import { useCallback, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import {
   CHECKBOX_COL_ID,
@@ -242,18 +243,14 @@ export function useSubTableKeyboardNav({
           `td[data-col-id="${activeColId}"]`
         );
         if (!td) return;
-        const cellInput = td.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-          'input:not([disabled]):not([type="checkbox"]), textarea:not([disabled])'
-        );
-        const cellSelect = !cellInput
-          ? td.querySelector<HTMLSelectElement>('select:not([disabled])')
-          : null;
+        // Поле ячейки — по обёртке data-field (в т.ч. без <input>, как FieldPeriod); иначе «голый» элемент ввода.
+        const field = td.querySelector<HTMLElement>("[data-field]");
+        const control = (field ? fieldControl(field) : null)
+          ?? td.querySelector<HTMLElement>('input:not([type="checkbox"]), textarea, select');
         e.preventDefault();
         e.stopPropagation();
-        if (cellInput) {
-          focusAtEnd(cellInput);
-        } else if (cellSelect) {
-          cellSelect.focus();
+        if (control && !isControlDisabled(control)) {
+          enterControl(control);
         } else {
           // Нередактируемая ячейка — индикация «пульс» (data-pulse="true"),
           // снимаем атрибут после короткой задержки, чтобы CSS-анимация

@@ -18,6 +18,10 @@ export type FieldActionType = 'clear' | 'list' | 'open' | 'assignNumber';
 export interface FieldAction { type: FieldActionType; onClick: () => void; /** Скрыть кнопку (display:none): набор в DOM постоянен, места не занимает. Стабильность ширины поля обеспечивает width-семантика (заданная ширина = flex 0 0 auto). */ hidden?: boolean; }
 export type TypeFieldActions = FieldAction[];
 
+// ── Обёртка поля: `data-field` ──────────────────────────────────────────────
+// Каждое Field* ставит `data-field=""` на свою обёртку (рядом с wrapperClass). По нему таблица (SubTable/fieldDom)
+// узнаёт поле в ячейке: клик в любую его часть — поле, фокус — в его элемент ввода. Новое Field* — тоже с ним.
+
 // ── Общий hook для всех Field* компонентов ──────────────────────────────────
 // Источники required: явный проп → CellFieldStateScope → FormRequiredScope
 // Источники dirty:    явный проп isDirty → FormDirtyScope
