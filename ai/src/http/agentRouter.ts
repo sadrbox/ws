@@ -19,7 +19,7 @@ import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
-import { BUSY_RETRY_DELAYS_SECS, RETRY_LATER_CODES } from "../commands/queue.ts";
+import { BUSY_RETRY_DELAYS_SECS, RETRY_LATER_CODES, runningLeaseSecs } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, checkShowInListIntent, parseEcho, roleVerdictMessage, showInListVerdictMessage } from "../onec/echo.ts";
@@ -76,6 +76,13 @@ const registerSchema = z.object({
 	bases: z.array(baseStateSchema).max(500).optional(),
 });
 
+/** Список выполняемых команд из heartbeat (С33): до 100 строк, номер команды ≤ 64. */
+const runningSchema = z.array(z.object({
+	commandId: z.string().min(1).max(64),
+	type: z.string().max(100).optional(),
+	startedAt: z.string().max(40).optional(),
+})).max(100);
+
 const heartbeatSchema = z.object({
 	agentId: z.string().uuid(),
 	version: z.string().max(50).optional(),
@@ -104,6 +111,11 @@ const heartbeatSchema = z.object({
 		// операцию с её процессом, а очередь держит место базы после TIMEOUT (С18).
 		commandId: z.string().max(64).optional(),
 	})).max(200).optional(),
+	/**
+	 * Выполняемые команды (С33, агент 18:00, способность `agent.running`) — `unknown` НАМЕРЕННО: разбирает
+	 * runningSchema в обработчике. Кривой список не должен превращать весь heartbeat в 400.
+	 */
+	running: z.unknown().optional(),
 	/**
 	 * Отказы по кодам и время команд (S5) — `unknown` НАМЕРЕННО: разбирает их
 	 * agents/commandStats.ts. Строгая схема здесь превратила бы кривой снимок в 400 на весь
@@ -308,6 +320,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			ok: true,
 			pollMaxWaitSecs: cfg.POLL_MAX_WAIT_SECS,
 			basesFullEverySecs: cfg.AGENT_BASES_FULL_EVERY_SECS,
+			// Сервис продлевает срок выполняемых команд по `running` (С33): агент оставляет до срока запас
+			// только до первого heartbeat, а не весь свой предел.
+			runningLease: true,
 		} });
 	});
 
@@ -318,6 +333,8 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			return;
 		}
 		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version ?? null, req.ip ?? null);
+		// Прошлый сигнал агента — до его обновления: по интервалу считается запас продления (С33).
+		const prevSeenAt = p.data.running !== undefined ? (await agents.findById(req.agent!.agentId))?.lastSeenAt ?? null : null;
 		await agents.heartbeat(req.agent!.agentId, {
 			status: p.data.status,
 			version: p.data.version,
@@ -340,6 +357,15 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// Список процессов приходит попутно с heartbeat: отдельная команда нужна только
 		// кнопке «Обновить сейчас», а раз в полминуты панель узнаёт о них бесплатно.
 		if (p.data.processes) await agents.setProcesses(req.agent!.agentId, p.data.processes);
+		// Выполняемые команды (С33): продлеваем их срок, пока агент подтверждает работу.
+		if (p.data.running !== undefined) {
+			const running = runningSchema.safeParse(p.data.running);
+			if (!running.success) {
+				log.warn({ agentId: req.agent!.agentId }, "список выполняемых команд в heartbeat не разобран — срок не продлевается");
+			} else if (running.data.length) {
+				await queue.extendRunning(req.agent!.agentId, running.data, runningLeaseSecs(prevSeenAt));
+			}
+		}
 		// Отказы и время команд (S5) — тем же попутным снимком. Поля нет — прежний снимок не
 		// затираем (старая сборка); не разобралось — пропускаем и называем, heartbeat принят.
 		const commandStats = parseCommandStats(p.data);

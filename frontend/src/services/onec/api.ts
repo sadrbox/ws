@@ -99,6 +99,10 @@ export type CommandPending = {
 	agentOnline?: boolean;
 	/** Сколько секунд агент молчит, если не на связи; null — не выходил на связь вовсе. */
 	agentSilentSecs?: number | null;
+	/** Когда агент начал работу по команде (С33). */
+	startedAt?: string | null;
+	/** Когда агент последний раз подтвердил, что команда выполняется (С33). */
+	runningConfirmedAt?: string | null;
 };
 type Pending = CommandPending;
 const isPending = (d: unknown): d is Pending =>
@@ -351,7 +355,8 @@ export const refreshPublications = () =>
  */
 export type CheckBasesResult = {
 	/** `reason` — почему базу не проверили (агент 22:05); признака `dbMissing` у неё нет. */
-	items?: { key: string; dbMissing?: boolean; reason?: string }[];
+	/** `busy` — не проверялась: по базе идёт операция агента (агент 17:30, А34); это не ошибка. */
+	items?: { key: string; dbMissing?: boolean; reason?: string; busy?: boolean }[];
 	checked?: number;
 	skipped?: number;
 	note?: string;

@@ -37,7 +37,8 @@ export function checkDbOutcome(d: CheckBasesResult): CheckDbOutcome {
 	 * помешать; её решит следующая проверка. Считать такие «не проверены» предупреждением значило бы звать
 	 * человека разбираться с тем, что в порядке.
 	 */
-	const isBusy = (i: { reason?: string }) => /идёт операция агента/i.test(i.reason ?? "");
+	// По признаку `busy` (агент 17:30, П22); текст — запасной путь для старых сборок.
+	const isBusy = (i: { reason?: string; busy?: boolean }) => i.busy === true || /идёт операция агента/i.test(i.reason ?? "");
 	const busy = items.filter((i) => typeof i.dbMissing !== "boolean" && isBusy(i));
 	const unchecked = items.filter((i) => typeof i.dbMissing !== "boolean" && !isBusy(i));
 	const skipped = Math.max(0, (typeof d.skipped === "number" ? d.skipped : unchecked.length + busy.length) - busy.length);

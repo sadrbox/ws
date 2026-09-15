@@ -76,7 +76,25 @@ export type CommandRow = {
 	available_at?: Date | null;
 	/** Результат пришёл после истечения срока (С21). */
 	late?: boolean;
+	/** Когда агент начал работу по команде (С33). */
+	started_at?: Date | null;
+	/** Когда агент последний раз подтвердил, что команда выполняется (С33). */
+	running_seen_at?: Date | null;
 };
+
+/** Потолок продления от выдачи (С33): зациклившийся агент не держит команду вечно. */
+export const RUNNING_LEASE_CAP_SECS = 24 * 3600;
+
+/**
+ * На сколько продлить срок выполняемой команды (С33): три периода heartbeat, не меньше 90 с. Период сервис
+ * не знает (он в настройках агента) — берёт интервал с прошлого сигнала агента, не больше 5 мин: после
+ * долгого молчания большой запас скрыл бы зависание.
+ */
+export function runningLeaseSecs(prevSeenAt: Date | string | null | undefined, now = Date.now()): number {
+	const prev = prevSeenAt ? new Date(prevSeenAt).getTime() : NaN;
+	const gap = Number.isFinite(prev) ? Math.max(0, (now - prev) / 1000) : 0;
+	return Math.max(90, Math.round(Math.min(300, gap) * 3));
+}
 
 /** Сколько секунд истёкшая, но выданная команда без ответа ещё держит место (С3). */
 export const DEFAULT_LATE_GRACE_SECS = 600;
@@ -134,7 +152,8 @@ export type WireCommand = {
  * Отказы «не выполнялась — повторите» (С19, С31, С25): в задании повторяются сами, с паузой. База
  * занята, агент занят другими командами, служба останавливалась до начала.
  */
-export const RETRY_LATER_CODES = new Set(["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING"]);
+// IB_TIMEOUT (С25): утилита не ответила за свой предел и снята — по контракту повтор допустим.
+export const RETRY_LATER_CODES = new Set(["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING", "IB_TIMEOUT"]);
 
 export type WireResult = {
 	commandId: string;
@@ -617,6 +636,35 @@ export class CommandQueue {
 		if (!row) return null;
 		this.bell.emit(row.agent_id);
 		return row.id;
+	}
+
+	/**
+	 * ПРОДЛИТЬ СРОК ВЫПОЛНЯЕМЫХ КОМАНД (С33, решение В2 по С24). Агент в heartbeat перечисляет команды, по которым
+	 * работает; срок каждой выданной ЭТОМУ агенту продлевается до «сейчас + запас», но не дальше потолка от
+	 * выдачи. Не перечислена или heartbeat не пришёл — не продлевается: зависший или остановленный агент
+	 * выявляется истечением срока, как прежде. Возвращает, сколько команд продлено.
+	 */
+	async extendRunning(
+		agentId: string, running: { commandId: string; startedAt?: string | null }[], leaseSecs: number,
+	): Promise<number> {
+		if (!running.length) return 0;
+		const ids = running.map((x) => x.commandId);
+		const started = running.map((x) => {
+			const t = x.startedAt ? Date.parse(x.startedAt) : NaN;
+			return Number.isFinite(t) ? new Date(t).toISOString() : null;
+		});
+		const r = await this.db.query<{ id: string }>(
+			`UPDATE commands c
+			    SET expires_at = LEAST(GREATEST(c.expires_at, now() + make_interval(secs => $3::int)),
+			                           c.dispatched_at + make_interval(secs => $4::int)),
+			        running_seen_at = now(),
+			        started_at = COALESCE(c.started_at, x.started_at)
+			   FROM unnest($2::text[], $5::timestamptz[]) AS x(id, started_at)
+			  WHERE c.id = x.id AND c.agent_id = $1 AND c.state = 'dispatched' AND c.dispatched_at IS NOT NULL
+			  RETURNING c.id`,
+			[agentId, ids, Math.max(90, Math.round(leaseSecs)), RUNNING_LEASE_CAP_SECS, started],
+		);
+		return r.rows.length;
 	}
 
 	async get(id: string): Promise<CommandRow | null> {

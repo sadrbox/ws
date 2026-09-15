@@ -80,8 +80,12 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const [live, setLive] = useState<{ commandId: string; title: string; pending: CommandPending } | null>(null);
 	const liveText = (p: CommandPending): string => [
 		p.state === "dispatched"
-			? `${translate("onecCmdRunningSince")} ${p.dispatchedAt ? getFormatDate(p.dispatchedAt) : "…"}`
+			? `${translate("onecCmdRunningSince")} ${(p.startedAt ?? p.dispatchedAt) ? getFormatDate((p.startedAt ?? p.dispatchedAt) as string) : "…"}`
 			: translate("onecCmdQueued"),
+		// Агент подтверждает работу heartbeat'ом, и сервис продлевает срок (С33): видно, что операция жива.
+		p.state === "dispatched" && p.runningConfirmedAt
+			? `${translate("onecAgentConfirms")}: ${getFormatDate(p.runningConfirmedAt)}`
+			: "",
 		// Агент молчит — слежение не бросаем (С20): работа на сервере 1С может идти дальше.
 		p.agentOnline === false
 			? `${translate("onecAgentSilentWaiting")}${typeof p.agentSilentSecs === "number" ? `: ${p.agentSilentSecs} ${translate("secShort")}` : ""}`

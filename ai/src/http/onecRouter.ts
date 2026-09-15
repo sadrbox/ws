@@ -1065,6 +1065,9 @@ export function onecRouter(deps: Deps) {
 				agentOnline,
 				...(agentOnline ? {} : { agentSilentSecs: silentSecs === Number.MAX_SAFE_INTEGER ? null : silentSecs }),
 				queuedAt: new Date(row.created_at).toISOString(),
+				// Когда агент начал и когда последний раз подтвердил работу (С33): «выполняется, агент подтверждает с …».
+				startedAt: row.started_at ? new Date(row.started_at).toISOString() : null,
+				runningConfirmedAt: row.running_seen_at ? new Date(row.running_seen_at).toISOString() : null,
 				dispatchedAt: row.dispatched_at ? new Date(row.dispatched_at).toISOString() : null,
 				abortable: isAbortable(row.state, row.type, {
 					canCancel: caps.includes("agent.cancel"), canCancelCheck: caps.includes(CANCEL_CHECK_CAPABILITY),

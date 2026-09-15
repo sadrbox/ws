@@ -55,4 +55,10 @@ describe("итог проверки наличия баз данных", () => {
 		expect(o.severity).toBe("success");
 		expect(o.text).toBe(`${summary(1, 0)}. ${translate("onecBasesDbBusy")}: 1 (busy1)`);
 	});
+
+	it("отложенная база по признаку busy, даже если причина сформулирована иначе (П22)", () => {
+		const o = checkDbOutcome({ items: [{ key: "busy2", busy: true, reason: "занята" }], checked: 0, skipped: 1 });
+		expect(o.severity).toBe("success");
+		expect(o.text).toContain(`${translate("onecBasesDbBusy")}: 1 (busy2)`);
+	});
 });

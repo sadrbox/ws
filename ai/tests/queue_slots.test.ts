@@ -3,7 +3,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { CommandQueue, BUSY_MAX_ATTEMPTS, BUSY_RETRY_DELAYS_SECS } from "../src/commands/queue.ts";
+import { CommandQueue, BUSY_MAX_ATTEMPTS, BUSY_RETRY_DELAYS_SECS, RETRY_LATER_CODES, RUNNING_LEASE_CAP_SECS, runningLeaseSecs } from "../src/commands/queue.ts";
 import { findAdminCommand, marksReachability, runsInsideBase, validateSchedulePayload } from "../src/commands/admin.ts";
 import { isDestructive } from "../src/onec/access.ts";
 import { ibFailureReason } from "../src/bases/service.ts";
@@ -117,5 +117,29 @@ describe("С21: поздний результат отмечается", () => {
 		await new CommandQueue(fakeDb(calls, [{ id: "c", base_key: null, late: true }]))
 			.complete("a", { commandId: "c", agentId: "a", status: "SUCCESS", result: {} });
 		assert.match(calls[0].sql, /late = late OR state = 'expired'/);
+	});
+});
+
+describe("С33: продление срока выполняемых команд", () => {
+	it("запас — три интервала heartbeat, не меньше 90 с и не больше 15 мин", () => {
+		const now = Date.parse("2026-09-15T18:00:00Z");
+		assert.equal(runningLeaseSecs(new Date(now - 30_000), now), 90);
+		assert.equal(runningLeaseSecs(new Date(now - 60_000), now), 180);
+		assert.equal(runningLeaseSecs(new Date(now - 3_600_000), now), 900);
+		assert.equal(runningLeaseSecs(null, now), 90);
+	});
+	it("продлеваются только выданные команды этого агента, не дальше потолка от выдачи", async () => {
+		const calls: Call[] = [];
+		const n = await new CommandQueue(fakeDb(calls, [{ id: "cmd_1" }]))
+			.extendRunning("a", [{ commandId: "cmd_1", startedAt: "2026-09-15T17:00:00Z" }, { commandId: "cmd_2", startedAt: "мусор" }], 90);
+		assert.equal(n, 1);
+		assert.match(calls[0].sql, /c\.agent_id = \$1 AND c\.state = 'dispatched'/);
+		assert.match(calls[0].sql, /LEAST\(GREATEST\(c\.expires_at/);
+		assert.equal(calls[0].params[3], RUNNING_LEASE_CAP_SECS);
+		assert.deepEqual(calls[0].params[4], ["2026-09-15T17:00:00.000Z", null]);
+		assert.equal(await new CommandQueue(fakeDb([], [])).extendRunning("a", [], 90), 0);
+	});
+	it("С25: IB_TIMEOUT повторяется в задании", () => {
+		assert.equal(RETRY_LATER_CODES.has("IB_TIMEOUT"), true);
 	});
 });
