@@ -53,6 +53,18 @@ describe("healthSections", () => {
 		expect(rej?.value).toContain("processes[3].what");
 	});
 
+	it("С24: предел агента не меньше срока сервиса или выключен — предупреждение", () => {
+		const ttl = { commandTtlSecs: 900, longCommandTtlSecs: 15000 };
+		const label = translate("onecHealthLimitOverTtl");
+		const warn = (a: { commandTimeoutSecs: number; longCommandTimeoutSecs: number }) =>
+			healthSections({ agent: a }, ttl)[0]?.rows.find((r) => r.label === label);
+		expect(warn({ commandTimeoutSecs: 600, longCommandTimeoutSecs: 14400 })).toBeUndefined();
+		expect(warn({ commandTimeoutSecs: 600, longCommandTimeoutSecs: 20000 })?.warn).toBe(true);
+		expect(warn({ commandTimeoutSecs: 0, longCommandTimeoutSecs: 14400 })?.value).toContain(translate("onecHealthNoLimit"));
+		// Сроки сервиса не пришли (сервис старее панели) — сравнивать не с чем.
+		expect(healthSections({ agent: { commandTimeoutSecs: 0, longCommandTimeoutSecs: 0 } })[0].rows.some((r) => r.label === label)).toBe(false);
+	});
+
 	it("бизнес-агент без кластера и пустые поля — разделов и строк нет", () => {
 		const s = healthSections({ agent: { state: "ONLINE", lastError: null }, cluster: null, readiness: { items: [] } });
 		expect(s).toHaveLength(1);

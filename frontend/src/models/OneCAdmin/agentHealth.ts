@@ -35,7 +35,16 @@ const pusher = (rows: HealthRow[]) => (label: string, value: string | null | und
 	rows.push(warn ? { label, value, warn } : { label, value });
 };
 
-export function healthSections(h: AgentHealth): HealthSection[] {
+/** Предел агента: 0 — без предела. */
+const limitText = (n: number | undefined): string => (n === 0 ? translate("onecHealthNoLimit") : secs(n));
+
+/**
+ * `serviceTtl` — сроки команд сервиса (С24, вариант Б): предел агента, не меньший срока (или выключенный),
+ * значит, что сервис объявит команду просроченной посреди работы агента.
+ */
+export function healthSections(
+	h: AgentHealth, serviceTtl?: { commandTtlSecs?: number; longCommandTtlSecs?: number },
+): HealthSection[] {
 	const out: HealthSection[] = [];
 
 	const a = h.agent;
@@ -51,7 +60,14 @@ export function healthSections(h: AgentHealth): HealthSection[] {
 		if (typeof a.maxParallel === "number") push(translate("onecHealthParallel"), String(a.maxParallel));
 		if (a.persistentBridge !== undefined) push(translate("onecHealthBridge"), yesNo(a.persistentBridge));
 		if (typeof a.commandTimeoutSecs === "number" || typeof a.longCommandTimeoutSecs === "number") {
-			push(translate("onecHealthTimeouts"), `${secs(a.commandTimeoutSecs)} / ${secs(a.longCommandTimeoutSecs)}`);
+			push(translate("onecHealthTimeouts"), `${limitText(a.commandTimeoutSecs)} / ${limitText(a.longCommandTimeoutSecs)}`);
+		}
+		const over = (limit: number | undefined, ttl: number | undefined) =>
+			typeof limit === "number" && typeof ttl === "number" && (limit === 0 || limit >= ttl);
+		if (over(a.commandTimeoutSecs, serviceTtl?.commandTtlSecs) || over(a.longCommandTimeoutSecs, serviceTtl?.longCommandTtlSecs)) {
+			push(translate("onecHealthLimitOverTtl"),
+				`${limitText(a.commandTimeoutSecs)} / ${limitText(a.longCommandTimeoutSecs)} — `
+				+ `${translate("onecHealthServiceTtl")}: ${secs(serviceTtl?.commandTtlSecs)} / ${secs(serviceTtl?.longCommandTtlSecs)}`, true);
 		}
 		push(translate("onecHealthLastError"), a.lastError, true);
 		// Вход в базы подтверждён пробой (С32, А27): без него «умеет ib.admin» — только по заданному администратору.

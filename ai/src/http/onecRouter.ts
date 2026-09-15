@@ -35,7 +35,7 @@ import type { BatchService } from "../onec/batches.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
-	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
+	DEFAULT_COMMAND_TTL_SECS, LONG_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
 	runsInsideBase, validateSchedulePayload, abortAllowed, isAbortable, CANCEL_CHECK_CAPABILITY,
 } from "../commands/admin.ts";
 
@@ -626,6 +626,10 @@ export function onecRouter(deps: Deps) {
 		})));
 		res.json({ success: true, data: { items, limits: {
 			checkParallel: cfg.ONEC_CHECK_PARALLEL,
+			// Сроки команд сервиса (С24, вариант Б): панель сравнивает с пределами агента и предупреждает, если
+			// предел агента не меньше срока — команда будет объявлена просроченной посреди работы.
+			commandTtlSecs: DEFAULT_COMMAND_TTL_SECS,
+			longCommandTtlSecs: LONG_COMMAND_TTL_SECS,
 			// Остаток общей квоты обращений к кластеру: она одна на всю установку, и, когда
 			// кончается, отказ выглядит как вина того, кто нажал последним. Панель видит
 			// остаток заранее — этот ответ она и так опрашивает раз в 15 секунд.
@@ -1032,7 +1036,15 @@ export function onecRouter(deps: Deps) {
 			const silentSecs = owner?.lastSeenAt
 				? Math.floor((Date.now() - new Date(owner.lastSeenAt).getTime()) / 1000)
 				: Number.MAX_SAFE_INTEGER;
-			if (silentSecs > cfg.AGENT_OFFLINE_AFTER_SECS) {
+			const agentOnline = silentSecs <= cfg.AGENT_OFFLINE_AFTER_SECS;
+			/*
+			 * СЛЕЖЕНИЕ ЗА ДОЛГОЙ ОПЕРАЦИЕЙ НЕ ОБРЫВАЕТСЯ МОЛЧАНИЕМ АГЕНТА (С20). Короткое ожидание получает отказ
+			 * сразу — ждать некого. Но загрузка идёт часами, агент может перезапуститься или потерять связь на
+			 * пару минут, а работа на сервере 1С продолжается: `?follow=1` получает «ещё идёт» с признаком
+			 * «агент не на связи» и сколько он молчит, и панель продолжает следить.
+			 */
+			const follow = req.query.follow === "1";
+			if (!agentOnline && !follow) {
 				const silent = owner?.lastSeenAt ? ` (молчит ${silentSecs} с)` : "";
 				send(res, fail(409, "AGENT_OFFLINE", row.state === "dispatched"
 					// Забрал и замолчал — это не «забрать некому» (С20): работа могла идти или оборваться.
@@ -1050,6 +1062,8 @@ export function onecRouter(deps: Deps) {
 			res.json({ success: true, data: {
 				pending: true, commandId: row.id,
 				state: row.state,
+				agentOnline,
+				...(agentOnline ? {} : { agentSilentSecs: silentSecs === Number.MAX_SAFE_INTEGER ? null : silentSecs }),
 				queuedAt: new Date(row.created_at).toISOString(),
 				dispatchedAt: row.dispatched_at ? new Date(row.dispatched_at).toISOString() : null,
 				abortable: isAbortable(row.state, row.type, {

@@ -4,7 +4,7 @@
 // работает с кластером через `rac`. Здесь только транспорт и типы — решения о правах,
 // маршрутизации и подтверждениях принимает сервис.
 
-import { aiFetch } from "src/services/ai/endpoint";
+import { AiServiceError, aiFetch } from "src/services/ai/endpoint";
 
 export type OnecBase = {
 	id: string;
@@ -95,6 +95,10 @@ export type CommandPending = {
 	dispatchedAt?: string | null;
 	/** Можно прервать: чтение или проверка без «Исправлять» у агента, который это умеет (С23). */
 	abortable?: boolean;
+	/** Агент на связи (С20); нет — сервис старее панели. */
+	agentOnline?: boolean;
+	/** Сколько секунд агент молчит, если не на связи; null — не выходил на связь вовсе. */
+	agentSilentSecs?: number | null;
 };
 type Pending = CommandPending;
 const isPending = (d: unknown): d is Pending =>
@@ -119,6 +123,8 @@ async function awaitCommand<T>(
 	first: T | Pending, limitMs = 30 * 60_000, keepWaiting?: () => boolean,
 	/** Каждый ответ «ещё идёт» — что происходит с командой сейчас (П15). */
 	onPending?: (p: Pending) => void,
+	/** Слежение за долгой операцией: молчание агента — не отказ, а «ещё идёт, агент не на связи» (С20). */
+	follow = false,
 ): Promise<T> {
 	let data = first;
 	let pauseMs = 1000;
@@ -130,7 +136,7 @@ async function awaitCommand<T>(
 		if (keepWaiting && !keepWaiting()) throw new Error("Наблюдение за командой прекращено");
 		await new Promise((r) => setTimeout(r, pauseMs));
 		pauseMs = Math.min(10_000, Math.round(pauseMs * 1.5));
-		data = await aiFetch<T | Pending>(`/v1/onec/commands/${encodeURIComponent(data.commandId)}`);
+		data = await aiFetch<T | Pending>(`/v1/onec/commands/${encodeURIComponent(data.commandId)}${follow ? "?follow=1" : ""}`);
 	}
 	return data;
 }
@@ -545,7 +551,28 @@ const startJob = <T>(path: string, body: unknown): Promise<Started<T>> =>
 export const followCommand = <T>(
 	commandId: string, keepWaiting: () => boolean, onPending?: (p: CommandPending) => void,
 ): Promise<T> =>
-	awaitCommand<T>({ pending: true, commandId }, Number.POSITIVE_INFINITY, keepWaiting, onPending);
+	awaitCommand<T>({ pending: true, commandId }, Number.POSITIVE_INFINITY, keepWaiting, onPending, true);
+
+/**
+ * ПОЗДНИЙ РЕЗУЛЬТАТ ОДИНОЧНОЙ ОПЕРАЦИИ (П16). Срок истёк, а агент мог работать дольше: 10 мин (столько сервис
+ * держит место истёкшей команды) раз в 15 с спрашиваем, не пришёл ли итог. `null` — не пришёл или наблюдение
+ * сняли; отказ агента, пришедший поздно, — исключением.
+ */
+export async function awaitLateResult<T>(commandId: string, keepWaiting: () => boolean, windowMs = 10 * 60_000): Promise<T | null> {
+	const until = Date.now() + windowMs;
+	while (Date.now() < until && keepWaiting()) {
+		await new Promise((r) => setTimeout(r, 15_000));
+		if (!keepWaiting()) return null;
+		try {
+			const d = await aiFetch<T | Pending>(`/v1/onec/commands/${encodeURIComponent(commandId)}?follow=1`);
+			if (!isPending(d)) return d;
+		} catch (e) {
+			if (e instanceof AiServiceError && e.code === "COMMAND_EXPIRED") continue;
+			throw e;
+		}
+	}
+	return null;
+}
 
 export const startCheckBase = (baseKey: string, p: IbCheckPayload) =>
 	startJob<IbCheckResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/check`, p);
@@ -783,7 +810,11 @@ export const fetchAgentLog = (agentId: string, p: { lines?: number; level?: "all
 export const fetchAgents = () =>
 	aiFetch<{
 		items: OnecAgent[];
-		limits: { checkParallel: number; clusterPerMin?: number; clusterRemaining?: number };
+		limits: {
+			checkParallel: number; clusterPerMin?: number; clusterRemaining?: number;
+			/** Сроки команд сервиса — для сравнения с пределами агента (С24). */
+			commandTtlSecs?: number; longCommandTtlSecs?: number;
+		};
 	}>("/v1/onec/agents");
 
 /** Назначить владельцем конкретный экземпляр: аренду мог занять не тот компьютер. */

@@ -16,7 +16,7 @@ import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchAgentHealth } from "src/services/onec/api";
 import { withOp } from "./progress";
-import { QueryError } from "./shared";
+import { QueryError, useAgents } from "./shared";
 import { healthSections } from "./agentHealth";
 import { formatDuration } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";
@@ -34,7 +34,9 @@ export const AgentHealthTab: FC<{ agentId: string; agentName: string }> = ({ age
 		staleTime: Infinity,
 	});
 	const h = health.data;
-	const sections = h ? healthSections(h) : [];
+	// Сроки сервиса — из списка агентов, который панель и так опрашивает (С24).
+	const limits = useAgents().data?.limits;
+	const sections = h ? healthSections(h, limits) : [];
 	const processes = h?.processes ?? [];
 	const problems = h?.logProblems ?? [];
 

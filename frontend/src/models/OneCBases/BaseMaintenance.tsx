@@ -26,13 +26,14 @@ import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import { CapabilityGuard, ReadonlyNotice, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/progress";
 import { updateOp, useRunningWork } from "src/components/TechMessages/operations";
 import { getFormatDate } from "src/utils/datetime";
 import {
-	abortCommand, applyBaseUpdate, checkBase, fetchAgentProcesses, followCommand, planText, restoreBase, runBatch,
+	abortCommand, applyBaseUpdate, awaitLateResult, checkBase, fetchAgentProcesses, followCommand, planText, restoreBase, runBatch,
 	type CommandPending,
 	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest,
 	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelftestResult, type Started,
@@ -77,9 +78,15 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	 * и «Прервать», если сервис разрешает её оборвать.
 	 */
 	const [live, setLive] = useState<{ commandId: string; title: string; pending: CommandPending } | null>(null);
-	const liveText = (p: CommandPending): string => p.state === "dispatched"
-		? `${translate("onecCmdRunningSince")} ${p.dispatchedAt ? getFormatDate(p.dispatchedAt) : "…"}`
-		: translate("onecCmdQueued");
+	const liveText = (p: CommandPending): string => [
+		p.state === "dispatched"
+			? `${translate("onecCmdRunningSince")} ${p.dispatchedAt ? getFormatDate(p.dispatchedAt) : "…"}`
+			: translate("onecCmdQueued"),
+		// Агент молчит — слежение не бросаем (С20): работа на сервере 1С может идти дальше.
+		p.agentOnline === false
+			? `${translate("onecAgentSilentWaiting")}${typeof p.agentSilentSecs === "number" ? `: ${p.agentSilentSecs} ${translate("secShort")}` : ""}`
+			: "",
+	].filter(Boolean).join(" · ");
 	const track = (op: string, title: string) => (p: CommandPending) => {
 		setLive({ commandId: p.commandId, title, pending: p });
 		updateOp(op, (o) => ({ ...o, note: liveText(p) }));
@@ -96,6 +103,26 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		refetchInterval: running ? 15_000 : false,
 	});
 	const liveProc = live ? (procs.data?.items ?? []).find((x) => x.commandId === live.commandId) : undefined;
+
+	const isExpired = (e: unknown) => (e as { code?: string } | null)?.code === "COMMAND_EXPIRED";
+	/*
+	 * ПОЗДНИЙ РЕЗУЛЬТАТ ОДИНОЧНОЙ ОПЕРАЦИИ (П16). Срок команды истёк, а агент мог работать дольше: операция
+	 * закрыта «Не выполнено», но ещё 10 минут досматривается. Пришёл итог — он заменяет отказ и попадает в журнал.
+	 */
+	const watchLate = <T,>(op: string, title: string, commandId: string, onLate: (r: T) => void) => {
+		updateOp(op, (o) => ({ ...o, note: `${o.note} · ${translate("onecLateWaiting")}` }));
+		void awaitLateResult<T>(commandId, () => getOps().some((o) => o.id === op))
+			.then((r) => {
+				if (r === null) return;
+				notify({ severity: "info", text: `${title}. ${translate("onecLateResult")}`, source: baseKey, toast: false });
+				onLate(r);
+			})
+			.catch((e: unknown) => {
+				const msg = e instanceof Error ? e.message : String(e);
+				updateOp(op, (o) => ({ ...o, note: msg }));
+				notify({ severity: "warning", text: `${title}. ${translate("onecLateResult")}: ${msg}`, source: baseKey });
+			});
+	};
 
 	/** Прерванная по кнопке — не ошибка для тоста: итог прерывания уже сказан. */
 	const isAborted = (e: unknown) => (e as { code?: string } | null)?.code === "COMMAND_ABORTED";
@@ -142,13 +169,15 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
 		const onPending = track(op, title);
 		if (started.pending) onPending(started.pending);
-		void followCommand<T>(started.commandId, watched, onPending)
+		const commandId = started.commandId;
+		void followCommand<T>(commandId, watched, onPending)
 			.then((r) => { setLive(null); finishWith(r); })
 			.catch((e: unknown) => {
 				setLive(null);
 				if (!watched()) return; // наблюдение сняли — сообщать некому
 				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 				if (!isAborted(e)) fail(e);
+				if (isExpired(e)) watchLate<T>(op, title, commandId, finishWith);
 			});
 		return translate("onecMaintRunning");
 	};
@@ -259,13 +288,15 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
 		const onPending = track(op, title);
 		if (started.pending) onPending(started.pending);
-		void followCommand<SelftestResult>(started.commandId, watched, onPending)
+		const commandId = started.commandId;
+		void followCommand<SelftestResult>(commandId, watched, onPending)
 			.then((r) => { setLive(null); settle(r); })
 			.catch((e: unknown) => {
 				setLive(null);
 				if (!watched()) return;
 				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 				if (!isAborted(e)) fail(e);
+				if (isExpired(e)) watchLate<SelftestResult>(op, title, commandId, settle);
 			});
 	};
 
