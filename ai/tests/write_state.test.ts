@@ -174,3 +174,14 @@ describe("С26, С31, С25: удаление регистрации, код ра
 		assert.match(humanizeAgentError({ code: "IB_AUTH_FAILED", message: "Authentication failed" })!.message, /Служебный администратор ИБ/);
 	});
 });
+
+describe("С32: защитные отказы удаления регистрации", () => {
+	it("подсказки по коду, причина «в базу не войти» не ставится, реестр не трогается", () => {
+		const alive = { code: "INFOBASE_DB_ALIVE", message: "база данных отсутствует? нет — база работает" };
+		assert.match(humanizeAgentError(alive)!.message, /удалять её регистрацию нельзя/);
+		assert.equal(ibFailureReason(alive), null);
+		for (const code of ["DB_PASSWORD_MISSING", "IBCMD_UNAVAILABLE", "DB_PARAMS_UNAVAILABLE", "DB_CHECK_FAILED"]) {
+			assert.match(humanizeAgentError({ code, message: "отказ" })!.message, /Регистрация не удалена/, code);
+		}
+	});
+});

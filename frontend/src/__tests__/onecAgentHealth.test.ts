@@ -3,6 +3,7 @@
  * а требующее внимания отмечает.
  */
 import { describe, expect, it } from "vitest";
+import { translate } from "src/i18";
 import { agentBuildLabel, featureLabels, healthSections } from "src/models/OneCAdmin/agentHealth";
 
 describe("healthSections", () => {
@@ -41,6 +42,15 @@ describe("healthSections", () => {
 		const calm = healthSections({ cluster: { locks: { known: 5, fresh: 5, enabled: 0, paused: 0, lastRefusal: null } } });
 		expect(calm[0].rows).toHaveLength(1);
 		expect(calm[0].rows[0].warn).toBeUndefined();
+	});
+
+	it("отказ сервиса принять heartbeat и неподтверждённый вход — с отметкой (С32)", () => {
+		const s = healthSections({ agent: { ibConfirmed: false, heartbeatRejected: { message: "400: processes[3].what > 200" } } });
+		const rows = s[0].rows;
+		expect(rows.find((r) => r.label === translate("onecHealthIbConfirmed"))?.warn).toBe(true);
+		const rej = rows.find((r) => r.label === translate("onecHealthHeartbeatRejected"));
+		expect(rej?.warn).toBe(true);
+		expect(rej?.value).toContain("processes[3].what");
 	});
 
 	it("бизнес-агент без кластера и пустые поля — разделов и строк нет", () => {

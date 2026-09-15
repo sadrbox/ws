@@ -732,6 +732,10 @@ export type AgentHealth = {
 		serviceName?: string; state?: string; lastError?: string | null; uptimeSecs?: number;
 		ibReady?: boolean; maxParallel?: number; persistentBridge?: boolean;
 		commandTimeoutSecs?: number; longCommandTimeoutSecs?: number;
+		/** Вход в базу подтверждён пробой (агент 16:23, А27). */
+		ibConfirmed?: boolean;
+		/** Последний отказ сервиса принять heartbeat: пока он есть, процессы и базы не обновляются (А25). */
+		heartbeatRejected?: { at?: string; message?: string } | null;
 	};
 	capabilities?: string[];
 	readiness?: { items?: { key: string; ok: boolean; note?: string }[] };

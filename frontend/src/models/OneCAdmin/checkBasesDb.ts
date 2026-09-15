@@ -32,13 +32,23 @@ export function checkDbOutcome(d: CheckBasesResult): CheckDbOutcome {
 	 * КАКИЕ БАЗЫ НЕ ПРОВЕРЕНЫ И ПОЧЕМУ (П6). Число пропущенных приходило, но не показывалось, а
 	 * базы без признака читались как «всё в порядке». Называем их — с причиной, если агент её дал.
 	 */
-	const unchecked = items.filter((i) => typeof i.dbMissing !== "boolean");
-	const skipped = typeof d.skipped === "number" ? d.skipped : unchecked.length;
+	/*
+	 * ОТЛОЖЕННЫЕ — НЕ ОШИБКА (С32, агент 16:23). По базе с идущей операцией агента ibcmd её не открывает, чтобы не
+	 * помешать; её решит следующая проверка. Считать такие «не проверены» предупреждением значило бы звать
+	 * человека разбираться с тем, что в порядке.
+	 */
+	const isBusy = (i: { reason?: string }) => /идёт операция агента/i.test(i.reason ?? "");
+	const busy = items.filter((i) => typeof i.dbMissing !== "boolean" && isBusy(i));
+	const unchecked = items.filter((i) => typeof i.dbMissing !== "boolean" && !isBusy(i));
+	const skipped = Math.max(0, (typeof d.skipped === "number" ? d.skipped : unchecked.length + busy.length) - busy.length);
 	const LIST = 10;
 	const named = unchecked.slice(0, LIST).map((i) => (i.reason ? `${i.key} — ${i.reason}` : i.key));
 	const skippedText = skipped > 0
 		? `${translate("onecBasesDbNotChecked")}: ${skipped}${named.length ? ` (${named.join("; ")}${unchecked.length > LIST ? "; …" : ""})` : ""}`
 		: "";
-	const text = [summary, skippedText, note].filter(Boolean).join(". ");
+	const busyText = busy.length
+		? `${translate("onecBasesDbBusy")}: ${busy.length} (${busy.slice(0, LIST).map((i) => i.key).join(", ")}${busy.length > LIST ? ", …" : ""})`
+		: "";
+	const text = [summary, skippedText, busyText, note].filter(Boolean).join(". ");
 	return { severity: note || skipped > 0 ? "warning" : "success", text, checked, missing };
 }

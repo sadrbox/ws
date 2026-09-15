@@ -54,6 +54,14 @@ export function healthSections(h: AgentHealth): HealthSection[] {
 			push(translate("onecHealthTimeouts"), `${secs(a.commandTimeoutSecs)} / ${secs(a.longCommandTimeoutSecs)}`);
 		}
 		push(translate("onecHealthLastError"), a.lastError, true);
+		// Вход в базы подтверждён пробой (С32, А27): без него «умеет ib.admin» — только по заданному администратору.
+		if (a.ibConfirmed !== undefined) push(translate("onecHealthIbConfirmed"), yesNo(a.ibConfirmed), a.ibConfirmed === false);
+		// Сервис не принимает heartbeat (С32, А25): «на связи», а процессы и базы в реестре стоят.
+		if (a.heartbeatRejected) {
+			const r = a.heartbeatRejected;
+			push(translate("onecHealthHeartbeatRejected"),
+				`${r.message || "—"}${r.at ? ` (${getFormatDate(r.at)})` : ""}`, true);
+		}
 		if (rows.length) out.push({ title: translate("onecHealthAgent"), rows });
 	}
 

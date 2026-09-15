@@ -48,5 +48,11 @@ describe("итог проверки наличия баз данных", () => {
 		expect(o.text).toContain("b10 — нет доступа к СУБД; …)");
 		expect(o.text).not.toContain("b11");
 	});
-});
 
+	it("отложенные из-за операции агента — отдельно и не предупреждение (С32)", () => {
+		const reason = "не проверялась: по базе идёт операция агента — ibcmd её не открывает, чтобы не помешать";
+		const o = checkDbOutcome({ items: [{ key: "a", dbMissing: false }, { key: "busy1", reason }], checked: 1, skipped: 1 });
+		expect(o.severity).toBe("success");
+		expect(o.text).toBe(`${summary(1, 0)}. ${translate("onecBasesDbBusy")}: 1 (busy1)`);
+	});
+});

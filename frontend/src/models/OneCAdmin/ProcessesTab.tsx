@@ -45,6 +45,8 @@ const columns = (): TColumn[] => ([
 	{ identifier: "baseKey", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "age", type: "string", width: "120px", minWidth: "90px", alignment: "right", visible: true, inlist: true },
 	{ identifier: "orphanLabel", type: "string", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	// Команда сервиса, запустившая процесс (С30): по ней процесс долгой операции находится среди остальных.
+	{ identifier: "procCommand", type: "string", width: "190px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
 /** Сколько идёт — словами: «14 мин» понятнее, чем 840. */
@@ -121,6 +123,7 @@ export const ProcessesTab: FC = () => {
 		baseKey: p.base || "—",
 		age: age(p.ageSecs),
 		orphanLabel: p.orphan ? translate("onecProcOrphan") : "",
+		procCommand: p.commandId || "—",
 	})), [procs.data]);
 	const view = useStaticTableView(rows, { age: "desc" });
 
