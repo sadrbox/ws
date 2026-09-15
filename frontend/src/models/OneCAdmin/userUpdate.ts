@@ -103,7 +103,8 @@ export function buildUserUpdate(
 	userName: string, current: UserCurrent, draft: UserDraft,
 ): Record<string, unknown> | null {
 	const rename = draft.name.trim() && draft.name.trim() !== userName ? draft.name.trim() : "";
-	const fullNameChanged = draft.fullName.trim() !== (current.fullName ?? "").trim();
+	// Пустое полное имя в команду не уходит никогда (П19, решение 15.09): очистить имя нельзя, форма об этом говорит.
+	const fullNameChanged = !!draft.fullName.trim() && draft.fullName.trim() !== (current.fullName ?? "").trim();
 	const disabledChanged = draft.disabled !== current.disabled;
 	const showChanged = draft.showInList !== null && draft.showInList !== current.showInList;
 

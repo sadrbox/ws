@@ -366,6 +366,11 @@ describe("групповая правка пользователя: только
 		expect(buildGroupUserUpdate("Оператор", original, draft({ fullName: "" }))).toBeNull();
 	});
 
+	it("П19: пустое полное имя не уходит и из карточки — очистить имя нельзя", () => {
+		expect(buildUserUpdate("Оператор", { fullName: "Оператор бухгалтер", disabled: false, showInList: null },
+			{ name: "Оператор", fullName: "  ", password: "", disabled: false, showInList: null })).toBeNull();
+	});
+
 	it("разница ролей без учёта регистра", () => {
 		expect(diffRoles(["Кассир"], ["кассир"])).toEqual({ add: [], remove: [] });
 	});

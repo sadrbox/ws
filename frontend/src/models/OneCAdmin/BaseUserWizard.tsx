@@ -37,6 +37,7 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
@@ -272,9 +273,8 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 			const plan = new Map<string, Record<string, unknown>>();
 			for (const base of changedBases) {
 				const entry: Record<string, unknown> = { name: userName };
-				// Полное имя задают отдельным окном — пустое значение там ЯВНОЕ «очистить» (П19): раньше групповой путь
-				// очистить имя не мог вовсе.
-				if (profile.fullName !== undefined) entry.fullName = profile.fullName.trim();
+				// Пустое полное имя не принимается (П19, решение 15.09): окно правки его не пропускает.
+				if (profile.fullName !== undefined && profile.fullName.trim()) entry.fullName = profile.fullName.trim();
 				if (profile.disabled !== undefined) entry.disabled = profile.disabled;
 				if (profile.password) entry.password = profile.password;
 				const r = changedByBase.get(base);
@@ -443,7 +443,15 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 					title={translate("onecWizSetForAll")}
 					onClose={() => setEditing(null)}
 					onApply={() => {
-						if (editing === "fullName") setProfile((p) => ({ ...p, fullName: editValue }));
+						if (editing === "fullName") {
+							// Пустое полное имя для выбранных баз не принимается (П19): предупреждение — в сообщения и тостом.
+							if (!editValue.trim()) {
+								const text = translate("onecUserFullNameEmptyGroup");
+								notify({ severity: "warning", text, source: translate("onecUser"), toast: text });
+								return;
+							}
+							setProfile((p) => ({ ...p, fullName: editValue }));
+						}
 						else if (editing === "password") setProfile((p) => ({ ...p, password: editValue }));
 						else setProfile((p) => ({ ...p, disabled: editFlag }));
 						setEditing(null);

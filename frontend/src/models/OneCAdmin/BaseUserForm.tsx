@@ -363,6 +363,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		[userName, here, form],
 	);
 	const dirtyProfile = !!profileUpdate;
+	/** Полное имя стёрли (П19): пустое не принимается — ошибка формы, записать нельзя. */
+	const fullNameEmpty = !!(here?.fullName ?? "").trim() && !form.fullName.trim();
 
 	/**
 	 * Постановка команды сразу попадает в реестр операций: запись прав на десятке баз
@@ -564,9 +566,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 * убрана, правила перешли на кнопки формы.
 	 */
 	const apply = useCallback((thenClose = false) => {
+		if (fullNameEmpty) return;
 		if (massChange) { setConfirmMass(thenClose ? "close" : "stay"); return; }
 		save.mutate(undefined, thenClose ? { onSuccess: close } : undefined);
-	}, [massChange, save, close]);
+	}, [fullNameEmpty, massChange, save, close]);
 
 	return (
 		<>
@@ -578,9 +581,10 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 			onSaveAndClose={() => apply(true)}
 			onClose={close}
 			// Агент без ib.roles правку ролей не применит (C5): записать нельзя, и сказано почему.
-			saveDisabled={rolesBlocked}
+			saveDisabled={rolesBlocked || fullNameEmpty}
 			saveTitle={rolesBlocked
 				? translate("onecRolesAgentOutdated")
+				: fullNameEmpty ? translate("onecUserFullNameEmpty")
 				: changedCount ? `${translate("onecUnsavedChanges")}: ${changedCount}` : undefined}
 			/*
 			 * «ОТМЕНИТЬ ИЗМЕНЕНИЯ» — ПОСЛЕ «ЗАКРЫТЬ», в ряду кнопок формы. Отменяет ВСЁ несохранённое
@@ -629,8 +633,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 													noAutofill disabled={locked}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
 												<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width={FIELD_WIDTH.wide}
-													// Пустое поле ОЧИЩАЕТ полное имя (П19): подсказка «Не менять» обещала обратное.
-													noAutofill disabled={locked} placeholder={here?.fullName ? translate("onecUserFullNameWillClear") : undefined}
+													// Пустое полное имя не принимается (П19): ошибка формы ниже, запись недоступна.
+													noAutofill disabled={locked} placeholder={here?.fullName || undefined}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
 												<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
 													width={FIELD_WIDTH.md} disabled={locked} placeholder={translate("onecKeepAsIs")}
@@ -698,6 +702,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 									<Notice items={[
 										...(renameTo ? [{ type: "warning" as const, text: `${translate("onecUserRenameWarning")} «${userName}» → «${renameTo}».` }] : []),
 										...(!baseKey ? [{ type: "info" as const, text: translate("onecPickBaseInHeader") }] : []),
+										// Ошибка формы (П19): пустое полное имя не принимается.
+										...(fullNameEmpty ? [{ type: "attention" as const, text: translate("onecUserFullNameEmpty") }] : []),
 										/*
 										 * НЕСОХРАНЁННЫХ ПРАВОК ЗДЕСЬ НЕТ И НЕ БУДЕТ.
 										 *

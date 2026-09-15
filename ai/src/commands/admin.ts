@@ -74,7 +74,8 @@ export type AdminCommandSpec = {
 
 const baseKey = z.string().min(1).max(200);
 // Имя пользователя ИБ и имя расширения — то, чем 1С их адресует.
-const ibName = z.string().min(1).max(200);
+// Пустое имя и имя из одних пробелов не принимаются (П19): 1С такое имя не адресует, а панель показала бы «—».
+const ibName = z.string().trim().min(1, "не может быть пустым").max(200);
 
 /**
  * СПИСОК РОЛЕЙ БАЗЫ.
@@ -225,7 +226,8 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		schema: z.object({
 			baseKey,
 			name: ibName,
-			fullName: z.string().max(200).optional(),
+			// Полное имя не очищается пустой строкой (П19, решение 15.09): поле есть — значит, непустое.
+			fullName: z.string().trim().min(1, "не может быть пустым").max(200).optional(),
 			// Пароль не логируется и не возвращается; пустой — вход без пароля (как в 1С).
 			password: z.string().max(200).optional(),
 			roles: roleList.optional(),
@@ -345,7 +347,8 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 			name: ibName,
 			/** Новое имя входа; без него имя не меняется. */
 			newName: ibName.optional(),
-			fullName: z.string().max(200).optional(),
+			// Полное имя не очищается пустой строкой (П19, решение 15.09): поле есть — значит, непустое.
+			fullName: z.string().trim().min(1, "не может быть пустым").max(200).optional(),
 			password: z.string().max(200).optional(),
 			/**
 			 * ТРИ РАЗНЫХ СПОСОБА тронуть роли — и путать их нельзя.

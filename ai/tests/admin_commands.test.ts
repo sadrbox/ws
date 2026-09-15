@@ -319,3 +319,14 @@ test("С27: идентификатор сеанса — UUID", () => {
 	assert.equal(buildAdminPayload(spec, { sessionId: "12" }).ok, false);
 	assert.equal(buildAdminPayload(spec, { sessionId: "8A1E8F3C-1D2B-4C5D-9E6F-0A1B2C3D4E5F" }).ok, true);
 });
+
+test("П19: пустое имя и полное имя пользователя не принимаются", () => {
+	const update = findAdminCommand("IB_UPDATE_USER")!;
+	const create = findAdminCommand("IB_CREATE_USER")!;
+	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "Оператор", fullName: "" }).ok, false);
+	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "Оператор", fullName: "   " }).ok, false);
+	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "   " }).ok, false);
+	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "Оператор", newName: " " }).ok, false);
+	assert.equal(buildAdminPayload(create, { baseKey: "b", name: "Оператор", fullName: "" }).ok, false);
+	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "Оператор", fullName: "Оператор бухгалтер" }).ok, true);
+});

@@ -49,6 +49,7 @@ import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 import { buildGroupUserUpdate } from "./userUpdate";
 import { showToast } from "src/components/UIToast";
+import { notify } from "src/components/TechMessages/store";
 
 export type ElementKind = "user" | "extension";
 
@@ -212,6 +213,15 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 
 	const apply = () => {
 		if (missing.length) return;
+		/*
+		 * ПУСТОЕ ПОЛНОЕ ИМЯ НЕ ПРИНИМАЕТСЯ (П19, решение 15.09). В групповом изменении оно и раньше не уходило
+		 * («не трогать»), но молча: человек стирал имя и думал, что очистил его во всех базах. Теперь — предупреждение
+		 * в технических сообщениях и тостом; остальные изменения применяются.
+		 */
+		if (isUser && dialog === "update" && !fullName.trim() && asText(row.fullName).trim()) {
+			const text = translate("onecUserFullNameEmptyGroup");
+			notify({ severity: "warning", text, source: translate("onecUser"), toast: text });
+		}
 		batch.mutate();
 	};
 
