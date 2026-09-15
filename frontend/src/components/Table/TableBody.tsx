@@ -706,6 +706,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
 
           const tdProps = {
             'data-col-id': col.identifier,
+            // Глобальная метка активной ячейки: класс activeCell хешируется CSS-модулем, а полям (Field.module.scss)
+            // нужно показывать по ней свои кнопки-действия в SubTable.
+            'data-active-cell': isCellActive || undefined,
             tabIndex: isCellActive ? -1 : undefined,
           } as const;
 

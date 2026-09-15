@@ -244,6 +244,37 @@
 	}
 }
 
+// ── Кнопки-действия поля в ячейке SubTable ──────────────────────────────────
+// Видны только у АКТИВНОЙ ячейки (td[data-active-cell]) или у поля в фокусе (:focus-within); наведение их
+// больше не показывает. Скрытые — visibility, а не display: место под кнопками остаётся, и текст ячейки не
+// сдвигается при переходе по строкам. На форме это правило не действует — там кнопки видны всегда.
+:global([data-subtable]) .FieldWrapper.tableVariant {
+
+	.FieldInputWrapper,
+	.FieldSelectWrapper,
+	.FieldPeriodWrapper {
+		.FieldActions {
+			display: flex;
+			visibility: hidden;
+		}
+
+		&:focus-within .FieldActions {
+			visibility: visible;
+		}
+	}
+}
+
+:global([data-subtable] td[data-active-cell]) .FieldWrapper.tableVariant {
+
+	.FieldInputWrapper,
+	.FieldSelectWrapper,
+	.FieldPeriodWrapper {
+		.FieldActions {
+			visibility: visible;
+		}
+	}
+}
+
 .FieldInputWrapper,
 .FieldSelectWrapper,
 .FieldTextareaInputWrapper,

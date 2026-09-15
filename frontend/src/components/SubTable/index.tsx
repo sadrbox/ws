@@ -995,7 +995,8 @@ const SubTable: FC<SubTableProps> = ({
     );
   }
 
-  return <div ref={containerRef} className={`${styles.SubTableHost}${disabled ? ` ${styles.DisabledMode}` : ""}`} onKeyDownCapture={handleContainerKeyDown}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
+  // data-subtable — глобальная метка контекста: полям в ячейках SubTable свои правила показа кнопок (Field.module.scss).
+  return <div ref={containerRef} data-subtable="" className={`${styles.SubTableHost}${disabled ? ` ${styles.DisabledMode}` : ""}`} onKeyDownCapture={handleContainerKeyDown}><SubTableInternalContext.Provider value={ctx}><Table {...tableProps} /></SubTableInternalContext.Provider></div>;
 };
 
 SubTable.displayName = "SubTable";
