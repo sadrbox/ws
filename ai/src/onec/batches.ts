@@ -12,6 +12,15 @@
 import { userWriteWarning } from "./writeBack.ts";
 import { humanizeAgentError } from "./errorHints.ts";
 import { isAbortable } from "../commands/admin.ts";
+import { DEFAULT_LATE_GRACE_SECS } from "../commands/queue.ts";
+
+/**
+ * Истёкшая выданная команда без ответа, которая ещё держит место (С3): её результат может прийти (С21).
+ * То же условие, что OCCUPIES в очереди.
+ */
+const LATE_WAIT = (a: string, graceParam: string) => `(${a}.state = 'expired' AND ${a}.dispatched_at IS NOT NULL
+	AND ${a}.result_status IS NULL AND ${a}.error->>'code' = 'COMMAND_EXPIRED'
+	AND ${a}.finished_at > now() - make_interval(secs => ${graceParam}::int))`;
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 
@@ -38,6 +47,14 @@ export type BatchProgress = {
 		abortable?: boolean;
 		/** Выполнено с оговоркой: признак не перечитан или свойства не приняты платформой (П12). */
 		warning?: string | null;
+		/** Номер попытки (повтор «база занята», С19). */
+		attempt?: number;
+		/** Повтор стоит на паузе до этого времени (С19). */
+		retryAt?: string | null;
+		/** Результат пришёл после истечения срока (С21). */
+		late?: boolean;
+		/** Срок истёк, агент мог продолжать работу — поздний результат ещё может прийти (С21). */
+		lateWait?: boolean;
 	}[];
 	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
 	cancelable: number;
@@ -156,8 +173,9 @@ export class BatchService {
 		const cmds = await this.db.query<{
 			batch_id: string; id: string; base_key: string | null; state: string;
 			error: { code: string; message: string } | null; outcome: string | null;
-			type: string; can_abort: boolean | null;
+			type: string; can_abort: boolean | null; can_abort_check: boolean | null; repair: string | null;
 			user_result: { unverified?: unknown; skipped?: unknown } | null;
+			attempt: number | null; retry_at: Date | null; late: boolean | null; late_wait: boolean | null;
 		}>(
 			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
@@ -168,11 +186,15 @@ export class BatchService {
 			        CASE WHEN c.type IN ('IB_CREATE_USER', 'IB_UPDATE_USER') AND c.state = 'done'
 			             THEN jsonb_build_object('unverified', c.result->'unverified', 'skipped', c.result->'skipped')
 			        END AS user_result,
-			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort
+			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort,
+			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_abort_check,
+			        c.payload->>'repair' AS repair, c.attempt, c.late,
+			        CASE WHEN c.state = 'queued' AND c.available_at > now() THEN c.available_at END AS retry_at,
+			        ${LATE_WAIT("c", "$2")} AS late_wait
 			   FROM commands c LEFT JOIN agents a ON a.id = c.agent_id
 			  -- Повторённая при занятой базе (С10) — не строка отчёта: её место заняла новая попытка.
 			  WHERE c.batch_id = ANY($1::uuid[]) AND c.retried_by IS NULL ORDER BY c.batch_id, c.created_at`,
-			[ids],
+			[ids, DEFAULT_LATE_GRACE_SECS],
 		);
 
 		// Контекст входа в базу: у каких баз задана своя учётная запись и умеет ли её
@@ -214,8 +236,14 @@ export class BatchService {
 						? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
 						: {}),
 					outcome: r.outcome,
-					abortable: isAbortable(r.state, r.type, r.can_abort === true),
+					abortable: isAbortable(r.state, r.type,
+						{ canCancel: r.can_abort === true, canCancelCheck: r.can_abort_check === true },
+						{ repair: r.repair === "true" }),
 					warning: userWriteWarning(r.user_result),
+					attempt: r.attempt ?? 1,
+					retryAt: r.retry_at ? new Date(r.retry_at).toISOString() : null,
+					...(r.late ? { late: true } : {}),
+					...(r.late_wait ? { lateWait: true } : {}),
 				}));
 
 				/*
@@ -296,8 +324,10 @@ export class BatchService {
 			`SELECT base_key, type, payload FROM commands
 			  WHERE batch_id = $1 AND state IN ('failed', 'expired') AND retried_by IS NULL
 			    AND ($2::text[] IS NULL OR base_key = ANY($2::text[]))
+			    -- Истёкшая, но, возможно, ещё работающая у агента — не повторять поверх неё (С21).
+			    AND NOT ${LATE_WAIT("commands", "$3")}
 			  ORDER BY created_at`,
-			[batchId, narrow],
+			[batchId, narrow, DEFAULT_LATE_GRACE_SECS],
 		);
 		return r.rows;
 	}

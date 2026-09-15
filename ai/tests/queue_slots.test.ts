@@ -3,7 +3,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { CommandQueue, BUSY_MAX_ATTEMPTS } from "../src/commands/queue.ts";
+import { CommandQueue, BUSY_MAX_ATTEMPTS, BUSY_RETRY_DELAYS_SECS } from "../src/commands/queue.ts";
 import { findAdminCommand, marksReachability, runsInsideBase, validateSchedulePayload } from "../src/commands/admin.ts";
 import { isDestructive } from "../src/onec/access.ts";
 import { ibFailureReason } from "../src/bases/service.ts";
@@ -47,6 +47,7 @@ describe("С1: место базы — только у команд внутрь
 		assert.match(sql, /d\.state = 'expired' AND d\.dispatched_at IS NOT NULL AND d\.result_status IS NULL/);
 		assert.ok(calls.some((c) => c.params.includes(600)), "запас передан");
 		assert.match(sql, /COMMAND_QUEUE_TIMEOUT/);
+		assert.match(sql, /c\.available_at IS NULL OR c\.available_at <= now\(\)/);
 	});
 });
 
@@ -59,6 +60,9 @@ describe("С10–С11: повтор при занятой базе и конец
 		assert.match(calls[0].sql, /retried_by IS NULL AND attempt < \$3/);
 		assert.match(calls[0].sql, /UPDATE commands SET retried_by = \$2/);
 		assert.equal(calls[0].params[2], BUSY_MAX_ATTEMPTS);
+		// Пауза перед повтором (С19): не выдавать раньше available_at, срок очереди — от конца паузы.
+		assert.match(calls[0].sql, /attempt, available_at\)/);
+		assert.deepEqual(calls[0].params.slice(4), [...BUSY_RETRY_DELAYS_SECS]);
 	});
 
 	it("отменённая команда — конец ожидания, без лишних секунд", async () => {
@@ -101,5 +105,14 @@ describe("С4–С6, С12, С14", () => {
 
 	it("С13: у кода TIMEOUT есть подсказка", () => {
 		assert.match(humanizeAgentError({ code: "TIMEOUT", message: "превышено время" })!.message, /пределу времени/);
+	});
+});
+
+describe("С21: поздний результат отмечается", () => {
+	it("приём результата ставит late, если команда уже истекла", async () => {
+		const calls: Call[] = [];
+		await new CommandQueue(fakeDb(calls, [{ id: "c", base_key: null, late: true }]))
+			.complete("a", { commandId: "c", agentId: "a", status: "SUCCESS", result: {} });
+		assert.match(calls[0].sql, /late = late OR state = 'expired'/);
 	});
 });

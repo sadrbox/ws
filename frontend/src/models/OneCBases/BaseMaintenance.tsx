@@ -29,9 +29,10 @@ import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { CapabilityGuard, ReadonlyNotice, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/progress";
-import { useRunningWork } from "src/components/TechMessages/operations";
+import { updateOp, useRunningWork } from "src/components/TechMessages/operations";
+import { getFormatDate } from "src/utils/datetime";
 import {
-	applyBaseUpdate, checkBase, followCommand, planText, restoreBase, runBatch,
+	abortCommand, applyBaseUpdate, checkBase, followCommand, planText, restoreBase, runBatch, type CommandPending,
 	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest,
 	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelftestResult, type Started,
 } from "src/services/onec/api";
@@ -69,6 +70,32 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const fail = (e: unknown) => reportError(e, { source: translate("onecBase") });
 
 	/**
+	 * ЧТО С ДОЛГОЙ ОПЕРАЦИЕЙ СЕЙЧАС (С20, П15). «0 из 1 · Выполняется» одинаково выглядело и в очереди, и в
+	 * работе, и у зависшего конфигуратора. Теперь — «ждёт очереди» или «выполняется с …», то же в «Прогрессе»,
+	 * и «Прервать», если сервис разрешает её оборвать.
+	 */
+	const [live, setLive] = useState<{ commandId: string; title: string; pending: CommandPending } | null>(null);
+	const liveText = (p: CommandPending): string => p.state === "dispatched"
+		? `${translate("onecCmdRunningSince")} ${p.dispatchedAt ? getFormatDate(p.dispatchedAt) : "…"}`
+		: translate("onecCmdQueued");
+	const track = (op: string, title: string) => (p: CommandPending) => {
+		setLive({ commandId: p.commandId, title, pending: p });
+		updateOp(op, (o) => ({ ...o, note: liveText(p) }));
+	};
+	/** Прерванная по кнопке — не ошибка для тоста: итог прерывания уже сказан. */
+	const isAborted = (e: unknown) => (e as { code?: string } | null)?.code === "COMMAND_ABORTED";
+
+	const abortLive = useMutation({
+		mutationFn: (commandId: string) => abortCommand(commandId),
+		onSuccess: (r) => {
+			showToast(r.aborted
+				? [translate("onecQueueAborted"), r.killed ? translate("onecAbortKilled") : "", r.note ?? ""].filter(Boolean).join(". ")
+				: translate("onecQueueAbortNotRunning"), r.aborted ? "success" : "warning");
+		},
+		onError: fail,
+	});
+
+	/**
 	 * ДОЛГАЯ ОПЕРАЦИЯ — В «ПРОГРЕССЕ», И ВЕДЁТСЯ ТАМ ДО КОНЦА (П2). Загрузка, обновление и проверка
 	 * идут до четырёх часов. Ответил за время запроса — итог сразу; «ещё идёт» — операция следит
 	 * за командой по номеру без предела, итог приходит тостом, а повтор до конца недоступен
@@ -88,12 +115,15 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		}
 		if ("done" in started) { finishOp(op); return describe(started.done); }
 		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
-		void followCommand<T>(started.commandId, watched)
-			.then((r) => { finishOp(op); showToast(describe(r), "success"); })
+		const onPending = track(op, title);
+		if (started.pending) onPending(started.pending);
+		void followCommand<T>(started.commandId, watched, onPending)
+			.then((r) => { setLive(null); finishOp(op); showToast(describe(r), "success"); })
 			.catch((e: unknown) => {
+				setLive(null);
 				if (!watched()) return; // наблюдение сняли — сообщать некому
 				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
-				fail(e);
+				if (!isAborted(e)) fail(e);
 			});
 		return translate("onecMaintRunning");
 	};
@@ -183,12 +213,15 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		}
 		if ("done" in started) { settle(started.done); return; }
 		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
-		void followCommand<SelftestResult>(started.commandId, watched)
-			.then(settle)
+		const onPending = track(op, title);
+		if (started.pending) onPending(started.pending);
+		void followCommand<SelftestResult>(started.commandId, watched, onPending)
+			.then((r) => { setLive(null); settle(r); })
 			.catch((e: unknown) => {
+				setLive(null);
 				if (!watched()) return;
 				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
-				fail(e);
+				if (!isAborted(e)) fail(e);
 			});
 	};
 
@@ -204,6 +237,18 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 			<ReadonlyNotice />
 			<div className={main.FormWrapper}>
 				<GroupCol className={main.Form}>
+					{/* Что с долгой операцией сейчас (С20, П15) — и «Прервать», если её можно оборвать. */}
+					{live && (
+						<GroupRow>
+							<Notice inline items={[{ type: "info", text: `${live.title}: ${liveText(live.pending)}` }]} />
+							{canWrite && live.pending.abortable && (
+								<Button variant="danger" disabled={abortLive.isPending} title={translate("onecQueueAbort")}
+									onClick={() => abortLive.mutate(live.commandId)}>
+									<Icon name="close" /> {translate("onecQueueAbort")}
+								</Button>
+							)}
+						</GroupRow>
+					)}
 					<FormArea title={translate("onecMaintCheck")}>
 						<GroupCol>
 							<GroupRow>

@@ -113,7 +113,10 @@ const READ_BATCHES = new Set(["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]);
  */
 export function abortHint(batchType: string, it: { state: string; abortable?: boolean }): string | null {
 	if (it.state !== "dispatched" || it.abortable === true) return null;
-	return translate(READ_BATCHES.has(batchType) ? "onecAbortAgentOld" : "onecAbortNotAllowed");
+	// Проверку базы обрывают только без «Исправлять» и только агентом, снимающим конфигуратор (С23):
+	// «запись не обрывают» здесь было бы неправдой.
+	return translate(READ_BATCHES.has(batchType) ? "onecAbortAgentOld"
+		: batchType === "IB_CHECK" ? "onecAbortCheckHint" : "onecAbortNotAllowed");
 }
 
 /** Состояние команды словами: коды состояний — внутренняя кухня очереди. */
@@ -200,17 +203,25 @@ export const BatchesTab: FC = () => {
 		mutationFn: async (ids: string[]) => {
 			let aborted = 0;
 			let finished = 0;
+			// Что именно снял агент (П15): «процесс снят», его пояснение — иначе прерывание выглядит одинаково.
+			const notes: string[] = [];
 			for (const id of ids) {
 				const r = await abortCommand(id);
 				if (r.aborted) aborted++; else finished++;
+				if (r.aborted && (r.note || r.killed)) notes.push([r.killed ? translate("onecAbortKilled") : "", r.note ?? ""].filter(Boolean).join(": "));
 			}
-			return { aborted, finished };
+			return { aborted, finished, notes };
 		},
 		onSuccess: (r) => {
 			void after();
 			setPicked(new Set());
 			// Прерванная работа — событие: «кто и когда её снял» спрашивают позже тоста.
-			if (r.aborted) notify({ severity: "success", source: translate("onecTabBatches"), text: `${translate("onecAborted")}: ${r.aborted}` });
+			if (r.aborted) {
+				notify({
+					severity: "success", source: translate("onecTabBatches"),
+					text: `${translate("onecAborted")}: ${r.aborted}${r.notes.length ? `. ${r.notes.join("; ")}` : ""}`,
+				});
+			}
 			if (r.finished) notify({ severity: "info", source: translate("onecTabBatches"), text: `${translate("onecAbortFinished")}: ${r.finished}`, ephemeral: true });
 		},
 		onError: (e) => { void after(); reportError(e, { source: translate("onecTabBatches") }); },

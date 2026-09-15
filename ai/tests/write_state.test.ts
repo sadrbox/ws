@@ -118,3 +118,18 @@ describe("С15: обрыв связи с рабочим процессом кл�
 		assert.equal(ibFailureReason(error), null);
 	});
 });
+
+describe("С16: обрыв при незаданных пределах — процесс упал, пределы поднимать не нужно", () => {
+	it("вывод агента есть — совет про журнал и дампы, без «поднимите пределы»", () => {
+		const m = humanizeAgentError({
+			code: "IB_CONNECTION_LOST",
+			message: "Оборвалась связь… Пределы перезапуска и памяти не заданы — процесс, вероятнее всего, аварийно завершился.",
+		})!.message;
+		assert.match(m, /журнал «Приложение»/);
+		assert.doesNotMatch(m, /поднимите пределы/);
+	});
+	it("вывода нет — прежний совет про пределы", () => {
+		const m = humanizeAgentError({ code: "IB_CONNECTION_LOST", message: "tcp://SERVER:1560 10054" })!.message;
+		assert.match(m, /поднимите пределы/);
+	});
+});

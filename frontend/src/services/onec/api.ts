@@ -85,7 +85,16 @@ export type ClusterRow = Record<string, string>;
  * показывает это как ошибку CORS (симптом, который мы ловили трижды). Поэтому сервис
  * отвечает 202 с идентификатором команды, а клиент дожидается короткими опросами.
  */
-type Pending = { pending: true; commandId: string };
+export type CommandPending = {
+	pending: true; commandId: string;
+	/** Ждёт очереди или уже выполняется (С20). Нет — сервис старее панели. */
+	state?: "queued" | "dispatched";
+	/** С какого времени выполняется. */
+	dispatchedAt?: string | null;
+	/** Можно прервать: чтение или проверка без «Исправлять» у агента, который это умеет (С23). */
+	abortable?: boolean;
+};
+type Pending = CommandPending;
 const isPending = (d: unknown): d is Pending =>
 	!!d && typeof d === "object" && (d as Pending).pending === true;
 
@@ -104,11 +113,14 @@ const isPending = (d: unknown): d is Pending =>
  */
 async function awaitCommand<T>(
 	first: T | Pending, limitMs = 15 * 60_000, keepWaiting?: () => boolean,
+	/** Каждый ответ «ещё идёт» — что происходит с командой сейчас (П15). */
+	onPending?: (p: Pending) => void,
 ): Promise<T> {
 	let data = first;
 	let pauseMs = 1000;
 	const until = Date.now() + limitMs;
 	while (isPending(data)) {
+		onPending?.(data);
 		if (Date.now() > until) throw new Error("Команда 1С выполняется слишком долго");
 		// Наблюдение сняли («Скрыть» у операции) — ждать дальше некому.
 		if (keepWaiting && !keepWaiting()) throw new Error("Наблюдение за командой прекращено");
@@ -470,6 +482,14 @@ export type BatchProgress = {
 		abortable?: boolean;
 		/** Выполнено с оговоркой: признак не перечитан или свойства не приняты платформой (П12). */
 		warning?: string | null;
+		/** Номер попытки (повтор «база занята», С19). */
+		attempt?: number;
+		/** Повтор стоит на паузе до этого времени (С19). */
+		retryAt?: string | null;
+		/** Результат пришёл после истечения срока (С21). */
+		late?: boolean;
+		/** Срок истёк, но агент мог продолжать работу — результат ещё может прийти (С21). */
+		lateWait?: boolean;
 	}[];
 };
 
@@ -508,15 +528,17 @@ export const planText = (plan: IbPlan | undefined): string =>
  * вторую. Теперь ответ «ещё идёт» возвращается номером — операцию дальше ведёт «Прогресс»
  * (`followCommand`), без предела.
  */
-export type Started<T> = { done: T } | { commandId: string };
+export type Started<T> = { done: T } | { commandId: string; pending?: CommandPending };
 
 const startJob = <T>(path: string, body: unknown): Promise<Started<T>> =>
 	aiFetch<T | Pending>(path, { method: "POST", body: JSON.stringify(body) })
-		.then((d) => (isPending(d) ? { commandId: d.commandId } : { done: d }));
+		.then((d) => (isPending(d) ? { commandId: d.commandId, pending: d } : { done: d }));
 
 /** Следить за командой по номеру, пока `keepWaiting()` — без предела по времени. */
-export const followCommand = <T>(commandId: string, keepWaiting: () => boolean): Promise<T> =>
-	awaitCommand<T>({ pending: true, commandId }, Number.POSITIVE_INFINITY, keepWaiting);
+export const followCommand = <T>(
+	commandId: string, keepWaiting: () => boolean, onPending?: (p: CommandPending) => void,
+): Promise<T> =>
+	awaitCommand<T>({ pending: true, commandId }, Number.POSITIVE_INFINITY, keepWaiting, onPending);
 
 export const startCheckBase = (baseKey: string, p: IbCheckPayload) =>
 	startJob<IbCheckResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/check`, p);

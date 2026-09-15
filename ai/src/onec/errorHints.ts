@@ -135,6 +135,16 @@ const CODE_HINTS: Record<string, string> = {
 		+ "ждала своей очереди дольше отведённого. Служба агента на связи — дело в загрузке очереди.",
 };
 
+/**
+ * Вывод агента (с 00:32, А12) «пределы перезапуска и памяти не заданы» — во всех его вариантах. Тогда
+ * совет «поднимите пределы» неверен (С16): снимать процесс было некому, он упал сам.
+ */
+const LIMITS_NOT_SET = /пределы перезапуска и памяти не заданы/i;
+const CONNECTION_LOST_CRASH_HINT = "Операция не завершена: рабочий процесс кластера 1С, вероятнее всего, аварийно "
+	+ "завершился — пределов перезапуска и памяти нет, снимать его было некому. Дело не в базе: отметка «в базу "
+	+ "не войти» не ставится. Причину ищите на сервере 1С: журнал «Приложение» Windows (записи о падении rphost — "
+	+ "агент приводит их выше, если прочитал) и дампы rphost. Повторять на рабочей базе не стоит — сначала на копии.";
+
 export function humanizeAgentError(
 	e: { code: string; message: string; details?: unknown } | null,
 	ctx: AuthContext = {},
@@ -153,7 +163,9 @@ export function humanizeAgentError(
 				+ "поэтому имя, обрезанное на один знак, выглядит как «просто неверный пароль».");
 	}
 	// Подсказка по КОДУ — там, где текст агента зависит от утилиты, а смысл один (С13).
-	const byCode = CODE_HINTS[e.code];
+	const byCode = e.code === "IB_CONNECTION_LOST" && LIMITS_NOT_SET.test(e.message)
+		? CONNECTION_LOST_CRASH_HINT
+		: CODE_HINTS[e.code];
 	if (byCode && !e.message.includes(byCode)) parts.push(byCode);
 	const found = HINTS.find((h) => h.match.test(e.message));
 	// Подсказка приписывается один раз: повторный проход по уже дополненному тексту

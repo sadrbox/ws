@@ -6,7 +6,7 @@ import {
 	APP_SCOPE, clearNoticeHistory, setTechMessagesOpen, useScopedNotices,
 } from "src/components/TechMessages/store";
 import {
-	abandonOp, attachBatch, finishOp, getOps, mergeBatch, progressOp, startOp,
+	abandonOp, attachBatch, finishOp, getOps, hasLateWatch, mergeBatch, progressOp, startOp,
 } from "src/models/OneCAdmin/progress";
 import { translate } from "src/i18";
 import { TestWrapper } from "./utils/TestWrapper";
@@ -165,6 +165,39 @@ describe("Технические сообщения: прогресс запро
 		const op = getOps().find((o) => o.batchId === "b2");
 		expect(op?.state).toBe("done");
 		expect(op?.warning).toMatch(/_transition: платформа не приняла/);
+	});
+
+	it("поздний результат (П16): истёкшая команда досматривается, итог меняется, наблюдение снимается", () => {
+		act(() => {
+			const id = startOp({ kind: "read", title: "Проверить базу", target: "_transition", total: 1 });
+			attachBatch(id, "b3", 1);
+			mergeBatch({
+				id: "b3", total: 1, done: 0, failed: 1, pending: 0, cancelable: 0,
+				items: [{ commandId: "c1", baseKey: "_transition", state: "expired", lateWait: true, error: { message: "срок истёк" } }],
+			} as unknown as Parameters<typeof mergeBatch>[0]);
+		});
+		expect(getOps().find((o) => o.batchId === "b3")?.state).toBe("failed");
+		expect(hasLateWatch()).toBe(true);
+		act(() => {
+			mergeBatch({
+				id: "b3", total: 1, done: 1, failed: 0, pending: 0, cancelable: 0,
+				items: [{ commandId: "c1", baseKey: "_transition", state: "done", late: true, error: null }],
+			} as unknown as Parameters<typeof mergeBatch>[0]);
+		});
+		expect(getOps().find((o) => o.batchId === "b3")?.state).toBe("done");
+		expect(hasLateWatch()).toBe(false);
+	});
+
+	it("база занята (С19): пока повтор на паузе, строка говорит, до какого времени", () => {
+		act(() => {
+			const id = startOp({ kind: "update", title: "Выгрузить", target: "базы: 1", total: 1 });
+			attachBatch(id, "b4", 1);
+			mergeBatch({
+				id: "b4", total: 1, done: 0, failed: 0, pending: 1, cancelable: 1,
+				items: [{ commandId: "c2", baseKey: "buh", state: "queued", attempt: 2, retryAt: "2026-09-15T10:00:00Z", error: null }],
+			} as unknown as Parameters<typeof mergeBatch>[0]);
+		});
+		expect(getOps().find((o) => o.batchId === "b4")?.note).toMatch(new RegExp(`^buh: ${translate("onecBusyRetryAt")}`));
 	});
 
 	it("«Без группировки» — операции без заголовка секции, но видны", () => {

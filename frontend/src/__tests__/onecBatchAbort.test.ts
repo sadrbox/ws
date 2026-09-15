@@ -32,6 +32,8 @@ describe("прервать начатую команду", () => {
 		expect(abortHint("IB_BACKUP", { state: "dispatched", abortable: false })).toBe(translate("onecAbortNotAllowed"));
 		expect(abortHint("IB_UPDATE_USER", { state: "dispatched" })).toBe(translate("onecAbortNotAllowed"));
 		expect(abortHint("IB_LIST_USERS", { state: "dispatched", abortable: false })).toBe(translate("onecAbortAgentOld"));
+		// Проверку базы обрывают без «Исправлять» у нового агента — подсказка своя, не «запись не обрывают» (С23).
+		expect(abortHint("IB_CHECK", { state: "dispatched", abortable: false })).toBe(translate("onecAbortCheckHint"));
 	});
 
 	it("подсказки нет, где вопроса нет: прервать можно или команда не начата", () => {

@@ -21,6 +21,8 @@ import {
 	cancelBatch, fetchBatches, hasCapability, type BatchProgress, type OnecAgent,
 } from "src/services/onec/api";
 import { translate } from "src/i18";
+import { notify } from "src/components/TechMessages/store";
+import { getFormatDate } from "src/utils/datetime";
 import {
 	abandonOp, cancelOp, clearFinished, finishOp, getOps, opDuration, opKindLabel, opPercent,
 	opStateLabel, opSucceeded, progressOp, setOpCanceler, settleOp, startOp as startCoreOp,
@@ -205,6 +207,30 @@ export function mergeBatch(p: BatchProgress): void {
 	const target = getOps().find((o) => o.batchId === p.id);
 	if (!target) return;
 	const running = p.pending > 0;
+	/*
+	 * ПОЗДНИЙ РЕЗУЛЬТАТ (П16). Истёкшая выданная команда ещё может ответить: агент мог работать дольше
+	 * срока. Раньше операция закрывалась один раз, опрос прекращался, и итог «Не выполнено» оставался
+	 * навсегда, даже когда база на деле была проверена. Теперь такие строки досматриваются.
+	 */
+	const lateWaiting = p.items.flatMap((i) => (i.lateWait && i.commandId ? [i.commandId] : []));
+	let watch = lateWatch.get(p.id);
+	if (!running && lateWaiting.length && !watch) {
+		watch = { until: Date.now() + LATE_WATCH_MS, waiting: new Set(lateWaiting) };
+		lateWatch.set(p.id, watch);
+	}
+	const watched = watch;
+	const arrived = watched
+		? p.items.filter((i) => i.commandId && watched.waiting.has(i.commandId) && (i.state === "done" || i.state === "failed"))
+		: [];
+	if (watch) {
+		for (const i of p.items) if (i.commandId && watch.waiting.has(i.commandId) && !i.lateWait) watch.waiting.delete(i.commandId);
+		if (!watch.waiting.size) lateWatch.delete(p.id);
+	}
+	// База занята — повтор на паузе (С19): говорим, до какого времени, а не молчим «Выполняется».
+	const retry = running ? p.items.find((i) => i.state === "queued" && i.retryAt) : undefined;
+	const retryNote = retry?.retryAt
+		? `${retry.baseKey ? `${retry.baseKey}: ` : ""}${translate("onecBusyRetryAt")} ${getFormatDate(retry.retryAt)}`
+		: "";
 	// Переход «шла → закончилась» — единственный момент, когда есть что перечитывать.
 	// На каждом опросе этого делать нельзя: опрос идёт раз в три секунды.
 	const justFinished = !running && target.state === "running";
@@ -223,13 +249,35 @@ export function mergeBatch(p: BatchProgress): void {
 		finishedAt: running ? null : (o.finishedAt ?? Date.now()),
 		note: p.failed > 0 && failedItem?.error
 			? `${failedItem.baseKey ?? ""}: ${failedItem.error.message}`.trim()
-			: (warning || o.note),
+				+ (lateWaiting.length ? ` · ${translate("onecLateWaiting")}` : "")
+			: (retryNote || warning || o.note),
 		...(warning ? { warning } : {}),
 	}));
 	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к
 	// одному концу не должны оставлять разный след.
 	if (justFinished) settleOp(target.id);
+	if (arrived.length) {
+		notify({
+			severity: arrived.some((i) => i.state === "failed") ? "warning" : "success",
+			text: `${target.title}. ${translate("onecLateResult")}: ${arrived
+				.map((i) => `${i.baseKey ?? "—"} — ${translate(i.state === "done" ? "onecBatchDone" : "onecOpFailed")}`)
+				.join("; ")}`,
+			source: target.target || target.title,
+			scope: target.pane,
+			ref: target.ref,
+		});
+	}
 }
+
+/** Сколько досматривать истёкшие выданные команды — столько сервис держит их место (П16, С3). */
+const LATE_WATCH_MS = 10 * 60_000;
+const lateWatch = new Map<string, { until: number; waiting: Set<string> }>();
+
+/** Есть ли задания, чей поздний результат ещё может прийти. Просроченное наблюдение снимается. */
+export const hasLateWatch = (now = Date.now()): boolean => {
+	for (const [id, w] of lateWatch) if (w.until < now || !w.waiting.size) lateWatch.delete(id);
+	return lateWatch.size > 0;
+};
 
 /** Есть ли незавершённые команды — по этому признаку включается опрос заданий. */
 export const hasRunningBatches = (list: Op[]): boolean =>
@@ -265,7 +313,7 @@ async function pollBatches(): Promise<void> {
 	} finally {
 		polling = false;
 		emitWatch();
-		if (poll !== null && !hasRunningBatches(getOps())) {
+		if (poll !== null && !hasRunningBatches(getOps()) && !hasLateWatch()) {
 			window.clearInterval(poll);
 			poll = null;
 		}
@@ -274,7 +322,7 @@ async function pollBatches(): Promise<void> {
 
 /** Начать наблюдение, если есть за чем. Идемпотентно: второй вызов ничего не удваивает. */
 export function ensureBatchWatch(): void {
-	if (poll !== null || !hasRunningBatches(getOps())) return;
+	if (poll !== null || (!hasRunningBatches(getOps()) && !hasLateWatch())) return;
 	poll = window.setInterval(() => void pollBatches(), 3000);
 	void pollBatches();
 }

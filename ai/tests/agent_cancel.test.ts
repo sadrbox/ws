@@ -8,7 +8,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agentCanRun, buildAdminPayload, findAdminCommand, isAbortable } from "../src/commands/admin.ts";
+import { abortAllowed, agentCanRun, buildAdminPayload, findAdminCommand, isAbortable } from "../src/commands/admin.ts";
 import { CommandQueue } from "../src/commands/queue.ts";
 import { isDestructive } from "../src/onec/access.ts";
 import type { Db } from "../src/db/pool.ts";
@@ -83,4 +83,16 @@ test("место внутрибазовых считает только кома
 
 test("прерывание — изменение: уровню readonly недоступно", () => {
 	assert.equal(isDestructive("POST", "/commands/7c1/abort"), true);
+});
+
+test("С23: проверку без «Исправлять» прерывают — только у агента, снимающего конфигуратор", () => {
+	assert.equal(abortAllowed("IB_CHECK", { baseKey: "b" }), true);
+	assert.equal(abortAllowed("IB_CHECK", { baseKey: "b", repair: true }), false, "исправление не обрываем");
+	assert.equal(abortAllowed("IB_RESTORE", { baseKey: "b" }), false);
+	const old = { canCancel: true, canCancelCheck: false };
+	const fresh = { canCancel: true, canCancelCheck: true };
+	assert.equal(isAbortable("dispatched", "IB_CHECK", old, { baseKey: "b" }), false, "агент без А21");
+	assert.equal(isAbortable("dispatched", "IB_CHECK", fresh, { baseKey: "b" }), true);
+	assert.equal(isAbortable("dispatched", "IB_CHECK", fresh, { baseKey: "b", repair: true }), false);
+	assert.equal(isAbortable("dispatched", "IB_LIST_USERS", fresh), true);
 });

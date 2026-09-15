@@ -747,8 +747,31 @@ export function payloadRefusal(
  * Одно правило на маршрут прерывания и на признак `abortable` в заданиях — панель не должна
  * предлагать то, от чего сервис откажет.
  */
-export function isAbortable(state: string, type: string, agentCanCancel: boolean): boolean {
-	return state === "dispatched" && agentCanCancel && findAdminCommand(type)?.operation === "READ";
+/**
+ * Способность агента снимать конфигуратор отменённой проверки без «Исправлять» (А21). Без неё отмена
+ * бросала бы задачу, а `1cv8` продолжал бы осмотр вне учёта агента — место базы освободилось бы поверх
+ * работающего процесса (А14). Поэтому прерывание проверки — только агенту, который это объявил.
+ */
+export const CANCEL_CHECK_CAPABILITY = "agent.cancel.check";
+
+/**
+ * Какую начатую команду вообще позволено обрывать (С23): чтение — и проверку базы БЕЗ «Исправлять»:
+ * осмотр `-TestOnly` базу не меняет. Выгрузку, загрузку, обновление и исправление не обрывают — база
+ * осталась бы в промежуточном состоянии.
+ */
+export function abortAllowed(type: string, payload?: Record<string, unknown> | null): boolean {
+	if (findAdminCommand(type)?.operation === "READ") return true;
+	return type === "IB_CHECK" && payload?.repair !== true;
+}
+
+export function isAbortable(
+	state: string, type: string,
+	agent: boolean | { canCancel: boolean; canCancelCheck?: boolean },
+	payload?: Record<string, unknown> | null,
+): boolean {
+	const a = typeof agent === "boolean" ? { canCancel: agent, canCancelCheck: false } : agent;
+	if (state !== "dispatched" || !a.canCancel || !abortAllowed(type, payload)) return false;
+	return type !== "IB_CHECK" || a.canCancelCheck === true;
 }
 
 export type AdminPayloadResult =

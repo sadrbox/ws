@@ -36,7 +36,7 @@ import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
 	DEFAULT_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
-	runsInsideBase, validateSchedulePayload,
+	runsInsideBase, validateSchedulePayload, abortAllowed, isAbortable, CANCEL_CHECK_CAPABILITY,
 } from "../commands/admin.ts";
 
 type Deps = {
@@ -212,8 +212,9 @@ export function onecRouter(deps: Deps) {
 			// организации пользователя: журнал команд должен показывать, где выполнено.
 			organizationUuid: agent.organizationUuid,
 			baseKey: built.baseKey,
-			// Кластерная команда с базой не занимает место базы (С1).
-			inBase: runsInsideBase(spec),
+			// Кластерная команда с базой не занимает место базы (С1). Сухой прогон — тоже (С22): в базу
+			// он не входит, а за долгой операцией план ждал бы единственное место до 15 минут.
+			inBase: runsInsideBase(spec) && built.payload.dryRun !== true,
 			type: spec.type,
 			payload: built.payload,
 			userUuid: u.uuid,
@@ -256,7 +257,12 @@ export function onecRouter(deps: Deps) {
 			// короткими опросами. Держать HTTP-запрос дольше нельзя — вход в базу занимает
 			// у агента до 15 минут, а туннель обрывает такой запрос СВОИМ ответом, без
 			// заголовков CORS, и браузер показывает это как ошибку CORS.
-			return { status: 202, body: { success: true, data: { pending: true, commandId: cmd.id } } };
+			return { status: 202, body: { success: true, data: {
+				pending: true, commandId: cmd.id,
+				// Ждёт очереди или уже выполняется — панели разные слова (С20).
+				state: done?.state === "dispatched" ? "dispatched" : "queued",
+				dispatchedAt: done?.dispatched_at ? new Date(done.dispatched_at).toISOString() : null,
+			} } };
 		}
 		if (done.state !== "done") {
 			const e = humanizeAgentError(done.error, await authContext(built.baseKey, agent))
@@ -551,7 +557,9 @@ export function onecRouter(deps: Deps) {
 			// оценка времени массовой операции.
 			ibParallel: cfg.AGENT_IB_PARALLEL,
 			// Кто держит очередь (R5): прервать панель предлагает только чтения — как и маршрут abort.
-			runningCommands: holders.map((c) => ({ ...c, abortable: findAdminCommand(c.type)?.operation === "READ" })),
+			runningCommands: holders.map(({ payload, canCancel, canCancelCheck, ...c }) => ({
+				...c, abortable: isAbortable("dispatched", c.type, { canCancel, canCancelCheck }, payload),
+			})),
 			// Время по типам — сводно по снимкам живых агентов (S5).
 			agentDurations: mergeDurationStats(live.map((a) => a.commandStats?.durationsByType)),
 		} });
@@ -1025,12 +1033,29 @@ export function onecRouter(deps: Deps) {
 				? Math.floor((Date.now() - new Date(owner.lastSeenAt).getTime()) / 1000)
 				: Number.MAX_SAFE_INTEGER;
 			if (silentSecs > cfg.AGENT_OFFLINE_AFTER_SECS) {
-				send(res, fail(409, "AGENT_OFFLINE",
-					`Агент 1С не на связи${owner?.lastSeenAt ? ` (молчит ${silentSecs} с)` : ""}: команда поставлена в очередь, но забрать её некому. `
-					+ "Проверьте службу агента на сервере 1С."));
+				const silent = owner?.lastSeenAt ? ` (молчит ${silentSecs} с)` : "";
+				send(res, fail(409, "AGENT_OFFLINE", row.state === "dispatched"
+					// Забрал и замолчал — это не «забрать некому» (С20): работа могла идти или оборваться.
+					? `Агент 1С забрал команду и перестал выходить на связь${silent}: она могла выполниться или прерваться `
+						+ "вместе со службой. Итог придёт, когда агент вернётся; проверьте службу агента на сервере 1С."
+					: `Агент 1С не на связи${silent}: команда поставлена в очередь, но забрать её некому. `
+						+ "Проверьте службу агента на сервере 1С."));
 				return;
 			}
-			res.json({ success: true, data: { pending: true, commandId: row.id } });
+			/*
+			 * ЧТО ПРОИСХОДИТ С КОМАНДОЙ (С20): ждёт очереди или выполняется и с какого времени, можно ли
+			 * её прервать. Раньше ответ был одинаковым, и долгая проверка выглядела зависшей.
+			 */
+			const caps = owner?.capabilities ?? [];
+			res.json({ success: true, data: {
+				pending: true, commandId: row.id,
+				state: row.state,
+				queuedAt: new Date(row.created_at).toISOString(),
+				dispatchedAt: row.dispatched_at ? new Date(row.dispatched_at).toISOString() : null,
+				abortable: isAbortable(row.state, row.type, {
+					canCancel: caps.includes("agent.cancel"), canCancelCheck: caps.includes(CANCEL_CHECK_CAPABILITY),
+				}, (row.payload ?? {}) as Record<string, unknown>),
+			} });
 			return;
 		}
 		if (row.state !== "done") {
@@ -1100,9 +1125,18 @@ export function onecRouter(deps: Deps) {
 			send(res, fail(409, "COMMAND_FINISHED", "Команда уже завершена — прерывать нечего"));
 			return;
 		}
-		if (findAdminCommand(cmd.type)?.operation !== "READ") {
+		if (!abortAllowed(cmd.type, (cmd.payload ?? {}) as Record<string, unknown>)) {
 			send(res, fail(409, "ABORT_NOT_ALLOWED",
-				"Прервать можно только чтение: обрыв выгрузки, загрузки или обновления оставляет базу в промежуточном состоянии"));
+				"Прервать можно чтение и проверку базы без «Исправлять»: обрыв выгрузки, загрузки, обновления или "
+				+ "исправления оставляет базу в промежуточном состоянии"));
+			return;
+		}
+		// Проверку прерывает только агент, снимающий конфигуратор при отмене (С23, А21): иначе
+		// осмотр продолжится вне учёта агента, а место базы освободится поверх работающего процесса.
+		if (cmd.type === "IB_CHECK" && !(await agents.findById(cmd.agent_id))?.capabilities.includes(CANCEL_CHECK_CAPABILITY)) {
+			send(res, fail(409, "ABORT_AGENT_OLD",
+				"Эта сборка агента не умеет снимать конфигуратор при отмене проверки — дождитесь окончания проверки "
+				+ "или обновите агента на сервере 1С"));
 			return;
 		}
 		const force = (req.body as { force?: unknown } | undefined)?.force === true;

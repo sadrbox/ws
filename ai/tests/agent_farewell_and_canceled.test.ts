@@ -64,5 +64,7 @@ test("S2: результат не принимается по отменённо
 	assert.ok(upd);
 	assert.match(upd.sql, /state <> 'canceled'/);
 	// Истёкшие не исключены: агент досылает их результаты из spool, и это правда о работе.
-	assert.doesNotMatch(upd.sql, /expired/);
+	assert.doesNotMatch(upd.sql.split("WHERE")[1] ?? "", /expired/);
+	// …но такой результат отмечается поздним (С21).
+	assert.match(upd.sql, /late = late OR state = 'expired'/);
 });

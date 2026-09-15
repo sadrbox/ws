@@ -19,6 +19,7 @@ import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
+import { BUSY_RETRY_DELAYS_SECS } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, checkShowInListIntent, parseEcho, roleVerdictMessage, showInListVerdictMessage } from "../onec/echo.ts";
@@ -526,9 +527,17 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		if (wire.status === "ERROR" && wire.error?.code === "IB_BUSY" && row.batch_id) {
 			const again = await queue.retryBusy(row.id, BATCH_QUEUE_WAIT_SECS);
 			if (again) {
-				log.info({ commandId: row.id, retry: again, baseKey: row.base_key, attempt: (row.attempt ?? 1) + 1 },
-					"база занята — команда задания поставлена повторно");
+				const attempt = (row.attempt ?? 1) + 1;
+				log.info({
+					commandId: row.id, retry: again, baseKey: row.base_key, attempt,
+					delaySecs: BUSY_RETRY_DELAYS_SECS[Math.min(attempt, 3) - 2],
+				}, "база занята — команда задания поставлена повторно с паузой");
 			}
+		}
+		if (row.late) {
+			// Пришёл после истечения срока (С21): принят и отмечен — итог правдив, но опоздал.
+			log.warn({ commandId: row.id, type: row.type, baseKey: row.base_key, status: wire.status },
+				"результат команды пришёл после истечения её срока — принят и отмечен поздним");
 		}
 		// Полный срез баз применяем к реестру ЗДЕСЬ же. Панель могла не дождаться ответа
 		// (запрос ограничен 20 с, а rac по сотне баз бывает дольше) — тогда синхронизация

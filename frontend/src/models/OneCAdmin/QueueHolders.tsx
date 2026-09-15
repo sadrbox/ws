@@ -29,7 +29,9 @@ export const QueueHolders: FC<{ stats: OnecQueueStats | undefined }> = ({ stats 
 	const abort = useMutation({
 		mutationFn: (commandId: string) => abortCommand(commandId),
 		onSuccess: (r) => {
-			showToast(r.aborted ? translate("onecQueueAborted") : translate("onecQueueAbortNotRunning"),
+			showToast(r.aborted
+				? [translate("onecQueueAborted"), r.killed ? translate("onecAbortKilled") : "", r.note ?? ""].filter(Boolean).join(". ")
+				: translate("onecQueueAbortNotRunning"),
 				r.aborted ? "success" : "warning");
 			void qc.invalidateQueries({ queryKey: ["onec", "queue-stats"] });
 		},

@@ -72,7 +72,21 @@ export type CommandRow = {
 	ttl_seconds?: number | null;
 	attempt?: number;
 	retried_by?: string | null;
+	/** Раньше этого времени не выдавать (повтор «база занята» с паузой, С19). */
+	available_at?: Date | null;
+	/** Результат пришёл после истечения срока (С21). */
+	late?: boolean;
 };
+
+/** Сколько секунд истёкшая, но выданная команда без ответа ещё держит место (С3). */
+export const DEFAULT_LATE_GRACE_SECS = 600;
+
+/**
+ * Пауза перед повтором «база занята» (С19): перед второй попыткой — 2 мин, перед третьей — 5.
+ * Агент отвечает IB_BUSY за секунды; без паузы три попытки уходили раньше, чем в базе хоть что-то
+ * менялось.
+ */
+export const BUSY_RETRY_DELAYS_SECS = [120, 300] as const;
 
 /** Сколько попыток даётся команде задания, когда база занята (IB_BUSY, С10). */
 export const BUSY_MAX_ATTEMPTS = 3;
@@ -133,7 +147,7 @@ export class CommandQueue {
 	/** Сколько секунд истёкшая, но выданная команда ещё держит место (С3). */
 	private readonly lateGraceSecs: number;
 
-	constructor(db: Db, ibParallel = 1, lateGraceSecs = 600) {
+	constructor(db: Db, ibParallel = 1, lateGraceSecs = DEFAULT_LATE_GRACE_SECS) {
 		this.db = db;
 		this.ibParallel = Math.max(1, ibParallel);
 		this.lateGraceSecs = Math.max(0, lateGraceSecs);
@@ -436,6 +450,8 @@ export class CommandQueue {
 			             ) AS rn
 			        FROM commands c
 			       WHERE c.agent_id = $1 AND c.state = 'queued'
+			         -- Повтор с паузой ещё не созрел (С19).
+			         AND (c.available_at IS NULL OR c.available_at <= now())
 			         AND (NOT ${IN_BASE("c")} OR NOT EXISTS (
 			               SELECT 1 FROM commands d
 			                WHERE d.agent_id = c.agent_id AND d.base_key = c.base_key
@@ -515,7 +531,9 @@ export class CommandQueue {
 		const r = await this.db.query<CommandRow>(
 			`UPDATE commands
 			    SET state = $3, result_status = $4, result = $5::jsonb, error = $6::jsonb,
-			        onec_http_status = $7, finished_at = COALESCE(finished_at, now())
+			        onec_http_status = $7, finished_at = COALESCE(finished_at, now()),
+			        -- Пришёл после истечения срока (С21): итог правдив, но его надо назвать поздним.
+			        late = late OR state = 'expired'
 			  WHERE id = $1 AND agent_id = $2 AND state <> 'canceled'
 			  RETURNING *`,
 			[res.commandId, agentId, ok ? "done" : "failed", res.status,
@@ -540,6 +558,8 @@ export class CommandQueue {
 	 * делали: ночная выгрузка пропускала базу, в которую кто-то зашёл в ту же минуту. Копия встаёт в
 	 * конец очереди того же задания; у исходной отмечается, кем она повторена — отчёт задания и
 	 * «Повторить неуспешные» видят только последнюю попытку. Не больше BUSY_MAX_ATTEMPTS попыток.
+	 * Копия выдаётся не сразу, а после паузы BUSY_RETRY_DELAYS_SECS (С19): ожидание очереди считается
+	 * от конца паузы.
 	 *
 	 * Возвращает номер новой команды или `null`, если повторять нечего.
 	 */
@@ -553,17 +573,19 @@ export class CommandQueue {
 			 ), ins AS (
 			    INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload,
 			                          user_uuid, conversation_id, expires_at, priority, batch_id,
-			                          in_base, ttl_seconds, attempt)
+			                          in_base, ttl_seconds, attempt, available_at)
 			    SELECT $2, agent_id, organization_uuid, base_key, NULL, type, payload,
-			           user_uuid, conversation_id, now() + make_interval(secs => $4::int), priority, batch_id,
-			           in_base, ttl_seconds, attempt + 1
+			           user_uuid, conversation_id,
+			           now() + make_interval(secs => $4::int + (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)]),
+			           priority, batch_id, in_base, ttl_seconds, attempt + 1,
+			           now() + make_interval(secs => (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)])
 			      FROM src
 			    RETURNING id, agent_id
 			 ), mark AS (
 			    UPDATE commands SET retried_by = $2 WHERE id IN (SELECT id FROM src) AND EXISTS (SELECT 1 FROM ins)
 			 )
 			 SELECT id, agent_id FROM ins`,
-			[id, next, BUSY_MAX_ATTEMPTS, Math.max(30, queueWaitSeconds)],
+			[id, next, BUSY_MAX_ATTEMPTS, Math.max(30, queueWaitSeconds), BUSY_RETRY_DELAYS_SECS[0], BUSY_RETRY_DELAYS_SECS[1]],
 		);
 		const row = r.rows[0];
 		if (!row) return null;
@@ -634,18 +656,25 @@ export class CommandQueue {
 	 */
 	async runningCommands(limit = 50): Promise<{
 		commandId: string; type: string; baseKey: string | null; agentId: string; ageSecs: number;
+		payload: Record<string, unknown>; canCancel: boolean; canCancelCheck: boolean;
 	}[]> {
-		const r = await this.db.query<{ id: string; type: string; base_key: string | null; agent_id: string; age_secs: string | null }>(
-			`SELECT id, type, base_key, agent_id,
-			        round(extract(epoch FROM (now() - dispatched_at)))::text AS age_secs
-			   FROM commands
-			  WHERE state = 'dispatched'
-			  ORDER BY dispatched_at
+		const r = await this.db.query<{
+			id: string; type: string; base_key: string | null; agent_id: string; age_secs: string | null;
+			payload: Record<string, unknown> | null; can_cancel: boolean | null; can_cancel_check: boolean | null;
+		}>(
+			`SELECT c.id, c.type, c.base_key, c.agent_id, c.payload,
+			        round(extract(epoch FROM (now() - c.dispatched_at)))::text AS age_secs,
+			        COALESCE(a.capabilities ? 'agent.cancel', false) AS can_cancel,
+			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_cancel_check
+			   FROM commands c LEFT JOIN agents a ON a.id = c.agent_id
+			  WHERE c.state = 'dispatched'
+			  ORDER BY c.dispatched_at
 			  LIMIT $1`,
 			[limit],
 		);
 		return r.rows.map((x) => ({
 			commandId: x.id, type: x.type, baseKey: x.base_key, agentId: x.agent_id, ageSecs: Number(x.age_secs) || 0,
+			payload: x.payload ?? {}, canCancel: x.can_cancel === true, canCancelCheck: x.can_cancel_check === true,
 		}));
 	}
 
