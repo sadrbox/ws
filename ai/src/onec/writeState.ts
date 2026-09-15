@@ -61,6 +61,7 @@ export function parseProcesses(v: unknown): AgentProcess[] | null {
 			...(typeof p.base === "string" || p.base === null ? { base: p.base as string | null } : {}),
 			...(Number.isInteger(p.ageSecs) ? { ageSecs: p.ageSecs as number } : {}),
 			...(typeof p.orphan === "boolean" ? { orphan: p.orphan } : {}),
+			...(typeof p.commandId === "string" && p.commandId ? { commandId: p.commandId } : {}),
 		});
 	}
 	return out;
@@ -101,15 +102,20 @@ export function planWriteState(
 		case "IB_RESTORE":
 		case "IB_APPLY_UPDATE": {
 			if (dryRun(payload)) return [];
+			const out: WriteStateAction[] = [];
+			// Блокировка после её снятия (агент 01:06, С26): без неё панель до полного среза баз (до 5 мин)
+			// показывала «Вход закрыт» у уже открытой базы. При `warning` агент блок не кладёт — не применяем.
+			const lock = parseLock(stateOf(result, "lock"));
+			if (lock) out.push({ kind: "lock", lock, source: "cluster" });
 			const c = stateOf(result, "config");
 			if (isObj(c) && (typeof c.version === "string" || typeof c.name === "string")) {
-				return [{ kind: "config", config: { name: str(c.name), version: str(c.version), seenAt: str(c.readAt) } }];
+				out.push({ kind: "config", config: { name: str(c.name), version: str(c.version), seenAt: str(c.readAt) } });
+				return out;
 			}
 			// Обновление без эха: версия, до которой обновили, известна из самого ответа.
 			const to = isObj(result) ? str(result.versionTo) : null;
-			return type === "IB_APPLY_UPDATE" && to
-				? [{ kind: "config", config: { name: null, version: to, seenAt: null } }]
-				: [];
+			if (type === "IB_APPLY_UPDATE" && to) out.push({ kind: "config", config: { name: null, version: to, seenAt: null } });
+			return out;
 		}
 		// Прерывание начатой команды, снявшее процесс (killed), тоже приносит список (аудит 14.09, T3).
 		case "AGENT_CANCEL_COMMAND":

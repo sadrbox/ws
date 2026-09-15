@@ -95,6 +95,18 @@ export const BUSY_MAX_ATTEMPTS = 3;
 const IN_BASE = (a: string) => `COALESCE(${a}.in_base, ${a}.base_key IS NOT NULL)`;
 
 /**
+ * TIMEOUT АГЕНТА НЕ ЗНАЧИТ «РАБОТА ОКОНЧЕНА» (С18). Агент перестаёт ждать команду, а конфигуратор `1cv8`
+ * работает дальше; пока он жив, агент держит базу (IB_BUSY) и снимает блокировку входа только после него.
+ * Раньше такая команда сразу освобождала место: следующая команда задания или «Повторить неуспешные» уходили
+ * агенту и получали отказ, сжигая повторы. Место держится, пока в снимке процессов агента есть процесс этой
+ * команды (`commandId`, агент 01:06), и ещё 90 с после отказа — на задержку heartbeat.
+ */
+export const TIMEOUT_STILL_RUNNING = (a: string) => `(${a}.state = 'failed' AND ${a}.error->>'code' = 'TIMEOUT' AND (
+	${a}.finished_at > now() - interval '90 seconds'
+	OR EXISTS (SELECT 1 FROM agents ag, jsonb_array_elements(ag.processes) pr
+	            WHERE ag.id = ${a}.agent_id AND pr->>'commandId' = ${a}.id)))`;
+
+/**
  * ЗАНИМАЕТ ЛИ КОМАНДА МЕСТО (С3). Выданная — да. Истёкшая по сроку, но выданная и без ответа —
  * тоже, ещё `grace` секунд: агент мог продолжать работу, и выдать ему вторую команду внутрь базы
  * поверх первой значит повторить заклинивание, от которого место и защищает.
@@ -102,7 +114,7 @@ const IN_BASE = (a: string) => `COALESCE(${a}.in_base, ${a}.base_key IS NOT NULL
 const OCCUPIES = (a: string, graceParam: string) => `(${a}.state = 'dispatched' OR (
 	${a}.state = 'expired' AND ${a}.dispatched_at IS NOT NULL AND ${a}.result_status IS NULL
 	AND ${a}.error->>'code' = 'COMMAND_EXPIRED'
-	AND ${a}.finished_at > now() - make_interval(secs => ${graceParam}::int)))`;
+	AND ${a}.finished_at > now() - make_interval(secs => ${graceParam}::int)) OR ${TIMEOUT_STILL_RUNNING(a)})`;
 
 /** Текст истечения: не дождалась очереди — это не «агент не на связи» (С2). */
 const QUEUE_TIMEOUT_MESSAGE = "Команда не дождалась своей очереди у агента: он был занят другими командами. "

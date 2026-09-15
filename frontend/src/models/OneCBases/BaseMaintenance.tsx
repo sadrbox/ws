@@ -15,7 +15,7 @@
  * исправление.
  */
 import { FC, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Modal from "src/components/Modal";
@@ -32,7 +32,8 @@ import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/pro
 import { updateOp, useRunningWork } from "src/components/TechMessages/operations";
 import { getFormatDate } from "src/utils/datetime";
 import {
-	abortCommand, applyBaseUpdate, checkBase, followCommand, planText, restoreBase, runBatch, type CommandPending,
+	abortCommand, applyBaseUpdate, checkBase, fetchAgentProcesses, followCommand, planText, restoreBase, runBatch,
+	type CommandPending,
 	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest,
 	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelftestResult, type Started,
 } from "src/services/onec/api";
@@ -82,6 +83,19 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		setLive({ commandId: p.commandId, title, pending: p });
 		updateOp(op, (o) => ({ ...o, note: liveText(p) }));
 	};
+	/*
+	 * ПРОЦЕСС ДОЛГОЙ ОПЕРАЦИИ (С30, П15): конфигуратор с pid — из снимка heartbeat, без команды агенту. Нужен,
+	 * чтобы «выполняется с 12:03» можно было сверить с сервером и, если он завис, найти его в «Процессах агента».
+	 */
+	const running = live?.pending.state === "dispatched";
+	const procs = useQuery({
+		queryKey: ["onec", "agent-processes"],
+		queryFn: () => fetchAgentProcesses(false),
+		enabled: running,
+		refetchInterval: running ? 15_000 : false,
+	});
+	const liveProc = live ? (procs.data?.items ?? []).find((x) => x.commandId === live.commandId) : undefined;
+
 	/** Прерванная по кнопке — не ошибка для тоста: итог прерывания уже сказан. */
 	const isAborted = (e: unknown) => (e as { code?: string } | null)?.code === "COMMAND_ABORTED";
 
@@ -101,7 +115,11 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	 * за командой по номеру без предела, итог приходит тостом, а повтор до конца недоступен
 	 * (`workKey`). Сервис к тому же склеивает повтор с идущей командой (С8).
 	 */
-	const runLong = async <T,>(job: Job, title: string, start: () => Promise<Started<T>>, describe: (r: T) => string): Promise<string> => {
+	const runLong = async <T,>(
+		job: Job, title: string, start: () => Promise<Started<T>>, describe: (r: T) => string,
+		/** Итог с оговоркой (П13, П14): текст — предупреждение в тосте и в журнале операции, а не «Выполнено». */
+		warningOf?: (r: T) => string | null,
+	): Promise<string> => {
 		const op = startOp({
 			kind: job === "check" ? "read" : "update", title, target: baseKey, total: 1,
 			scope: { bases: [baseKey] }, workKey,
@@ -113,12 +131,18 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 			throw e;
 		}
-		if ("done" in started) { finishOp(op); return describe(started.done); }
+		const finishWith = (r: T) => {
+			const warning = warningOf?.(r) ?? null;
+			if (warning) updateOp(op, (o) => ({ ...o, warning }));
+			finishOp(op);
+			showToast(warning ? `${describe(r)}. ${warning}` : describe(r), warning ? "warning" : "success");
+		};
+		if ("done" in started) { finishWith(started.done); return ""; }
 		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
 		const onPending = track(op, title);
 		if (started.pending) onPending(started.pending);
 		void followCommand<T>(started.commandId, watched, onPending)
-			.then((r) => { setLive(null); finishOp(op); showToast(describe(r), "success"); })
+			.then((r) => { setLive(null); finishWith(r); })
 			.catch((e: unknown) => {
 				setLive(null);
 				if (!watched()) return; // наблюдение сняли — сообщать некому
@@ -126,6 +150,16 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 				if (!isAborted(e)) fail(e);
 			});
 		return translate("onecMaintRunning");
+	};
+
+	/** Найдено и не исправлено (П14): проверка с ошибками — не зелёный тост. */
+	const checkWarning = (r: IbCheckResult): string | null => {
+		const found = r.issues ?? 0;
+		const left = r.repairMode ? found - (r.repaired ?? 0) : found;
+		if (found <= 0 || left <= 0) return null;
+		return r.repairMode
+			? `${translate("onecCheckIssuesLeft")}: ${left} / ${found}`
+			: `${translate("onecCheckIssuesFound")}: ${found} — ${translate("onecCheckRunRepair")}`;
 	};
 
 	/** Итог проверки: найдено, исправлено и что не выполнено без «Исправлять» (П9). */
@@ -163,7 +197,12 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		mutationFn: async (job: Job) => {
 			if (job === "check") {
 				return runLong("check", translate("onecMaintCheck"), () => startCheckBase(baseKey, checkPayload()),
-					(r: IbCheckResult) => { setReport(r.report || ""); return checkText(r); });
+					(r: IbCheckResult) => {
+						// Ключи конфигуратора — рядом с отчётом (П14): по ним видно, что именно проверялось.
+						setReport([r.report, r.keys?.length ? `${translate("onecMaintKeys")}: ${r.keys.join(" ")}` : ""]
+							.filter(Boolean).join("\n"));
+						return checkText(r);
+					}, checkWarning);
 			}
 			if (job === "backup") {
 				// Выгрузка идёт заданием, как и раньше: она же доступна группой по списку баз.
@@ -176,13 +215,17 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 				const path = restorePath.trim();
 				return runLong("restore", translate("onecMaintRestore"),
 					() => startRestoreBase(baseKey, { path, lockSessions: restoreLock }),
-					(r: IbRestoreResult) => `${translate("onecMaintRestored")}: ${r.path || path}`);
+					(r: IbRestoreResult) => `${translate("onecMaintRestored")}: ${r.path || path}`,
+					// Блокировку снять не удалось — база закрыта для входа (П13): это не «Загружено» зелёным.
+					(r: IbRestoreResult) => r.warning || null);
 			}
 			return runLong("update", translate("onecMaintUpdate"),
 				() => startApplyUpdate(baseKey, { path: updatePath.trim(), backup: updateBackup, lockSessions: updateLock }),
-				(r: IbApplyUpdateResult) => `${translate("onecMaintUpdated")}: ${r.versionFrom || "—"} → ${r.versionTo || "—"}`);
+				(r: IbApplyUpdateResult) => `${translate("onecMaintUpdated")}: ${r.versionFrom || "—"} → ${r.versionTo || "—"}`,
+				(r: IbApplyUpdateResult) => r.warning || null);
 		},
-		onSuccess: (text) => { showToast(text, "success"); setConfirm(null); },
+		// Пустой текст — итог уже сказан самой операцией (с предупреждением или без).
+		onSuccess: (text) => { if (text) showToast(text, "success"); setConfirm(null); },
 		onError: (e) => { fail(e); setConfirm(null); },
 	});
 
@@ -240,7 +283,11 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 					{/* Что с долгой операцией сейчас (С20, П15) — и «Прервать», если её можно оборвать. */}
 					{live && (
 						<GroupRow>
-							<Notice inline items={[{ type: "info", text: `${live.title}: ${liveText(live.pending)}` }]} />
+							<Notice inline items={[{
+								type: "info",
+								text: `${live.title}: ${liveText(live.pending)}`
+									+ (liveProc ? `. ${translate("onecOpProcess")}: ${liveProc.tool} ${liveProc.pid} (${translate("onecOpProcessHint")})` : ""),
+							}]} />
 							{canWrite && live.pending.abortable && (
 								<Button variant="danger" disabled={abortLive.isPending} title={translate("onecQueueAbort")}
 									onClick={() => abortLive.mutate(live.commandId)}>

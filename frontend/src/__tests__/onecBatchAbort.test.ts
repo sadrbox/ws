@@ -6,7 +6,7 @@
  * прервать нельзя, итог объясняет почему, двумя разными ответами.
  */
 import { describe, it, expect } from "vitest";
-import { abortHint, abortTargets } from "src/models/OneCAdmin/BatchesTab";
+import { abortHint, abortTargets, itemOutcome } from "src/models/OneCAdmin/BatchesTab";
 import { translate } from "src/i18";
 
 const batch = (items: { commandId: string | null; state: string; abortable?: boolean }[]) => ({ items });
@@ -40,5 +40,21 @@ describe("прервать начатую команду", () => {
 		expect(abortHint("IB_LIST_USERS", { state: "dispatched", abortable: true })).toBeNull();
 		expect(abortHint("IB_BACKUP", { state: "queued" })).toBeNull();
 		expect(abortHint("IB_BACKUP", { state: "done" })).toBeNull();
+	});
+});
+
+describe("итог строки задания (П14)", () => {
+	it("итог проверки с оговоркой, номер попытки и процесс после TIMEOUT", () => {
+		const text = itemOutcome("IB_CHECK", {
+			state: "done", outcome: "найдено ошибок: 3", error: null, warning: "найдены ошибки: 3 — нужна проверка с «Исправлять»",
+			attempt: 2,
+		});
+		expect(text).toContain("найдено ошибок: 3 · найдены ошибки: 3");
+		expect(text).toContain(`${translate("onecBatchAttempt")} 2`);
+		const timeout = itemOutcome("IB_RESTORE", {
+			state: "failed", outcome: null, error: { code: "TIMEOUT", message: "продолжают работу: 1cv8 1234" }, stillRunning: true,
+		});
+		expect(timeout).toBe(`TIMEOUT: продолжают работу: 1cv8 1234 · ${translate("onecStillRunning")}`);
+		expect(itemOutcome("IB_BACKUP", { state: "done", outcome: null, error: null })).toBe("—");
 	});
 });

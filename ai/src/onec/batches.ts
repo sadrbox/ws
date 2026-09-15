@@ -12,7 +12,8 @@
 import { userWriteWarning } from "./writeBack.ts";
 import { humanizeAgentError } from "./errorHints.ts";
 import { isAbortable } from "../commands/admin.ts";
-import { DEFAULT_LATE_GRACE_SECS } from "../commands/queue.ts";
+import { DEFAULT_LATE_GRACE_SECS, TIMEOUT_STILL_RUNNING } from "../commands/queue.ts";
+import { checkOutcome } from "./checkOutcome.ts";
 
 /**
  * Истёкшая выданная команда без ответа, которая ещё держит место (С3): её результат может прийти (С21).
@@ -55,6 +56,8 @@ export type BatchProgress = {
 		late?: boolean;
 		/** Срок истёк, агент мог продолжать работу — поздний результат ещё может прийти (С21). */
 		lateWait?: boolean;
+		/** Агент перестал ждать (TIMEOUT), но процесс команды ещё работает (С18). */
+		stillRunning?: boolean;
 	}[];
 	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
 	cancelable: number;
@@ -176,6 +179,8 @@ export class BatchService {
 			type: string; can_abort: boolean | null; can_abort_check: boolean | null; repair: string | null;
 			user_result: { unverified?: unknown; skipped?: unknown } | null;
 			attempt: number | null; retry_at: Date | null; late: boolean | null; late_wait: boolean | null;
+			check_result: { issues?: unknown; repaired?: unknown; repairMode?: unknown; skipped?: unknown } | null;
+			still_running: boolean | null;
 		}>(
 			// Путь и адрес — единственное, что имеет смысл показать из результата: остальное
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
@@ -190,7 +195,13 @@ export class BatchService {
 			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_abort_check,
 			        c.payload->>'repair' AS repair, c.attempt, c.late,
 			        CASE WHEN c.state = 'queued' AND c.available_at > now() THEN c.available_at END AS retry_at,
-			        ${LATE_WAIT("c", "$2")} AS late_wait
+			        ${LATE_WAIT("c", "$2")} AS late_wait,
+			        ${TIMEOUT_STILL_RUNNING("c")} AS still_running,
+			        -- Итог проверки базы (С17): только числа и пропущенное, не весь отчёт.
+			        CASE WHEN c.type = 'IB_CHECK' AND c.state = 'done'
+			             THEN jsonb_build_object('issues', c.result->'issues', 'repaired', c.result->'repaired',
+			                                     'repairMode', c.result->'repairMode', 'skipped', c.result->'skipped')
+			        END AS check_result
 			   FROM commands c LEFT JOIN agents a ON a.id = c.agent_id
 			  -- Повторённая при занятой базе (С10) — не строка отчёта: её место заняла новая попытка.
 			  WHERE c.batch_id = ANY($1::uuid[]) AND c.retried_by IS NULL ORDER BY c.batch_id, c.created_at`,
@@ -225,7 +236,9 @@ export class BatchService {
 		return heads.rows
 			.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
 			.map((head) => {
-				const items: BatchProgress["items"] = (byBatch.get(head.id) ?? []).map((r) => ({
+				const items: BatchProgress["items"] = (byBatch.get(head.id) ?? []).map((r) => {
+				const check = checkOutcome(r.check_result);
+				return {
 					commandId: r.id as string | null,
 					baseKey: r.base_key,
 					state: r.state,
@@ -235,16 +248,18 @@ export class BatchService {
 					error: humanizeAgentError(r.error, r.base_key
 						? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
 						: {}),
-					outcome: r.outcome,
+					outcome: check?.outcome ?? r.outcome,
 					abortable: isAbortable(r.state, r.type,
 						{ canCancel: r.can_abort === true, canCancelCheck: r.can_abort_check === true },
 						{ repair: r.repair === "true" }),
-					warning: userWriteWarning(r.user_result),
+					warning: userWriteWarning(r.user_result) ?? check?.warning ?? null,
 					attempt: r.attempt ?? 1,
 					retryAt: r.retry_at ? new Date(r.retry_at).toISOString() : null,
 					...(r.late ? { late: true } : {}),
 					...(r.late_wait ? { lateWait: true } : {}),
-				}));
+					...(r.still_running ? { stillRunning: true } : {}),
+				};
+				});
 
 				/*
 				 * ОТСЕЯННЫЕ БАЗЫ — ОТДЕЛЬНЫЕ СТРОКИ, а не молчаливая разница в счётчике.
@@ -326,6 +341,8 @@ export class BatchService {
 			    AND ($2::text[] IS NULL OR base_key = ANY($2::text[]))
 			    -- Истёкшая, но, возможно, ещё работающая у агента — не повторять поверх неё (С21).
 			    AND NOT ${LATE_WAIT("commands", "$3")}
+			    -- TIMEOUT, а процесс команды ещё работает (С18): повтор лёг бы поверх него.
+			    AND NOT ${TIMEOUT_STILL_RUNNING("commands")}
 			  ORDER BY created_at`,
 			[batchId, narrow, DEFAULT_LATE_GRACE_SECS],
 		);

@@ -100,6 +100,9 @@ const heartbeatSchema = z.object({
 		base: z.string().max(200).nullable().optional(),
 		ageSecs: z.number().int().nonnegative().optional(),
 		orphan: z.boolean().optional(),
+		// Номер команды сервиса, запустившей процесс (агент 01:06, С30): по нему панель связывает долгую
+		// операцию с её процессом, а очередь держит место базы после TIMEOUT (С18).
+		commandId: z.string().max(64).optional(),
 	})).max(200).optional(),
 	/**
 	 * Отказы по кодам и время команд (S5) — `unknown` НАМЕРЕННО: разбирает их

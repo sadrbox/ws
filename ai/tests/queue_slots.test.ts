@@ -48,6 +48,9 @@ describe("С1: место базы — только у команд внутрь
 		assert.ok(calls.some((c) => c.params.includes(600)), "запас передан");
 		assert.match(sql, /COMMAND_QUEUE_TIMEOUT/);
 		assert.match(sql, /c\.available_at IS NULL OR c\.available_at <= now\(\)/);
+		// TIMEOUT держит место, пока процесс команды жив (С18).
+		assert.match(sql, /d\.error->>'code' = 'TIMEOUT'/);
+		assert.match(sql, /pr->>'commandId' = d\.id/);
 	});
 });
 

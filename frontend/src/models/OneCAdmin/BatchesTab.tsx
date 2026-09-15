@@ -30,6 +30,7 @@
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { getFormatDate } from "src/utils/datetime";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
@@ -117,6 +118,28 @@ export function abortHint(batchType: string, it: { state: string; abortable?: bo
 	// «запись не обрывают» здесь было бы неправдой.
 	return translate(READ_BATCHES.has(batchType) ? "onecAbortAgentOld"
 		: batchType === "IB_CHECK" ? "onecAbortCheckHint" : "onecAbortNotAllowed");
+}
+
+/**
+ * ИТОГ СТРОКИ ЗАДАНИЯ (П14): ответ или ошибка, оговорка (итог проверки, запись пользователя) и что происходит с
+ * командой — номер попытки, повтор на паузе, процесс после TIMEOUT ещё работает, поздний результат.
+ */
+export function itemOutcome(batchType: string, it: {
+	state: string; abortable?: boolean; outcome: string | null; error: { code: string; message: string } | null;
+	warning?: string | null; attempt?: number; retryAt?: string | null; late?: boolean; lateWait?: boolean; stillRunning?: boolean;
+}): string {
+	const main = it.error
+		? `${it.error.code}: ${it.error.message}`
+		: (abortHint(batchType, it) ?? [it.outcome, it.warning].filter(Boolean).join(" · "));
+	return [
+		main,
+		it.error && it.warning ? it.warning : "",
+		(it.attempt ?? 1) > 1 ? `${translate("onecBatchAttempt")} ${it.attempt}` : "",
+		it.retryAt ? `${translate("onecBusyRetryAt")} ${getFormatDate(it.retryAt)}` : "",
+		it.stillRunning ? translate("onecStillRunning") : "",
+		it.lateWait ? translate("onecLateWaiting") : "",
+		it.late ? translate("onecLateResultShort") : "",
+	].filter(Boolean).join(" · ") || "—";
 }
 
 /** Состояние команды словами: коды состояний — внутренняя кухня очереди. */
@@ -279,7 +302,7 @@ export const BatchesTab: FC = () => {
 			progress: stateLabel(it.state),
 			failedCount: "",
 			// У начатой строки, которую прервать нельзя, итог говорит почему.
-			outcome: it.error ? `${it.error.code}: ${it.error.message}` : (abortHint(b.type, it) ?? (it.outcome || "—")),
+			outcome: itemOutcome(b.type, it),
 			createdAt: "",
 			__commandId: it.commandId ?? "",
 			// Отменить можно только не начатое: агент ещё не забирал эту команду.

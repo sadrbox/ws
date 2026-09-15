@@ -490,6 +490,8 @@ export type BatchProgress = {
 		late?: boolean;
 		/** Срок истёк, но агент мог продолжать работу — результат ещё может прийти (С21). */
 		lateWait?: boolean;
+		/** Агент перестал ждать (TIMEOUT), а процесс команды ещё работает (С18). */
+		stillRunning?: boolean;
 	}[];
 };
 
@@ -561,7 +563,11 @@ export const checkBase = (baseKey: string, p: IbCheckPayload) =>
 		method: "POST", body: JSON.stringify(p),
 	}).then((d) => awaitCommand<IbCheckResult>(d));
 
-export type IbRestoreResult = { ok?: boolean; path?: string; transport?: string; plan?: IbPlan };
+export type IbRestoreResult = {
+	ok?: boolean; path?: string; transport?: string; plan?: IbPlan;
+	/** Блокировку входа снять не удалось — база закрыта для входа (П13). */
+	warning?: string;
+};
 
 export const restoreBase = (baseKey: string, p: { path: string; lockSessions?: boolean; dryRun?: boolean }) =>
 	aiFetch<IbRestoreResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/restore`, {
@@ -571,6 +577,8 @@ export const restoreBase = (baseKey: string, p: { path: string; lockSessions?: b
 export type IbApplyUpdateResult = {
 	ok?: boolean; versionFrom?: string; versionTo?: string; backupPath?: string;
 	transport?: string; plan?: IbPlan;
+	/** Блокировку входа снять не удалось — база закрыта для входа (П13). */
+	warning?: string;
 };
 
 export const applyBaseUpdate = (
@@ -594,6 +602,8 @@ export type AgentProcess = {
 	ageSecs?: number;
 	/** Остался с прошлого запуска агента: за ним уже никто не следит. */
 	orphan?: boolean;
+	/** Номер команды сервиса, запустившей процесс (агент 01:06, С30). */
+	commandId?: string;
 	agentId?: string;
 	agentName?: string;
 	seenAt?: string | null;

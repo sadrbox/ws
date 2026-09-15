@@ -67,6 +67,8 @@ export type AgentProcess = {
 	base?: string | null;
 	ageSecs?: number;
 	orphan?: boolean;
+	/** Номер команды сервиса, запустившей процесс (агент 01:06, С30). */
+	commandId?: string;
 };
 
 export type AgentView = {

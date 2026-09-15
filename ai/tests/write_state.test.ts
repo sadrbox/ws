@@ -7,7 +7,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseLock, planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
+import { parseLock, parseProcesses, planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
 import { humanizeAgentError } from "../src/onec/errorHints.ts";
 import { ibFailureReason } from "../src/bases/service.ts";
 
@@ -131,5 +131,25 @@ describe("С16: обрыв при незаданных пределах — пр
 	it("вывода нет — прежний совет про пределы", () => {
 		const m = humanizeAgentError({ code: "IB_CONNECTION_LOST", message: "tcp://SERVER:1560 10054" })!.message;
 		assert.match(m, /поднимите пределы/);
+	});
+});
+
+describe("С26, С30: блокировка после загрузки и номер команды у процесса", () => {
+	it("загрузка с эхом блокировки — блокировка и конфигурация в реестр; сухой прогон — ничего", () => {
+		const result = { ok: true, state: {
+			lock: { enabled: false, message: "", from: null, to: null, readAt: "2026-09-15T15:00:00Z" },
+			config: { name: "БП", version: "3.0.45", readAt: "2026-09-15T15:00:00Z" },
+		} };
+		const a = planWriteState("IB_RESTORE", { baseKey: "b", path: "x.dt" }, result);
+		assert.deepEqual(a.map((x) => x.kind), ["lock", "config"]);
+		assert.equal(a[0].kind === "lock" && a[0].lock.enabled, false);
+		assert.deepEqual(planWriteState("IB_RESTORE", { baseKey: "b", path: "x.dt", dryRun: true }, result), []);
+		// Без эха блокировки (warning — снять не удалось) — только версия из ответа обновления.
+		assert.deepEqual(planWriteState("IB_APPLY_UPDATE", { baseKey: "b", path: "u.cfu" }, { ok: true, versionTo: "3.0.46" })
+			.map((x) => x.kind), ["config"]);
+	});
+	it("commandId процесса сохраняется", () => {
+		assert.equal(parseProcesses([{ pid: 1234, tool: "1cv8", orphan: true, commandId: "cmd_1" }])?.[0].commandId, "cmd_1");
+		assert.equal(parseProcesses([{ pid: 1, tool: "rac" }])?.[0].commandId, undefined);
 	});
 });
