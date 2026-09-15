@@ -250,9 +250,10 @@
 // сдвигается. На форме это правило не действует — там кнопки видны всегда.
 :global([data-subtable]) .FieldWrapper.tableVariant {
 
-	// Текстовое поле: курсор ввода, как у обычного поля (клик ставит курсор в место клика).
-	.FieldString:not(:disabled),
-	.FieldNumber:not(:disabled) {
+	// Курсор ввода — только у поля в фокусе: одиночный клик по ячейке фокус не ставит (только activeCell),
+	// в поле входят двойным кликом.
+	.FieldString:focus,
+	.FieldNumber:focus {
 		cursor: text;
 	}
 

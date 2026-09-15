@@ -8,6 +8,7 @@
  * Вынесено из Table/index.tsx (T4) БЕЗ изменения логики — модульные memo-компоненты
  * self-contained (контекст + локальный стейт + константы), поэтому перенос чистый.
  */
+import { focusAtEnd } from "src/components/SubTable/caret";
 import {
   memo, Fragment,
   useState, useCallback, useEffect, useMemo, useRef, useLayoutEffect,
@@ -340,9 +341,6 @@ interface TableBodyRowProps {
 }
 
 
-/** Типы input, у которых клик ставит курсор в место клика (стандартное поведение текстового поля). */
-const TEXT_INPUT_TYPES = new Set(["text", "search", "password", "email", "tel", "url", "number"]);
-
 const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isAllSelectedMode, isChild, onToggleSelect }) => {
   const {
     variant, selectable,
@@ -436,7 +434,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     }
   }, [row.id, rows, isAllSelectedMode, setIsAllSelectedMode, setSelectedRows, setExcludedRows]);
 
-  // Флаг: mousedown произошёл на текстовом или уже сфокусированном поле — клик должен быть стандартным
+  // Флаг: mousedown произошёл на уже сфокусированном поле — клик должен быть стандартным
   const clickedFocusedInputRef = useRef(false);
 
   const handleRowClick = useCallback((e: React.MouseEvent) => {
@@ -495,12 +493,9 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
       clickedFocusedInputRef.current = false;
       return;
     }
-    // Текстовое поле (FieldString, FieldNumber, LookupField) — стандартное поведение: одиночный клик ставит фокус и
-    // курсор в место клика, двойной — выделяет весь текст (handleDoubleClick). Текст при входе не выделяется.
-    // Остальные поля (дата, список, textarea) — как раньше: фокус по двойному клику, одиночный клик — по тому же
-    // полю, которое уже в фокусе.
-    const isTextInput = target.tagName === 'INPUT' && TEXT_INPUT_TYPES.has((target as HTMLInputElement).type);
-    if (isTextInput || target === document.activeElement) {
+    // Одиночный клик по полю — только activeCell (выбор ячейки), фокус НЕ ставится: фокус — по двойному клику
+    // (handleDoubleClick). Стандартное поведение — лишь у поля, которое уже в фокусе (курсор, выделение мышью).
+    if (target === document.activeElement) {
       clickedFocusedInputRef.current = true;
     } else {
       clickedFocusedInputRef.current = false;
@@ -517,9 +512,13 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
         target.tagName === 'TEXTAREA' ||
         target.tagName === 'SELECT';
       if (isEditableField) {
-        (target as HTMLInputElement).focus();
-        // select() для SELECT-элемента не определён — вызываем только для текстовых полей
-        if (target.tagName !== 'SELECT') {
+        // Двойной клик по полю без фокуса — вход в поле: фокус без выделения, курсор в конце значения.
+        // Двойной клик по полю, которое уже в фокусе, — выделить весь текст.
+        if (target.tagName === 'SELECT') {
+          (target as HTMLSelectElement).focus();
+        } else if (target !== document.activeElement) {
+          focusAtEnd(target as HTMLInputElement);
+        } else {
           try { (target as HTMLInputElement).select(); } catch { /* ignore */ }
         }
       } else {
