@@ -739,12 +739,20 @@ export class BaseService {
 		return (r.rowCount ?? 0) > 0;
 	}
 
-	/** Конфигурация базы после загрузки или обновления (S3). Имя без эха не затираем. */
-	async setConfig(serverId: string, key: string, config: ConfigState): Promise<void> {
+	/**
+	 * Конфигурация базы после загрузки, обновления, установки расширения и `IB_INFO` (S3, С35).
+	 *
+	 * `exact` — прочитано у базы: записываем как есть, иначе «версия не задана» (`null`) оставила бы навсегда
+	 * прежнюю версию. Без него — по факту команды (`versionTo` без эха): имя, которого не знаем, не затираем.
+	 */
+	async setConfig(serverId: string, key: string, config: ConfigState, exact: boolean): Promise<void> {
 		await this.db.query(
-			`UPDATE bases SET config_name = COALESCE($3, config_name), config_version = COALESCE($4, config_version),
-			        config_seen_at = COALESCE($5::timestamptz, now())
-			  WHERE server_id = $1 AND key = $2`,
+			exact
+				? `UPDATE bases SET config_name = $3, config_version = $4, config_seen_at = COALESCE($5::timestamptz, now())
+				    WHERE server_id = $1 AND key = $2`
+				: `UPDATE bases SET config_name = COALESCE($3, config_name), config_version = COALESCE($4, config_version),
+				        config_seen_at = COALESCE($5::timestamptz, now())
+				    WHERE server_id = $1 AND key = $2`,
 			[serverId, key, config.name, config.version, config.seenAt],
 		);
 	}

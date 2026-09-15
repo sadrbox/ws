@@ -619,7 +619,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				if (!row.base_key) continue;
 				if (a.kind === "lock") await bases.setSessionsLock(me.serverId, row.base_key, a.lock, a.source);
 				else if (a.kind === "missing") await bases.markMissing(me.serverId, row.base_key);
-				else if (a.kind === "config") await bases.setConfig(me.serverId, row.base_key, a.config);
+				else if (a.kind === "config") await bases.setConfig(me.serverId, row.base_key, a.config, a.exact);
 				else if (a.kind === "publication") {
 					await bases.setPublication(me.serverId, row.base_key, a.published, a.url, a.seenAt);
 				}

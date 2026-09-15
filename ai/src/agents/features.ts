@@ -26,7 +26,7 @@ export function buildOutdated(version: string | null | undefined, latest: string
 }
 
 /** Функции панели, которые требуют чего-то от агента. Ключи — панель переводит их в слова. */
-export type AgentFeature = "abort" | "roles" | "commandStats" | "health" | "log" | "selftest";
+export type AgentFeature = "abort" | "roles" | "commandStats" | "health" | "log" | "selftest" | "info";
 
 /**
  * Чего не хватает сборке. Только у админ-агента: бизнес-агенту эти функции не нужны вовсе.
@@ -48,5 +48,7 @@ export function missingFeatures(agent: {
 	// Без `ib.admin` агент не объявляет и самопроверку: это не старая сборка, а не заданный служебный
 	// администратор баз (С25) — «нет в этой сборке» и совет обновить агента были бы неправдой.
 	if (!has("IB_SELFTEST") && has("ib.admin")) out.push("selftest");
+	// Сведения о базе (С35) — со сборки 2026-09-15 23:24; условие то же, что у самопроверки.
+	if (!has("IB_INFO") && has("ib.admin")) out.push("info");
 	return out;
 }

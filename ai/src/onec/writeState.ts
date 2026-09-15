@@ -29,7 +29,11 @@ export type WriteStateAction =
 	| { kind: "lock"; lock: LockState; source: "cluster" | "command" }
 	| { kind: "infobases"; items: Record<string, unknown>[] }
 	| { kind: "missing" }
-	| { kind: "config"; config: ConfigState }
+	/**
+	 * `exact` — прочитано у самой базы: записывается как есть, и `version: null` значит «в конфигурации версия не
+	 * задана» (С35). Без него — известное по факту команды: пустое поле прежнее значение не затирает.
+	 */
+	| { kind: "config"; config: ConfigState; exact: boolean }
 	| { kind: "processes"; items: AgentProcess[] }
 	| { kind: "publication"; published: boolean; url: string | null; seenAt: string | null };
 
@@ -68,6 +72,14 @@ export function parseProcesses(v: unknown): AgentProcess[] | null {
 		});
 	}
 	return out;
+}
+
+/** Конфигурация базы `{name, version, synonym?, readAt}` — из эха, `IB_INFO` или ответа установки расширения. */
+export function parseConfig(v: unknown): ConfigState | null {
+	if (!isObj(v)) return null;
+	// Хоть что-то прочитано: имя, версия или время чтения (версия `null` — не задана в конфигурации).
+	if (typeof v.name !== "string" && typeof v.version !== "string" && typeof v.readAt !== "string") return null;
+	return { name: str(v.name), version: str(v.version), seenAt: str(v.readAt) };
 }
 
 const dryRun = (payload: Record<string, unknown>): boolean => payload.dryRun === true;
@@ -115,15 +127,32 @@ export function planWriteState(
 			// показывала «Вход закрыт» у уже открытой базы. При `warning` агент блок не кладёт — не применяем.
 			const lock = parseLock(stateOf(result, "lock"));
 			if (lock) out.push({ kind: "lock", lock, source: "cluster" });
-			const c = stateOf(result, "config");
-			if (isObj(c) && (typeof c.version === "string" || typeof c.name === "string")) {
-				out.push({ kind: "config", config: { name: str(c.name), version: str(c.version), seenAt: str(c.readAt) } });
+			const config = parseConfig(stateOf(result, "config"));
+			if (config) {
+				out.push({ kind: "config", config, exact: true });
 				return out;
 			}
 			// Обновление без эха: версия, до которой обновили, известна из самого ответа.
 			const to = isObj(result) ? str(result.versionTo) : null;
-			if (type === "IB_APPLY_UPDATE" && to) out.push({ kind: "config", config: { name: null, version: to, seenAt: null } });
+			if (type === "IB_APPLY_UPDATE" && to) out.push({ kind: "config", config: { name: null, version: to, seenAt: null }, exact: false });
 			return out;
+		}
+		/*
+		 * СВЕДЕНИЯ О БАЗЕ (С35, агент 23:24) — чтение, но того же вида, что эхо: конфигурация и блокировка входа.
+		 * Расширения из `state.extensions` применяет общий разбор эха (`parseEcho`) — здесь их нет.
+		 */
+		case "IB_INFO": {
+			const out: WriteStateAction[] = [];
+			const lock = parseLock(stateOf(result, "lock"));
+			if (lock) out.push({ kind: "lock", lock, source: "cluster" });
+			const config = parseConfig(stateOf(result, "config")) ?? parseConfig(isObj(result) ? result.config : undefined);
+			if (config) out.push({ kind: "config", config, exact: true });
+			return out;
+		}
+		// Установка расширения через COM (агент 23:24) кладёт в ответ конфигурацию базы, к которой встало расширение.
+		case "IB_INSTALL_EXTENSION": {
+			const config = parseConfig(isObj(result) ? result.config : undefined);
+			return config ? [{ kind: "config", config, exact: true }] : [];
 		}
 		// Прерывание начатой команды, снявшее процесс (killed), тоже приносит список (аудит 14.09, T3).
 		case "AGENT_CANCEL_COMMAND":

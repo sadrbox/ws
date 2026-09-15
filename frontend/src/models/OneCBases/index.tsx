@@ -11,12 +11,14 @@
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
 import { FC, useCallback, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
-import { FormArea, GroupCol } from "src/components/UI";
+import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import { Button } from "src/components/Button";
+import { Icon } from "src/components/IconButton/icons";
 import Notice from "src/components/Notice";
 import { ValueList, ValueRow } from "src/components/ValueList";
 import { StateChip, StateChips } from "src/components/StateChip";
@@ -31,7 +33,7 @@ import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseExtensionsCached, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBases,
+	fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBases,
 	type IbExtension, type IbUser, type OnecBase,
 } from "src/services/onec/api";
 import {
@@ -46,7 +48,8 @@ import BaseCredentialsTab from "./BaseCredentials";
 import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
-import { useScopeObject } from "src/components/TechMessages/store";
+import { useNoticeScope, useScopeObject } from "src/components/TechMessages/store";
+import { reportError } from "src/services/errors/route";
 import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
 import BaseMaintenance from "./BaseMaintenance";
 import columnsJson from "./columns.json";
@@ -326,8 +329,21 @@ const baseToRow = (b: OnecBase): TDataItem => ({
 	sessionsDeniedFrom: b.sessionsDeniedFrom ?? null, sessionsDeniedTo: b.sessionsDeniedTo ?? null,
 	sessionsDeniedSource: b.sessionsDeniedSource ?? null, sessionsDeniedActive: b.sessionsDeniedActive ?? null,
 	sessionsDeniedSeenAt: b.sessionsDeniedSeenAt ?? null, sessionsDeniedCodeSet: b.sessionsDeniedCodeSet ?? null,
-	configName: b.configName ?? null, configVersion: b.configVersion ?? null,
+	configName: b.configName ?? null, configVersion: b.configVersion ?? null, configSeenAt: b.configSeenAt ?? null,
 } as unknown as TDataItem);
+
+/**
+ * Конфигурация со временем чтения (С35): «БухгалтерияПредприятия 3.0.180.20 · прочитано …». Не читали — «—»;
+ * прочитана без версии — «версия не задана»: это ответ базы, а не незнание.
+ */
+const configLabel = (row: TDataItem): string => {
+	const name = asText(row.configName);
+	const version = asText(row.configVersion);
+	const seenAt = row.configSeenAt ? asText(row.configSeenAt) : "";
+	if (!name && !version && !seenAt) return "—";
+	const text = [name, version || (seenAt ? translate("onecConfigVersionNotSet") : "")].filter(Boolean).join(" ");
+	return seenAt ? `${text} · ${translate("onecConfigReadAt")} ${getFormatDate(seenAt)}` : text;
+};
 
 /**
  * Форма элемента: шапка полями + вложенные таблицы во вкладках. Только чтение.
@@ -387,6 +403,23 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	const platform = asText(row.onecVersion)
 		|| (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform
 		|| translate("onecPlatformUnknown");
+
+	/*
+	 * СВЕДЕНИЯ О БАЗЕ (С35). Версию конфигурации агент сам не читает — только по кнопке: один вход в базу за
+	 * конфигурацией, расширениями и блокировкой. Это чтение — кнопка есть и у просмотра. Сборка агента без
+	 * `IB_INFO` — кнопка недоступна и говорит почему (на связи агент или нет, объявленное он не забывает).
+	 */
+	const scope = useNoticeScope();
+	const infoKnown = agents.isLoading || (agents.data?.items ?? [])
+		.some((a) => a.role === "admin" && !a.disabled && a.capabilities.includes("IB_INFO"));
+	const readInfo = useMutation({
+		mutationFn: () => withOp(
+			{ kind: "read", title: translate("onecBaseInfoRefresh"), target: key, scope: { bases: [key] } },
+			() => fetchBaseInfo(key),
+		),
+		// Итог операции об отказе уже сказал — маршрутизатор покажет только тост.
+		onError: (e: unknown) => reportError(e, { source: translate("onecBaseInfoRefresh"), scope }),
+	});
 
 	return (
 		<ModelForm
@@ -468,13 +501,22 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 													: statusLabel(asText(row.status))} />
 											<ValueRow label={translate("lastSeenAt")}
 												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
-											{/* Конфигурация — после загрузки из выгрузки и обновления (S3); платформа — строкой выше. */}
-											<ValueRow label={translate("onecConfiguration")}
-												value={[asText(row.configName), asText(row.configVersion)].filter(Boolean).join(" ") || "—"} />
+											{/* Конфигурация — из эха загрузки, обновления, установки расширения и из «Обновить
+											    сведения» (S3, С35) — со временем чтения; платформа — строкой выше. */}
+											<ValueRow label={translate("onecConfiguration")} value={configLabel(row)} />
 											<ValueRow label={translate("onecSessionsLockState")}
 												title={sessionsLockView(row as never).details || undefined}
 												value={sessionsLockView(row as never).label} />
 										</ValueList>
+										<GroupRow>
+											<Button variant="secondary" disabled={!key || !infoKnown || readInfo.isPending}
+												title={infoKnown
+													? translate("onecBaseInfoHint")
+													: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}
+												onClick={() => readInfo.mutate()}>
+												<Icon name="reload" /> {translate("onecBaseInfoRefresh")}
+											</Button>
+										</GroupRow>
 									</FormArea>
 
 									{/* Доступность: почему в базу не войти и что панель может с этим

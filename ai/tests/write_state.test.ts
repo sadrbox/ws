@@ -46,10 +46,36 @@ describe("состояние после изменяющей команды", ()
 	it("обновление конфигурации: эхо — конфигурация; без эха — versionTo; dryRun — ничего", () => {
 		const echo = planWriteState("IB_APPLY_UPDATE", { baseKey: "b", path: "x.cfu" },
 			{ ok: true, versionTo: "3.0.46", state: { config: { name: "Бухгалтерия", version: "3.0.45.9", readAt: "t" } } });
-		assert.deepEqual(echo, [{ kind: "config", config: { name: "Бухгалтерия", version: "3.0.45.9", seenAt: "t" } }]);
+		assert.deepEqual(echo, [{ kind: "config", config: { name: "Бухгалтерия", version: "3.0.45.9", seenAt: "t" }, exact: true }]);
 		assert.deepEqual(planWriteState("IB_APPLY_UPDATE", { baseKey: "b" }, { ok: true, versionTo: "3.0.46" }),
-			[{ kind: "config", config: { name: null, version: "3.0.46", seenAt: null } }]);
+			[{ kind: "config", config: { name: null, version: "3.0.46", seenAt: null }, exact: false }]);
 		assert.deepEqual(planWriteState("IB_APPLY_UPDATE", { baseKey: "b", dryRun: true }, { ok: true, versionTo: "3.0.46" }), []);
+	});
+
+	it("С35: IB_INFO — конфигурация как прочитана (версия не задана — null) и блокировка; расширения — не здесь", () => {
+		const a = planWriteState("IB_INFO", { baseKey: "_transition" }, {
+			ok: true, baseKey: "_transition",
+			config: { name: "БухгалтерияПредприятия", version: null, synonym: "Бухгалтерия предприятия", readAt: "2026-09-15T18:24:00Z" },
+			state: {
+				config: { name: "БухгалтерияПредприятия", version: null, synonym: "Бухгалтерия предприятия", readAt: "2026-09-15T18:24:00Z" },
+				lock: { enabled: false, readAt: "2026-09-15T18:24:00Z" },
+			},
+		});
+		assert.deepEqual(a.map((x) => x.kind), ["lock", "config"]);
+		assert.deepEqual(a[1], { kind: "config", exact: true,
+			config: { name: "БухгалтерияПредприятия", version: null, seenAt: "2026-09-15T18:24:00Z" } });
+		// Агент без кластера: `state.lock` нет, конфигурация — и из отдельного поля.
+		assert.deepEqual(planWriteState("IB_INFO", { baseKey: "b" }, { ok: true, config: { name: "БП", version: "3.0.1", readAt: "t" } }),
+			[{ kind: "config", exact: true, config: { name: "БП", version: "3.0.1", seenAt: "t" } }]);
+		assert.deepEqual(planWriteState("IB_INFO", { baseKey: "b" }, { ok: true }), []);
+	});
+
+	it("С35: установка расширения — конфигурация базы из ответа; без неё — ничего", () => {
+		assert.deepEqual(planWriteState("IB_INSTALL_EXTENSION", { baseKey: "b", name: "ext" },
+			{ ok: true, config: { name: "БП", version: "3.0.180.20", readAt: "t" }, state: { extensions: { items: [], complete: true } } }),
+		[{ kind: "config", exact: true, config: { name: "БП", version: "3.0.180.20", seenAt: "t" } }]);
+		assert.deepEqual(planWriteState("IB_INSTALL_EXTENSION", { baseKey: "b", name: "ext" }, { ok: true }), []);
+		assert.deepEqual(readsAfter("IB_INFO", { baseKey: "b" }, { users: false, extensions: false }), []);
 	});
 
 	it("процессы: из эха снятия и из живого чтения; кривая строка — не принимаем", () => {

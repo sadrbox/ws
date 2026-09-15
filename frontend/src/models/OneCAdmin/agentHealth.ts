@@ -164,6 +164,7 @@ const FEATURE_KEY: Record<string, string> = {
 	health: "onecFeatureHealth",
 	log: "onecFeatureLog",
 	selftest: "onecFeatureSelftest",
+	info: "onecFeatureInfo",
 };
 
 /** Чего нет в сборке агента — словами (R3). Незнакомый ключ показывается как есть. */

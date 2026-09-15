@@ -388,6 +388,21 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		schema: z.object({ baseKey }).strict(),
 	},
 	{
+		/*
+		 * СВЕДЕНИЯ О БАЗЕ (С35, агент 23:24). Только чтение и только по запросу — фонового чтения нет: версия
+		 * конфигурации меняется загрузкой и обновлением, а там она приходит в эхе. Одним входом — конфигурация и
+		 * расширения; блокировка и регистрация — из `rac`. Ответ применяется тем же разбором, что эхо
+		 * (`planWriteState`, `parseEcho`).
+		 */
+		type: "IB_INFO",
+		title: "Сведения о базе",
+		operation: "READ",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey }).strict(),
+	},
+	{
 		type: "IB_INSTALL_EXTENSION",
 		title: "Установить расширение",
 		operation: "CRITICAL",

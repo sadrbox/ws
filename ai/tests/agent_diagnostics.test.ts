@@ -22,16 +22,30 @@ describe("R3: сборка агента и её отставание", () => {
 
 	it("недостающее — только у админ-агента и по способностям", () => {
 		const old = { role: "admin", capabilities: ["cluster.admin", "ib.admin", "CLUSTER_LIST_INFOBASES"], commandStats: null };
-		assert.deepEqual(missingFeatures(old), ["abort", "roles", "commandStats", "health", "log", "selftest"]);
+		assert.deepEqual(missingFeatures(old), ["abort", "roles", "commandStats", "health", "log", "selftest", "info"]);
 		const fresh = {
 			role: "admin",
-			capabilities: ["agent.cancel", "ib.roles", "AGENT_HEALTH", "AGENT_LOG_TAIL", "IB_SELFTEST"],
+			capabilities: ["agent.cancel", "ib.roles", "AGENT_HEALTH", "AGENT_LOG_TAIL", "IB_SELFTEST", "IB_INFO"],
 			commandStats: { durationsByType: {} },
 		};
 		assert.deepEqual(missingFeatures(fresh), []);
 		assert.deepEqual(missingFeatures({ ...old, role: "business" }), []);
 		// Без ib.admin самопроверки нет не из-за сборки, а из-за незаданного служебного администратора (С25).
 		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("selftest"), false);
+		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("info"), false);
+	});
+
+	it("С35: сведения о базе — чтение внутрь базы с обычным сроком, доступно просмотру", () => {
+		const info = findAdminCommand("IB_INFO")!;
+		assert.equal(info.operation, "READ");
+		assert.equal(info.capability, "ib.admin");
+		assert.equal(info.requiresBase, true);
+		assert.equal(info.ttlSeconds, undefined);
+		assert.equal(buildAdminPayload(info, { baseKey: "_transition" }).ok, true);
+		assert.equal(buildAdminPayload(info, { baseKey: "_transition", dryRun: true }).ok, false);
+		// Два нажатия подряд — одна команда.
+		assert.equal(commandRequestId(info, { baseKey: "b" }, "b"), commandRequestId(info, { baseKey: "b" }, "b"));
+		assert.equal(isDestructive("GET", "/bases/_transition/ib-info"), false);
 	});
 });
 

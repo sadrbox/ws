@@ -256,6 +256,17 @@ export const fetchBaseExtensions = (baseKey: string) =>
 	aiFetch<{ items: IbExtension[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`)
 		.then((d) => awaitCommand<{ items: IbExtension[] }>(d));
 
+/** Конфигурация базы, как прочитана (С35): `version: null` — в конфигурации версия не задана. */
+export type IbConfigInfo = { name: string | null; version: string | null; synonym?: string | null; readAt?: string | null };
+
+/**
+ * Сведения о базе (`IB_INFO`, С35): конфигурация, расширения и блокировка одним входом. Реестр сервис обновляет
+ * сам — после ответа карточка перечитывает базы; расширения из ответа вырезаны (они уже в реестре).
+ */
+export const fetchBaseInfo = (baseKey: string) =>
+	aiFetch<{ config?: IbConfigInfo | null } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/ib-info`)
+		.then((d) => awaitCommand<{ config?: IbConfigInfo | null }>(d));
+
 // ── Учётная запись администратора отдельной базы ───────────────────────────
 // Агент знает одного администратора баз на всех; там, где он не подходит, база получает
 // свою пару. Пароль сервис наружу не отдаёт — только признак «задан».
@@ -684,7 +695,7 @@ export type OnecAgent = {
 	build?: string | null;
 	/** Старше эталона сервиса (R3); null — сравнивать не с чем. */
 	buildOutdated?: boolean | null;
-	/** Функции панели, которых нет в этой сборке (R3): abort, roles, commandStats, health, log, selftest. */
+	/** Функции панели, которых нет в этой сборке (R3): abort, roles, commandStats, health, log, selftest, info. */
 	missingFeatures?: string[];
 	/**
 	 * Экземпляры (процессы) агента, отзывавшиеся за последнее время. Больше одного — авария:
