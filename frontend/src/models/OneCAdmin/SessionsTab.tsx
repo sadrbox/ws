@@ -115,9 +115,10 @@ export const SessionsTab: FC = () => {
 			if (!echo) void sessions.refetch();
 			// Строка ещё в списке кластера — «сеанс снят» над ней звучало бы ложью, и человек
 			// снял бы его ещё раз.
+			// Сеанса уже не было (повтор после 202, двойное нажатие) — успех, а не отказ (С30).
 			showToast(
-				translate(echo?.stillListed ? "onecSessionStillListed" : "onecSessionTerminated"),
-				echo?.stillListed ? "warning" : "success",
+				translate(r.alreadyGone ? "onecSessionAlreadyGone" : echo?.stillListed ? "onecSessionStillListed" : "onecSessionTerminated"),
+				echo?.stillListed && !r.alreadyGone ? "warning" : "success",
 			);
 		},
 		onError: failed,

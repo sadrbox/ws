@@ -66,10 +66,13 @@ export const ConnectionsTab: FC = () => {
 			// Список соединений из ответа на разрыв (clusterEcho.echoList) кладём в таблицу сразу.
 			// Решает ПОСЛЕДНИЙ успешный разрыв: список от более раннего не знает о следующих.
 			let lastEcho: ReturnType<typeof echoList> = null;
+			// Разорвано, а строка ещё в списке кластера (П17) — «разорвано» без оговорки звучало бы ложью.
+			let stillListed = false;
 			for (const id of ids) {
 				try {
 					const r = await disconnectConnection(id);
 					lastEcho = echoList(r, "connections");
+					if (lastEcho?.stillListed) stillListed = true;
 					if (lastEcho) qc.setQueryData(["onec", "connections"], { items: lastEcho.items });
 					// Блокировки после разрыва (агент R7-А3): соединение держало блокировку — её
 					// больше нет, и таблица «Блокировки» не должна показывать её до «Обновить» (T2).
@@ -78,11 +81,12 @@ export const ConnectionsTab: FC = () => {
 					ok += 1;
 				} catch { failed.push(id); }
 			}
-			return { ok, failed, fresh: !!lastEcho };
+			return { ok, failed, fresh: !!lastEcho, stillListed };
 		},
 		onSuccess: (r) => {
-			showToast(`${translate("onecDisconnected")}: ${r.ok}${r.failed.length ? ` / ${r.ok + r.failed.length}` : ""}`,
-				r.failed.length ? "warning" : "success");
+			showToast(`${translate("onecDisconnected")}: ${r.ok}${r.failed.length ? ` / ${r.ok + r.failed.length}` : ""}`
+				+ (r.stillListed ? `. ${translate("onecConnectionStillListed")}` : ""),
+			r.failed.length || r.stillListed ? "warning" : "success");
 			setPicked([]);
 			// Без эха — перечитываем соединения; блокировки старой сборкой не перечитываются, как прежде.
 			if (!r.fresh) void connections.refetch();

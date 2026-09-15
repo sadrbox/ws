@@ -629,7 +629,8 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 													noAutofill disabled={locked}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, name: e.target.value }))} />
 												<Field name="buf_full" label={translate("onecUserFullName")} value={form.fullName} width={FIELD_WIDTH.wide}
-													noAutofill disabled={locked} placeholder={here?.fullName || translate("onecKeepAsIs")}
+													// Пустое поле ОЧИЩАЕТ полное имя (П19): подсказка «Не менять» обещала обратное.
+													noAutofill disabled={locked} placeholder={here?.fullName ? translate("onecUserFullNameWillClear") : undefined}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
 												<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
 													width={FIELD_WIDTH.md} disabled={locked} placeholder={translate("onecKeepAsIs")}

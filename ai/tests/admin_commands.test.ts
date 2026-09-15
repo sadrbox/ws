@@ -72,10 +72,10 @@ test("гейт: админ-команду получает только аген
 
 test("payload проверяется по схеме, лишние поля отвергаются", () => {
 	const spec = findAdminCommand("CLUSTER_TERMINATE_SESSION")!;
-	assert.equal(buildAdminPayload(spec, { sessionId: "12" }).ok, true);
+	assert.equal(buildAdminPayload(spec, { sessionId: "8a1e8f3c-1d2b-4c5d-9e6f-0a1b2c3d4e5f" }).ok, true);
 	assert.equal(buildAdminPayload(spec, {}).ok, false);
 	// Ни одно поле мимо схемы не должно доехать до командной строки rac.
-	assert.equal(buildAdminPayload(spec, { sessionId: "12", extraArg: "--cluster-pwd=x" }).ok, false);
+	assert.equal(buildAdminPayload(spec, { sessionId: "8a1e8f3c-1d2b-4c5d-9e6f-0a1b2c3d4e5f", extraArg: "--cluster-pwd=x" }).ok, false);
 });
 
 test("команда о конкретной базе без baseKey не ставится", () => {
@@ -312,4 +312,10 @@ test("отсеянные базы приходят строками и обну�
 	assert.equal(report.items[0].commandId, null);
 	assert.equal(report.items[0].error?.code, "NOT_QUEUED");
 	assert.match(report.items[0].error?.message ?? "", /нет агента/);
+});
+
+test("С27: идентификатор сеанса — UUID", () => {
+	const spec = findAdminCommand("CLUSTER_TERMINATE_SESSION")!;
+	assert.equal(buildAdminPayload(spec, { sessionId: "12" }).ok, false);
+	assert.equal(buildAdminPayload(spec, { sessionId: "8A1E8F3C-1D2B-4C5D-9E6F-0A1B2C3D4E5F" }).ok, true);
 });

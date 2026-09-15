@@ -70,7 +70,10 @@ export const BaseAvailability: FC<{
 		onSuccess: (r) => {
 			setConfirmDrop(false);
 			// Ответ агента говорит, что именно он сделал, — он точнее любого нашего пересказа.
-			showToast(r.note || translate("saved"), "success");
+			// Удалено, а строка ещё видна кластеру (П17) — предупреждение, а не молчаливое «Сохранено».
+			const still = r.state?.infobases?.stillListed === true;
+			showToast(still ? `${r.note || translate("saved")}. ${translate("onecDropStillListed")}` : (r.note || translate("saved")),
+				still ? "warning" : "success");
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
 		},

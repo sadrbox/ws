@@ -16,7 +16,7 @@ describe("состояние после изменяющей команды", ()
 		const a = planWriteState("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b", enabled: true },
 			{ ok: true, state: { lock: { enabled: true, message: "Обслуживание", from: null, to: null, readAt: "2026-09-14T10:00:00Z" } } });
 		assert.deepEqual(a, [{ kind: "lock", source: "cluster",
-			lock: { enabled: true, active: null, message: "Обслуживание", from: null, to: null, seenAt: "2026-09-14T10:00:00Z" } }]);
+			lock: { enabled: true, active: null, permissionCodeSet: null, message: "Обслуживание", from: null, to: null, seenAt: "2026-09-14T10:00:00Z" } }]);
 	});
 
 	it("блокировка без эха — по команде; снятие стирает сообщение", () => {
@@ -103,7 +103,8 @@ describe("блокировка включена, но не действует (�
 
 	it("SESSIONS_LOCK_NOT_ACTIVE — с подсказкой, что делать", () => {
 		const e = humanizeAgentError({ code: "SESSIONS_LOCK_NOT_ACTIVE", message: "Блокировка не действует" });
-		assert.match(e!.message, /Снимите блокировку/);
+		// Агент уже снял блокировку (С25): совет — включить заново, а не «снять».
+		assert.match(e!.message, /Включите блокировку заново/);
 	});
 });
 
@@ -151,5 +152,25 @@ describe("С26, С30: блокировка после загрузки и ном
 	it("commandId процесса сохраняется", () => {
 		assert.equal(parseProcesses([{ pid: 1234, tool: "1cv8", orphan: true, commandId: "cmd_1" }])?.[0].commandId, "cmd_1");
 		assert.equal(parseProcesses([{ pid: 1, tool: "rac" }])?.[0].commandId, undefined);
+	});
+});
+
+describe("С26, С31, С25: удаление регистрации, код разрешения, занятость агента", () => {
+	it("stillListed у удаления регистрации — всё равно «нет в кластере»; признак кода разрешения хранится", () => {
+		const items = [{ key: "a" }];
+		assert.deepEqual(planWriteState("CLUSTER_DROP_INFOBASE", { baseKey: "b", confirm: true },
+			{ ok: true, state: { infobases: { complete: true, items, stillListed: true } } }).map((x) => x.kind), ["infobases", "missing"]);
+		assert.deepEqual(planWriteState("CLUSTER_DROP_INFOBASE", { baseKey: "b", confirm: true },
+			{ ok: true, state: { infobases: { complete: true, items, stillListed: false } } }).map((x) => x.kind), ["infobases"]);
+		assert.equal(parseLock({ enabled: true, permissionCodeSet: true })?.permissionCodeSet, true);
+	});
+	it("AGENT_BUSY: подсказка «не выполнялась — повторите», отметка «в базу не войти» не ставится", () => {
+		const e = { code: "AGENT_BUSY", message: "Агент занят: команда ждала исполнителя 300 с и не выполнялась" };
+		assert.match(humanizeAgentError(e)!.message, /не выполнялась — в базе ничего не изменено/);
+		assert.equal(ibFailureReason(e), null);
+		assert.equal(ibFailureReason({ code: "AGENT_STOPPING", message: "доступ запрещён" }), null);
+	});
+	it("IB_AUTH_FAILED — подсказка по коду, даже если текст на другом языке", () => {
+		assert.match(humanizeAgentError({ code: "IB_AUTH_FAILED", message: "Authentication failed" })!.message, /Служебный администратор ИБ/);
 	});
 });

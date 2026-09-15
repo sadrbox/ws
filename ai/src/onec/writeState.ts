@@ -14,6 +14,8 @@ export type LockState = {
 	enabled: boolean;
 	/** Действует ли сейчас (агент 23:16): включена И время внутри окна; null — не сообщал. */
 	active: boolean | null;
+	/** Задан ли код разрешения (самого кода агент не отдаёт, С26); null — не сообщал. */
+	permissionCodeSet: boolean | null;
 	message: string | null;
 	from: string | null;
 	to: string | null;
@@ -42,6 +44,7 @@ export function parseLock(v: unknown): LockState | null {
 	return {
 		enabled: v.enabled,
 		active: typeof v.active === "boolean" ? v.active : null,
+		permissionCodeSet: typeof v.permissionCodeSet === "boolean" ? v.permissionCodeSet : null,
 		message: str(v.message),
 		from: str(v.from),
 		to: str(v.to),
@@ -84,6 +87,7 @@ export function planWriteState(
 					enabled: payload.enabled,
 					// Без эха кластера — не знаем: окно прошлой блокировки могло остаться.
 					active: null,
+					permissionCodeSet: null,
 					message: payload.enabled ? str(payload.message) : null,
 					from: payload.enabled ? str(payload.from) : null,
 					to: payload.enabled ? str(payload.to) : null,
@@ -94,7 +98,11 @@ export function planWriteState(
 		case "CLUSTER_DROP_INFOBASE": {
 			const list = stateOf(result, "infobases");
 			if (isObj(list) && list.complete === true && Array.isArray(list.items) && list.items.every(isObj)) {
-				return [{ kind: "infobases", items: list.items as Record<string, unknown>[] }];
+				const out: WriteStateAction[] = [{ kind: "infobases", items: list.items as Record<string, unknown>[] }];
+				// Удаление прошло, а строка ещё видна кластеру (С26): срез оставил бы базе прежний статус —
+				// регистрацию агент удаляет, только убедившись, что базы данных нет, это факт.
+				if (list.stillListed === true) out.push({ kind: "missing" });
+				return out;
 			}
 			// Агент удаляет регистрацию, только убедившись, что базы данных нет, — это факт.
 			return [{ kind: "missing" }];

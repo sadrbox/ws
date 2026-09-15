@@ -35,4 +35,13 @@ describe("состояние блокировки сеансов", () => {
 		expect(v).toMatchObject({ known: true, enabled: true, tone: "unknown", label: translate("onecSessionsLockInactive") });
 		expect(v.details).toBe(translate("onecSessionsLockInactiveHint"));
 	});
+
+	it("код разрешения задан и время чтения у недействующей — в подробностях (П17)", () => {
+		const v = sessionsLockView({
+			sessionsDenied: true, sessionsDeniedActive: false, sessionsDeniedCodeSet: true,
+			sessionsDeniedSeenAt: "2026-09-15T10:00:00Z", sessionsDeniedSource: "cluster",
+		});
+		expect(v.details).toContain(translate("onecSessionsLockCodeSet"));
+		expect(v.details).toContain(translate("onecSessionsLockReadAt"));
+	});
 });

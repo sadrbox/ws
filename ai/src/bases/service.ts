@@ -60,6 +60,7 @@ export type BaseRow = {
 	sessions_denied_seen_at?: Date | null;
 	sessions_denied_source?: string | null;
 	sessions_denied_active?: boolean | null;
+	sessions_denied_code_set?: boolean | null;
 	config_name?: string | null;
 	config_version?: string | null;
 	config_seen_at?: Date | null;
@@ -90,6 +91,8 @@ export type BaseView = {
 	sessionsDeniedSource: "cluster" | "command" | null;
 	/** Включена, но действует ли сейчас (агент 23:16); null — не сообщал. */
 	sessionsDeniedActive: boolean | null;
+	/** Задан ли код разрешения входа в закрытую базу (С26); null — не сообщал. */
+	sessionsDeniedCodeSet: boolean | null;
 	/** Конфигурация базы (S3); onecVersion — версия платформы, это другое. */
 	configName: string | null;
 	configVersion: string | null;
@@ -223,6 +226,8 @@ export function ibFailureReason(
 	// не применяем: агент дописывает к этому отказу настройки кластера и список процессов, и
 	// случайное совпадение слов пометило бы исправную базу «в базу не войти».
 	if (code === "IB_CONNECTION_LOST") return null;
+	// Занятость и остановка — тоже не про базу (С31, С25): команда не выполнялась или прервана службой.
+	if (["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING", "AGENT_STOPPED", "TIMEOUT", "IB_TIMEOUT"].includes(code)) return null;
 
 	// Нет регистрации в кластере: база исчезла целиком, а не только её данные.
 	if (code === "INFOBASE_NOT_FOUND") return "NO_INFOBASE";
@@ -320,7 +325,7 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
 	b.ib_unreachable_reason,
 	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,
-	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.config_name, b.config_version, b.config_seen_at,
+	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.sessions_denied_code_set, b.config_name, b.config_version, b.config_seen_at,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -711,12 +716,12 @@ export class BaseService {
 		await this.db.query(
 			`UPDATE bases SET sessions_denied = $3, sessions_denied_message = $4, sessions_denied_from = $5,
 			        sessions_denied_to = $6, sessions_denied_seen_at = COALESCE($7::timestamptz, now()),
-			        sessions_denied_source = $8, sessions_denied_active = $9
+			        sessions_denied_source = $8, sessions_denied_active = $9, sessions_denied_code_set = $10
 			  WHERE server_id = $1 AND key = $2`,
 			[serverId, key, lock.enabled, lock.enabled ? lock.message : null,
 				lock.enabled ? lock.from : null, lock.enabled ? lock.to : null, lock.seenAt, source,
 				// «Действует» имеет смысл только у включённой блокировки.
-				lock.enabled ? lock.active : null],
+				lock.enabled ? lock.active : null, lock.enabled ? lock.permissionCodeSet : null],
 		);
 	}
 
@@ -887,6 +892,7 @@ export class BaseService {
 			sessionsDeniedSeenAt: r.sessions_denied_seen_at?.toISOString() ?? null,
 			sessionsDeniedSource: (r.sessions_denied_source as "cluster" | "command" | null | undefined) ?? null,
 			sessionsDeniedActive: r.sessions_denied_active ?? null,
+			sessionsDeniedCodeSet: r.sessions_denied_code_set ?? null,
 			configName: r.config_name ?? null,
 			configVersion: r.config_version ?? null,
 			configSeenAt: r.config_seen_at?.toISOString() ?? null,

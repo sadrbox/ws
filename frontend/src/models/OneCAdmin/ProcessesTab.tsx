@@ -102,6 +102,9 @@ export const ProcessesTab: FC = () => {
 			const needsConsent = code
 				? code === "AGENT_PROCESS_UNSAFE" || code === "AGENT_PROCESS_NOT_FOUND"
 				: /AGENT_PROCESS_UNSAFE|AGENT_PROCESS_NOT_FOUND/.test(text);
+			// Процесс уже завершился — снимать нечего, и согласие на `force` ничего не даст (П21).
+			const gone = /уже заверш/i.test(text);
+			if (gone) { showToast(text, "warning"); live.mutate(); return; }
 			if (needsConsent && !vars.force) {
 				setConfirm({ pid: vars.pid, force: true, note: text });
 				return;

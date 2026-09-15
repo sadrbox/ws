@@ -56,6 +56,8 @@ export type OnecBase = {
 	 * открытым. null — не сообщал.
 	 */
 	sessionsDeniedActive?: boolean | null;
+	/** Задан ли код разрешения входа в закрытую базу (С26); null — не сообщал. */
+	sessionsDeniedCodeSet?: boolean | null;
 	/** Конфигурация базы (имя и версия); onecVersion — версия платформы. */
 	configName?: string | null;
 	configVersion?: string | null;
@@ -112,7 +114,9 @@ const isPending = (d: unknown): d is Pending =>
  * С нарастанием до 10 секунд их остаётся около шестидесяти.
  */
 async function awaitCommand<T>(
-	first: T | Pending, limitMs = 15 * 60_000, keepWaiting?: () => boolean,
+	// 30 минут (П18): сервис даёт команде до 900 с очереди и ещё до 900 с выполнения — при 15 минутах живая
+	// команда объявлялась «выполняется слишком долго».
+	first: T | Pending, limitMs = 30 * 60_000, keepWaiting?: () => boolean,
 	/** Каждый ответ «ещё идёт» — что происходит с командой сейчас (П15). */
 	onPending?: (p: Pending) => void,
 ): Promise<T> {
@@ -184,7 +188,8 @@ export type ClusterListEcho = {
 	stillListed?: boolean;
 };
 
-export type TerminateResult = { ok: boolean; state?: { sessions?: ClusterListEcho } };
+/** `alreadyGone` — сеанса уже не было: повтор после 202 или двойное нажатие (агент, С30). */
+export type TerminateResult = { ok: boolean; alreadyGone?: boolean; state?: { sessions?: ClusterListEcho } };
 /** `state.locks` — блокировки всего кластера после разрыва (агент R7-А3). */
 export type DisconnectResult = { ok: boolean; state?: { connections?: ClusterListEcho; locks?: ClusterListEcho } };
 
@@ -809,11 +814,14 @@ export const releaseAgentInstance = (id: string) =>
  * «проверить не удалось» — тоже отказ, а не молчаливое удаление. Поэтому опечатка в имени
  * не может увести из кластера рабочую базу.
  */
+/** `state.infobases.stillListed` — удалено, но строка ещё видна кластеру (П17). */
+type DropRegistrationResult = { ok: boolean; baseKey?: string; note?: string; state?: { infobases?: { stillListed?: boolean } } };
+
 export const dropBaseRegistration = (baseKey: string) =>
-	aiFetch<{ ok: boolean; baseKey?: string; note?: string } | Pending>(
+	aiFetch<DropRegistrationResult | Pending>(
 		`/v1/onec/bases/${encodeURIComponent(baseKey)}/drop-registration`,
 		{ method: "POST", body: JSON.stringify({ confirm: true }) },
-	).then((d) => awaitCommand<{ ok: boolean; baseKey?: string; note?: string }>(d));
+	).then((d) => awaitCommand<DropRegistrationResult>(d));
 
 /**
  * СКРЫТЬ БАЗУ ИЗ РАБОТЫ — решение администратора о базе-фантоме.

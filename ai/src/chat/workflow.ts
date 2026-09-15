@@ -300,7 +300,9 @@ export class ChatWorkflow {
 
 		const cmd = await this.d.queue.enqueue({
 			agentId: agent.id, organizationUuid: user.organizationUuid, type: spec.commandType, payload, requestId,
-			userUuid: user.uuid, conversationId: conv.id, ttlSeconds: 600,
+			// Больше предела агента (600 с) с запасом на ожидание пропуска (С24): при равных сроках команда
+			// объявлялась просроченной ровно тогда, когда агент ещё мог ответить.
+			userUuid: user.uuid, conversationId: conv.id, ttlSeconds: 900,
 		});
 		await this.d.audit.write({ event: "command.enqueue", conversationId: conv.id, userUuid: user.uuid, agentId: agent.id, commandId: cmd.id, requestId, details: { type: spec.commandType, tool: spec.name, source: "chat" } });
 

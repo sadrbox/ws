@@ -272,7 +272,9 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 			const plan = new Map<string, Record<string, unknown>>();
 			for (const base of changedBases) {
 				const entry: Record<string, unknown> = { name: userName };
-				if (profile.fullName !== undefined && profile.fullName.trim()) entry.fullName = profile.fullName.trim();
+				// Полное имя задают отдельным окном — пустое значение там ЯВНОЕ «очистить» (П19): раньше групповой путь
+				// очистить имя не мог вовсе.
+				if (profile.fullName !== undefined) entry.fullName = profile.fullName.trim();
 				if (profile.disabled !== undefined) entry.disabled = profile.disabled;
 				if (profile.password) entry.password = profile.password;
 				const r = changedByBase.get(base);

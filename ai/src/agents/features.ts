@@ -45,6 +45,8 @@ export function missingFeatures(agent: {
 	if (!agent.commandStats) out.push("commandStats");
 	if (!has("AGENT_HEALTH")) out.push("health");
 	if (!has("AGENT_LOG_TAIL")) out.push("log");
-	if (!has("IB_SELFTEST")) out.push("selftest");
+	// Без `ib.admin` агент не объявляет и самопроверку: это не старая сборка, а не заданный служебный
+	// администратор баз (С25) — «нет в этой сборке» и совет обновить агента были бы неправдой.
+	if (!has("IB_SELFTEST") && has("ib.admin")) out.push("selftest");
 	return out;
 }

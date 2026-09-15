@@ -50,9 +50,10 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	// Переиндексация и пересчёт итогов меняют базу: агент выполняет их только с «Исправлять» (П9),
 	// поэтому по умолчанию они выключены и без «Исправлять» не отправляются.
 	const [check, setCheck] = useState({ reindex: false, logicalIntegrity: true, recalcTotals: false, repair: false });
+	// Логическая целостность без «Исправлять» проверяется всегда (П20) — выбор имеет смысл только с исправлением.
 	const checkPayload = (): IbCheckPayload => ({
-		logicalIntegrity: check.logicalIntegrity, repair: check.repair,
-		...(check.repair ? { reindex: check.reindex, recalcTotals: check.recalcTotals } : {}),
+		repair: check.repair,
+		...(check.repair ? { reindex: check.reindex, recalcTotals: check.recalcTotals, logicalIntegrity: check.logicalIntegrity } : {}),
 	});
 	/** Работа по этой базе уже идёт — повторить её нельзя, пока команда жива (П2). */
 	const workKey = `onec-maint:${baseKey.toLowerCase()}`;
@@ -304,8 +305,11 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 									label={`${translate("onecMaintReindex")}${check.repair ? "" : ` (${translate("onecMaintWithRepair")})`}`}
 									value={check.repair && check.reindex}
 									disabled={busy || !check.repair} onChange={(v) => setCheck((c) => ({ ...c, reindex: v }))} />
-								<FieldToggle name="mnt_logical" label={translate("onecMaintLogical")} value={check.logicalIntegrity}
-									disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, logicalIntegrity: v }))} />
+								{/* Осмотр всегда проверяет целостность (П20): без «Исправлять» переключатель включён и недоступен. */}
+								<FieldToggle name="mnt_logical"
+									label={`${translate("onecMaintLogical")}${check.repair ? "" : ` (${translate("onecMaintAlwaysOnInspect")})`}`}
+									value={check.repair ? check.logicalIntegrity : true}
+									disabled={busy || !check.repair} onChange={(v) => setCheck((c) => ({ ...c, logicalIntegrity: v }))} />
 								<FieldToggle name="mnt_totals"
 									label={`${translate("onecMaintTotals")}${check.repair ? "" : ` (${translate("onecMaintWithRepair")})`}`}
 									value={check.repair && check.recalcTotals}

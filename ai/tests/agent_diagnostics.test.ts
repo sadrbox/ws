@@ -30,6 +30,8 @@ describe("R3: сборка агента и её отставание", () => {
 		};
 		assert.deepEqual(missingFeatures(fresh), []);
 		assert.deepEqual(missingFeatures({ ...old, role: "business" }), []);
+		// Без ib.admin самопроверки нет не из-за сборки, а из-за незаданного служебного администратора (С25).
+		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("selftest"), false);
 	});
 });
 

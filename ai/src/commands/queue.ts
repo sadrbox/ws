@@ -121,7 +121,20 @@ const QUEUE_TIMEOUT_MESSAGE = "Команда не дождалась своей
 	+ "Повторите позже или разделите задание на части.";
 
 /** Команда в формате протокола агента. */
-export type WireCommand = { id: string; requestId?: string; baseKey?: string; type: string; payload: Record<string, unknown> };
+export type WireCommand = {
+	id: string; requestId?: string; baseKey?: string; type: string; payload: Record<string, unknown>;
+	/**
+	 * Срок команды (С31): агент ждёт свободного исполнителя ровно до него, а не по разнице сроков из
+	 * контракта, — поздно дождавшаяся выполнилась бы, когда сервис уже объявил её просроченной.
+	 */
+	expiresAt?: string;
+};
+
+/**
+ * Отказы «не выполнялась — повторите» (С19, С31, С25): в задании повторяются сами, с паузой. База
+ * занята, агент занят другими командами, служба останавливалась до начала.
+ */
+export const RETRY_LATER_CODES = new Set(["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING"]);
 
 export type WireResult = {
 	commandId: string;
@@ -497,6 +510,7 @@ export class CommandQueue {
 			...(c.base_key ? { baseKey: c.base_key } : {}),
 			type: c.type,
 			payload: c.payload ?? {},
+			...(c.expires_at ? { expiresAt: new Date(c.expires_at).toISOString() } : {}),
 		}));
 
 		// Учётные данные баз — только в выдаче, по одному запросу на пачку команд.

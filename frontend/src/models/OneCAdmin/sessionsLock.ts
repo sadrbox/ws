@@ -8,6 +8,7 @@
 import { translate } from "src/i18";
 import type { ChipTone } from "src/components/StateChip";
 import type { OnecBase } from "src/services/onec/api";
+import { getFormatDate } from "src/utils/datetime";
 
 export type SessionsLockView = {
 	/** Известно ли состояние вообще. */
@@ -21,7 +22,7 @@ export type SessionsLockView = {
 };
 
 type LockFields = Pick<OnecBase, "sessionsDenied" | "sessionsDeniedMessage" | "sessionsDeniedFrom" | "sessionsDeniedTo" | "sessionsDeniedSource"
-	| "sessionsDeniedActive">;
+	| "sessionsDeniedActive" | "sessionsDeniedSeenAt" | "sessionsDeniedCodeSet">;
 
 export function sessionsLockView(base: LockFields | null | undefined): SessionsLockView {
 	const v = base?.sessionsDenied;
@@ -33,6 +34,7 @@ export function sessionsLockView(base: LockFields | null | undefined): SessionsL
 	if (v && (base?.sessionsDeniedFrom || base?.sessionsDeniedTo)) {
 		parts.push(`${base?.sessionsDeniedFrom ?? "…"} — ${base?.sessionsDeniedTo ?? "…"}`);
 	}
+	if (v && base?.sessionsDeniedCodeSet) parts.push(translate("onecSessionsLockCodeSet"));
 	if (base?.sessionsDeniedSource === "command") parts.push(translate("onecSessionsLockByCommand"));
 	/*
 	 * ВКЛЮЧЕНА, НО НЕ ДЕЙСТВУЕТ (агент 23:16, `lock.active`). В кластере осталось окно прошлой
@@ -40,7 +42,11 @@ export function sessionsLockView(base: LockFields | null | undefined): SessionsL
 	 * думая, что в базу не войти, а пользователи входили бы посреди работ.
 	 */
 	const inactive = v && base?.sessionsDeniedActive === false;
-	if (inactive) parts.unshift(translate("onecSessionsLockInactiveHint"));
+	if (inactive) {
+		parts.unshift(translate("onecSessionsLockInactiveHint"));
+		// «Не действует» — на момент чтения, а оно бывает до 30 мин старым (П17): говорим, когда читали.
+		if (base?.sessionsDeniedSeenAt) parts.push(`${translate("onecSessionsLockReadAt")} ${getFormatDate(base.sessionsDeniedSeenAt)}`);
+	}
 	return {
 		known: true,
 		enabled: v,

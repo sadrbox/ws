@@ -325,6 +325,7 @@ const baseToRow = (b: OnecBase): TDataItem => ({
 	sessionsDenied: b.sessionsDenied ?? null, sessionsDeniedMessage: b.sessionsDeniedMessage ?? null,
 	sessionsDeniedFrom: b.sessionsDeniedFrom ?? null, sessionsDeniedTo: b.sessionsDeniedTo ?? null,
 	sessionsDeniedSource: b.sessionsDeniedSource ?? null, sessionsDeniedActive: b.sessionsDeniedActive ?? null,
+	sessionsDeniedSeenAt: b.sessionsDeniedSeenAt ?? null, sessionsDeniedCodeSet: b.sessionsDeniedCodeSet ?? null,
 	configName: b.configName ?? null, configVersion: b.configVersion ?? null,
 } as unknown as TDataItem);
 
