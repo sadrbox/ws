@@ -7,6 +7,7 @@
  *
  * Потребитель задаёт только уникальную логику через пропсы.
  */
+import { focusAtEnd } from "./caret";
 import {
   FC, useMemo, useCallback, useState, useEffect, useRef, ReactNode,
 } from "react";
@@ -614,8 +615,7 @@ const SubTable: FC<SubTableProps> = ({
       for (const tr of ordered) {
         const input = tr.querySelector<HTMLInputElement>('input:not([disabled]):not([type="checkbox"])');
         if (input) {
-          input.focus();
-          try { input.select(); } catch { /* ignore */ }
+          focusAtEnd(input);
           break;
         }
       }

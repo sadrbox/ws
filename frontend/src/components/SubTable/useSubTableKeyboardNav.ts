@@ -5,6 +5,7 @@
  * Tab между инпутами inline-редактирования. Перенос БАЙТ-В-БАЙТ — логика не изменена;
  * компонент лишь передаёт входы (значения + refs + колбэки).
  */
+import { focusAtEnd } from "./caret";
 import { useCallback, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import {
   CHECKBOX_COL_ID,
@@ -250,8 +251,7 @@ export function useSubTableKeyboardNav({
         e.preventDefault();
         e.stopPropagation();
         if (cellInput) {
-          cellInput.focus();
-          try { (cellInput as HTMLInputElement).select?.(); } catch { /* ignore */ }
+          focusAtEnd(cellInput);
         } else if (cellSelect) {
           cellSelect.focus();
         } else {
@@ -268,8 +268,7 @@ export function useSubTableKeyboardNav({
       if (!firstInput) return;
       e.preventDefault();
       e.stopPropagation();
-      firstInput.focus();
-      try { firstInput.select(); } catch { /* ignore */ }
+      focusAtEnd(firstInput);
       return;
     }
 
@@ -303,8 +302,7 @@ export function useSubTableKeyboardNav({
       e.preventDefault();
       e.stopPropagation();
       const next = rowInputs[idxInRow + 1];
-      next.focus();
-      try { next.select(); } catch { /* ignore */ }
+      focusAtEnd(next);
       return;
     }
 
@@ -322,8 +320,7 @@ export function useSubTableKeyboardNav({
         const ridStr = (nextTr as HTMLTableRowElement).getAttribute("data-row-id");
         const rid = ridStr ? Number(ridStr) : NaN;
         if (Number.isFinite(rid)) tableApi?.setActiveRow(rid);
-        first.focus();
-        try { first.select(); } catch { /* ignore */ }
+        focusAtEnd(first);
         return;
       }
       nextTr = nextTr.nextElementSibling as HTMLElement | null;

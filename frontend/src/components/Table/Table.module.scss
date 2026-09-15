@@ -173,7 +173,11 @@ tr[data-loading] {
 			box-shadow: inset 0 0 0 1px color-mix(in srgb, #{$color1} 50%, transparent);
 		}
 
-		&:not(:has(input[type="checkbox"], button)):focus-within {
+		// Фокус в ПОЛЕ ВВОДА ячейки — единый вид для LookupField, FieldString, FieldNumber. Раньше условие исключало
+		// ячейки с кнопками (`:not(:has(button))`), а у LookupField и FieldString кнопки-действия внутри поля — их ячейка
+		// при фокусе не подсвечивалась, а у FieldNumber без кнопок — подсвечивалась. Фокус на самой кнопке (✕ строки,
+		// ссылка) ячейку по-прежнему не подсвечивает.
+		&:has(input:not([type="checkbox"]):focus, textarea:focus, select:focus) {
 			background: color-mix(in srgb, #{$warningText} 20%, transparent);
 			box-shadow: inset 0 0 0 1px color-mix(in srgb, #{$warningText} 60%, transparent);
 			outline: none;

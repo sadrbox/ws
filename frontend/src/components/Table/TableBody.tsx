@@ -340,6 +340,9 @@ interface TableBodyRowProps {
 }
 
 
+/** Типы input, у которых клик ставит курсор в место клика (стандартное поведение текстового поля). */
+const TEXT_INPUT_TYPES = new Set(["text", "search", "password", "email", "tel", "url", "number"]);
+
 const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isAllSelectedMode, isChild, onToggleSelect }) => {
   const {
     variant, selectable,
@@ -433,7 +436,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     }
   }, [row.id, rows, isAllSelectedMode, setIsAllSelectedMode, setSelectedRows, setExcludedRows]);
 
-  // Флаг: mousedown произошёл на уже сфокусированном поле — клик должен быть стандартным
+  // Флаг: mousedown произошёл на текстовом или уже сфокусированном поле — клик должен быть стандартным
   const clickedFocusedInputRef = useRef(false);
 
   const handleRowClick = useCallback((e: React.MouseEvent) => {
@@ -492,10 +495,12 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
       clickedFocusedInputRef.current = false;
       return;
     }
-    // Разрешаем стандартное поведение только если клик по тому же полю,
-    // которое уже в фокусе (перемещение курсора, выделение текста внутри поля).
-    // Для любого другого поля — блокируем авто-фокус; фокус только по двойному клику.
-    if (target === document.activeElement) {
+    // Текстовое поле (FieldString, FieldNumber, LookupField) — стандартное поведение: одиночный клик ставит фокус и
+    // курсор в место клика, двойной — выделяет весь текст (handleDoubleClick). Текст при входе не выделяется.
+    // Остальные поля (дата, список, textarea) — как раньше: фокус по двойному клику, одиночный клик — по тому же
+    // полю, которое уже в фокусе.
+    const isTextInput = target.tagName === 'INPUT' && TEXT_INPUT_TYPES.has((target as HTMLInputElement).type);
+    if (isTextInput || target === document.activeElement) {
       clickedFocusedInputRef.current = true;
     } else {
       clickedFocusedInputRef.current = false;

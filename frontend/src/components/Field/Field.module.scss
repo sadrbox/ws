@@ -245,10 +245,16 @@
 }
 
 // ── Кнопки-действия поля в ячейке SubTable ──────────────────────────────────
-// Видны только у АКТИВНОЙ ячейки (td[data-active-cell]) или у поля в фокусе (:focus-within); наведение их
-// больше не показывает. Скрытые — visibility, а не display: место под кнопками остаётся, и текст ячейки не
-// сдвигается при переходе по строкам. На форме это правило не действует — там кнопки видны всегда.
+// Видны только у поля В ФОКУСЕ (:focus-within) — LookupField, FieldString, FieldNumber; ни наведение, ни активная
+// ячейка их не показывают. Скрытые — visibility, а не display: место под кнопками остаётся, и текст ячейки не
+// сдвигается. На форме это правило не действует — там кнопки видны всегда.
 :global([data-subtable]) .FieldWrapper.tableVariant {
+
+	// Текстовое поле: курсор ввода, как у обычного поля (клик ставит курсор в место клика).
+	.FieldString:not(:disabled),
+	.FieldNumber:not(:disabled) {
+		cursor: text;
+	}
 
 	.FieldInputWrapper,
 	.FieldSelectWrapper,
@@ -264,14 +270,13 @@
 	}
 }
 
+// Исключение — ЗАБЛОКИРОВАННОЕ поле (проведённый документ): фокус в него не встаёт, а «Открыть» (чтение) нужен.
+// Его кнопки видны у активной ячейки.
 :global([data-subtable] td[data-active-cell]) .FieldWrapper.tableVariant {
 
-	.FieldInputWrapper,
-	.FieldSelectWrapper,
-	.FieldPeriodWrapper {
-		.FieldActions {
-			visibility: visible;
-		}
+	.FieldInputWrapper.FieldDisabled .FieldActions,
+	.FieldInputWrapper:has(input:disabled) .FieldActions {
+		visibility: visible;
 	}
 }
 
