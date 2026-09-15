@@ -24,9 +24,7 @@ import { getRowId, extractServerError, ReadOnlyCell, type ReadOnlyCellProps } fr
 // Ре-экспорт: внешние импортируют ReadOnlyCell из "src/components/SubTable".
 export { ReadOnlyCell };
 export type { ReadOnlyCellProps };
-import {
-  applyEditMarker, computeDisplayRows, isSameRow, isUnsavedRow, type PendingRow,
-} from "./rowModel";
+import { applyEditMarker, computeDisplayRows, isSameRow, isUnsavedRow, type PendingRow, serverSortOf, hasLocalRows, hasUnsavedChanges } from "./rowModel";
 import type { RowGroup } from "./rowModel";
 import { useSubTableRows } from "./useSubTableRows";
 import { useSubTableColumns } from "./useSubTableColumns";
@@ -364,6 +362,10 @@ const SubTable: FC<SubTableProps> = ({
   // в хуке useSubTableColumns (синхронизация через mergeColumnDefs).
   const { columns, setColumns, setColumnsForTable } = useSubTableColumns(colJson, componentName);
   const [sort, setSort] = useState<Record<string, "asc" | "desc">>(defaultSort);
+  // Т4: сортировку выбрал пользователь (щелчок по заголовку) — сортируются и новые строки; порядок запоминается
+  // до следующего щелчка или ответа сервера, чтобы строки не переезжали при вводе.
+  const explicitSortRef = useRef(false);
+  const frozenOrderRef = useRef<{ key: string; order: Map<string, number> } | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
   // Inline-режим (редактирование в таблице ↔ через форму) + доп-кнопки тулбара —
@@ -394,14 +396,7 @@ const SubTable: FC<SubTableProps> = ({
   // SubTable — вложенная таблица: поиск ВСЕГДА на фронтенде, не отправляем search на сервер
   // Фильтруем sort: не отправляем на сервер поля у которых sortable === false
   // или dynamic === true (вычисляемые колонки, отсутствующие в БД — сортируются клиентски).
-  const serverSort = useMemo(() => {
-    const skip = new Set(
-      columns.filter(c => c.sortable === false || c.dynamic === true).map(c => c.identifier),
-    );
-    if (skip.size === 0) return sort;
-    const filtered = Object.fromEntries(Object.entries(sort).filter(([k]) => !skip.has(k)));
-    return Object.keys(filtered).length > 0 ? filtered : undefined;
-  }, [sort, columns]);
+  const serverSort = useMemo(() => serverSortOf(sort, columns, sortValue), [sort, columns, sortValue]);
 
   const params = useMemo(() => ({
     sort: serverSort, filter,
@@ -473,22 +468,20 @@ const SubTable: FC<SubTableProps> = ({
     // колонок serverSort не меняется — сортируем текущие строки
     // клиентски, и сброс кэша оставил бы таблицу пустой (refetch
     // не будет тригериться, т. к. params не меняются).
-    const skipIds = new Set(
-      columns.filter(c => c.sortable === false || c.dynamic === true).map(c => c.identifier),
-    );
-    const nextServerSort = Object.fromEntries(
-      Object.entries(next).filter(([k]) => !skipIds.has(k)),
-    );
+    const nextServerSort = serverSortOf(next, columns, sortValue) ?? {};
     const prevServerSort = serverSort ?? {};
     const serverChanged = JSON.stringify(nextServerSort) !== JSON.stringify(prevServerSort);
     // Сбрасываем кэш только если реально будет серверный refetch (есть parentUuid
     // и не клиентская сортировка). Иначе (инъектированные данные, parentUuid="")
     // refetch не сработает и таблица просто опустеет.
-    if (serverChanged && parentUuid && !clientSort) {
+    // Т1: при несохранённых строках кэш НЕ обнуляем — вместе с серверными ушли бы и они, а в форме-родителе
+    // остались бы: «Сохранить» записал бы невидимое. Ответ сервера смержит их (useSubTableRows, ветка B).
+    if (serverChanged && parentUuid && !clientSort && !hasLocalRows(cachedRowsRef.current)) {
       cachedRowsRef.current = []; setCacheVersion(0); updateAdaptiveLimit(500);
     }
+    explicitSortRef.current = s != null;
     setSort(next);
-  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort, cachedRowsRef, setCacheVersion]);
+  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort, cachedRowsRef, setCacheVersion, sortValue]);
 
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
     setFilter(prev => {
@@ -502,7 +495,8 @@ const SubTable: FC<SubTableProps> = ({
   const handleSearch = useCallback((v: string) => setSearch(v.trim()), []);
   const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, []);
 
-  const handleCleanRefresh = useCallback(() => {
+  const doCleanRefresh = useCallback(() => {
+    explicitSortRef.current = false;
     setSearch(""); setFilter(undefined); setSort(defaultSort); updateAdaptiveLimit(500);
     cancelAllRequests();
     // Сбрасываем флаг мержа pending, чтобы при повторном открытии мерж мог выполниться
@@ -524,6 +518,14 @@ const SubTable: FC<SubTableProps> = ({
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
     void queryClient.invalidateQueries({ queryKey: [model] });
   }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent, cachedRowsRef, setCacheVersion, pendingAppliedRef]);
+
+  // Т6: «Обновить» отменяет несохранённые изменения табличной части — только после вопроса.
+  const handleCleanRefresh = useCallback(() => {
+    if (!deferRemoteChanges || !hasUnsavedChanges(cachedRowsRef.current)) { doCleanRefresh(); return; }
+    void (async () => {
+      if (await confirm(translate("subTableRefreshDiscard"))) doCleanRefresh();
+    })();
+  }, [deferRemoteChanges, cachedRowsRef, confirm, doCleanRefresh]);
 
   // ── Inline-редактирование ──────────────────────────────────────────────
   const handleInlineChange = useCallback(async (row: TDataItem, field: string, value: string) => {
@@ -693,10 +695,16 @@ const SubTable: FC<SubTableProps> = ({
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
   // Конвейер отображаемых строк вынесен в чистую computeDisplayRows (см. выше),
   // useMemo лишь кеширует результат по тем же зависимостям.
-  const displayRows = useMemo(
-    () => computeDisplayRows({ rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns, sortValue, groupRows }),
-    [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort, sortValue, groupRows],
-  );
+  const displayRows = useMemo(() => {
+    // Снимок порядка живёт до смены сортировки или ответа сервера (после сохранения строки получают настоящие uuid).
+    const freezeKey = `${JSON.stringify(sort)}|${dataUpdatedAt}`;
+    const sortPending = explicitSortRef.current;
+    const frozenOrder = sortPending && frozenOrderRef.current?.key === freezeKey ? frozenOrderRef.current.order : undefined;
+    return computeDisplayRows({
+      rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns, sortValue, groupRows,
+      sortPending, frozenOrder, captureOrder: (order) => { frozenOrderRef.current = { key: freezeKey, order }; },
+    });
+  }, [rows, search, filterRows, deferRemoteChanges, parentUuid, parentKey, sort, computeRow, columns, clientSort, sortValue, groupRows, dataUpdatedAt]);
 
   // Синхронизируем ref c актуальным displayRows (используется в ctx.rows
   // и в клавиатурном обработчике для навигации).

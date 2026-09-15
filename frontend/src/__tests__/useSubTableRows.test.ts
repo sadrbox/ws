@@ -152,3 +152,21 @@ describe("useSubTableRows — Ветка B (синхронизация с сер
     expect(result.current.cachedRowsRef.current.map(r => r.uuid)).toEqual(["a", "tmp-z"]);
   });
 });
+
+describe("useSubTableRows — несохранённые строки при refetch (Т2, Т5)", () => {
+  it("новая нетронутая строка переживает refetch (сортировка/фильтр), даже когда родителю нечего хранить", () => {
+    const { result, rerender } = render({ allItems: [row({ id: 1, uuid: "a" })], dataUpdatedAt: 1 });
+    expect(result.current.rows.map(r => r.uuid)).toEqual(["a"]);
+
+    act(() => {
+      const draft = row({ id: -1, uuid: "tmp-1", _pendingAction: "create", _untouched: true }) as (typeof result.current.rows)[number];
+      result.current.cachedRowsRef.current = [...result.current.cachedRowsRef.current, draft];
+      result.current.setCacheVersion(v => v + 1);
+    });
+
+    act(() => {
+      rerender(makeProps({ allItems: [row({ id: 2, uuid: "b" }), row({ id: 1, uuid: "a" })], dataUpdatedAt: 2 }));
+    });
+    expect(result.current.rows.map(r => r.uuid)).toEqual(["b", "a", "tmp-1"]);
+  });
+});

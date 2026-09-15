@@ -1741,6 +1741,7 @@
   "onecPermForbidden": "Тыйым салынған",
   "onecPermAddNested": "Ішкілерін қосу",
   "onecPermDenied": "Рұқсат жоқ",
+  "subTableRefreshDiscard": "Кестелік бөліктің сақталмаған өзгерістері жойылады. Жаңарту керек пе?",
   "onecAgentConfirms": "агент растайды",
   "onecAgentSilentWaiting": "агент байланыста емес — күтеміз",
   "onecHealthLimitOverTtl": "Агент шегі сервис мерзімінен кем емес — командалар жұмыс ортасында мерзімі өткен деп жарияланады",

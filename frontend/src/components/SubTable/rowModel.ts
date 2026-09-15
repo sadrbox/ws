@@ -101,6 +101,45 @@ export const applyEditMarker = (r: PendingRow, patch: Record<string, unknown>): 
  *   4) поиск (кастомный filterRows либо по видимым колонкам).
  * Чистая функция — тестируется отдельно (computeDisplayRows.test.ts).
  */
+/** Ключ строки для снимка порядка: uuid (у новых — `tmp-…`), иначе id. */
+export const displayRowKey = (r: TDataItem): string => String(r.uuid ?? r.id);
+
+/**
+ * Т4. СНИМОК ПОРЯДКА: строки из снимка — в запомненном порядке (правка значения их не двигает), строки, которых
+ * в снимке нет (добавлены после щелчка по заголовку), — в конце.
+ */
+export function applyFrozenOrder<T extends TDataItem>(rows: T[], order: Map<string, number>): T[] {
+  const rank = (r: T) => order.get(displayRowKey(r)) ?? 0;
+  const known = rows.filter((r) => order.has(displayRowKey(r))).sort((a, b) => rank(a) - rank(b));
+  const fresh = rows.filter((r) => !order.has(displayRowKey(r)));
+  return [...known, ...fresh];
+}
+
+/**
+ * Сортировка, уходящая на сервер. Без неё: несортируемые (`sortable: false`), вычисляемые (`dynamic`) и колонки
+ * с подписью (`sortValue`, Т3) — сервер сортирует их по ключу, а таблица всё равно пересортирует по подписи,
+ * так что запрос бесполезен и только сбрасывает загруженное.
+ */
+export function serverSortOf(
+  sort: Record<string, "asc" | "desc">,
+  columns: Pick<TColumn, "identifier" | "sortable" | "dynamic">[],
+  sortValue?: Record<string, unknown>,
+): Record<string, "asc" | "desc"> | undefined {
+  const skip = new Set([
+    ...columns.filter((c) => c.sortable === false || c.dynamic === true).map((c) => c.identifier),
+    ...Object.keys(sortValue ?? {}),
+  ]);
+  if (skip.size === 0) return sort;
+  const filtered = Object.fromEntries(Object.entries(sort).filter(([k]) => !skip.has(k)));
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
+}
+
+/** В кэше есть локальные строки — новые (в т.ч. нетронутые), изменённые или помеченные на удаление (Т1). */
+export const hasLocalRows = (rows: PendingRow[]): boolean => rows.some((r) => !!r._pendingAction || !!r._untouched);
+
+/** Есть что терять: несохранённые изменения, кроме пустых нетронутых строк (Т6). */
+export const hasUnsavedChanges = (rows: PendingRow[]): boolean => rows.some((r) => !!r._pendingAction && !r._untouched);
+
 /** Группа строки: `key` — общий для группы, `order` — место внутри группы (0 — головная строка). */
 export type RowGroup = { key: string; order: number };
 
@@ -153,8 +192,17 @@ export function computeDisplayRows(params: {
   sortValue?: Record<string, (row: TDataItem) => unknown>;
   /** Группа строки — строки группы стоят вместе (см. SubTableProps.groupRows). */
   groupRows?: (row: TDataItem) => RowGroup | null | undefined;
+  /**
+   * Т4: пользователь сам выбрал сортировку (щелчок по заголовку) — сортируются и новые строки, а не только
+   * сохранённые. Без неё новые строки стоят в конце в порядке добавления.
+   */
+  sortPending?: boolean;
+  /** Снимок порядка (ключ строки → позиция) с последнего щелчка: при вводе строки не переезжают. */
+  frozenOrder?: Map<string, number>;
+  /** Вызывается, когда снимка ещё нет: SubTable запоминает порядок до следующего щелчка или ответа сервера. */
+  captureOrder?: (order: Map<string, number>) => void;
 }): PendingRow[] {
-  const { rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns, sortValue, groupRows } = params;
+  const { rows, deferRemoteChanges, parentUuid, parentKey, computeRow, clientSort, sort, search, filterRows, columns, sortValue, groupRows, sortPending, frozenOrder, captureOrder } = params;
 
   let visible: PendingRow[] = deferRemoteChanges
     ? rows.filter(r => r._pendingAction !== "delete")
@@ -172,13 +220,17 @@ export function computeDisplayRows(params: {
     r._pendingAction === "create" ||
     (typeof r.id === "number" && r.id < 0) ||
     (typeof r.uuid === "string" && r.uuid.startsWith("tmp-"));
-  const pendingCreates = clientSort ? [] : enriched.filter(isTmpRow);
+  const pendingCreates = clientSort || sortPending ? [] : enriched.filter(isTmpRow);
   const others = pendingCreates.length ? enriched.filter(r => !isTmpRow(r)) : enriched;
   const getValue = sortValue
     ? (r: PendingRow, id: string) => (sortValue[id] ? sortValue[id](r) : getNestedValue(r, id))
     : undefined;
   const sortedOthers = sortTableRows(others, sort, "default", getValue);
-  const flat = pendingCreates.length ? [...sortedOthers, ...pendingCreates] : sortedOthers;
+  let flat = pendingCreates.length ? [...sortedOthers, ...pendingCreates] : sortedOthers;
+  if (sortPending) {
+    if (frozenOrder) flat = applyFrozenOrder(flat, frozenOrder);
+    else captureOrder?.(new Map(flat.map((r, i) => [displayRowKey(r), i])));
+  }
   const sorted = groupRows ? groupDisplayRows(flat, groupRows) : flat;
 
   if (!search) return sorted;

@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { TColumn } from "src/components/Table/types";
+import { hasLocalRows, hasUnsavedChanges, serverSortOf, type PendingRow } from "src/components/SubTable/rowModel";
 
 // ── Воспроизводит логику serverSort из SubTable ───────────────────────────────
 
@@ -96,5 +97,24 @@ describe("SubTable: serverSort — фильтрация несортируемы
 		];
 		const result = computeServerSort(sort, columns);
 		expect(result).toBeUndefined();
+	});
+});
+
+describe("SubTable: serverSortOf и несохранённые строки (Т1, Т3, Т6)", () => {
+	it("колонки с подписью (sortValue) и вычисляемые на сервер не уходят", () => {
+		const cols = [{ identifier: "modelName" }, { identifier: "calc", dynamic: true }, { identifier: "id" }] as TColumn[];
+		expect(serverSortOf({ modelName: "asc" }, cols, { modelName: () => "" })).toBeUndefined();
+		expect(serverSortOf({ calc: "desc" }, cols)).toBeUndefined();
+		expect(serverSortOf({ id: "asc" }, cols, { modelName: () => "" })).toEqual({ id: "asc" });
+	});
+
+	it("локальные строки — и нетронутые; терять есть что — только без нетронутых", () => {
+		const untouched = [{ id: -1, uuid: "tmp-1", _pendingAction: "create", _untouched: true }] as unknown as PendingRow[];
+		const updated = [{ id: 1, uuid: "a", _pendingAction: "update" }] as unknown as PendingRow[];
+		const clean = [{ id: 1, uuid: "a" }] as unknown as PendingRow[];
+		expect(hasLocalRows(untouched)).toBe(true);
+		expect(hasUnsavedChanges(untouched)).toBe(false);
+		expect(hasUnsavedChanges(updated)).toBe(true);
+		expect(hasLocalRows(clean)).toBe(false);
 	});
 });

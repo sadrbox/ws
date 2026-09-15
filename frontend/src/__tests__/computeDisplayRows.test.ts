@@ -177,3 +177,23 @@ describe("сортировка по подписи и группы строк", 
     expect(sorted.map(o => o.value)).toEqual(["", "a", "b"]);
   });
 });
+
+describe("Т4: явная сортировка и снимок порядка", () => {
+  it("без щелчка новые строки в конце; по щелчку сортируются все; снимок держит порядок при вводе, новые — в конец", () => {
+    const rows = [row({ id: 1, uuid: "a", name: "Бета" }), row({ id: -1, uuid: "tmp-1", name: "Альфа", _pendingAction: "create" })];
+    expect(base({ rows, sort: { name: "asc" } }).map(r => r.uuid)).toEqual(["a", "tmp-1"]);
+
+    let captured: Map<string, number> | undefined;
+    const sorted = base({ rows, sort: { name: "asc" }, sortPending: true, captureOrder: (o) => { captured = o; } });
+    expect(sorted.map(r => r.uuid)).toEqual(["tmp-1", "a"]);
+    expect(captured?.get("tmp-1")).toBe(0);
+
+    const edited = [
+      row({ id: 1, uuid: "a", name: "Бета" }),
+      row({ id: -1, uuid: "tmp-1", name: "Яблоко", _pendingAction: "create" }),
+      row({ id: -2, uuid: "tmp-2", name: "Аист", _pendingAction: "create" }),
+    ];
+    const frozen = base({ rows: edited, sort: { name: "asc" }, sortPending: true, frozenOrder: captured });
+    expect(frozen.map(r => r.uuid)).toEqual(["tmp-1", "a", "tmp-2"]);
+  });
+});

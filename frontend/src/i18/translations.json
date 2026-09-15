@@ -1741,6 +1741,7 @@
   "onecPermForbidden": "Запрещено",
   "onecPermAddNested": "Добавить вложенные",
   "onecPermDenied": "Нет разрешения",
+  "subTableRefreshDiscard": "Несохранённые изменения табличной части будут отменены. Обновить?",
   "onecAgentConfirms": "агент подтверждает",
   "onecAgentSilentWaiting": "агент не на связи — ждём",
   "onecHealthLimitOverTtl": "Предел агента не меньше срока сервиса — команды будут объявляться просроченными посреди работы",

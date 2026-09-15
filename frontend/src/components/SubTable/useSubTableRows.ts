@@ -189,8 +189,13 @@ export function useSubTableRows({
     // сохранения формы открытой из SubTable в режиме "Редактирование в форме").
     // НЕ мержим если родитель уже очистил pending (initialPendingRows === []) —
     // это значит коммит прошёл успешно, серверные данные теперь авторитетны.
-    if (dirtyRows.length > 0 && (initialPendingRows?.length ?? 0) > 0) {
-      const merged = mergeServerWithPending(clean, dirtyRows);
+    const keepDirty = dirtyRows.length > 0 && (initialPendingRows?.length ?? 0) > 0;
+    // Т2: новые «нетронутые» строки — локальное состояние таблицы. Родителю их не передаём (notifyParent
+    // отбрасывает _untouched), но и при refetch — сортировка, фильтр, invalidate — не теряем.
+    const untouchedRows = deferRemoteChanges ? prev.filter(r => r._untouched && r._pendingAction === "create") : [];
+    if (keepDirty || untouchedRows.length > 0) {
+      const local = prev.filter(r => (keepDirty && r._pendingAction && !r._untouched) || untouchedRows.includes(r));
+      const merged = mergeServerWithPending(clean, local);
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
