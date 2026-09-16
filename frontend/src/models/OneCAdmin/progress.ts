@@ -367,7 +367,18 @@ export function useBatchWatch(): { isFetching: boolean; refresh: () => void; run
  */
 const MAINTENANCE_TYPES = new Set(["IB_CHECK", "IB_RESTORE", "IB_APPLY_UPDATE", "IB_BACKUP"]);
 
-export async function restoreRunningWork(): Promise<void> {
+let restoring: Promise<void> | null = null;
+
+export function restoreRunningWork(): Promise<void> {
+	// Одно восстановление за раз: оболочка может смонтироваться повторно, пока первое ещё ждёт ответа сервиса.
+	restoring ??= doRestoreRunningWork().finally(() => { restoring = null; });
+	return restoring;
+}
+
+/** Эта команда или задание уже в реестре — в любом состоянии: одну работу не поднимаем дважды. */
+const alreadyKnown = (id: string): boolean => getOps().some((o) => o.command?.id === id || o.batchId === id);
+
+async function doRestoreRunningWork(): Promise<void> {
 	let work: MyWork;
 	try {
 		work = await fetchMyWork();
@@ -375,12 +386,11 @@ export async function restoreRunningWork(): Promise<void> {
 		// Нет доступа к администрированию 1С или сервис старее панели — восстанавливать нечего.
 		return;
 	}
-	const known = getOps();
 	for (const b of work.batches) {
-		if (known.some((o) => o.batchId === b.batchId)) continue;
+		if (alreadyKnown(b.batchId)) continue;
 		const id = startOp({
 			kind: "update", title: b.title, target: `${translate("onecBases")}: ${b.total}`, total: b.total,
-			command: { type: b.type, baseKey: null },
+			command: { type: b.type, baseKey: null, id: b.batchId },
 			// Длительность — от запуска на сервере, а не от перезагрузки страницы.
 			startedAt: Date.parse(b.createdAt) || Date.now(),
 		});
@@ -390,12 +400,13 @@ export async function restoreRunningWork(): Promise<void> {
 		// «Обслуживание» узнаёт свою работу по ключу базы — восстановленной операции его и даём.
 		const workKey = MAINTENANCE_TYPES.has(cmd.type) && cmd.baseKey
 			? `onec-maint:${cmd.baseKey.toLowerCase()}` : `cmd:${cmd.commandId}`;
-		if (known.some((o) => o.state === "running" && o.command?.type === cmd.type
+		// Проверяем живой реестр на каждом шаге: снимок до цикла не видел только что поднятое.
+		if (alreadyKnown(cmd.commandId) || getOps().some((o) => o.state === "running" && o.command?.type === cmd.type
 			&& (o.command.baseKey ?? "") === (cmd.baseKey ?? ""))) continue;
 		const id = startOp({
 			kind: cmd.operation === "READ" ? "read" : "update", title: cmd.title, target: cmd.baseKey ?? "",
 			total: 1, workKey, scope: { bases: cmd.baseKey ? [cmd.baseKey] : [] },
-			command: { type: cmd.type, baseKey: cmd.baseKey },
+			command: { type: cmd.type, baseKey: cmd.baseKey, id: cmd.commandId },
 			startedAt: Date.parse(cmd.createdAt) || Date.now(),
 		});
 		// Слежение без предела по времени — как у долгой операции «Обслуживания»; «Скрыть» у операции его снимает.

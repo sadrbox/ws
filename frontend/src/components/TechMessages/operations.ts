@@ -74,7 +74,7 @@ export type Op = {
 	 */
 	workKey?: string;
 	/** Команда 1С, которую ведёт операция: по ней кнопки узнают свою идущую работу — и после перезагрузки. */
-	command?: { type: string; baseKey: string | null };
+	command?: { type: string; baseKey: string | null; /** Номер команды или задания на сервере. */ id?: string };
 	/** Объект работы (одна база, пользователь базы, запись): по нему открывают из строки и из итога. */
 	ref?: TechMessage["ref"];
 };
@@ -90,7 +90,7 @@ export type OpInit = {
 	pane?: string;
 	workKey?: string;
 	/** Команда 1С, которую ведёт операция: по ней кнопки узнают свою идущую работу — и после перезагрузки. */
-	command?: { type: string; baseKey: string | null };
+	command?: { type: string; baseKey: string | null; /** Номер команды или задания на сервере. */ id?: string };
 	/** Когда работа началась на самом деле — у восстановленной после перезагрузки: иначе длительность считалась бы заново. */
 	startedAt?: number;
 	/** Объект работы — ссылка в строке «Прогресса» и в итоге. */
@@ -187,7 +187,19 @@ export function updateOp(id: string, patch: (op: Op) => Op): void {
  * вместе с операцией — и правильно делает. Но тогда от всей работы не остаётся НИЧЕГО.
  * Поэтому окончание пишется событием: что делали, над чем, чем кончилось и сколько заняло.
  */
+/** Команды, итог которых уже записан: одна команда — один итог, сколько бы операций за ней ни следило. */
+const notedCommands = new Set<string>();
+
 function noteOutcome(op: Op): void {
+	/*
+	 * ОДИН ИТОГ НА КОМАНДУ. После перезагрузки страницы одну и ту же команду могли поднять несколько раз (оболочка
+	 * монтируется повторно, пока подгружаются вкладки), и в истории оседало «Пользователи базы. Выполнено» трижды.
+	 */
+	const cmdId = op.command?.id;
+	if (cmdId) {
+		if (notedCommands.has(cmdId)) return;
+		notedCommands.add(cmdId);
+	}
 	const secs = Math.max(0, Math.round(((op.finishedAt ?? Date.now()) - op.startedAt) / 1000));
 	const failed = op.failed > 0;
 	const ok = op.done - op.failed;
@@ -349,6 +361,7 @@ export function abandonOp(id: string): void {
  * собственная идущая работа поднимется заново с сервиса (restoreRunningWork).
  */
 export function resetOps(): void {
+	notedCommands.clear();
 	finishHooks.clear();
 	cancelers.clear();
 	ownOutcome.clear();
