@@ -383,7 +383,8 @@ export const BatchesTab: FC = () => {
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_batches", rows: view.rows, columns: cols, setColumns: setCols,
 				sorting: view.sorting, search: view.search,
-				isLoading: batches.isLoading, reloading: batches.isFetching,
+				// Задания опрашиваются по таймеру: вращение от фонового опроса было бы бесконечным — только от нажатия.
+				isLoading: batches.isLoading, reloading: false,
 				onReload: () => void batches.refetch(),
 				/*
 				 * Отмечают БАЗЫ. Отметка задания означает «все его базы» — так устроена

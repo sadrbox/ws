@@ -13,6 +13,7 @@
  * ПОДТВЕРЖДЕНИЯ. Снятие сеанса и блокировка входа необратимы для того, кто в этот момент
  * работает в базе, поэтому обе операции проходят через модальное окно с явным «Да».
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import React, { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -164,6 +165,7 @@ export const SessionsTab: FC = () => {
 		onError: failed,
 	});
 
+	const terminating = useRunningCommand(["CLUSTER_TERMINATE_SESSION"]);
 	const lock = useMutation({
 		mutationFn: (p: { baseKey: string; enabled: boolean; message?: string }) => {
 			const op = startOp({
@@ -266,7 +268,7 @@ export const SessionsTab: FC = () => {
 					columns,
 					setColumns,
 					isLoading: sessions.isLoading,
-					reloading: sessions.isFetching || terminate.isPending,
+					reloading: sessions.isFetching || terminate.isPending || terminating,
 					onReload: () => void sessions.refetch(),
 					// Двойной щелчок НЕ завершает сеанс: этот жест значит «открыть элемент»,
 					// и запускать им разрушающую операцию нельзя — у сеанса и карточки-то нет.

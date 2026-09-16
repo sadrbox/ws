@@ -17,6 +17,7 @@
  * вместе с сеансами пользователей. Конфигуратор без явного согласия не снимается вовсе:
  * агент отвечает `AGENT_PROCESS_UNSAFE`, и решение принимает человек, а не интерфейс.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -155,6 +156,8 @@ export const ProcessesTab: FC = () => {
 	// старше него описывает прошлое, а не настоящее.
 	const stale = snapshotAgeSecs > 90;
 
+	const liveRunning = useRunningCommand(["AGENT_LIST_PROCESSES"]);
+
 	return (
 		<>
 			<CapabilityGuard capability="agent.procs" />
@@ -174,7 +177,8 @@ export const ProcessesTab: FC = () => {
 				sorting: view.sorting, search: view.search,
 				isLoading: procs.isLoading,
 				// Таблица не гаснет: живой опрос идёт секунды, прежний список читаем.
-				reloading: procs.isFetching || live.isPending,
+				// Опрос heartbeat идёт по таймеру — вращаем от живого чтения, в том числе начатого до перезагрузки.
+				reloading: live.isPending || liveRunning,
 				// «Обновить» спрашивает агента живьём — снимок heartbeat приходит и сам.
 				onReload: () => live.mutate(),
 				reloadTitle: translate("onecProcRefreshLive"),

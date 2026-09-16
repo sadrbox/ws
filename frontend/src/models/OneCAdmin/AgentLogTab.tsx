@@ -6,6 +6,7 @@
  * автообновления: журнал читают, разбирая случай, а не наблюдают. По кнопке — по той же причине, что
  * и состояние сервера: вкладки формы отрисованы все сразу.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -62,6 +63,8 @@ export const AgentLogTab: FC<{ agentId: string; agentName: string }> = ({ agentI
 		d.note ?? "",
 	].filter(Boolean).join(" · ") : "";
 
+	const logRunning = useRunningCommand(["AGENT_LOG_TAIL"]);
+
 	return (
 		<div className={styles.Instances}>
 			<div className={styles.Hint}>{translate("onecAgentLogHint")}</div>
@@ -76,7 +79,7 @@ export const AgentLogTab: FC<{ agentId: string; agentName: string }> = ({ agentI
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setContains(e.target.value.slice(0, 100))} />
 			</GroupRow>
 			<GroupRow>
-				<Button variant="primary" disabled={!agentId || log.isFetching} onClick={() => void log.refetch()}>
+				<Button variant="primary" disabled={!agentId || log.isFetching || logRunning} onClick={() => void log.refetch()}>
 					<Icon name="recalc" /> {d ? translate("onecAgentDiagRefresh") : translate("onecAgentLogGet")}
 				</Button>
 				<Button variant="secondary" disabled={!shown.length} onClick={() => void copy()}>

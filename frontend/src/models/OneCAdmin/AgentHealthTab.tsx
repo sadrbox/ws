@@ -8,6 +8,7 @@
  * команду агенту на каждое открытие карточки. Каждое «Обновить» — новая команда; время и отказы
  * команд — на соседней вкладке («Время и отказы»), здесь их не повторяем.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -40,11 +41,13 @@ export const AgentHealthTab: FC<{ agentId: string; agentName: string }> = ({ age
 	const processes = h?.processes ?? [];
 	const problems = h?.logProblems ?? [];
 
+	const healthRunning = useRunningCommand(["AGENT_HEALTH"]);
+
 	return (
 		<div className={styles.Instances}>
 			<div className={styles.Hint}>{translate("onecAgentHealthHint")}</div>
 			<div>
-				<Button variant="primary" disabled={!agentId || health.isFetching} onClick={() => void health.refetch()}>
+				<Button variant="primary" disabled={!agentId || health.isFetching || healthRunning} onClick={() => void health.refetch()}>
 					<Icon name="recalc" /> {h ? translate("onecAgentDiagRefresh") : translate("onecAgentHealthGet")}
 				</Button>
 			</div>

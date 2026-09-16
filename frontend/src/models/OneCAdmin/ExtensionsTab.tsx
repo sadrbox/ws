@@ -13,6 +13,7 @@
  * а одно и то же имя в разных базах может принадлежать разным расширениям — склеивать их
  * в одну строку значило бы врать о том, что стоит одинаковое.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -112,6 +113,9 @@ export const ExtensionsTab: FC = () => {
 	// приходит сообщением, сводки после неё перечитываются.
 	const check = useBaseContentCheck("extensions");
 
+	// Чтение расширений, начатое до перезагрузки страницы, — иконка крутится до итога.
+	const extReading = useRunningCommand(["IB_LIST_EXTENSIONS"]);
+
 	return (
 		<>
 			<CapabilityGuard capability="ib.admin" />
@@ -173,7 +177,7 @@ export const ExtensionsTab: FC = () => {
 								componentName: "OneCAdmin_extBases", rows: baseView.rows, columns: baseCols,
 								setColumns: setBaseCols, sorting: baseView.sorting, search: baseView.search,
 								isLoading: bases.isLoading,
-								reloading: check.checking,
+								reloading: check.checking || extReading,
 								// «Обновить» = прочитать расширения отмеченных баз у самой 1С;
 								// ничего не отмечено — перечитать список баз.
 								onReload: () => {

@@ -17,6 +17,7 @@
  * рабочей. Скрытая база уходит из групповых операций и из отборов, а решение обратимо —
  * восстановили базу из копии, вернули в работу.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -62,6 +63,7 @@ export const BaseAvailability: FC<{
 	 * остальным инструментам. Данные не трогаются — их нет; что база действительно мертва,
 	 * проверяет САМ АГЕНТ через СУБД и у живой базы отказывает.
 	 */
+	const dropRunning = useRunningCommand(["CLUSTER_DROP_INFOBASE"], baseKey);
 	const drop = useMutation({
 		mutationFn: () => withOp(
 			{ kind: "delete", title: translate("onecBaseDropRegistration"), target: baseKey },
@@ -112,7 +114,7 @@ export const BaseAvailability: FC<{
 					{/* Кнопка только у базы, в которую не войти: у рабочей агент всё равно
 					    откажет, и предлагать её значило бы звать на отказ. */}
 					{ibUnreachableAt && (
-						<Button variant="danger" disabled={drop.isPending}
+						<Button variant="danger" disabled={drop.isPending || dropRunning}
 							title={translate("onecBaseDropRegistrationHint")}
 							onClick={() => setConfirmDrop(true)}>
 							<Icon name="trash" /> {translate("onecBaseDropRegistration")}

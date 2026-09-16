@@ -365,6 +365,8 @@ export function useBatchWatch(): { isFetching: boolean; refresh: () => void; run
  * пользователя (`/my-work`) — поднимаем её теми же записями, что при запуске: задание — со слежением за заданием,
  * одиночная команда — со слежением по номеру до итога. Уже известное реестру не дублируем.
  */
+const MAINTENANCE_TYPES = new Set(["IB_CHECK", "IB_RESTORE", "IB_APPLY_UPDATE", "IB_BACKUP"]);
+
 export async function restoreRunningWork(): Promise<void> {
 	let work: MyWork;
 	try {
@@ -376,15 +378,22 @@ export async function restoreRunningWork(): Promise<void> {
 	const known = getOps();
 	for (const b of work.batches) {
 		if (known.some((o) => o.batchId === b.batchId)) continue;
-		const id = startOp({ kind: "update", title: b.title, target: `${translate("onecBases")}: ${b.total}`, total: b.total });
+		const id = startOp({
+			kind: "update", title: b.title, target: `${translate("onecBases")}: ${b.total}`, total: b.total,
+			command: { type: b.type, baseKey: null },
+		});
 		attachBatch(id, b.batchId, b.total);
 	}
 	for (const cmd of work.commands) {
-		const workKey = `cmd:${cmd.commandId}`;
-		if (known.some((o) => o.workKey === workKey)) continue;
+		// «Обслуживание» узнаёт свою работу по ключу базы — восстановленной операции его и даём.
+		const workKey = MAINTENANCE_TYPES.has(cmd.type) && cmd.baseKey
+			? `onec-maint:${cmd.baseKey.toLowerCase()}` : `cmd:${cmd.commandId}`;
+		if (known.some((o) => o.state === "running" && o.command?.type === cmd.type
+			&& (o.command.baseKey ?? "") === (cmd.baseKey ?? ""))) continue;
 		const id = startOp({
 			kind: cmd.operation === "READ" ? "read" : "update", title: cmd.title, target: cmd.baseKey ?? "",
 			total: 1, workKey, scope: { bases: cmd.baseKey ? [cmd.baseKey] : [] },
+			command: { type: cmd.type, baseKey: cmd.baseKey },
 		});
 		// Слежение без предела по времени — как у долгой операции «Обслуживания»; «Скрыть» у операции его снимает.
 		void followCommand<unknown>(cmd.commandId, () => getOps().some((o) => o.id === id && o.state === "running"))

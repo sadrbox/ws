@@ -296,7 +296,12 @@ const TableControlPanel = memo(({
       setSpinPending(false);
     }
   };
-  const spinning = spinClick > 0 && (spinHold || spinPending || busy);
+  /*
+   * И БЕЗ НАЖАТИЯ — ПОКА ЭКРАН ГОВОРИТ «РАБОТА ИДЁТ» (`reloading`). Так вращение переживает перезагрузку страницы:
+   * работа, начатая до неё, поднимается в реестр, и экран передаёт её сюда. Экраны с фоновым опросом (задания,
+   * прогресс, процессы) `reloading` от опроса не передают — иначе иконка крутилась бы без остановки.
+   */
+  const spinning = reloading || (spinClick > 0 && (spinHold || spinPending || busy));
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly || hideAddDelete;
   return (

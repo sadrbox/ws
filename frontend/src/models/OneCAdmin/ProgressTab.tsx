@@ -45,7 +45,7 @@ const opColumns = (): TColumn[] => ([
 	{ identifier: "opNote", type: "string", width: "320px", minWidth: "150px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
-export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = ({ onRefresh, isLoading }) => {
+export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = ({ onRefresh }) => {
 	const ops = useOnecOps();
 	/*
 	 * ЧЕГО ЖДЁТ ОЧЕРЕДЬ. Команда «в очереди» выглядела так же, как выполняющаяся: не
@@ -113,7 +113,8 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 			<Table {...buildStaticTableProps({
 			componentName: "OneCAdmin_ops", rows: view.rows, columns: cols, setColumns: setCols,
 			sorting: view.sorting, search: view.search, isLoading: false,
-			reloading: !!isLoading,
+			// Опрос заданий идёт по таймеру — вращаем только от нажатия.
+			reloading: false,
 			onReload: onRefresh,
 			renderCell: (r, col) => {
 				if (col.identifier !== "opProgress") return undefined;

@@ -10,6 +10,7 @@
  * СОЗДАНИЕ И УДАЛЕНИЕ НЕПРИМЕНИМЫ: базы заводят и удаляют в кластере 1С, а не в панели.
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { finishOp } from "src/models/OneCAdmin/progress";
 import { startOp } from "src/models/OneCAdmin/progress";
 import { useOnecWrite } from "src/models/OneCAdmin/shared";
@@ -153,6 +154,9 @@ const useBaseTabs = (row: TDataItem) => {
 	 */
 	const usersCheck = useBaseContentCheck("users");
 	const extCheck = useBaseContentCheck("extensions");
+	// Чтение содержимого базы могло начаться до перезагрузки страницы — иконка крутится до итога.
+	const extReading = useRunningCommand(["IB_LIST_EXTENSIONS"], baseKey);
+	const usersReading = useRunningCommand(["IB_LIST_USERS"], baseKey);
 	// Кого правим: строка, выбранная одиночным щелчком. Двойной по-прежнему открывает
 	// карточку пары — кнопка «Изменить» делает тот же жест явным.
 	const [activeUser, setActiveUser] = useState("");
@@ -241,7 +245,7 @@ const useBaseTabs = (row: TDataItem) => {
 						onRowClick: (r) => openExt(r, baseKey),
 						sorting: extView.sorting, search: extView.search,
 						isLoading: ext.isLoading,
-						reloading: extCheck.checking,
+						reloading: extCheck.checking || extReading,
 						// «Обновить» = войти в базу и прочитать её расширения у самой 1С.
 						// Таблица при этом показывает известное из реестра: гасить её незачем.
 						onReload: () => void extCheck.run([baseKey]),
@@ -264,7 +268,7 @@ const useBaseTabs = (row: TDataItem) => {
 						onRowClick: (r) => openBaseUser(asText(r.name), baseKey),
 						sorting: userView.sorting, search: userView.search,
 						isLoading: users.isLoading,
-						reloading: usersCheck.checking,
+						reloading: usersCheck.checking || usersReading,
 						// «Обновить» = войти в базу и прочитать её пользователей у 1С.
 						// Отдельной кнопки «Проверить пользователей» здесь больше нет: она
 						// делала ровно это же, и две кнопки одного действия только спорили,
@@ -444,6 +448,9 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		setJobsWas(v);
 		try { if (v === null) localStorage.removeItem(wasKey); else localStorage.setItem(wasKey, String(v)); } catch { /* хранилище недоступно */ }
 	};
+	// Запрет заданий и чтение сведений могли начаться до перезагрузки страницы — кнопки заняты до итога.
+	const jobsRunning = useRunningCommand(["CLUSTER_SET_SCHEDULED_JOBS"], key);
+	const infoRunning = useRunningCommand(["IB_INFO"], key);
 	const setJobs = useMutation({
 		mutationFn: async (p: { denied: boolean; restore?: boolean }) => {
 			const op = startOp({
@@ -592,7 +599,7 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 										</ValueList>
 										<GroupRow>
 											<Button variant={jobsDenied ? "primary" : "secondary"}
-												disabled={!key || !canWrite || !jobsKnown || setJobs.isPending}
+												disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
 												title={jobsKnown
 													? translate("onecScheduledJobsHint")
 													: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
@@ -601,13 +608,13 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 											</Button>
 											{jobsWas !== null && jobsWas !== jobsDenied && (
 												<Button variant="primary"
-													disabled={!key || !canWrite || !jobsKnown || setJobs.isPending}
+													disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
 													title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
 													onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
 													{translate("onecScheduledJobsRestore")}
 												</Button>
 											)}
-											<Button variant="secondary" disabled={!key || !infoKnown || readInfo.isPending}
+											<Button variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
 												title={infoKnown
 													? translate("onecBaseInfoHint")
 													: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}

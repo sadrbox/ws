@@ -13,6 +13,7 @@
  * могли снять мимо панели, и запрет «уже опубликована» превращался бы в тупик — запрещена
  * оказывалась ровно та команда, которой расхождение и лечится.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -66,6 +67,7 @@ export const BasePublication: FC<{
 	 */
 	const address = usePublishAddressHint(serverName);
 
+	const publishRunning = useRunningCommand(["IB_PUBLISH", "IB_UNPUBLISH"], baseKey);
 	const run = useMutation({
 		mutationFn: async (job: Job) => {
 			const spec = SPEC[job];
@@ -115,12 +117,12 @@ export const BasePublication: FC<{
 				    людей в базе через веб-клиент. */}
 				{canWrite && (
 					<GroupRow>
-						<Button variant="secondary" disabled={run.isPending}
+						<Button variant="secondary" disabled={run.isPending || publishRunning}
 							title={`${translate("onecPublish")}: ${baseKey}`}
 							onClick={() => setConfirm("publish")}>
 							<Icon name="open" /> {translate("onecPublish")}
 						</Button>
-						<Button variant="danger" disabled={run.isPending}
+						<Button variant="danger" disabled={run.isPending || publishRunning}
 							title={`${translate("onecUnpublish")}: ${baseKey}`}
 							onClick={() => setConfirm("unpublish")}>
 							<Icon name="clear" /> {translate("onecUnpublish")}

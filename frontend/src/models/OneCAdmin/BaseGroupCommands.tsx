@@ -11,6 +11,7 @@
  * веб-сервера на все базы) и «Проверить базы данных» (отмеченные базы или все). Они доступны
  * и уровню «только просмотр» — чтение ничего не меняет (F5).
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -48,6 +49,8 @@ export const BaseGroupCommands: FC<{
 }> = ({ selected, groups = ["publication", "maintenance"], presetName }) => {
 	const canWrite = useOnecWrite();
 	const perms = useOnecPermissions();
+	const pubChecking = useRunningCommand(["CLUSTER_LIST_PUBLICATIONS"]);
+	const dbChecking = useRunningCommand(["CLUSTER_CHECK_BASES"]);
 	/** Пользователи и расширения — по вложенным разрешениям, прочие операции — по общему праву. */
 	const opAllowed = (o: GroupOp) => {
 		const need = SECTION_OF_TYPE[GROUP_OPS[o].type];
@@ -153,8 +156,8 @@ export const BaseGroupCommands: FC<{
 					// Чтения — всем, кому открыта панель.
 					...(g === "publication"
 						? [
-							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), disabled: checkPublications.isPending },
-							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), disabled: checkDb.isPending },
+							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), disabled: checkPublications.isPending || pubChecking },
+							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), disabled: checkDb.isPending || dbChecking },
 						]
 						: []),
 				];

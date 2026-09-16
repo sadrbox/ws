@@ -73,6 +73,8 @@ export type Op = {
 	 * локальный флаг «занято» умирает вместе с окном, а работа — нет.
 	 */
 	workKey?: string;
+	/** Команда 1С, которую ведёт операция: по ней кнопки узнают свою идущую работу — и после перезагрузки. */
+	command?: { type: string; baseKey: string | null };
 	/** Объект работы (одна база, пользователь базы, запись): по нему открывают из строки и из итога. */
 	ref?: TechMessage["ref"];
 };
@@ -87,6 +89,8 @@ export type OpInit = {
 	scope?: { user?: string; bases?: string[] };
 	pane?: string;
 	workKey?: string;
+	/** Команда 1С, которую ведёт операция: по ней кнопки узнают свою идущую работу — и после перезагрузки. */
+	command?: { type: string; baseKey: string | null };
 	/** Объект работы — ссылка в строке «Прогресса» и в итоге. */
 	ref?: TechMessage["ref"];
 	/** Что сделать, когда работа закончена (адаптер 1С перечитывает кэш). */
@@ -239,6 +243,7 @@ export function startOp(init: OpInit): string {
 		// «Всё приложение» — это не пейн: такая операция видна в любом срезе.
 		...(init.pane && init.pane !== APP_SCOPE ? { pane: init.pane } : {}),
 		...(init.workKey ? { workKey: init.workKey } : {}),
+		...(init.command ? { command: init.command } : {}),
 		...(init.ref ? { ref: init.ref } : {}),
 	}, ...ops];
 	if (init.onFinish) finishHooks.set(id, init.onFinish);
@@ -371,5 +376,14 @@ export const getOps = (): Op[] => ops;
  * Идёт ли уже работа с этим ключом. Кнопке запуска — вместо локального «занято»: окно
  * закрыли и открыли снова, а импорт всё ещё идёт — кнопка это знает.
  */
+/**
+ * ИДЁТ ЛИ КОМАНДА 1С ЭТОГО ТИПА (по базе — если задана). Кнопка знает о своей работе по состоянию запроса, а оно
+ * теряется при перезагрузке страницы; восстановленная операция несёт тип и базу команды, и кнопка по ним остаётся
+ * «занятой», а иконка «Обновить» крутится — до итога.
+ */
+export const useRunningCommand = (types: readonly string[], baseKey?: string | null): boolean =>
+	useOps().some((o) => o.state === "running" && !!o.command && types.includes(o.command.type)
+		&& (baseKey === undefined || (o.command.baseKey ?? "").toLowerCase() === (baseKey ?? "").toLowerCase()));
+
 export const useRunningWork = (workKey: string): boolean =>
 	useOps().some((o) => o.state === "running" && o.workKey === workKey);

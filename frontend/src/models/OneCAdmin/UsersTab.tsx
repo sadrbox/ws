@@ -14,6 +14,7 @@
  * КАРКАС ЖЁСТКИЙ: полоса режима, тело из двух колонок, полоса состояния. Прокручиваются
  * только таблицы, поэтому появление сообщения ничего не сдвигает.
  */
+import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -168,6 +169,10 @@ export const UsersTab: FC = () => {
 		onError: (e) => reportError(e, { source: translate("onecTabUsers") }),
 	});
 
+	// Работа, начатая до перезагрузки страницы: чтение баз у кластера и пользователей у 1С.
+	const basesRefreshing = useRunningCommand(["CLUSTER_LIST_INFOBASES"]);
+	const usersReading = useRunningCommand(["IB_LIST_USERS"]);
+
 	// ── Таблицы ─────────────────────────────────────────────────────────────
 	const basesTable = (
 		<Table {...buildStaticTableProps({
@@ -176,7 +181,7 @@ export const UsersTab: FC = () => {
 			isLoading: bases.isLoading || occurrences.isLoading,
 			// Таблица не гаснет на время чтения: крутится только кнопка, прежние данные
 			// остаются читаемыми.
-			reloading: refreshFromCluster.isPending,
+			reloading: refreshFromCluster.isPending || basesRefreshing,
 			/*
 			 * «Обновить» в таблице БАЗ обновляет БАЗЫ — спрашивает кластер и перечитывает
 			 * список. Раньше она читала пользователей активной базы: кнопка стояла в одной
@@ -212,7 +217,7 @@ export const UsersTab: FC = () => {
 			componentName: "OneCAdmin_ubUsers", rows: userView.rows, columns: userCols,
 			setColumns: setUserCols, sorting: userView.sorting, search: userView.search,
 			isLoading: summary.isLoading || baseUsers.isLoading,
-			reloading: check.checking,
+			reloading: check.checking || usersReading,
 			// Показаны пользователи базы — обновляем их у 1С; показана сводка по всем
 			// базам — перечитываем сводку: спрашивать сто баз по одной кнопке нельзя.
 			onReload: () => {
