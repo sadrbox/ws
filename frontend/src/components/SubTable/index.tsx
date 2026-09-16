@@ -173,7 +173,7 @@ export interface SubTableProps {
   /** Колбэк при любом обновлении кэша строк (включая загрузку с сервера). Используется для печати. */
   onAllItemsChange?: (rows: TDataItem[]) => void;
   /** Переопределяет кнопку «Обновить» в тулбаре (вместо handleCleanRefresh). */
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
   /**
    * Вычисляет дополнительные (динамические) поля строки, которые
    * отсутствуют в БД, но нужны для клиентской сортировки/фильтрации.
@@ -517,14 +517,14 @@ const SubTable: FC<SubTableProps> = ({
     // для активного (mounted) query — ручной refetch() НЕ нужен, иначе будет два запроса.
     // Кэш cachedRowsRef НЕ сбрасываем — useEffect на [allItems] обновит его когда придут новые данные,
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
-    void queryClient.invalidateQueries({ queryKey: [model] });
+    return queryClient.invalidateQueries({ queryKey: [model] });
   }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent, cachedRowsRef, setCacheVersion, pendingAppliedRef]);
 
   // Т6: «Обновить» отменяет несохранённые изменения табличной части — только после вопроса.
   const handleCleanRefresh = useCallback(() => {
-    if (!deferRemoteChanges || !hasUnsavedChanges(cachedRowsRef.current)) { doCleanRefresh(); return; }
-    void (async () => {
-      if (await confirm(translate("subTableRefreshDiscard"))) doCleanRefresh();
+    if (!deferRemoteChanges || !hasUnsavedChanges(cachedRowsRef.current)) return doCleanRefresh();
+    return (async () => {
+      if (await confirm(translate("subTableRefreshDiscard"))) await doCleanRefresh();
     })();
   }, [deferRemoteChanges, cachedRowsRef, confirm, doCleanRefresh]);
 

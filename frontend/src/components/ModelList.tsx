@@ -437,7 +437,7 @@ const ModelList: FC<ModelListProps> = ({
   // «Обновить» списка-кэша сначала спрашивает источник (см. проп onReload), и только
   // потом перечитывает таблицу: иначе кнопка перерисовывает вчерашний снимок.
   const actions = onReload
-    ? { ...tableProps.actions, refetch: () => { void Promise.resolve(onReload()).finally(() => tableProps.actions.refetch()); } }
+    ? { ...tableProps.actions, refetch: () => Promise.resolve(onReload()).catch(() => { }).then(() => tableProps.actions.refetch()) }
     : tableProps.actions;
 
   /*

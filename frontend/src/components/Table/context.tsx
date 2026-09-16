@@ -66,7 +66,7 @@ export interface TableContextProps {
 
   actions: {
     openModelForm?: (props: TOpenModelFormProps) => void;
-    refetch: () => void;
+    refetch: () => void | Promise<void>;
     setColumns: (columns: TColumn[]) => void;
     fetchNextPage?: () => void;
     setAdaptiveLimit?: (limit: number) => void; // Установить адаптивный лимит

@@ -904,7 +904,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           priceTypeUuid={form.fields.priceTypeUuid}
           disabled={form.isLoading}
           deferRemoteChanges
-          onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
+          onRefresh={hasBasis ? () => handleRefillFromBasis(true) : undefined}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (saleItems.pending.length > 0 ? saleItems.pending : basisItems)}
           onTotalChange={handleTotalChange}

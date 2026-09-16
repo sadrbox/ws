@@ -128,7 +128,7 @@ export interface TradeDocumentItemsTableProps {
   /** Документ-основание возврата (реализация) — для serialMode="return". */
   originIssueDocUuid?: string;
   /** Переопределяет кнопку «Обновить» в тулбаре SubTable (вместо handleCleanRefresh). */
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
   /** Запретить добавление строк (независимо от disabled). */
   disableAddRows?: boolean;
   /** Запретить удаление строк (независимо от disabled), но редактирование разрешено. */

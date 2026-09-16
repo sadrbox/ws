@@ -18,7 +18,7 @@ interface Params {
 	setColumns: (c: TColumn[]) => void;
 	renderCell?: (row: TDataItem, col: TColumn) => ReactNode;
 	onRowClick?: (data: Partial<TDataItem>) => void;
-	onReload?: () => void;
+	onReload?: () => void | Promise<void>;
 	/** Подпись кнопки «Обновить»: экрану важно сказать, ОТКУДА она перечитывает данные. */
 	reloadTitle?: string;
 	/** Что написать вместо пустой таблицы: «данных нет» и «их ещё не читали» — разные ответы. */

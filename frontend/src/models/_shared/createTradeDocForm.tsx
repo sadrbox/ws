@@ -644,7 +644,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
             priceTypeUuid={form.fields.priceTypeUuid}
             disabled={form.isLoading} deferRemoteChanges
-            onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
+            onRefresh={hasBasis ? () => handleRefillFromBasis(true) : undefined}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}

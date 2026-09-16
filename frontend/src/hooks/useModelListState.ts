@@ -261,7 +261,7 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		setFilter(undefined);
 		setSort(defaultSort);
 		updateAdaptiveLimit(500);
-		void queryClient.resetQueries({ queryKey: [model] });
+		return queryClient.resetQueries({ queryKey: [model] });
 	}, [
 		cancelAllRequests,
 		queryClient,

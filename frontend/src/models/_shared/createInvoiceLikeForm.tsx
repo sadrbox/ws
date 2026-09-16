@@ -820,7 +820,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             disableDeleteRows={basisLock}
             fieldsReadOnly={basisLock}
             deferRemoteChanges
-            onRefresh={hasBasis ? () => void handleRefillFromBasis(true) : undefined}
+            onRefresh={hasBasis ? () => handleRefillFromBasis(true) : undefined}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}

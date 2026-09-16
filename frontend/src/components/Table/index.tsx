@@ -202,7 +202,8 @@ interface TableControlPanelProps {
   onConfigOpen: () => void;
   onDateRangeToggle: () => void;
   onSearchToggle: () => void;
-  onRefresh: () => void;
+  /** Может вернуть промис — тогда «Обновить» крутится, пока он не завершится. */
+  onRefresh: () => void | Promise<void>;
   onAddClick: () => void;
   onDeleteClick: () => void;
   /** Есть ли выбранные/выделенные строки — от этого зависит доступность кнопки «Удалить». */
@@ -261,25 +262,41 @@ const TableControlPanel = memo(({
   componentName,
 }: TableControlPanelProps) => {
   /*
-   * ВРАЩЕНИЕ «ОБНОВИТЬ» — ТОЛЬКО ОТ НАЖАТИЯ. Флаг `reloading` передают лишь статичные таблицы, и у списков нажатие не
-   * отзывалось ничем. Но и привязать вращение к одной загрузке нельзя: у таблиц с фоновым опросом (задания, прогресс)
-   * загрузка идёт раз в несколько секунд, и иконка крутилась без остановки. Поэтому: нажали — крутим не меньше 700 мс,
-   * дальше пока идёт загрузка, и не дольше 15 с, даже если признак загрузки завис. Без нажатия — не крутим.
+   * ВРАЩЕНИЕ «ОБНОВИТЬ» — ОТ НАЖАТИЯ И ДО КОНЦА ЗАПРОСА. Без нажатия не крутим: у таблиц с фоновым опросом (задания,
+   * прогресс) загрузка идёт раз в несколько секунд, и иконка крутилась бы без остановки. Нажали — крутим не меньше
+   * 700 мс и дальше, пока не завершится операция: промис, который вернул onRefresh, и признак загрузки таблицы
+   * (isLoading/reloading). Потолка по времени нет: команда 1С идёт минутами, и остановка раньше конца врёт.
    */
   const [spinClick, setSpinClick] = useState(0);
   const [spinHold, setSpinHold] = useState(false);
+  const [spinPending, setSpinPending] = useState(false);
   const busy = !!isLoading || reloading;
   useEffect(() => {
     if (!spinClick) return;
     setSpinHold(true);
     const hold = setTimeout(() => setSpinHold(false), 700);
-    const cap = setTimeout(() => setSpinClick(0), 15_000);
-    return () => { clearTimeout(hold); clearTimeout(cap); };
+    return () => clearTimeout(hold);
   }, [spinClick]);
   useEffect(() => {
-    if (spinClick && !spinHold && !busy) setSpinClick(0);
-  }, [spinClick, spinHold, busy]);
-  const spinning = spinClick > 0 && (spinHold || busy);
+    if (spinClick && !spinHold && !spinPending && !busy) setSpinClick(0);
+  }, [spinClick, spinHold, spinPending, busy]);
+  const spinClickRef = useRef(0);
+  const handleReloadClick = () => {
+    const click = Date.now();
+    spinClickRef.current = click;
+    setSpinClick(click);
+    const result = onRefresh();
+    if (result instanceof Promise) {
+      setSpinPending(true);
+      // Промис прежнего нажатия не гасит вращение нового.
+      void result.catch(() => { }).finally(() => {
+        if (spinClickRef.current === click) setSpinPending(false);
+      });
+    } else {
+      setSpinPending(false);
+    }
+  };
+  const spinning = spinClick > 0 && (spinHold || spinPending || busy);
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly || hideAddDelete;
   return (
@@ -316,7 +333,7 @@ const TableControlPanel = memo(({
       {!isSelect && <Toolbar.Divider />}
       {!hideReload && (
         <Toolbar.ReloadButton
-          onClick={() => { setSpinClick(Date.now()); onRefresh(); }}
+          onClick={handleReloadClick}
           disabled={isLoading || reloading}
           loading={spinning}
           title={reloadTitle}
@@ -338,6 +355,7 @@ const TableControlPanel = memo(({
     prevProps.extraButtons === nextProps.extraButtons &&
     prevProps.onDeleteClick === nextProps.onDeleteClick &&
     prevProps.onAddClick === nextProps.onAddClick &&
+    prevProps.onRefresh === nextProps.onRefresh &&
     prevProps.hasSelection === nextProps.hasSelection &&
     prevProps.readonly === nextProps.readonly &&
     prevProps.disableAdd === nextProps.disableAdd &&
@@ -734,9 +752,7 @@ const Table: FC<TableProps> = memo((props) => {
   }, [inlineEditing, onInlineAdd, openModelForm, refetch]);  // onRefresh — обновляет данные.
   // isAllSelectedMode, selectedRows и excludedRows НЕ сбрасываем:
   // строки с теми же ID после перезагрузки сохранят своё состояние выделения.
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  const handleRefresh = useCallback(() => refetch(), [refetch]);
 
   /*
    * Отметки строк, которых больше нет (удалены здесь, ушли после обновления или фильтра), снимаются: иначе
