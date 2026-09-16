@@ -260,6 +260,24 @@ const TableControlPanel = memo(({
   canDelete = true,
   componentName,
 }: TableControlPanelProps) => {
+  /*
+   * ВРАЩЕНИЕ «ОБНОВИТЬ» — НА КАЖДОЕ НАЖАТИЕ. Флаг `reloading` передают только статичные таблицы, а списки и табличные
+   * части — нет, и у них иконка не отзывалась вовсе: быстрый запрос проходит за доли секунды, и нажатие выглядело
+   * пустым. Крутим не меньше 600 мс и дольше, пока таблица грузится.
+   */
+  const [spinClick, setSpinClick] = useState(0);
+  const [spinHold, setSpinHold] = useState(false);
+  useEffect(() => {
+    if (!spinClick) return;
+    setSpinHold(true);
+    const t = setTimeout(() => setSpinHold(false), 600);
+    return () => clearTimeout(t);
+  }, [spinClick]);
+  useEffect(() => {
+    // Загрузка кончилась и минимум отыгран — нажатие больше не держит вращение.
+    if (spinClick && !spinHold && !isLoading) setSpinClick(0);
+  }, [spinClick, spinHold, isLoading]);
+  const spinning = reloading || spinHold || (spinClick > 0 && !!isLoading);
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly || hideAddDelete;
   return (
@@ -296,9 +314,9 @@ const TableControlPanel = memo(({
       {!isSelect && <Toolbar.Divider />}
       {!hideReload && (
         <Toolbar.ReloadButton
-          onClick={onRefresh}
+          onClick={() => { setSpinClick(Date.now()); onRefresh(); }}
           disabled={isLoading || reloading}
-          loading={reloading}
+          loading={spinning}
           title={reloadTitle}
         />
       )}
