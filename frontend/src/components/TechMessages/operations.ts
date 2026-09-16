@@ -91,6 +91,8 @@ export type OpInit = {
 	workKey?: string;
 	/** Команда 1С, которую ведёт операция: по ней кнопки узнают свою идущую работу — и после перезагрузки. */
 	command?: { type: string; baseKey: string | null };
+	/** Когда работа началась на самом деле — у восстановленной после перезагрузки: иначе длительность считалась бы заново. */
+	startedAt?: number;
 	/** Объект работы — ссылка в строке «Прогресса» и в итоге. */
 	ref?: TechMessage["ref"];
 	/** Что сделать, когда работа закончена (адаптер 1С перечитывает кэш). */
@@ -237,7 +239,7 @@ export function startOp(init: OpInit): string {
 	ops = [{
 		id, kind: init.kind, title: init.title, target: init.target,
 		total: Math.max(init.total, 0), done: 0, failed: 0,
-		state: "running", startedAt: Date.now(), finishedAt: null,
+		state: "running", startedAt: init.startedAt ?? Date.now(), finishedAt: null,
 		batchId: init.batchId ?? null, note: init.note ?? "", cancelable: 0,
 		scope: { ...(init.scope?.user ? { user: init.scope.user } : {}), bases: init.scope?.bases ?? [] },
 		// «Всё приложение» — это не пейн: такая операция видна в любом срезе.

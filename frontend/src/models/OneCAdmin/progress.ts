@@ -381,6 +381,8 @@ export async function restoreRunningWork(): Promise<void> {
 		const id = startOp({
 			kind: "update", title: b.title, target: `${translate("onecBases")}: ${b.total}`, total: b.total,
 			command: { type: b.type, baseKey: null },
+			// Длительность — от запуска на сервере, а не от перезагрузки страницы.
+			startedAt: Date.parse(b.createdAt) || Date.now(),
 		});
 		attachBatch(id, b.batchId, b.total);
 	}
@@ -394,6 +396,7 @@ export async function restoreRunningWork(): Promise<void> {
 			kind: cmd.operation === "READ" ? "read" : "update", title: cmd.title, target: cmd.baseKey ?? "",
 			total: 1, workKey, scope: { bases: cmd.baseKey ? [cmd.baseKey] : [] },
 			command: { type: cmd.type, baseKey: cmd.baseKey },
+			startedAt: Date.parse(cmd.createdAt) || Date.now(),
 		});
 		// Слежение без предела по времени — как у долгой операции «Обслуживания»; «Скрыть» у операции его снимает.
 		void followCommand<unknown>(cmd.commandId, () => getOps().some((o) => o.id === id && o.state === "running"))

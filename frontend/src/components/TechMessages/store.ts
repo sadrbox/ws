@@ -118,6 +118,18 @@ const currentOwner = (): string => {
 	} catch { return "anon"; }
 };
 let owner = currentOwner();
+
+/**
+ * СТРАНИЦА ВЫГРУЖАЕТСЯ. Перезагрузка обрывает запросы, и операции закрывались «Не выполнено: Нет связи с сервером»,
+ * а итог оседал в истории и показывался после загрузки рядом с той же работой, восстановленной как выполняющаяся.
+ * `pagehide` — выгрузка действительно идёт (в отличие от `beforeunload`, который можно отменить); `pageshow` —
+ * страница вернулась (кэш истории браузера), пишем снова.
+ */
+let pageUnloading = false;
+if (typeof window !== "undefined") {
+	window.addEventListener("pagehide", () => { pageUnloading = true; });
+	window.addEventListener("pageshow", () => { pageUnloading = false; });
+}
 const ownerKey = (o: string): string => `${STORE_KEY}:${o}`;
 
 /**
@@ -266,6 +278,9 @@ const listeners = new Set<() => void>();
 function persist(): void {
 	// Без входа не пишем: история «никого» оказалась бы видна следующему вошедшему.
 	if (owner === "anon") return;
+	// Страница выгружается: браузер обрывает идущие запросы, и их «Нет связи с сервером» — не итог работы (она идёт
+	// на сервере дальше и поднимется после загрузки). В историю такое не пишем.
+	if (pageUnloading) return;
 	try {
 		localStorage.setItem(ownerKey(owner), JSON.stringify(
 			notices.filter((n) => !n.fromSource).map(({ actions: _actions, ...rest }) => rest),
