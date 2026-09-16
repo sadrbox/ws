@@ -420,6 +420,12 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	const cardQc = useQueryClient();
 	const canWrite = useOnecWrite();
 	const jobsDenied = (row.scheduledJobsDenied ?? null) as boolean | null;
+	/*
+	 * Команду знает агент со сборки `2026-09-16 12:13`. Старый агент её не выполнит, и активная кнопка обещала бы
+	 * то, чего не будет: так же, как «Обновить сведения», гасим её и говорим почему.
+	 */
+	const jobsKnown = agents.isLoading || (agents.data?.items ?? [])
+		.some((a) => a.role === "admin" && !a.disabled && a.capabilities.includes("CLUSTER_SET_SCHEDULED_JOBS"));
 	const setJobs = useMutation({
 		mutationFn: (denied: boolean) => withOp(
 			{ kind: "update", title: translate(denied ? "onecScheduledJobsDeny" : "onecScheduledJobsAllow"), target: key, scope: { bases: [key] } },
@@ -532,8 +538,10 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 										</ValueList>
 										<GroupRow>
 											<Button variant={jobsDenied ? "primary" : "secondary"}
-												disabled={!key || !canWrite || setJobs.isPending}
-												title={translate("onecScheduledJobsHint")}
+												disabled={!key || !canWrite || !jobsKnown || setJobs.isPending}
+												title={jobsKnown
+													? translate("onecScheduledJobsHint")
+													: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
 												onClick={() => setJobs.mutate(!jobsDenied)}>
 												{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
 											</Button>

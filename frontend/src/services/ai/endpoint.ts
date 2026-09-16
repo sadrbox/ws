@@ -86,6 +86,16 @@ export async function aiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 	}
 	if (!res.ok || !body?.success) {
 		const err = body?.error as { message?: string; code?: string; details?: unknown; retryable?: boolean } | undefined;
+		/*
+		 * МАРШРУТА НЕТ — СЕРВИС СТАРЕЕ ПАНЕЛИ. Панель уже знает новую кнопку, а работающий сервис ещё не перезапущен:
+		 * его общий ответ «Ресурс не найден» (16.09, «Запретить регламентные задания») человеку ничего не говорит.
+		 */
+		if (res.status === 404 && err?.code === "NOT_FOUND") {
+			throw new AiServiceError(
+				"Сервис не знает эту операцию: он запущен со старой версией. Перезапустите сервис (pm2 restart all) и повторите.",
+				res.status, err.code,
+			);
+		}
 		throw new AiServiceError(err?.message || `HTTP ${res.status}`, res.status, err?.code, err?.details, err?.retryable);
 	}
 	return body.data as T;
