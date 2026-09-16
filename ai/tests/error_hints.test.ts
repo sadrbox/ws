@@ -75,7 +75,9 @@ test("IB_EXTENSION_NOT_APPLICABLE: совет пересобрать; ни по�
 	};
 	const out = humanizeAgentError(e)!;
 	assert.ok(out.message.startsWith(e.message));
-	assert.match(out.message, /обновите заимствованные объекты/);
+	// Совет «пересоберите расширение» даёт сам агент — подсказка его не повторяет (проверка 16.09).
+	assert.doesNotMatch(out.message.slice(e.message.length), /конфигуратор|заимствованн/i);
+	assert.match(out.message, /не повторяет/);
 	assert.equal(ibFailureReason(e), null);
 	assert.equal(RETRY_LATER_CODES.has(e.code), false);
 });
