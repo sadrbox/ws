@@ -247,10 +247,15 @@ export function mergeBatch(p: BatchProgress): void {
 		failed: p.failed,
 		state: running ? "running" : (p.failed > 0 ? "failed" : "done"),
 		finishedAt: running ? null : (o.finishedAt ?? Date.now()),
+		/*
+		 * ПРИМЕЧАНИЕ НЕ ПЕРЕЖИВАЕТ ЗАВЕРШЕНИЕ (П25). «База занята, повтор в 09:30» пишется, пока задание ждёт
+		 * очередной попытки, и считается только у выполняющегося задания. Раньше по завершении оставалось прежнее
+		 * значение — и успешное задание показывало «Выполнено» рядом с отжившим обещанием повтора (16.09).
+		 */
 		note: p.failed > 0 && failedItem?.error
 			? `${failedItem.baseKey ?? ""}: ${failedItem.error.message}`.trim()
 				+ (lateWaiting.length ? ` · ${translate("onecLateWaiting")}` : "")
-			: (retryNote || warning || o.note),
+			: (retryNote || warning || (running ? o.note : "")),
 		...(warning ? { warning } : {}),
 	}));
 	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к

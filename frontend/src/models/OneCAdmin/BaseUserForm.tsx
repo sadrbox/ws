@@ -14,6 +14,7 @@
  * базы человека и где она есть. Правку в этих строках делать можно: она копится тем же
  * черновиком, что и отметки на текущей базе.
  */
+import { ValueList, ValueRow } from "src/components/ValueList";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
@@ -625,14 +626,20 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 												disabled={locked}
 												onChange={(e) => setBaseKey(e.target.value)}
 												options={baseOptions} />
-											<Field name="buf_seen" label={translate("onecDataFrom")}
-												value={occ.find((o) => o.baseKey === baseKey)?.seenAt
-													? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"}
-												disabled width={FIELD_WIDTH.date} onChange={() => {}} />
-											<Field name="buf_roles" label={translate("roles")}
-												value={String((rolesByBase.get(baseKey.toLowerCase()) ?? []).length)}
-												disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
 										</GroupRow>
+										{/*
+										  * ПРАВИТСЯ ТОЛЬКО БАЗА, ОСТАЛЬНОЕ — СВЕДЕНИЯ. «Данные от» и число ролей стояли
+										  * выключенными полями ввода: рамка и серый фон обещают правку, которой нет, — по
+										  * ним щёлкают и ищут, где она включается. Теперь это список «подпись — значение»,
+										  * как в карточке базы, с одной колонкой подписей — отсюда и сквозное выравнивание.
+										  */}
+										<ValueList columns={2}>
+											<ValueRow label={translate("onecDataFrom")}
+												value={occ.find((o) => o.baseKey === baseKey)?.seenAt
+													? getFormatDate(occ.find((o) => o.baseKey === baseKey)!.seenAt) : "—"} />
+											<ValueRow label={translate("roles")}
+												value={String((rolesByBase.get(baseKey.toLowerCase()) ?? []).length)} />
+										</ValueList>
 									</FormArea>
 
 									<FormArea title={translate("onecAreaUserData")}>
@@ -647,8 +654,9 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 													// Пустое полное имя не принимается (П19): ошибка формы ниже, запись недоступна.
 													noAutofill disabled={locked} placeholder={here?.fullName || undefined}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, fullName: e.target.value }))} />
+												{/* Ширина — одна на весь ряд (FIELD_WIDTH.wide): поля разной длины ломали сетку. */}
 												<Field name="buf_pwd" label={translate("onecUserPassword")} type="password" value={form.password}
-													width={FIELD_WIDTH.md} disabled={locked} placeholder={translate("onecKeepAsIs")}
+													width={FIELD_WIDTH.wide} disabled={locked} placeholder={translate("onecKeepAsIs")}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, password: e.target.value }))} />
 											</GroupRow>
 											<GroupRow>

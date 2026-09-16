@@ -200,6 +200,27 @@ describe("Технические сообщения: прогресс запро
 		expect(getOps().find((o) => o.batchId === "b4")?.note).toMatch(new RegExp(`^buh: ${translate("onecBusyRetryAt")}`));
 	});
 
+	it("П25: задание дождалось повтора и выполнилось — обещание повтора не остаётся в примечании", () => {
+		act(() => {
+			const id = startOp({ kind: "update", title: "Установить расширение", target: "базы: 1", total: 1 });
+			attachBatch(id, "b5", 1);
+			mergeBatch({
+				id: "b5", total: 1, done: 0, failed: 0, pending: 1, cancelable: 1,
+				items: [{ commandId: "c3", baseKey: "_transition", state: "queued", attempt: 2, retryAt: "2026-09-16T04:30:00Z", error: null }],
+			} as unknown as Parameters<typeof mergeBatch>[0]);
+		});
+		expect(getOps().find((o) => o.batchId === "b5")?.note).toContain(translate("onecBusyRetryAt"));
+		act(() => {
+			mergeBatch({
+				id: "b5", total: 1, done: 1, failed: 0, pending: 0, cancelable: 0,
+				items: [{ commandId: "c3", baseKey: "_transition", state: "done", error: null }],
+			} as unknown as Parameters<typeof mergeBatch>[0]);
+		});
+		const op = getOps().find((o) => o.batchId === "b5");
+		expect(op?.state).toBe("done");
+		expect(op?.note ?? "").toBe("");
+	});
+
 	it("«Без группировки» — операции без заголовка секции, но видны", () => {
 		// Сплошная лента не должна держать единственный заголовок — у «Прогресса».
 		localStorage.setItem("tech_messages_group", "none");

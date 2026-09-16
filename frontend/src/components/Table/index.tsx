@@ -9,6 +9,7 @@ import {
   TDataItem,
   TypeFormAction,
 } from './types';
+import { pruneSelection } from './services';
 
 import { translate } from 'src/i18';
 import {
@@ -717,6 +718,20 @@ const Table: FC<TableProps> = memo((props) => {
     refetch();
   }, [refetch]);
 
+  /*
+   * Отметки строк, которых больше нет (удалены здесь, ушли после обновления или фильтра), снимаются: иначе
+   * «выбрано N» считает призраков, а групповое действие уходит по чужим строкам с теми же id (services.pruneSelection).
+   */
+  useEffect(() => {
+    const ids = rows.map((r) => Number(r.id));
+    const nextSelected = pruneSelection(selectedRows, ids);
+    if (nextSelected) setSelectedRows(nextSelected);
+    const nextExcluded = pruneSelection(excludedRows, ids);
+    if (nextExcluded) setExcludedRows(nextExcluded);
+    // Намеренно только по смене строк: набор отметок правит сам пользователь.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
   const handleDeleteClick = useCallback(async () => {
     // Собираем реальный набор id выбранных строк
     let effectiveIds: Set<number>;
@@ -725,13 +740,10 @@ const Table: FC<TableProps> = memo((props) => {
       effectiveIds = new Set<number>(
         rows.map(r => r.id).filter(id => !excludedRows.has(id)),
       );
-    } else if (selectedRows.size > 0) {
-      effectiveIds = selectedRows;
-    } else if (activeRow !== null) {
-      // Ничего не выбрано чекбоксом — берём активную строку
-      effectiveIds = new Set([activeRow]);
     } else {
-      effectiveIds = new Set();
+      // ТОЛЬКО ОТМЕЧЕННОЕ ЧЕКБОКСОМ. Активная строка — это «где я сейчас», а не «что я выбрал»: она переезжает
+      // от стрелок и от клика по любой ячейке, и удалять по ней значило удалять то, чего человек не выбирал.
+      effectiveIds = selectedRows;
     }
 
     if (effectiveIds.size === 0) return;
@@ -992,7 +1004,7 @@ const Table: FC<TableProps> = memo((props) => {
           onRefresh={handleRefresh}
           onAddClick={handleCreate}
           onDeleteClick={handleDeleteClick}
-          hasSelection={isAllSelectedMode || selectedRows.size > 0 || activeRow !== null}
+          hasSelection={isAllSelectedMode || selectedRows.size > 0}
           search={search}
           extraButtons={extraButtons}
           readonly={isReadonly}

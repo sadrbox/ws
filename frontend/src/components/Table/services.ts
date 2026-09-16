@@ -88,6 +88,27 @@ export function sortTableRows<T>(
 	});
 }
 
+/**
+ * ОТМЕТКИ ЖИВУТ, ПОКА ЖИВЫ СТРОКИ. После удаления или замены данных в наборе остаются id, которых в таблице
+ * больше нет: кнопки продолжают считать «выбрано 3», а групповое действие уходит по чужим строкам — тем, кому
+ * теперь принадлежат те же id.
+ *
+ * Пустой набор строк — не повод снимать отметки: у таблиц, где галочка означает состояние данных (роли
+ * пользователя, задачи расписания), строки приходят позже отметок, и чистка на пустом списке прочиталась бы
+ * как «сняли всё».
+ */
+export function pruneSelection(selected: ReadonlySet<number>, rowIds: readonly number[]): Set<number> | null {
+	if (selected.size === 0 || rowIds.length === 0) return null;
+	const alive = new Set(rowIds);
+	let dropped = false;
+	const next = new Set<number>();
+	for (const id of selected) {
+		if (alive.has(id)) next.add(id);
+		else dropped = true;
+	}
+	return dropped ? next : null;
+}
+
 export function getModelColumns(
 	initColumns: TColumn[],
 	modelName: string,

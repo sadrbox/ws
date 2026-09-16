@@ -37,7 +37,9 @@ import type { TPane } from "src/app/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
-import { fetchBases, runBatch, type BatchType, type OnecBase } from "src/services/onec/api";
+import {
+	fetchBases, runBatch, type BatchType, type OnecBase, fetchRoles
+} from "src/services/onec/api";
 import {
 	isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation, useOnecPermissions,
 } from "./shared";
@@ -68,6 +70,11 @@ type OpSpec = {
 	/** Вид операции для реестра прогресса. */
 	kind: "create" | "update" | "delete" | "read";
 };
+
+/** Колонка шага «Права»: одна роль в строке — отметка значит «выдать новому пользователю». */
+const rightsColumns = (): TColumn[] => ([
+	{ identifier: "role", type: "string", width: "420px", minWidth: "200px", alignment: "left", visible: true, inlist: true },
+] as unknown as TColumn[]);
 
 export const GROUP_OPS: Record<GroupOp, OpSpec> = {
 	publish: { type: "IB_PUBLISH", title: "onecPublish", warning: "onecPublishWarning", needs: "publish", kind: "update" },
@@ -124,6 +131,9 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	const eta = formatDuration(estimateSecs(stats.data, spec?.type ?? "", picked.size));
 
 	const [name, setName] = useState(asText(data.name));
+	// Роли нового пользователя (шаг «Права»). IB_CREATE_USER принимает их вместе с именем и паролем — без
+	// этого шага пользователь заводился без единого права, и за ролями шли второй командой в карточку.
+	const [roles, setRoles] = useState<Set<string>>(new Set());
 	const [fullName, setFullName] = useState("");
 	const [password, setPassword] = useState("");
 	const [safeMode, setSafeMode] = useState(true);
@@ -155,6 +165,22 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 		() => items.filter((b) => picked.has(b.key.toLowerCase()) && fitOf(b) !== "")
 			.map((b) => ({ key: b.key, reason: fitOf(b) })),
 		[items, picked, fitOf],
+	);
+
+	// ── Шаг «Права»: роли нового пользователя (только создание) ─────────────
+	const isCreateUser = spec?.type === "IB_CREATE_USER";
+	const rolesQuery = useQuery({
+		queryKey: ["onec", "roles", ""], queryFn: () => fetchRoles(), staleTime: 5 * 60_000, enabled: isCreateUser,
+	});
+	const [rightsCols, setRightsCols] = useState<TColumn[]>(() => getModelColumns(rightsColumns(), "OneCAdmin_gcwRights"));
+	const rightsRows = useMemo(
+		() => (rolesQuery.data?.items ?? []).map((r, i) => ({ id: i + 1, uuid: r.name, role: r.name })),
+		[rolesQuery.data],
+	);
+	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
+	const rightsPreset = useMemo(
+		() => new Set(rightsRows.filter((r) => roles.has(r.role)).map((r) => r.id)),
+		[rightsRows, roles],
 	);
 
 	// ── Что не хватает для запуска ──────────────────────────────────────────
@@ -285,6 +311,27 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 				</WizardForm>
 			),
 		},
+		...(isCreateUser ? [{
+			id: "rights",
+			title: translate("onecTabRights"),
+			hint: translate("onecWizStepRightsCreateHint"),
+			body: (
+				<Table {...buildStaticTableProps({
+					componentName: "OneCAdmin_gcwRights", rows: rightsView.rows, columns: rightsCols,
+					setColumns: setRightsCols, sorting: rightsView.sorting, search: rightsView.search,
+					isLoading: rolesQuery.isLoading,
+					reloading: rolesQuery.isFetching,
+					onReload: () => void rolesQuery.refetch(),
+					// Строка — не «текущая запись», а отметка: роль либо выдаётся новому пользователю, либо нет.
+					disableActiveRow: true,
+					selectable: true,
+					presetSelectedRows: rightsPreset,
+					onSelectionChange: (sel, all) => setRoles(new Set(
+						all.filter((r) => sel.has(Number(r.id))).map((r) => asText(r.role)),
+					)),
+				})} />
+			),
+		}] : []),
 		{
 			id: "plan",
 			title: translate("onecWhatHappens"),
