@@ -1677,6 +1677,7 @@
   "onecScheduledJobsDeny": "Регламенттік тапсырмаларға тыйым салу",
   "onecScheduledJobsAllow": "Регламенттік тапсырмаларға рұқсат беру",
   "onecScheduledJobsHint": "Фондық тапсырмалар базаны бөлінген қатынаспен ұстайды. Жұмыстан кейін қайта рұқсат беруді ұмытпаңыз.",
+  "onecScheduledJobsDeniedChip": "Регламенттік тапсырмаларға тыйым салынған",
   "onecScheduledJobsByCommand": "команда бойынша, оқылмаған",
   "onecScheduledJobsRestore": "Бұрынғыдай қайтару",
   "onecScheduledJobsNotApplied": "Кластер команданы қабылдады, бірақ регламенттік тапсырмалар өзгермеді",

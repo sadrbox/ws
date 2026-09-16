@@ -332,6 +332,9 @@ const baseToRow = (b: OnecBase): TDataItem => ({
 	sessionsDeniedSource: b.sessionsDeniedSource ?? null, sessionsDeniedActive: b.sessionsDeniedActive ?? null,
 	sessionsDeniedSeenAt: b.sessionsDeniedSeenAt ?? null, sessionsDeniedCodeSet: b.sessionsDeniedCodeSet ?? null,
 	configName: b.configName ?? null, configVersion: b.configVersion ?? null, configSeenAt: b.configSeenAt ?? null,
+	// Запрет регламентных заданий (С39, С40): без этих полей карточка показывала прочерк, хотя реестр их знает.
+	scheduledJobsDenied: b.scheduledJobsDenied ?? null, scheduledJobsSeenAt: b.scheduledJobsSeenAt ?? null,
+	scheduledJobsSource: b.scheduledJobsSource ?? null,
 } as unknown as TDataItem);
 
 /**
@@ -531,6 +534,15 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 													? translate("onecExtNotChecked")
 													: `${translate("extensionsCount")}: ${asText(row.extensionsCount)}`}
 											</StateChip>
+											{/*
+											  * Запрещённые регламентные задания — меткой в состоянии: это временное положение на время работ,
+											  * и о нём надо помнить, чтобы разрешить задания обратно.
+											  */}
+											{row.scheduledJobsDenied === true && (
+												<StateChip tone="bad" title={translate("onecScheduledJobsHint")}>
+													{translate("onecScheduledJobsDeniedChip")}
+												</StateChip>
+											)}
 											{/* Вход в базу: закрыт ли он сейчас — видно без перехода на «Сеансы». */}
 											{(() => {
 												const lock = sessionsLockView(row as never);
