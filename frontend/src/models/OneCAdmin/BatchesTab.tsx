@@ -27,6 +27,7 @@
  * строки, которую прервать нельзя, итог говорит почему — запись не обрывают, или агент
  * старый. Подтверждение обязательно: работа уже идёт на сервере 1С.
  */
+import { formatDuration } from "./queueStats";
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -127,9 +128,24 @@ export function abortHint(batchType: string, it: { state: string; abortable?: bo
  * ИТОГ СТРОКИ ЗАДАНИЯ (П14): ответ или ошибка, оговорка (итог проверки, запись пользователя) и что происходит с
  * командой — номер попытки, повтор на паузе, процесс после TIMEOUT ещё работает, поздний результат.
  */
+/**
+ * «Ждала очереди 18 мин · работала 2 мин» — по паре чисел из отчёта (С40).
+ *
+ * Молчим, пока ждать было нечего: у команды, выданной сразу, ожидание — секунды, и строка о нём только мешает.
+ * Порог в полминуты отделяет «очередь была» от «её не было».
+ */
+export function timingNote(it: { queuedSecs?: number | null; runSecs?: number | null }): string {
+	const parts = [
+		(it.queuedSecs ?? 0) >= 30 ? `${translate("onecBatchQueuedFor")} ${formatDuration(it.queuedSecs ?? 0)}` : "",
+		(it.runSecs ?? 0) >= 30 ? `${translate("onecBatchRanFor")} ${formatDuration(it.runSecs ?? 0)}` : "",
+	].filter(Boolean);
+	return parts.join(" · ");
+}
+
 export function itemOutcome(batchType: string, it: {
 	state: string; abortable?: boolean; outcome: string | null; error: { code: string; message: string } | null;
 	warning?: string | null; attempt?: number; retryAt?: string | null; late?: boolean; lateWait?: boolean; stillRunning?: boolean;
+	queuedSecs?: number | null; runSecs?: number | null;
 }): string {
 	const main = it.error
 		? `${it.error.code}: ${it.error.message}`
@@ -138,6 +154,8 @@ export function itemOutcome(batchType: string, it: {
 		main,
 		it.error && it.warning ? it.warning : "",
 		(it.attempt ?? 1) > 1 ? `${translate("onecBatchAttempt")} ${it.attempt}` : "",
+		// Куда ушло время (С40): ожидание очереди по базе и собственно работа — раздельно.
+		timingNote(it),
 		it.retryAt ? `${translate("onecBusyRetryAt")} ${getFormatDate(it.retryAt)}` : "",
 		it.stillRunning ? translate("onecStillRunning") : "",
 		it.lateWait ? translate("onecLateWaiting") : "",

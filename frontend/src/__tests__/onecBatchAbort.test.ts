@@ -6,7 +6,7 @@
  * прервать нельзя, итог объясняет почему, двумя разными ответами.
  */
 import { describe, it, expect } from "vitest";
-import { abortHint, abortTargets, itemOutcome } from "src/models/OneCAdmin/BatchesTab";
+import { abortHint, abortTargets, itemOutcome, timingNote } from "src/models/OneCAdmin/BatchesTab";
 import { translate } from "src/i18";
 
 const batch = (items: { commandId: string | null; state: string; abortable?: boolean }[]) => ({ items });
@@ -56,5 +56,22 @@ describe("итог строки задания (П14)", () => {
 		});
 		expect(timeout).toBe(`TIMEOUT: продолжают работу: 1cv8 1234 · ${translate("onecStillRunning")}`);
 		expect(itemOutcome("IB_BACKUP", { state: "done", outcome: null, error: null })).toBe("—");
+	});
+});
+
+describe("С40: куда ушло время команды", () => {
+	it("ожидание очереди и работа — раздельно; секунды не показываем", () => {
+		expect(timingNote({ queuedSecs: 1100, runSecs: 128 })).toMatch(/18 .*·.*2 /);
+		// Команда выдана сразу — про очередь говорить нечего.
+		expect(timingNote({ queuedSecs: 3, runSecs: 240 })).not.toMatch(/·/);
+		expect(timingNote({ queuedSecs: 2, runSecs: 4 })).toBe("");
+		expect(timingNote({})).toBe("");
+	});
+
+	it("строка задания показывает ожидание рядом с итогом", () => {
+		const text = itemOutcome("IB_INSTALL_EXTENSION", {
+			state: "done", outcome: null, error: null, queuedSecs: 1100, runSecs: 90,
+		});
+		expect(text).toContain("18");
 	});
 });

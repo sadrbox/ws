@@ -1777,6 +1777,8 @@
   "onecCmdRunningSince": "выполняется с",
   "onecAbortKilled": "процесс снят",
   "onecBusyRetryAt": "база занята, повтор",
+  "onecBatchQueuedFor": "ждала очереди",
+  "onecBatchRanFor": "работала",
   "onecLateWaiting": "срок истёк — ждём поздний результат",
   "onecLateResult": "пришёл поздний результат",
   "onecAbortCheckHint": "Проверку с «Исправлять» не обрывают, а без него прервать её может только агент, который снимает конфигуратор при отмене, — обновите агента",

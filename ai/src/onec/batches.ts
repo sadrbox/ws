@@ -48,6 +48,13 @@ export type BatchProgress = {
 		abortable?: boolean;
 		/** Выполнено с оговоркой: признак не перечитан или свойства не приняты платформой (П12). */
 		warning?: string | null;
+		/**
+		 * Сколько секунд команда ЖДАЛА очереди (постановка → выдача агенту) и сколько РАБОТАЛА
+		 * (выдача → результат). Без этой пары «задание шло 20 минут» ничего не объясняет: почти
+		 * всё это время команда могла стоять за чужой операцией по той же базе (С40, 16.09).
+		 */
+		queuedSecs?: number | null;
+		runSecs?: number | null;
 		/** Номер попытки (повтор «база занята», С19). */
 		attempt?: number;
 		/** Повтор стоит на паузе до этого времени (С19). */
@@ -179,6 +186,7 @@ export class BatchService {
 			type: string; can_abort: boolean | null; can_abort_check: boolean | null; repair: string | null;
 			user_result: { unverified?: unknown; skipped?: unknown } | null;
 			attempt: number | null; retry_at: Date | null; late: boolean | null; late_wait: boolean | null;
+			queued_secs: number | null; run_secs: number | null;
 			check_result: { issues?: unknown; repaired?: unknown; repairMode?: unknown; skipped?: unknown } | null;
 			still_running: boolean | null;
 		}>(
@@ -186,6 +194,9 @@ export class BatchService {
 			// у изменяющих команд это `{ok:true}`. Полный result в отчёт не тащим.
 			// Тип команды и способность агента — для признака «можно прервать» (S4).
 			`SELECT c.batch_id, c.id, c.base_key, c.state, c.error,
+			        EXTRACT(EPOCH FROM (COALESCE(c.dispatched_at, c.finished_at, now()) - c.created_at))::int AS queued_secs,
+			        CASE WHEN c.dispatched_at IS NOT NULL
+			             THEN EXTRACT(EPOCH FROM (COALESCE(c.finished_at, now()) - c.dispatched_at))::int END AS run_secs,
 			        COALESCE(c.result->>'path', c.result->>'url') AS outcome,
 			        -- Оговорки записи пользователя (П12): только эти два поля, а не весь ответ.
 			        CASE WHEN c.type IN ('IB_CREATE_USER', 'IB_UPDATE_USER') AND c.state = 'done'
@@ -255,6 +266,8 @@ export class BatchService {
 					warning: userWriteWarning(r.user_result) ?? check?.warning ?? null,
 					attempt: r.attempt ?? 1,
 					retryAt: r.retry_at ? new Date(r.retry_at).toISOString() : null,
+					queuedSecs: r.queued_secs ?? null,
+					runSecs: r.run_secs ?? null,
 					...(r.late ? { late: true } : {}),
 					...(r.late_wait ? { lateWait: true } : {}),
 					...(r.still_running ? { stillRunning: true } : {}),
