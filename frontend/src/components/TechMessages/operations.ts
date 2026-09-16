@@ -337,6 +337,19 @@ export function abandonOp(id: string): void {
 	emit();
 }
 
+/**
+ * СБРОСИТЬ РЕЕСТР — при смене пользователя. Операции прежнего пользователя не должны оставаться на экране нового; его
+ * собственная идущая работа поднимется заново с сервиса (restoreRunningWork).
+ */
+export function resetOps(): void {
+	finishHooks.clear();
+	cancelers.clear();
+	ownOutcome.clear();
+	if (!ops.length) return;
+	ops = [];
+	emit();
+}
+
 /** Убрать завершённые: список нужен для наблюдения, а журнал — это итоги-события. */
 export function clearFinished(): void {
 	const next = ops.filter((o) => o.state === "running");

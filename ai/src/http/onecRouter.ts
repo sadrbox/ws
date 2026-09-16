@@ -1163,6 +1163,31 @@ export function onecRouter(deps: Deps) {
 		res.json({ success: true, data: row.result ?? null });
 	});
 
+	/*
+	 * ТЕКУЩАЯ РАБОТА ПОЛЬЗОВАТЕЛЯ — одиночные команды и задания, которые ещё идут. Реестр операций панели живёт в
+	 * памяти вкладки: после перезагрузки страницы или смены кэша «Прогресс» пустел, хотя работа шла. Панель по этому
+	 * списку восстанавливает операции, как если бы только что их запустила, и дослеживает до конца. Только своё.
+	 */
+	r.get("/my-work", async (req, res) => {
+		const u = req.erpUser!;
+		const [cmds, own] = await Promise.all([queue.activeOfUser(u.uuid), batches.activeOfUser(u.uuid)]);
+		res.json({ success: true, data: {
+			commands: cmds.map((c) => {
+				const spec = findAdminCommand(c.type);
+				return {
+					commandId: c.id, type: c.type, title: spec?.title ?? c.type, operation: spec?.operation ?? null,
+					baseKey: c.base_key, state: c.state,
+					createdAt: new Date(c.created_at).toISOString(),
+					dispatchedAt: c.dispatched_at ? new Date(c.dispatched_at).toISOString() : null,
+				};
+			}),
+			batches: own.map((b) => ({
+				batchId: b.id, type: b.type, title: findAdminCommand(b.type)?.title ?? b.type, total: b.total,
+				createdAt: new Date(b.created_at).toISOString(),
+			})),
+		} });
+	});
+
 	r.get("/batches", async (req, res) => {
 		// Задания опрашивает панель, пока в них есть незавершённое, — здесь и закрываем то,
 		// чему уже не суждено выполниться. Иначе групповая операция висела бы «в работе»

@@ -100,9 +100,25 @@ const LIMIT = 200;
  */
 const RETENTION_DAYS = 14;
 
-/** Ключ хранения. Прежний журнал уведомлений лежал под `notification-journal`. */
+/**
+ * Ключ хранения — СВОЙ У КАЖДОГО ПОЛЬЗОВАТЕЛЯ. Раньше ключ был один на браузер, и после входа другим пользователем в
+ * той же вкладке или на том же компьютере показывалась чужая история: чьи базы, чьи ошибки, чьи операции. Прежние
+ * общие ключи (`tech-messages`, `notification-journal`) не переносим — чья в них история, не узнать, — а удаляем.
+ */
 const STORE_KEY = "tech-messages";
-const LEGACY_KEY = "notification-journal";
+const LEGACY_KEYS = ["tech-messages", "notification-journal"];
+const AUTH_USER_KEY = "auth_user";
+
+/** Чья история сейчас на экране: uuid вошедшего пользователя, без входа — «никто». */
+const currentOwner = (): string => {
+	try {
+		const raw = localStorage.getItem(AUTH_USER_KEY);
+		const uuid = raw ? (JSON.parse(raw) as { uuid?: unknown }).uuid : null;
+		return typeof uuid === "string" && uuid ? uuid : "anon";
+	} catch { return "anon"; }
+};
+let owner = currentOwner();
+const ownerKey = (o: string): string => `${STORE_KEY}:${o}`;
 
 /**
  * Область «всё приложение»: сама область сообщений видит всё, что ей сообщили, а
@@ -201,24 +217,14 @@ function load(): TechMessage[] {
 		 * никто уже не задаёт. Записи старше RETENTION_DAYS при загрузке не поднимаем.
 		 */
 		const oldest = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
-		const own = parse(localStorage.getItem(STORE_KEY))
+		// Общие ключи прежних версий — чужая или ничья история: удаляем, не показывая.
+		for (const k of LEGACY_KEYS) localStorage.removeItem(k);
+		if (owner === "anon") return [];
+		const own = parse(localStorage.getItem(ownerKey(owner)))
 			.filter((n) => !n.fromSource)
 			.filter((n) => (n.lastAt ?? n.firstAt ?? 0) >= oldest)
 			.map((n) => (n.active ? { ...n, active: false } : n));
-		if (own.length) return own;
-		// Переезд со старого журнала — один раз: записи те же, форма другая.
-		const legacy = parse(localStorage.getItem(LEGACY_KEY)) as unknown as {
-			id: number; type: NoticeType; text: string; timestamp: number;
-			paneLabel?: string; ref?: { endpoint: string; uuid: string; label?: string };
-		}[];
-		if (!legacy.length) return [];
-		const moved: TechMessage[] = legacy.map((e, i) => ({
-			id: `legacy${i}`, scope: APP_SCOPE, key: `legacy${i}`,
-			type: e.type, text: e.text, source: e.paneLabel ?? "",
-			firstAt: e.timestamp, lastAt: e.timestamp, active: false, ref: e.ref,
-		})).reverse();
-		localStorage.removeItem(LEGACY_KEY);
-		return moved.slice(0, LIMIT);
+		return own;
 	} catch {
 		return [];
 	}
@@ -258,14 +264,30 @@ const listeners = new Set<() => void>();
  * хранилище браузера. Журнал — не аудит (M18): он про события, а не про данные.
  */
 function persist(): void {
+	// Без входа не пишем: история «никого» оказалась бы видна следующему вошедшему.
+	if (owner === "anon") return;
 	try {
-		localStorage.setItem(STORE_KEY, JSON.stringify(
+		localStorage.setItem(ownerKey(owner), JSON.stringify(
 			notices.filter((n) => !n.fromSource).map(({ actions: _actions, ...rest }) => rest),
 		));
 	} catch { /* приватный режим или переполнение — не повод ломать экран */ }
 }
 
 const emit = () => { persist(); for (const l of listeners) l(); };
+
+/**
+ * СМЕНИЛСЯ ПОЛЬЗОВАТЕЛЬ — СМЕНИЛАСЬ ИСТОРИЯ. Вызывает оболочка приложения при входе и выходе: в памяти вкладки не
+ * должно остаться ни строки прежнего пользователя. Возвращает, сменился ли владелец.
+ */
+export function setTechMessagesOwner(uuid: string | null | undefined): boolean {
+	const next = uuid || "anon";
+	if (next === owner) return false;
+	owner = next;
+	notices = load();
+	hidden.clear();
+	for (const l of listeners) l();
+	return true;
+}
 
 /**
  * Сообщить состояние источника. Пустой список — источник замолчал.

@@ -681,6 +681,22 @@ export class CommandQueue {
 		return r.rows.length;
 	}
 
+	/**
+	 * НЕЗАВЕРШЁННЫЕ ОДИНОЧНЫЕ КОМАНДЫ ПОЛЬЗОВАТЕЛЯ (без задания). Реестр операций панели живёт в памяти вкладки:
+	 * после перезагрузки страницы «Прогресс» пустел, хотя команды шли дальше. По этому списку панель восстанавливает
+	 * их и дослеживает до конца. Служебные чтения сервиса (без пользователя) сюда не попадают.
+	 */
+	async activeOfUser(userUuid: string): Promise<CommandRow[]> {
+		const r = await this.db.query<CommandRow>(
+			`SELECT * FROM commands
+			  WHERE user_uuid = $1 AND batch_id IS NULL AND state IN ('queued', 'dispatched')
+			    AND created_at > now() - interval '1 day'
+			  ORDER BY created_at LIMIT 50`,
+			[userUuid],
+		);
+		return r.rows;
+	}
+
 	async get(id: string): Promise<CommandRow | null> {
 		const r = await this.db.query<CommandRow>(`SELECT * FROM commands WHERE id = $1`, [id]);
 		return r.rows[0] ?? null;

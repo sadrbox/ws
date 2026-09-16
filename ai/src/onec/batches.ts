@@ -369,6 +369,19 @@ export class BatchService {
 	}
 
 	/** Последние задания организации — для вкладки «Задания». Шесть запросов на любой размер. */
+	/** Задания пользователя, в которых ещё есть незавершённые команды, — для восстановления «Прогресса» после перезагрузки. */
+	async activeOfUser(userUuid: string): Promise<{ id: string; type: string; total: number; created_at: Date }[]> {
+		const r = await this.db.query<{ id: string; type: string; total: number; created_at: Date }>(
+			`SELECT b.id, b.type, b.total, b.created_at FROM command_batches b
+			  WHERE b.user_uuid = $1 AND b.created_at > now() - interval '1 day'
+			    AND EXISTS (SELECT 1 FROM commands c
+			                 WHERE c.batch_id = b.id AND c.state IN ('queued', 'dispatched') AND c.retried_by IS NULL)
+			  ORDER BY b.created_at LIMIT 20`,
+			[userUuid],
+		);
+		return r.rows;
+	}
+
 	async list(organizationUuid: string, limit = 20): Promise<BatchProgress[]> {
 		const r = await this.db.query<{ id: string }>(
 			`SELECT id FROM command_batches WHERE organization_uuid = $1 ORDER BY created_at DESC LIMIT $2`,

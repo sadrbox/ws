@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-	APP_SCOPE, addMessage, clearNoticeHistory, clearScope, getMessages, noteNotice, notify, reportNotices,
+	APP_SCOPE, addMessage, clearNoticeHistory, clearScope, getMessages, noteNotice, notify, reportNotices, setTechMessagesOwner,
 } from "src/components/TechMessages/store";
 import { NETWORK_KEY, addPaneNotification, dismissNetworkNotifications } from "src/hooks/paneNotifications";
 
@@ -149,15 +149,18 @@ describe("журнал — не аудит (M18)", () => {
 	});
 
 	it("сообщения форм не оседают в хранилище браузера, события — остаются", () => {
+		// История хранится у пользователя (без входа не пишется вовсе) — входим.
+		setTechMessagesOwner("user-notify");
 		reportNotices("pane-1", "form", "Реализация", [{ type: "attention", text: "Не заполнен ИИН покупателя" }]);
 		noteNotice("Базы 1С", { type: "error", text: "Команда отклонена" });
 
-		const saved = JSON.parse(localStorage.getItem("tech-messages") ?? "[]") as { text: string; fromSource?: boolean }[];
+		const saved = JSON.parse(localStorage.getItem("tech-messages:user-notify") ?? "[]") as { text: string; fromSource?: boolean }[];
 		expect(saved.some((m) => m.fromSource)).toBe(false);
 		expect(saved.map((m) => m.text)).toEqual(["Команда отклонена"]);
 		// На экране сообщение формы при этом есть: не пишется оно только на диск.
 		expect(getMessages().some((m) => m.text === "Не заполнен ИИН покупателя")).toBe(true);
 
 		reportNotices("pane-1", "form", "Реализация", []);
+		setTechMessagesOwner(null);
 	});
 });

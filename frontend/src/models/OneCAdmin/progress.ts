@@ -19,7 +19,7 @@ import { stagesText } from "./queueStats";
 import { useEffect, useSyncExternalStore } from "react";
 import { queryClient } from "src/app/queryClient";
 import {
-	cancelBatch, fetchBatches, hasCapability, type BatchProgress, type OnecAgent,
+	cancelBatch, fetchBatches, hasCapability, type BatchProgress, type OnecAgent, fetchMyWork, followCommand, type MyWork
 } from "src/services/onec/api";
 import { translate } from "src/i18";
 import { notify } from "src/components/TechMessages/store";
@@ -354,4 +354,41 @@ export function useBatchWatch(): { isFetching: boolean; refresh: () => void; run
 		refresh: () => void pollBatches(),
 		running: list.filter((o) => o.state === "running").length,
 	};
+}
+
+
+/**
+ * ВОССТАНОВИТЬ ИДУЩУЮ РАБОТУ после перезагрузки страницы, сброса кэша или входа.
+ *
+ * Реестр операций живёт в памяти вкладки, и после обновления «Прогресс» пустел, хотя команды на сервере шли дальше:
+ * человек не видел, что его установка расширения ещё выполняется, и запускал её повторно. Сервис знает работу
+ * пользователя (`/my-work`) — поднимаем её теми же записями, что при запуске: задание — со слежением за заданием,
+ * одиночная команда — со слежением по номеру до итога. Уже известное реестру не дублируем.
+ */
+export async function restoreRunningWork(): Promise<void> {
+	let work: MyWork;
+	try {
+		work = await fetchMyWork();
+	} catch {
+		// Нет доступа к администрированию 1С или сервис старее панели — восстанавливать нечего.
+		return;
+	}
+	const known = getOps();
+	for (const b of work.batches) {
+		if (known.some((o) => o.batchId === b.batchId)) continue;
+		const id = startOp({ kind: "update", title: b.title, target: `${translate("onecBases")}: ${b.total}`, total: b.total });
+		attachBatch(id, b.batchId, b.total);
+	}
+	for (const cmd of work.commands) {
+		const workKey = `cmd:${cmd.commandId}`;
+		if (known.some((o) => o.workKey === workKey)) continue;
+		const id = startOp({
+			kind: cmd.operation === "READ" ? "read" : "update", title: cmd.title, target: cmd.baseKey ?? "",
+			total: 1, workKey, scope: { bases: cmd.baseKey ? [cmd.baseKey] : [] },
+		});
+		// Слежение без предела по времени — как у долгой операции «Обслуживания»; «Скрыть» у операции его снимает.
+		void followCommand<unknown>(cmd.commandId, () => getOps().some((o) => o.id === id && o.state === "running"))
+			.then(() => finishOp(id))
+			.catch((e: unknown) => finishOp(id, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e }));
+	}
 }

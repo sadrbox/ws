@@ -12,7 +12,9 @@ import type { TPane } from 'src/app/types';
 import { usePaneToolbarSlot, useHasToolbar, usePaneHeaderActionsSlot } from 'src/hooks/usePaneToolbar';
 import { usePaneIsBusy, usePaneIsDirty, usePaneIsEditMode } from 'src/hooks/useFormStore';
 import TechMessages from 'src/components/TechMessages/TechMessages';
-import { NoticeScope, retireScope, setScopeObject, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
+import { NoticeScope, retireScope, setScopeObject, setTechMessagesOwner, useTechMessagesOpen, useTechMessagesPlacement } from 'src/components/TechMessages/store';
+import { resetOps } from 'src/components/TechMessages/operations';
+import { restoreRunningWork } from 'src/models/OneCAdmin/progress';
 import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
@@ -100,6 +102,16 @@ export const HorizontalLine = () => {
 
 export const Container: FC = () => {
   const context = useAppContext();
+  /*
+   * ПОЛЬЗОВАТЕЛЬ — ХОЗЯИН ТЕХНИЧЕСКИХ СООБЩЕНИЙ И ПРОГРЕССА. Сменился (вход другим пользователем в той же вкладке) —
+   * история и операции прежнего уходят с экрана. И при каждом входе и загрузке страницы поднимаем с сервиса работу,
+   * которая ещё идёт: после обновления страницы «Прогресс» не должен пустеть.
+   */
+  const userUuid = (context.auth.user as { uuid?: string } | null)?.uuid ?? null;
+  useEffect(() => {
+    if (setTechMessagesOwner(userUuid)) resetOps();
+    if (userUuid) void restoreRunningWork();
+  }, [userUuid]);
   const isPaneShow = context.windows.panes.length > 0;
   const techOpen = useTechMessagesOpen();
   const techPlace = useTechMessagesPlacement();

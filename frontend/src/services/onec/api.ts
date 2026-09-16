@@ -563,6 +563,14 @@ export type BatchProgress = {
 export const fetchBatch = (id: string) => aiFetch<BatchProgress>(`/v1/onec/batches/${encodeURIComponent(id)}`);
 export const fetchBatches = () => aiFetch<{ items: BatchProgress[] }>("/v1/onec/batches");
 
+/** Текущая работа пользователя: одиночные команды и задания, которые ещё идут (восстановление «Прогресса»). */
+export type MyWork = {
+	commands: { commandId: string; type: string; title: string; operation: string | null; baseKey: string | null;
+		state: string; createdAt: string; dispatchedAt: string | null }[];
+	batches: { batchId: string; type: string; title: string; total: number; createdAt: string }[];
+};
+export const fetchMyWork = () => aiFetch<MyWork>("/v1/onec/my-work");
+
 // ── Обслуживание базы: проверка, загрузка, обновление конфигурации ──────────
 // Все три долгие (часы) и все три понимают dryRun: агент возвращает план и базу не
 // трогает. Для разрушающих это и есть текст подтверждения — точнее сочинённого нами.
