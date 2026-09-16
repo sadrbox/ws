@@ -72,8 +72,3 @@
 .IconButton.loading img {
   animation: IconButtonSpin 0.8s linear infinite;
 }
-
-// Иконка «Обновить» нарисована стрелкой против часовой — вращаем туда же.
-.IconButton.loading.spinReverse svg {
-  animation-direction: reverse;
-}

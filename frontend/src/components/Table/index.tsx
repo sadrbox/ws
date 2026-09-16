@@ -261,23 +261,25 @@ const TableControlPanel = memo(({
   componentName,
 }: TableControlPanelProps) => {
   /*
-   * ВРАЩЕНИЕ «ОБНОВИТЬ» — НА КАЖДОЕ НАЖАТИЕ. Флаг `reloading` передают только статичные таблицы, а списки и табличные
-   * части — нет, и у них иконка не отзывалась вовсе: быстрый запрос проходит за доли секунды, и нажатие выглядело
-   * пустым. Крутим не меньше 600 мс и дольше, пока таблица грузится.
+   * ВРАЩЕНИЕ «ОБНОВИТЬ» — ТОЛЬКО ОТ НАЖАТИЯ. Флаг `reloading` передают лишь статичные таблицы, и у списков нажатие не
+   * отзывалось ничем. Но и привязать вращение к одной загрузке нельзя: у таблиц с фоновым опросом (задания, прогресс)
+   * загрузка идёт раз в несколько секунд, и иконка крутилась без остановки. Поэтому: нажали — крутим не меньше 700 мс,
+   * дальше пока идёт загрузка, и не дольше 15 с, даже если признак загрузки завис. Без нажатия — не крутим.
    */
   const [spinClick, setSpinClick] = useState(0);
   const [spinHold, setSpinHold] = useState(false);
+  const busy = !!isLoading || reloading;
   useEffect(() => {
     if (!spinClick) return;
     setSpinHold(true);
-    const t = setTimeout(() => setSpinHold(false), 600);
-    return () => clearTimeout(t);
+    const hold = setTimeout(() => setSpinHold(false), 700);
+    const cap = setTimeout(() => setSpinClick(0), 15_000);
+    return () => { clearTimeout(hold); clearTimeout(cap); };
   }, [spinClick]);
   useEffect(() => {
-    // Загрузка кончилась и минимум отыгран — нажатие больше не держит вращение.
-    if (spinClick && !spinHold && !isLoading) setSpinClick(0);
-  }, [spinClick, spinHold, isLoading]);
-  const spinning = reloading || spinHold || (spinClick > 0 && !!isLoading);
+    if (spinClick && !spinHold && !busy) setSpinClick(0);
+  }, [spinClick, spinHold, busy]);
+  const spinning = spinClick > 0 && (spinHold || busy);
   const isSelect = variant === 'select';
   const hideWrite = isSelect || isReadonly || hideAddDelete;
   return (
