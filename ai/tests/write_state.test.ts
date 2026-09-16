@@ -143,6 +143,10 @@ describe("С15: обрыв связи с рабочим процессом кл�
 		};
 		assert.match(humanizeAgentError(error)!.message, /рабочим процессом кластера/);
 		assert.equal(ibFailureReason(error), null);
+		// Процессы и пределы агент прикладывает НЕ всегда (живой случай 16.09) — подсказка обещает их условно.
+		const bare = humanizeAgentError({ code: "IB_CONNECTION_LOST", message: "tcp://SERVER:1561 10054" })!.message;
+		assert.doesNotMatch(bare, /Агент перечислил/);
+		assert.match(bare, /Если агент привёл выше/);
 	});
 });
 
