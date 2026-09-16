@@ -61,6 +61,8 @@ export type BaseRow = {
 	sessions_denied_source?: string | null;
 	sessions_denied_active?: boolean | null;
 	sessions_denied_code_set?: boolean | null;
+	scheduled_jobs_denied?: boolean | null;
+	scheduled_jobs_seen_at?: Date | null;
 	config_name?: string | null;
 	config_version?: string | null;
 	config_seen_at?: Date | null;
@@ -93,6 +95,9 @@ export type BaseView = {
 	sessionsDeniedActive: boolean | null;
 	/** Задан ли код разрешения входа в закрытую базу (С26); null — не сообщал. */
 	sessionsDeniedCodeSet: boolean | null;
+	/** Запрещены ли регламентные и фоновые задания базы (С39); null — не знаем. */
+	scheduledJobsDenied: boolean | null;
+	scheduledJobsSeenAt: string | null;
 	/** Конфигурация базы (S3); onecVersion — версия платформы, это другое. */
 	configName: string | null;
 	configVersion: string | null;
@@ -332,7 +337,8 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
 	b.ib_unreachable_reason,
 	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,
-	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.sessions_denied_code_set, b.config_name, b.config_version, b.config_seen_at,
+	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.sessions_denied_code_set,
+	b.scheduled_jobs_denied, b.scheduled_jobs_seen_at, b.config_name, b.config_version, b.config_seen_at,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -730,6 +736,25 @@ export class BaseService {
 				// «Действует» имеет смысл только у включённой блокировки.
 				lock.enabled ? lock.active : null, lock.enabled ? lock.permissionCodeSet : null],
 		);
+		// Признак заданий приходит в той же блокировке (С39) и к включённости входа не привязан: запрет живёт
+		// сам по себе. Не сообщили — прежнее значение не трогаем.
+		if (lock.scheduledJobsDenied !== null) {
+			await this.setScheduledJobs(serverId, key, lock.scheduledJobsDenied);
+		}
+	}
+
+	/**
+	 * ЗАПРЕЩЕНЫ ЛИ РЕГЛАМЕНТНЫЕ И ФОНОВЫЕ ЗАДАНИЯ базы (С39).
+	 *
+	 * Отдельно от блокировки входа: она фоновые задания не останавливает, а держат базу именно они. Признак нужен
+	 * не только для показа: по нему панель предлагает вернуть прежнее состояние после работ.
+	 */
+	async setScheduledJobs(serverId: string, key: string, denied: boolean): Promise<void> {
+		await this.db.query(
+			`UPDATE bases SET scheduled_jobs_denied = $3, scheduled_jobs_seen_at = now()
+			  WHERE server_id = $1 AND key = $2`,
+			[serverId, key, denied],
+		);
 	}
 
 	/**
@@ -908,6 +933,8 @@ export class BaseService {
 			sessionsDeniedSource: (r.sessions_denied_source as "cluster" | "command" | null | undefined) ?? null,
 			sessionsDeniedActive: r.sessions_denied_active ?? null,
 			sessionsDeniedCodeSet: r.sessions_denied_code_set ?? null,
+			scheduledJobsDenied: r.scheduled_jobs_denied ?? null,
+			scheduledJobsSeenAt: r.scheduled_jobs_seen_at?.toISOString() ?? null,
 			configName: r.config_name ?? null,
 			configVersion: r.config_version ?? null,
 			configSeenAt: r.config_seen_at?.toISOString() ?? null,

@@ -21,6 +21,8 @@ export type LockState = {
 	to: string | null;
 	/** Когда прочитано у кластера; null — не читалось (записано по команде). */
 	seenAt: string | null;
+	/** Запрещены ли регламентные и фоновые задания базы (С39); null — кластер не сообщал. */
+	scheduledJobsDenied: boolean | null;
 };
 
 export type ConfigState = { name: string | null; version: string | null; seenAt: string | null };
@@ -35,6 +37,8 @@ export type WriteStateAction =
 	 */
 	| { kind: "config"; config: ConfigState; exact: boolean }
 	| { kind: "processes"; items: AgentProcess[] }
+	/** Запрет регламентных заданий по факту команды: эха блокировки в ответе может не быть (С39). */
+	| { kind: "scheduledJobs"; denied: boolean }
 	| { kind: "publication"; published: boolean; url: string | null; seenAt: string | null };
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -53,6 +57,7 @@ export function parseLock(v: unknown): LockState | null {
 		from: str(v.from),
 		to: str(v.to),
 		seenAt: str(v.readAt),
+		scheduledJobsDenied: typeof v.scheduledJobsDenied === "boolean" ? v.scheduledJobsDenied : null,
 	};
 }
 
@@ -104,8 +109,25 @@ export function planWriteState(
 					from: payload.enabled ? str(payload.from) : null,
 					to: payload.enabled ? str(payload.to) : null,
 					seenAt: null,
+					// Про задания команда закрытия входа ничего не говорит — прежнее значение остаётся (С39).
+					scheduledJobsDenied: null,
 				},
 			}];
+		}
+		/*
+		 * ЗАПРЕТ РЕГЛАМЕНТНЫХ ЗАДАНИЙ (С39). Ответ несёт и признак (`denied`), и блокировку, прочитанную ПОСЛЕ
+		 * изменения. Блокировку применяем, как у закрытия входа; признак заданий — отдельным действием: у эха
+		 * блокировки его может не быть, а знать его надо — по нему панель предлагает вернуть как было.
+		 */
+		case "CLUSTER_SET_SCHEDULED_JOBS": {
+			const out: WriteStateAction[] = [];
+			const lock = parseLock(stateOf(result, "lock"));
+			if (lock) out.push({ kind: "lock", lock, source: "cluster" });
+			const denied = isObj(result) && typeof result.denied === "boolean"
+				? result.denied
+				: (typeof payload.denied === "boolean" ? payload.denied : null);
+			if (denied !== null) out.push({ kind: "scheduledJobs", denied });
+			return out;
 		}
 		case "CLUSTER_DROP_INFOBASE": {
 			const list = stateOf(result, "infobases");

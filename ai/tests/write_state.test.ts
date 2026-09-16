@@ -16,7 +16,8 @@ describe("состояние после изменяющей команды", ()
 		const a = planWriteState("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b", enabled: true },
 			{ ok: true, state: { lock: { enabled: true, message: "Обслуживание", from: null, to: null, readAt: "2026-09-14T10:00:00Z" } } });
 		assert.deepEqual(a, [{ kind: "lock", source: "cluster",
-			lock: { enabled: true, active: null, permissionCodeSet: null, message: "Обслуживание", from: null, to: null, seenAt: "2026-09-14T10:00:00Z" } }]);
+			lock: { enabled: true, active: null, permissionCodeSet: null, message: "Обслуживание", from: null, to: null,
+				seenAt: "2026-09-14T10:00:00Z", scheduledJobsDenied: null } }]);
 	});
 
 	it("блокировка без эха — по команде; снятие стирает сообщение", () => {
@@ -213,5 +214,29 @@ describe("С32: защитные отказы удаления регистра�
 		for (const code of ["DB_PASSWORD_MISSING", "IBCMD_UNAVAILABLE", "DB_PARAMS_UNAVAILABLE", "DB_CHECK_FAILED"]) {
 			assert.match(humanizeAgentError({ code, message: "отказ" })!.message, /Регистрация не удалена/, code);
 		}
+	});
+});
+
+describe("С39: запрет регламентных и фоновых заданий", () => {
+	it("ответ команды: блокировка в реестр и признак заданий отдельным действием", () => {
+		const a = planWriteState("CLUSTER_SET_SCHEDULED_JOBS", { baseKey: "b", denied: true }, {
+			ok: true, baseKey: "b", denied: true, was: false,
+			state: { lock: { enabled: false, message: "", from: null, to: null, readAt: "2026-09-16T07:00:00Z", scheduledJobsDenied: true } },
+		});
+		assert.equal(a.length, 2);
+		assert.equal(a[0].kind, "lock");
+		assert.deepEqual(a[1], { kind: "scheduledJobs", denied: true });
+		// Признак пришёл и внутри блокировки — реестр получит его обоими путями.
+		assert.equal(a[0].kind === "lock" && a[0].lock.scheduledJobsDenied, true);
+	});
+
+	it("кластер промолчал — признак берём из того, что велели", () => {
+		const a = planWriteState("CLUSTER_SET_SCHEDULED_JOBS", { baseKey: "b", denied: false }, { ok: true });
+		assert.deepEqual(a, [{ kind: "scheduledJobs", denied: false }]);
+	});
+
+	it("закрытие входа о заданиях не говорит: прежнее значение не трогается", () => {
+		const a = planWriteState("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b", enabled: true }, { ok: true });
+		assert.equal(a[0].kind === "lock" && a[0].lock.scheduledJobsDenied, null);
 	});
 });

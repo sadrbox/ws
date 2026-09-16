@@ -56,6 +56,12 @@ export type OnecBase = {
 	 * открытым. null — не сообщал.
 	 */
 	sessionsDeniedActive?: boolean | null;
+	/**
+	 * Запрещены ли регламентные и фоновые задания базы (С39): именно они держат базу разделённым доступом и
+	 * срывают монопольные операции. Блокировка входа на них не действует. null — не знаем.
+	 */
+	scheduledJobsDenied?: boolean | null;
+	scheduledJobsSeenAt?: string | null;
 	/** Задан ли код разрешения входа в закрытую базу (С26); null — не сообщал. */
 	sessionsDeniedCodeSet?: boolean | null;
 	/** Конфигурация базы (имя и версия); onecVersion — версия платформы. */
@@ -217,6 +223,15 @@ export type SessionsLockResult = {
 	reset?: "all" | "dates" | "none";
 	note?: string;
 };
+
+/** Запрет регламентных и фоновых заданий базы (С39). `was` — как было до команды: по нему предлагаем вернуть. */
+export type ScheduledJobsResult = { ok?: boolean; baseKey?: string; denied?: boolean; was?: boolean };
+
+export const setScheduledJobs = (baseKey: string, denied: boolean) =>
+	aiFetch<ScheduledJobsResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/scheduled-jobs`, {
+		method: "POST",
+		body: JSON.stringify({ denied }),
+	}).then((d) => awaitCommand<ScheduledJobsResult>(d));
 
 export const setSessionsLock = (baseKey: string, enabled: boolean, message?: string) =>
 	aiFetch<SessionsLockResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/lock`, {

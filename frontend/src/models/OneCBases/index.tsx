@@ -10,6 +10,7 @@
  * СОЗДАНИЕ И УДАЛЕНИЕ НЕПРИМЕНИМЫ: базы заводят и удаляют в кластере 1С, а не в панели.
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
+import { useOnecWrite } from "src/models/OneCAdmin/shared";
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
@@ -33,8 +34,7 @@ import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBases,
-	type IbExtension, type IbUser, type OnecBase,
+	fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBases, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
 } from "src/services/onec/api";
 import {
 	EchoDelayNotice, QueryError, ReadonlyNotice, publishLabel, unreachableReason, unreachableShort,
@@ -412,6 +412,23 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	const scope = useNoticeScope();
 	const infoKnown = agents.isLoading || (agents.data?.items ?? [])
 		.some((a) => a.role === "admin" && !a.disabled && a.capabilities.includes("IB_INFO"));
+	/*
+	 * ЗАПРЕТ РЕГЛАМЕНТНЫХ ЗАДАНИЙ (С39, П26). Фоновое задание базы держит её разделённым доступом: установка
+	 * расширения, выгрузка и проверка отказывают «Ошибка разделенного доступа», а блокировка входа фоновые задания
+	 * не останавливает. Кнопка здесь же, где видно состояние базы, — чтобы не искать её по вкладкам во время работ.
+	 */
+	const cardQc = useQueryClient();
+	const canWrite = useOnecWrite();
+	const jobsDenied = (row.scheduledJobsDenied ?? null) as boolean | null;
+	const setJobs = useMutation({
+		mutationFn: (denied: boolean) => withOp(
+			{ kind: "update", title: translate(denied ? "onecScheduledJobsDeny" : "onecScheduledJobsAllow"), target: key, scope: { bases: [key] } },
+			() => setScheduledJobs(key, denied),
+		),
+		onSuccess: () => { void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] }); },
+		onError: (e: unknown) => reportError(e, { source: translate("onecScheduledJobs"), scope }),
+	});
+
 	const readInfo = useMutation({
 		mutationFn: () => withOp(
 			{ kind: "read", title: translate("onecBaseInfoRefresh"), target: key, scope: { bases: [key] } },
@@ -504,11 +521,22 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 											{/* Конфигурация — из эха загрузки, обновления, установки расширения и из «Обновить
 											    сведения» (S3, С35) — со временем чтения; платформа — строкой выше. */}
 											<ValueRow label={translate("onecConfiguration")} value={configLabel(row)} />
+											<ValueRow label={translate("onecScheduledJobs")}
+												value={jobsDenied == null
+													? "—"
+													: `${translate(jobsDenied ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}`
+														+ (row.scheduledJobsSeenAt ? ` · ${getFormatDate(asText(row.scheduledJobsSeenAt))}` : "")} />
 											<ValueRow label={translate("onecSessionsLockState")}
 												title={sessionsLockView(row as never).details || undefined}
 												value={sessionsLockView(row as never).label} />
 										</ValueList>
 										<GroupRow>
+											<Button variant={jobsDenied ? "primary" : "secondary"}
+												disabled={!key || !canWrite || setJobs.isPending}
+												title={translate("onecScheduledJobsHint")}
+												onClick={() => setJobs.mutate(!jobsDenied)}>
+												{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
+											</Button>
 											<Button variant="secondary" disabled={!key || !infoKnown || readInfo.isPending}
 												title={infoKnown
 													? translate("onecBaseInfoHint")

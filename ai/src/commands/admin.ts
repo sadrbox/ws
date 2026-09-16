@@ -633,6 +633,21 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		}).strict(),
 	},
 	{
+		/*
+		 * ЗАПРЕТ РЕГЛАМЕНТНЫХ И ФОНОВЫХ ЗАДАНИЙ (агент `2026-09-16 12:13`, С39).
+		 *
+		 * Поле называется `denied`, а не `enabled`: у блокировки сеансов `enabled: true` значит «вход закрыт», и
+		 * одинаковое имя с обратным смыслом в соседних командах — готовая ошибка на живой базе.
+		 */
+		type: "CLUSTER_SET_SCHEDULED_JOBS",
+		title: "Запрет регламентных заданий",
+		operation: "CRITICAL",
+		capability: "cluster.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey, denied: z.boolean() }).strict(),
+	},
+	{
 		type: "CLUSTER_SET_SESSIONS_LOCK",
 		title: "Блокировка начала сеансов",
 		operation: "CRITICAL",

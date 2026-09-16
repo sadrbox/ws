@@ -1455,5 +1455,14 @@ export function onecRouter(deps: Deps) {
 		send(res, await run(req, "CLUSTER_SET_SESSIONS_LOCK", { ...body, baseKey: req.params.key }));
 	});
 
+	/*
+	 * Запрет регламентных и фоновых заданий (С39). Отдельно от блокировки входа: она на фоновые задания не
+	 * действует, а именно они держат базу разделённым доступом и срывают установку расширения.
+	 */
+	r.post("/bases/:key/scheduled-jobs", async (req, res) => {
+		const body = (req.body ?? {}) as Record<string, unknown>;
+		send(res, await run(req, "CLUSTER_SET_SCHEDULED_JOBS", { ...body, baseKey: req.params.key }));
+	});
+
 	return r;
 }
