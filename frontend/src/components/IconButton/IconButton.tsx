@@ -36,6 +36,8 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       size === "sm" ? styles.sm : styles.md,
       active ? styles.active : null,
       loading ? styles.loading : null,
+      // Стрелка «Обновить» идёт против часовой — и вращение при загрузке в ту же сторону, иначе оно спорит с ней.
+      loading && icon === "reload" ? styles.spinReverse : null,
       className,
     ]
       .filter(Boolean)
