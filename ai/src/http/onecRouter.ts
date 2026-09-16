@@ -16,7 +16,6 @@
 // заводится в ERP вместе с панелью (A5) — тогда проверка переедет на него.
 
 import { humanizeAgentError } from "../onec/errorHints.ts";
-import { planWriteState } from "../onec/writeState.ts";
 import { isDestructive } from "../onec/access.ts";
 import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAllows } from "../onec/permissions.ts";
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
@@ -434,20 +433,11 @@ export function onecRouter(deps: Deps) {
 	 * СВЕДЕНИЯ О БАЗЕ (С35): конфигурация, расширения и блокировка входа — одним входом в базу, по кнопке
 	 * «Обновить сведения». Чтение: пути нет в списке разрушающих, доступно и просмотру.
 	 *
-	 * Реестр пишет приём результата (agentRouter), но ожидание здесь просыпается, когда команда стала `done`, —
-	 * раньше, чем эхо записано, и карточка перечитала бы прежнюю версию. Поэтому конфигурацию и блокировку
-	 * записываем и здесь, до ответа: запись та же и повтор безвреден.
+	 * Реестр пишет приём результата (agentRouter) — до того, как команда объявлена выполненной (С36), поэтому
+	 * к ответу отсюда прочитанное уже в реестре и карточке достаточно перечитать базы.
 	 */
 	r.get("/bases/:key/ib-info", async (req, res) => {
-		const outcome = await run(req, "IB_INFO", { baseKey: req.params.key });
-		if (outcome.status === 200) {
-			const base = await bases.findByKeyGlobal(req.params.key);
-			for (const a of base ? planWriteState("IB_INFO", {}, outcome.data) : []) {
-				if (a.kind === "config") await bases.setConfig(base!.serverId, base!.key, a.config, a.exact);
-				else if (a.kind === "lock") await bases.setSessionsLock(base!.serverId, base!.key, a.lock, a.source);
-			}
-		}
-		send(res, outcome);
+		send(res, await run(req, "IB_INFO", { baseKey: req.params.key }));
 	});
 
 	r.get("/sessions", async (req, res) => {

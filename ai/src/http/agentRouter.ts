@@ -25,7 +25,7 @@ import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, checkShowInListIntent, parseEcho, roleVerdictMessage, showInListVerdictMessage } from "../onec/echo.ts";
 import { listItems } from "../onec/listShape.ts";
 import { rememberAfterEcho, writeBackOf } from "../onec/writeBack.ts";
-import { parseLock, planWriteState, readsAfter, readsAfterFailure } from "../onec/writeState.ts";
+import { parseLock, planWriteState, readsAfter, readsAfterFailure, type WriteStateAction } from "../onec/writeState.ts";
 
 /** Объект, а не массив и не скаляр: только у такого результата есть поле items. */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -475,9 +475,10 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 * ни был приговор команде.
 		 */
 		let wire = echo ? { ...p.data, result: echo.result } : p.data;
-		// Запись команды читаем ДО её завершения: из неё известно, что именно приказали —
-		// это нужно и для сверки ролей ниже, и для запоминания непрочитываемых реквизитов.
-		const pending = p.data.status === "SUCCESS" ? await queue.get(p.data.commandId) : null;
+		// Запись команды читаем ДО её завершения: из неё известно, что именно приказали — это нужно и для
+		// сверки ролей ниже, и для запоминания непрочитываемых реквизитов, и для реестра (С36), который
+		// обновляется до «выполнено». Читаем при любом исходе: отметку «в базу не войти» ставит и отказ.
+		const pending = await queue.get(p.data.commandId);
 		if (echo?.state.users) {
 			const verdict = pending ? checkRoleIntent(pending.payload, echo.state.users) : { ok: true as const };
 			if (!verdict.ok) {
@@ -537,6 +538,183 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			if (base) await rememberShow(base.id);
 		}
 
+		/*
+		 * РЕЕСТР ОБНОВЛЯЕМ ДО ТОГО, КАК КОМАНДА СТАНЕТ ЗАВЕРШЁННОЙ (С36).
+		 *
+		 * Об окончании панель узнаёт по состоянию команды: синхронный запрос просыпается на `queue.complete`,
+		 * опрос `/commands/:id` видит `done` — и тут же перечитывает реестр. Пока состояние применялось ПОСЛЕ
+		 * завершения, ответ мог обогнать запись, и карточка показывала прежнюю версию конфигурации или прежний
+		 * список расширений. Правило то же, по которому выше запоминается «показывать в списке выбора»:
+		 * значение обязано быть в реестре к моменту, когда команда объявлена выполненной.
+		 *
+		 * Состояние, прочитанное агентом у 1С, правдиво независимо от приговора самой команде, поэтому
+		 * применяется и тогда, когда результат потом не примут (поздний результат по отменённой).
+		 */
+		const applied = { users: false, extensions: false };
+		let writeState: WriteStateAction[] = [];
+		if (pending) {
+			const cmd = pending;
+			// Полный срез баз применяем к реестру ЗДЕСЬ же. Панель могла не дождаться ответа
+			// (запрос ограничен 20 с, а rac по сотне баз бывает дольше) — тогда синхронизация
+			// в её обработчике не выполнится, и «Обновить из кластера» тихо ничего не сделает.
+			if (p.data.status === "SUCCESS" && cmd.type === "CLUSTER_LIST_INFOBASES") {
+				const items = (p.data.result as { items?: BaseState[] } | null)?.items;
+				const me = await agents.findById(req.agent!.agentId);
+				if (Array.isArray(items) && items.length && me?.serverId) {
+					await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
+				}
+			}
+			// Проверка наличия баз данных (S3) — здесь же и по той же причине: на сотне баз она
+			// дольше, чем панель ждёт ответа, и обработчик HTTP-запроса результата не увидит.
+			if (p.data.status === "SUCCESS" && cmd.type === "CLUSTER_CHECK_BASES") {
+				const me = await agents.findById(req.agent!.agentId);
+				if (me?.serverId) await bases.applyCheckResult(me.serverId, p.data.result);
+			}
+			/*
+			 * СОСТОЯНИЕ ПОСЛЕ ИЗМЕНЕНИЯ (TASK_SERVICE_ECHO_WRITE_COMMANDS.md, S1–S5): блокировка,
+			 * удалённая регистрация, конфигурация, процессы, публикация. Что записать — решает
+			 * onec/writeState.planWriteState: эхо агента, а без него — известное по факту команды.
+			 */
+			writeState = p.data.status === "SUCCESS"
+				? planWriteState(cmd.type, (cmd.payload ?? {}) as Record<string, unknown>, p.data.result)
+				: [];
+			if (writeState.length) {
+				const me = await agents.findById(req.agent!.agentId);
+				for (const a of writeState) {
+					if (a.kind === "processes") { await agents.setProcesses(cmd.agent_id, a.items); continue; }
+					if (!me?.serverId) continue;
+					if (a.kind === "infobases") {
+						await bases.sync(me.serverId, a.items as unknown as BaseState[], { complete: true, authoritative: me.role === "admin" });
+						continue;
+					}
+					if (!cmd.base_key) continue;
+					if (a.kind === "lock") await bases.setSessionsLock(me.serverId, cmd.base_key, a.lock, a.source);
+					else if (a.kind === "missing") await bases.markMissing(me.serverId, cmd.base_key);
+					else if (a.kind === "config") await bases.setConfig(me.serverId, cmd.base_key, a.config, a.exact);
+					else if (a.kind === "publication") {
+						await bases.setPublication(me.serverId, cmd.base_key, a.published, a.url, a.seenAt);
+					}
+				}
+				log.info({ commandId: cmd.id, type: cmd.type, baseKey: cmd.base_key, applied: writeState.map((a) => a.kind) },
+					"состояние после изменения применено к реестру");
+			}
+			// Публикация и её снятие — сразу в реестр: иначе состояние обновилось бы только
+			// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
+			if (p.data.status === "SUCCESS" && cmd.base_key
+				&& (cmd.type === "IB_PUBLISH" || cmd.type === "IB_UNPUBLISH")
+				// Эхо публикации (E6) уже записано выше — по факту команды записываем только без него.
+				&& !writeState.some((a) => a.kind === "publication")) {
+				const published = cmd.type === "IB_PUBLISH";
+				const url = published ? (p.data.result as { url?: string } | null)?.url ?? null : null;
+				const me = await agents.findById(req.agent!.agentId);
+				if (me?.serverId) await bases.setPublication(me.serverId, cmd.base_key, published, url);
+			}
+			// Срез публикаций может прийти и не из ручки панели (пакет, повтор задания) —
+			// применяем его на общем пути приёма результатов.
+			if (p.data.status === "SUCCESS" && cmd.type === "CLUSTER_LIST_PUBLICATIONS") {
+				const data = p.data.result as {
+					items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
+				} | null;
+				const me = await agents.findById(req.agent!.agentId);
+				if (me?.serverId && Array.isArray(data?.items) && data.items.length) {
+					const evidence = { source: data.source ?? null, lookedIn: data.lookedIn?.length ?? 0 };
+					const report = publicationReport(data.items, data.complete === true, evidence);
+					const r = await bases.applyPublications(me.serverId, data.items, data.complete === true, evidence);
+					// Ответ, из которого не узнана ни одна база, — не «ничего не опубликовано», а
+					// разговор на разных языках. Молча проглатывать такое нельзя: реестр
+					// останется с прежним, а в логе будет видно, с чем разбираться.
+					if (!r.matched || !report.accepted) {
+						log.warn({
+							agentId: req.agent!.agentId, items: report.total, matched: r.matched,
+							published: report.published, complete: report.complete,
+							source: evidence.source, lookedIn: evidence.lookedIn,
+							sample: data.items[0]?.key,
+						}, !report.accepted
+							? "в срезе публикаций нет ни одной опубликованной базы — принимаем это за незнание, а не за факт"
+							: "срез публикаций не сопоставлен ни с одной базой — реестр не тронут");
+					}
+				}
+			}
+			/**
+			 * Содержимое базы из эха — в реестр: панель читает его оттуда
+			 * (`/bases/:key/users/cached`), и спрашивать ей после команды нечего.
+			 */
+			if (echo && cmd.base_key) {
+				const base = await bases.findByKeyGlobal(cmd.base_key);
+				// Базы нет в реестре — применять некуда; тогда ниже отработает обычное чтение.
+				if (base) {
+					if (echo.state.users) {
+						await registry.syncUsers(base.id, echo.state.users);
+						applied.users = true;
+						if (remember && rememberAfterEcho(remember, echo.state.users)) await rememberShow(base.id);
+					}
+					if (echo.state.extensions) {
+						await registry.syncExtensions(base.id, echo.state.extensions);
+						applied.extensions = true;
+					}
+					log.info({
+						commandId: cmd.id, type: cmd.type, baseKey: cmd.base_key,
+						users: echo.state.users?.length ?? null, extensions: echo.state.extensions?.length ?? null,
+					}, "состояние базы применено из ответа команды — читающая команда не нужна");
+				}
+			}
+			/*
+			 * ВОЙТИ В БАЗУ НЕ УДАЛОСЬ — ОТДЕЛЬНЫЙ ФАКТ, И ОН НЕ ДОЛЖЕН ТЕРЯТЬСЯ.
+			 *
+			 * Раньше такую базу помечали `status = MISSING`, а вернуть её в ONLINE должен был
+			 * «ближайший успешный срез кластера». На деле срез возвращал ONLINE ВСЕГДА: `rac`
+			 * перечисляет регистрацию в кластере, и для базы, снесённой на СУБД, запись есть.
+			 * Знание, добытое входом, затиралось источником, который входить не умеет, — и по
+			 * кругу: база выглядит рабочей, человек жмёт «Обновить», ждёт, получает «база не
+			 * найдена на сервере», через минуту всё повторяется.
+			 *
+			 * Теперь признак ставит и снимает ТОЛЬКО тот, кто в базу заходит.
+			 */
+			/*
+			 * ПРИЧИНУ РАЗБИРАЕМ ПО ТЕКСТУ, А НЕ ТОЛЬКО ПО КОДУ. Код у агента крупный — IB_ERROR
+			 * на всё, что ответила утилита, — и по нему база `aibek` («База данных отсутствует
+			 * в сервере баз данных») ничем не отличалась от занятого каталога: отметка не
+			 * ставилась, база оставалась «рабочей», и её снова и снова звали командами.
+			 * Классификация намеренно узкая: не узнали причину — ничего не помечаем.
+			 */
+			const failReason = p.data.status === "SUCCESS" ? null : ibFailureReason(p.data.error);
+			if (cmd.base_key && (p.data.status === "SUCCESS" || failReason)) {
+				const spec = findAdminCommand(cmd.type);
+				// Только команды ВНУТРЬ базы: срез кластера об этом ничего не знает.
+				// И не по сухому прогону (С5): он в базу не входил, его успех ничего не доказывает.
+				if (spec && marksReachability(spec, (cmd.payload ?? {}) as Record<string, unknown>)) {
+					const me = await agents.findById(req.agent!.agentId);
+					if (me?.serverId) {
+						await bases.markIbReachable(
+							me.serverId, cmd.base_key, p.data.status === "SUCCESS", failReason ?? "UNKNOWN",
+						);
+					}
+				}
+			}
+			// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
+			// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.
+			if (p.data.status === "SUCCESS" && cmd.base_key && (cmd.type === "IB_LIST_USERS" || cmd.type === "IB_LIST_EXTENSIONS")) {
+				/*
+				 * НЕУЗНАННУЮ ФОРМУ НЕ СЧИТАЕМ ПУСТЫМ СРЕЗОМ. Прежний код видел непустой массив,
+				 * не находил в нём ни одной записи и удалял из кэша ВСЕХ: полный срез,
+				 * разобранный неправильно, выглядит как «пользователей больше нет». Именно так
+				 * 12.09 опустели `_transition` и `abdali` (см. onec/listShape.ts).
+				 */
+				const list = listItems(p.data.result);
+				if (!list) {
+					log.warn({
+						commandId: cmd.id, type: cmd.type, baseKey: cmd.base_key,
+					}, "список в ответе агента неузнанной формы — кэш базы не трогаем");
+				} else {
+					const base = await bases.findByKeyGlobal(cmd.base_key);
+					if (base) {
+						if (cmd.type === "IB_LIST_USERS") await registry.syncUsers(base.id, list.items as IbUser[]);
+						else await registry.syncExtensions(base.id, list.items as IbExtension[]);
+					}
+				}
+			}
+		}
+
 		const row = await queue.complete(req.agent!.agentId, wire);
 		if (!row) {
 			// Результат не принят. Отвечаем 200 в любом случае, иначе агент будет вечно досылать
@@ -570,22 +748,6 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			log.warn({ commandId: row.id, type: row.type, baseKey: row.base_key, status: wire.status },
 				"результат команды пришёл после истечения её срока — принят и отмечен поздним");
 		}
-		// Полный срез баз применяем к реестру ЗДЕСЬ же. Панель могла не дождаться ответа
-		// (запрос ограничен 20 с, а rac по сотне баз бывает дольше) — тогда синхронизация
-		// в её обработчике не выполнится, и «Обновить из кластера» тихо ничего не сделает.
-		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_LIST_INFOBASES") {
-			const items = (p.data.result as { items?: BaseState[] } | null)?.items;
-			const me = await agents.findById(req.agent!.agentId);
-			if (Array.isArray(items) && items.length && me?.serverId) {
-				await bases.sync(me.serverId, items, { complete: true, authoritative: me.role === "admin" });
-			}
-		}
-		// Проверка наличия баз данных (S3) — здесь же и по той же причине: на сотне баз она
-		// дольше, чем панель ждёт ответа, и обработчик HTTP-запроса результата не увидит.
-		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_CHECK_BASES") {
-			const me = await agents.findById(req.agent!.agentId);
-			if (me?.serverId) await bases.applyCheckResult(me.serverId, p.data.result);
-		}
 		// Прерывание начатой команды (S4): агент снял задачу и результата по ней не пришлёт —
 		// закрываем её сами, иначе она держит место до срока. Здесь, а не только в обработчике
 		// панели: ответ на отмену мог прийти позже, чем панель ждала (202).
@@ -599,71 +761,6 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// заводил ВТОРУЮ запись для того же процесса — и список экземпляров показывал
 		// один процесс дважды, под разными именами. Машина и процесс из details
 		// по-прежнему видны в тексте ошибки (describeResponder).
-		/*
-		 * СОСТОЯНИЕ ПОСЛЕ ИЗМЕНЕНИЯ (TASK_SERVICE_ECHO_WRITE_COMMANDS.md, S1–S5): блокировка,
-		 * удалённая регистрация, конфигурация, процессы, публикация. Что записать — решает
-		 * onec/writeState.planWriteState: эхо агента, а без него — известное по факту команды.
-		 */
-		const writeState = p.data.status === "SUCCESS"
-			? planWriteState(row.type, (row.payload ?? {}) as Record<string, unknown>, p.data.result)
-			: [];
-		if (writeState.length) {
-			const me = await agents.findById(req.agent!.agentId);
-			for (const a of writeState) {
-				if (a.kind === "processes") { await agents.setProcesses(row.agent_id, a.items); continue; }
-				if (!me?.serverId) continue;
-				if (a.kind === "infobases") {
-					await bases.sync(me.serverId, a.items as unknown as BaseState[], { complete: true, authoritative: me.role === "admin" });
-					continue;
-				}
-				if (!row.base_key) continue;
-				if (a.kind === "lock") await bases.setSessionsLock(me.serverId, row.base_key, a.lock, a.source);
-				else if (a.kind === "missing") await bases.markMissing(me.serverId, row.base_key);
-				else if (a.kind === "config") await bases.setConfig(me.serverId, row.base_key, a.config, a.exact);
-				else if (a.kind === "publication") {
-					await bases.setPublication(me.serverId, row.base_key, a.published, a.url, a.seenAt);
-				}
-			}
-			log.info({ commandId: row.id, type: row.type, baseKey: row.base_key, applied: writeState.map((a) => a.kind) },
-				"состояние после изменения применено к реестру");
-		}
-		// Публикация и её снятие — сразу в реестр: иначе состояние обновилось бы только
-		// ближайшим полным срезом, а пользователь ждёт результата здесь и сейчас.
-		if (p.data.status === "SUCCESS" && row.base_key
-			&& (row.type === "IB_PUBLISH" || row.type === "IB_UNPUBLISH")
-			// Эхо публикации (E6) уже записано выше — по факту команды записываем только без него.
-			&& !writeState.some((a) => a.kind === "publication")) {
-			const published = row.type === "IB_PUBLISH";
-			const url = published ? (p.data.result as { url?: string } | null)?.url ?? null : null;
-			const me = await agents.findById(req.agent!.agentId);
-			if (me?.serverId) await bases.setPublication(me.serverId, row.base_key, published, url);
-		}
-		// Срез публикаций может прийти и не из ручки панели (пакет, повтор задания) —
-		// применяем его на общем пути приёма результатов.
-		if (p.data.status === "SUCCESS" && row.type === "CLUSTER_LIST_PUBLICATIONS") {
-			const data = p.data.result as {
-				items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
-			} | null;
-			const me = await agents.findById(req.agent!.agentId);
-			if (me?.serverId && Array.isArray(data?.items) && data.items.length) {
-				const evidence = { source: data.source ?? null, lookedIn: data.lookedIn?.length ?? 0 };
-				const report = publicationReport(data.items, data.complete === true, evidence);
-				const r = await bases.applyPublications(me.serverId, data.items, data.complete === true, evidence);
-				// Ответ, из которого не узнана ни одна база, — не «ничего не опубликовано», а
-				// разговор на разных языках. Молча проглатывать такое нельзя: реестр
-				// останется с прежним, а в логе будет видно, с чем разбираться.
-				if (!r.matched || !report.accepted) {
-					log.warn({
-						agentId: req.agent!.agentId, items: report.total, matched: r.matched,
-						published: report.published, complete: report.complete,
-						source: evidence.source, lookedIn: evidence.lookedIn,
-						sample: data.items[0]?.key,
-					}, !report.accepted
-						? "в срезе публикаций нет ни одной опубликованной базы — принимаем это за незнание, а не за факт"
-						: "срез публикаций не сопоставлен ни с одной базой — реестр не тронут");
-				}
-			}
-		}
 		/**
 		 * После УДАЧНОГО изменения содержимого базы сразу ставим чтение того же содержимого.
 		 *
@@ -674,31 +771,6 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 * `requestId` делает это идемпотентным: если чтение по этой базе уже стоит в
 		 * очереди, второе не создаётся (частичный уникальный индекс среди незавершённых).
 		 */
-		/**
-		 * Состояние из ответа кладём в реестр СРАЗУ: он становится актуальным в тот же миг,
-		 * когда команда стала `done`. Панель читает содержимое базы из реестра
-		 * (`/bases/:key/users/cached`), поэтому больше ей ждать нечего и спрашивать нечего.
-		 */
-		const applied = { users: false, extensions: false };
-		if (echo && row.base_key) {
-			const base = await bases.findByKeyGlobal(row.base_key);
-			// Базы нет в реестре — применять некуда; тогда ниже отработает обычное чтение.
-			if (base) {
-				if (echo.state.users) {
-					await registry.syncUsers(base.id, echo.state.users);
-					applied.users = true;
-					if (remember && rememberAfterEcho(remember, echo.state.users)) await rememberShow(base.id);
-				}
-				if (echo.state.extensions) {
-					await registry.syncExtensions(base.id, echo.state.extensions);
-					applied.extensions = true;
-				}
-				log.info({
-					commandId: row.id, type: row.type, baseKey: row.base_key,
-					users: echo.state.users?.length ?? null, extensions: echo.state.extensions?.length ?? null,
-				}, "состояние базы применено из ответа команды — читающая команда не нужна");
-			}
-		}
 		// Что эхо не принесло — читаем (onec/writeState.readsAfter): загрузка из выгрузки меняет и
 		// пользователей, и расширения; второй вход в базу за тем, что уже пришло, не нужен.
 		// После отказа «признак не принят» остальное уже записано — тоже читаем (S3).
@@ -717,61 +789,6 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				requestId: `refresh:${refreshType}:${row.base_key}`,
 				ttlSeconds: 900,
 			});
-		}
-		/*
-		 * ВОЙТИ В БАЗУ НЕ УДАЛОСЬ — ОТДЕЛЬНЫЙ ФАКТ, И ОН НЕ ДОЛЖЕН ТЕРЯТЬСЯ.
-		 *
-		 * Раньше такую базу помечали `status = MISSING`, а вернуть её в ONLINE должен был
-		 * «ближайший успешный срез кластера». На деле срез возвращал ONLINE ВСЕГДА: `rac`
-		 * перечисляет регистрацию в кластере, и для базы, снесённой на СУБД, запись есть.
-		 * Знание, добытое входом, затиралось источником, который входить не умеет, — и по
-		 * кругу: база выглядит рабочей, человек жмёт «Обновить», ждёт, получает «база не
-		 * найдена на сервере», через минуту всё повторяется.
-		 *
-		 * Теперь признак ставит и снимает ТОЛЬКО тот, кто в базу заходит.
-		 */
-		/*
-		 * ПРИЧИНУ РАЗБИРАЕМ ПО ТЕКСТУ, А НЕ ТОЛЬКО ПО КОДУ. Код у агента крупный — IB_ERROR
-		 * на всё, что ответила утилита, — и по нему база `aibek` («База данных отсутствует
-		 * в сервере баз данных») ничем не отличалась от занятого каталога: отметка не
-		 * ставилась, база оставалась «рабочей», и её снова и снова звали командами.
-		 * Классификация намеренно узкая: не узнали причину — ничего не помечаем.
-		 */
-		const failReason = p.data.status === "SUCCESS" ? null : ibFailureReason(p.data.error);
-		if (row.base_key && (p.data.status === "SUCCESS" || failReason)) {
-			const spec = findAdminCommand(row.type);
-			// Только команды ВНУТРЬ базы: срез кластера об этом ничего не знает.
-			// И не по сухому прогону (С5): он в базу не входил, его успех ничего не доказывает.
-			if (spec && marksReachability(spec, (row.payload ?? {}) as Record<string, unknown>)) {
-				const me = await agents.findById(req.agent!.agentId);
-				if (me?.serverId) {
-					await bases.markIbReachable(
-						me.serverId, row.base_key, p.data.status === "SUCCESS", failReason ?? "UNKNOWN",
-					);
-				}
-			}
-		}
-		// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
-		// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.
-		if (p.data.status === "SUCCESS" && row.base_key && (row.type === "IB_LIST_USERS" || row.type === "IB_LIST_EXTENSIONS")) {
-			/*
-			 * НЕУЗНАННУЮ ФОРМУ НЕ СЧИТАЕМ ПУСТЫМ СРЕЗОМ. Прежний код видел непустой массив,
-			 * не находил в нём ни одной записи и удалял из кэша ВСЕХ: полный срез,
-			 * разобранный неправильно, выглядит как «пользователей больше нет». Именно так
-			 * 12.09 опустели `_transition` и `abdali` (см. onec/listShape.ts).
-			 */
-			const list = listItems(p.data.result);
-			if (!list) {
-				log.warn({
-					commandId: row.id, type: row.type, baseKey: row.base_key,
-				}, "список в ответе агента неузнанной формы — кэш базы не трогаем");
-			} else {
-				const base = await bases.findByKeyGlobal(row.base_key);
-				if (base) {
-					if (row.type === "IB_LIST_USERS") await registry.syncUsers(base.id, list.items as IbUser[]);
-					else await registry.syncExtensions(base.id, list.items as IbExtension[]);
-				}
-			}
 		}
 		log.info({ commandId: row.id, status: p.data.status, code: p.data.error?.code }, "результат команды");
 		await audit.write({ event: "command.result", agentId: row.agent_id, organizationUuid: row.organization_uuid,
