@@ -38,7 +38,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
 import {
-	fetchBases, runBatch, type BatchType, type OnecBase, fetchRoles
+	fetchBases, runBatch, type BatchType, type OnecBase, fetchRoles, fetchSessions
 } from "src/services/onec/api";
 import {
 	isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation, useOnecPermissions,
@@ -166,6 +166,23 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 			.map((b) => ({ key: b.key, reason: fitOf(b) })),
 		[items, picked, fitOf],
 	);
+
+	/*
+	 * ЗАНЯТЫЕ БАЗЫ — ДО НАЖАТИЯ (П27). Платформе нужен монопольный доступ: живой сеанс останавливает установку
+	 * расширения, загрузку и обновление. Узнавать об этом из отказа через двадцать минут ожидания в очереди — поздно,
+	 * а «Фоновое задание» вдобавок не убирается блокировкой входа: его снимают сеансом или запретом регламентных.
+	 */
+	const needsExclusive = spec?.needs === "ib";
+	const sessions = useQuery({
+		queryKey: ["onec", "sessions"], queryFn: fetchSessions,
+		enabled: needsExclusive && picked.size > 0, staleTime: 30_000,
+	});
+	const busy = useMemo(() => {
+		const uuids = new Set(items.filter((b) => targets.includes(b.key)).map((b) => b.infobaseId).filter(Boolean));
+		const rows = (sessions.data?.items ?? []).filter((r) => uuids.has(r.infobase));
+		const jobs = rows.filter((r) => /BackgroundJob|Фоновое задание/i.test(r.appId ?? "")).length;
+		return { total: rows.length, jobs };
+	}, [items, targets, sessions.data]);
 
 	// ── Шаг «Права»: роли нового пользователя (только создание) ─────────────
 	const isCreateUser = spec?.type === "IB_CREATE_USER";
@@ -347,6 +364,13 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 					 * параметров агента. Называем адрес до нажатия, а не после.
 					 */
 					...(spec.type === "IB_PUBLISH" ? [address] : []),
+					// Сеансы мешают только операциям внутрь базы; молчим, когда база свободна (П27).
+					...(busy.total ? [{
+						type: "warning" as const,
+						text: `${translate("onecBusySessionsWarn")}: ${busy.total}`
+							+ (busy.jobs ? ` · ${translate("onecBusyBackgroundJobs")}: ${busy.jobs}` : "")
+							+ `. ${translate("onecBusySessionsHint")}`,
+					}] : []),
 				]} />}>
 					<>
 						<GroupRow>
