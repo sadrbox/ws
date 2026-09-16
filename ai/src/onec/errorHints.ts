@@ -95,6 +95,34 @@ const HINTS: Hint[] = [
 	},
 ];
 
+/**
+ * КТО ДЕРЖИТ БАЗУ — разобранным, а не абзацем (П25).
+ *
+ * Платформа пишет держателя прозой: «База данных заблокирована: компьютер: SERVER, сеанс: 2, начат: 16.09.2026
+ * в 9:54:27, приложение: Фоновое задание». Человеку этого мало: по нему нельзя ни снять сеанс кнопкой, ни понять
+ * с одного взгляда, что мешает — конфигуратор коллеги или фоновое задание, которое блокировкой входа не убрать.
+ * Разбираем узко: не узнали — возвращаем null, и панель покажет текст как есть.
+ */
+export type LockedBy = { computer: string | null; sessionId: string | null; startedAt: string | null; appId: string | null };
+
+const FIELD = (name: string, text: string): string | null => {
+	const m = new RegExp(`${name}\\s*:\\s*([^,]+?)\\s*(?:,|$)`, "i").exec(text);
+	return m ? m[1].trim() : null;
+};
+
+export function parseLockedBy(message: string | null | undefined): LockedBy | null {
+	const text = message ?? "";
+	if (!/база данных заблокирована|разделен\w* доступ|разделённ\w* доступ/i.test(text)) return null;
+	const out: LockedBy = {
+		computer: FIELD("компьютер", text),
+		sessionId: FIELD("сеанс", text),
+		startedAt: FIELD("начат", text),
+		appId: FIELD("приложение", text),
+	};
+	// Ни одного поля — разбирать нечего: пусть панель покажет текст платформы как есть.
+	return Object.values(out).some((v) => v) ? out : null;
+}
+
 /** Кто ответил: агент кладёт машину и процесс в `details` ошибки. */
 export type AgentErrorDetails = { host?: unknown; pid?: unknown; build?: unknown };
 

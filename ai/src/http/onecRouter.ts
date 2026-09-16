@@ -15,7 +15,8 @@
 // Права: пока администратор организации или суперадмин. Именованное право OneCAdmin
 // заводится в ERP вместе с панелью (A5) — тогда проверка переедет на него.
 
-import { humanizeAgentError } from "../onec/errorHints.ts";
+import { isBusyFailure } from "../commands/queue.ts";
+import { humanizeAgentError, parseLockedBy } from "../onec/errorHints.ts";
 import { isDestructive } from "../onec/access.ts";
 import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAllows } from "../onec/permissions.ts";
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
@@ -306,7 +307,17 @@ export function onecRouter(deps: Deps) {
 			// ответ своей HTML-страницей, у которой нет заголовков CORS, и браузер показывает
 			// это как «Access-Control-Allow-Origin missing». Именно так терялись все
 			// сообщения об ошибках 1С — текст до панели не доезжал.
-			return { status: 422, body: { success: false, error: e } };
+			/*
+			 * ЧТО ПАНЕЛИ ДЕЛАТЬ С ЭТИМ ОТКАЗОМ (С38, П25). `retryable` — отказ временный, повтор осмыслен: у
+			 * группового задания сервис повторяет сам, а одиночную команду человек ждёт на экране, и решать ему.
+			 * `lockedBy` — кто держит базу, полями: по ним панель предложит снять сеанс, а не пересказывать абзац.
+			 */
+			const lockedBy = parseLockedBy(e.message);
+			return { status: 422, body: { success: false, error: {
+				...e,
+				retryable: isBusyFailure(e.code, e.message),
+				...(lockedBy ? { details: { ...(typeof e.details === "object" && e.details ? e.details : {}), lockedBy } } : {}),
+			} } };
 		}
 		return { status: 200, body: { success: true, data: done.result ?? null }, data: done.result ?? null };
 	}

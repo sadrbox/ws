@@ -32,7 +32,15 @@ export type Envelope<T> = { success: boolean; data?: T; error?: { code: string; 
  * видно парами одинаковых 422.
  */
 export class AiServiceError extends Error {
-	constructor(message: string, readonly status: number, readonly code?: string) {
+	constructor(
+		message: string, readonly status: number, readonly code?: string,
+		/**
+		 * Подробности отказа, как их прислал сервис. Раньше терялись, а в них — то, по чему панель решает, что
+		 * делать: `lockedBy` (кто держит базу) и `retryable` (повтор осмыслен, база освободится сама).
+		 */
+		readonly details?: unknown,
+		readonly retryable?: boolean,
+	) {
 		super(message);
 		this.name = "AiServiceError";
 	}
@@ -77,7 +85,8 @@ export async function aiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 		body = null;
 	}
 	if (!res.ok || !body?.success) {
-		throw new AiServiceError(body?.error?.message || `HTTP ${res.status}`, res.status, body?.error?.code);
+		const err = body?.error as { message?: string; code?: string; details?: unknown; retryable?: boolean } | undefined;
+		throw new AiServiceError(err?.message || `HTTP ${res.status}`, res.status, err?.code, err?.details, err?.retryable);
 	}
 	return body.data as T;
 }

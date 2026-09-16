@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { humanizeAgentError } from "../src/onec/errorHints.ts";
+import { humanizeAgentError, parseLockedBy } from "../src/onec/errorHints.ts";
 import { ibFailureReason } from "../src/bases/service.ts";
 import { RETRY_LATER_CODES, isBusyFailure } from "../src/commands/queue.ts";
 
@@ -100,4 +100,16 @@ test("«разделённый доступ»: подсказка про сеа�
 	assert.equal(isBusyFailure("IB_BUSY", ""), true);
 	assert.equal(isBusyFailure("IB_ERROR", "иная ошибка"), false);
 	assert.equal(RETRY_LATER_CODES.has("IB_BUSY"), true);
+});
+
+// П25: кто держит базу — полями, а не абзацем.
+test("parseLockedBy: компьютер, сеанс, начало и приложение из текста платформы", () => {
+	const held = parseLockedBy("Ошибка разделенного доступа к базе данных База данных заблокирована: компьютер: SERVER, "
+		+ "сеанс: 2, начат: 16.09.2026 в 9:54:27, приложение: Фоновое задание");
+	assert.deepEqual(held, {
+		computer: "SERVER", sessionId: "2", startedAt: "16.09.2026 в 9:54:27", appId: "Фоновое задание",
+	});
+	// Иной отказ разбирать нечего — панель покажет текст как есть.
+	assert.equal(parseLockedBy("Соединение с информационной базой не установлено"), null);
+	assert.equal(parseLockedBy(null), null);
 });

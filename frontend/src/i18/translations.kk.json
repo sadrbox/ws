@@ -1670,6 +1670,8 @@
   "onecLockDisabled": "Базаға кіру ашылды",
   "onecSessionsLockState": "Сеанстарды бұғаттау",
   "onecScheduledJobs": "Регламенттік тапсырмалар",
+  "onecHeldBy": "Базаны ұстап тұр",
+  "onecSessionShort": "сеанс",
   "onecScheduledJobsDeniedLabel": "тыйым салынған",
   "onecScheduledJobsAllowedLabel": "рұқсат етілген",
   "onecScheduledJobsDeny": "Регламенттік тапсырмаларға тыйым салу",

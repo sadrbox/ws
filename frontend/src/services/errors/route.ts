@@ -48,6 +48,25 @@ export function errorStatus(e: unknown): number | undefined {
  * humanErrorText), и делаем это в одном месте — через него проходят все три канала:
  * тост, журнал и сообщение формы.
  */
+/**
+ * КТО ДЕРЖИТ БАЗУ — строкой к тексту отказа (П25).
+ *
+ * Сервис разбирает прозу платформы на поля (`details.lockedBy`): компьютер, сеанс, начало, приложение. Показываем
+ * их отдельной строкой — «Фоновое задание» в ней сразу говорит, что блокировка входа не поможет и нужен запрет
+ * регламентных заданий. Полей нет — ничего не приписываем.
+ */
+function heldByText(e: unknown): string {
+	const d = (e as { details?: { lockedBy?: Record<string, string | null> } } | null)?.details?.lockedBy;
+	if (!d) return "";
+	const parts = [
+		d.appId,
+		d.sessionId ? `${translate("onecSessionShort")} ${d.sessionId}` : null,
+		d.computer,
+		d.startedAt,
+	].filter(Boolean);
+	return parts.length ? `${translate("onecHeldBy")}: ${parts.join(", ")}` : "";
+}
+
 export function errorText(e: unknown, fallback = translate("unknownError")): string {
 	if (typeof e === "string" && e.trim()) return humanErrorText(e);
 	if (e && typeof e === "object") {
@@ -55,7 +74,8 @@ export function errorText(e: unknown, fallback = translate("unknownError")): str
 		const server = o.response?.data?.message;
 		if (typeof server === "string" && server.trim()) return humanErrorText(server);
 		if (typeof o.message === "string" && o.message.trim() && !AXIOS_GENERIC.test(o.message.trim())) {
-			return humanErrorText(o.message);
+			const held = heldByText(e);
+			return [humanErrorText(o.message), held].filter(Boolean).join("\n\n");
 		}
 	}
 	return fallback;

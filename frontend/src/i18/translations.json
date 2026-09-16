@@ -1670,6 +1670,8 @@
   "onecLockDisabled": "Вход в базу открыт",
   "onecSessionsLockState": "Блокировка сеансов",
   "onecScheduledJobs": "Регламентные задания",
+  "onecHeldBy": "Базу держит",
+  "onecSessionShort": "сеанс",
   "onecScheduledJobsDeniedLabel": "запрещены",
   "onecScheduledJobsAllowedLabel": "разрешены",
   "onecScheduledJobsDeny": "Запретить регламентные задания",
