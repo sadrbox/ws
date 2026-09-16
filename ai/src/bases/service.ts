@@ -228,6 +228,8 @@ export function ibFailureReason(
 	if (code === "IB_CONNECTION_LOST") return null;
 	// Занятость и остановка — тоже не про базу (С31, С25): команда не выполнялась или прервана службой.
 	if (["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING", "AGENT_STOPPED", "TIMEOUT", "IB_TIMEOUT"].includes(code)) return null;
+	// Расширение не подошло к конфигурации базы (С34): дефект расширения, а не базы — вход в неё состоялся.
+	if (code === "IB_EXTENSION_NOT_APPLICABLE") return null;
 	// Защитные отказы удаления регистрации (С32): это про СУБД и компоненты агента, не про вход в базу.
 	if (["INFOBASE_DB_ALIVE", "DB_PASSWORD_MISSING", "IBCMD_UNAVAILABLE", "DB_PARAMS_UNAVAILABLE", "DB_CHECK_FAILED"].includes(code)) return null;
 

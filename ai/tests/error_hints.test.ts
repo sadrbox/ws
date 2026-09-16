@@ -6,6 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { humanizeAgentError } from "../src/onec/errorHints.ts";
+import { ibFailureReason } from "../src/bases/service.ts";
+import { RETRY_LATER_CODES } from "../src/commands/queue.ts";
 
 const COM_MEMBER_NOT_FOUND = {
 	code: "IB_ERROR",
@@ -63,4 +65,17 @@ test("неаутентифицированный администратор кл
 test("незарегистрированный COMConnector отличается от отсутствующего члена", () => {
 	const out = humanizeAgentError({ code: "IB_ERROR", message: "Class not registered (0x80040154)" })!;
 	assert.match(out.message, /COMConnector/);
+});
+
+// С34: расширение собрано под другую версию конфигурации — повтор бессмыслен, база исправна.
+test("IB_EXTENSION_NOT_APPLICABLE: совет пересобрать; ни повтора в задании, ни отметки «в базу не войти»", () => {
+	const e = {
+		code: "IB_EXTENSION_NOT_APPLICABLE",
+		message: "Контролируемое свойство «Тип» реквизита Справочник.Номенклатура.Артикул не совпадает с конфигурацией",
+	};
+	const out = humanizeAgentError(e)!;
+	assert.ok(out.message.startsWith(e.message));
+	assert.match(out.message, /обновите заимствованные объекты/);
+	assert.equal(ibFailureReason(e), null);
+	assert.equal(RETRY_LATER_CODES.has(e.code), false);
 });
