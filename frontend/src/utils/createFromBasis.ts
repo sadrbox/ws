@@ -287,7 +287,21 @@ export function buildRefillBasisItems(
 			(k) => !refillFieldEqual(k, existing[k], newValues[k]),
 		);
 
-		if (isServerRow(existing)) {
+		if (isServerRow(existing) && existing._pendingAction === "delete") {
+			/*
+			 * УДАЛЁННАЯ БЕЗ ЗАПИСИ, НО ЕСТЬ В ОСНОВАНИИ — ВОССТАНАВЛИВАЕМ (16.09). Перезаполнение приводит таблицу к
+			 * основанию, и позиция основания возвращается на своё место. Раньше удалённые строки сюда не попадали
+			 * вовсе: позиция основания не находила пары и добавлялась новой копией, а серверная строка после
+			 * пересоздания таблицы теряла пометку удаления и возвращалась — одна позиция дважды.
+			 */
+			result.push({
+				...existing,
+				...newValues,
+				sourceRowId: srcId || null,
+				_pendingAction: "update",
+			});
+			changed = true;
+		} else if (isServerRow(existing)) {
 			// Серверная строка: трогаем только при реальном изменении значений.
 			// sourceRowId при этом тоже проставляем (идемпотентность будущих refill),
 			// но не ради него одного. Если значения совпали — строку не трогаем.
@@ -315,7 +329,12 @@ export function buildRefillBasisItems(
 	// Несопоставленные СЕРВЕРНЫЕ строки (лишние/ручные/убранные из основания) → delete.
 	for (const r of displayed) {
 		if (consumed.has(r)) continue;
-		if (isServerRow(r) && r?._pendingAction !== "delete") {
+		if (!isServerRow(r)) continue;
+		if (r?._pendingAction === "delete") {
+			// Уже удалена и в основании её нет — пометка должна пережить пересоздание таблицы, иначе строка
+			// вернётся. Само по себе это не изменение: без других правок таблицу не трогаем.
+			result.push(r);
+		} else {
 			result.push({ ...r, _pendingAction: "delete" });
 			changed = true;
 		}
@@ -426,12 +445,13 @@ export async function runBasisRefill(opts: {
 		lastRefillBasis.get(storeKey) !== basisUuid;
 	lastRefillBasis.set(storeKey, basisUuid);
 
-	// Текущее отображаемое состояние таблицы (сервер + pending, без delete).
-	// allItemsRef/setBasisItems приходят как TDataItem[] (тип useState/useRef формы);
-	// внутри работаем с DocRow[] (шире: id опционален + бизнес-поля) — апкаст безопасен.
-	const live: DocRow[] = opts.allItemsRef.current.filter(
-		(r: DocRow) => r._pendingAction !== "delete",
-	);
+	/*
+	 * Текущие строки таблицы — ВСЕ, включая помеченные на удаление без записи. Раньше удалённые отбрасывались, и
+	 * «Обновить» после удаления давало дубли: позиция основания не находила пары и добавлялась копией, а серверная
+	 * строка после пересоздания таблицы возвращалась без пометки. Решает, что с ними делать, слияние.
+	 * allItemsRef/setBasisItems приходят как TDataItem[] (тип useState/useRef формы); внутри работаем с DocRow[].
+	 */
+	const live: DocRow[] = opts.allItemsRef.current;
 
 	let merged: DocRow[];
 	if (basisChanged) {

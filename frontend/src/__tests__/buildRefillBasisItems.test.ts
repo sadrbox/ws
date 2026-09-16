@@ -116,3 +116,27 @@ describe("buildRefillBasisItems — идемпотентный refill по sourc
 		expect(merged[0]).toMatchObject({ sourceRowId: "c", _pendingAction: "create" });
 	});
 });
+
+describe("buildRefillBasisItems — строки, удалённые без записи («Обновить» у документа с основанием)", () => {
+	it("удалённая строка, которая есть в основании, восстанавливается — а не дублируется новой копией", () => {
+		const displayed = [serverRow("srv-a", "a"), { ...serverRow("srv-b", "b"), id: 101, _pendingAction: "delete" }];
+		const basisRows = mapItemsForBasis([basisSrc("a"), basisSrc("b")]);
+		const merged = buildRefillBasisItems(displayed, basisRows);
+		// Ровно одна строка на позицию b: серверная, без пометки удаления, и никакой новой копии.
+		const forB = merged.filter((r) => r.sourceRowId === "b");
+		expect(forB).toHaveLength(1);
+		expect(forB[0]).toMatchObject({ uuid: "srv-b", _pendingAction: "update" });
+		expect(merged.some((r) => r._pendingAction === "create")).toBe(false);
+	});
+
+	it("удалённая строка, которой в основании нет, остаётся удалённой — пометка не теряется", () => {
+		const displayed = [
+			serverRow("srv-a", "a"),
+			{ ...serverRow("srv-c", "c"), id: 102, _pendingAction: "delete" },
+		];
+		const basisRows = mapItemsForBasis([basisSrc("a", { quantity: 25 })]);
+		const merged = buildRefillBasisItems(displayed, basisRows);
+		expect(merged.find((r) => r.uuid === "srv-a")).toMatchObject({ _pendingAction: "update", quantity: 25 });
+		expect(merged.find((r) => r.uuid === "srv-c")).toMatchObject({ _pendingAction: "delete" });
+	});
+});
