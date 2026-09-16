@@ -126,8 +126,23 @@ let owner = currentOwner();
  * страница вернулась (кэш истории браузера), пишем снова.
  */
 let pageUnloading = false;
+let unloadReset: ReturnType<typeof setTimeout> | null = null;
 if (typeof window !== "undefined") {
-	window.addEventListener("pagehide", () => { pageUnloading = true; });
+	/*
+	 * С НАЧАЛА ПЕРЕХОДА, А НЕ С ВЫГРУЗКИ. Одних `pagehide` мало: браузер может оборвать запросы уже в начале перехода
+	 * (так делает Firefox), и отказ «Нет связи с сервером» обрабатывался раньше выгрузки — запись оседала в истории
+	 * (живой случай 17.09, «Проверить пользователей»). `beforeunload` — начало перехода; если переход отменили (человек
+	 * остался на странице), через 5 с запись снова включается.
+	 */
+	window.addEventListener("beforeunload", () => {
+		pageUnloading = true;
+		if (unloadReset) clearTimeout(unloadReset);
+		unloadReset = setTimeout(() => { pageUnloading = false; unloadReset = null; }, 5000);
+	});
+	window.addEventListener("pagehide", () => {
+		pageUnloading = true;
+		if (unloadReset) { clearTimeout(unloadReset); unloadReset = null; }
+	});
 	window.addEventListener("pageshow", () => { pageUnloading = false; });
 }
 const ownerKey = (o: string): string => `${STORE_KEY}:${o}`;
