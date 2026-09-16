@@ -33,10 +33,10 @@ describe("aiFetch: маршрута нет", () => {
 	it("404 NOT_FOUND объясняется устаревшим сервисом, а не «ресурс не найден»", async () => {
 		const { aiFetch } = await import("src/services/ai/endpoint");
 		const orig = globalThis.fetch;
-		globalThis.fetch = (async () => new Response(
+		globalThis.fetch = (() => Promise.resolve(new Response(
 			JSON.stringify({ success: false, error: { code: "NOT_FOUND", message: "Ресурс не найден" } }),
 			{ status: 404, headers: { "Content-Type": "application/json" } },
-		)) as typeof fetch;
+		))) as typeof fetch;
 		try {
 			await expect(aiFetch("/v1/onec/bases/shahs/scheduled-jobs", { method: "POST" })).rejects.toThrow(/перезапустите сервис/i);
 		} finally {

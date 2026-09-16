@@ -24,7 +24,7 @@ vi.mock("src/hooks/useInfiniteModelList", () => ({
 		};
 	},
 }));
-vi.mock("src/hooks/useModelDelete", () => ({ useModelDelete: () => async () => ({ deletedIds: new Set<number>() }) }));
+vi.mock("src/hooks/useModelDelete", () => ({ useModelDelete: () => () => Promise.resolve({ deletedIds: new Set<number>() }) }));
 
 import SubTable, { type SubTableApi } from "src/components/SubTable";
 
@@ -35,8 +35,9 @@ describe("SubTable: «Обновить» после несохранённого
 		setServer({ items: [row(1, "Альфа"), row(2, "Бета"), row(3, "Гамма"), row(4, "Дельта")], updatedAt: 1 });
 		const qc = new QueryClient();
 		// «Обновить»: сервис отдаёт тот же состав новым массивом.
-		vi.spyOn(qc, "invalidateQueries").mockImplementation(async () => {
+		vi.spyOn(qc, "invalidateQueries").mockImplementation(() => {
 			setServer({ items: server.items.map((r) => ({ ...r })), updatedAt: server.updatedAt + 1 });
+			return Promise.resolve();
 		});
 		let latest: TDataItem[] = [];
 		const apiHolder: { current: SubTableApi | null } = { current: null };
@@ -68,7 +69,7 @@ describe("SubTable: «Обновить» после несохранённого
 		// «Обновить» в командной панели таблицы.
 		const reload = screen.getAllByRole("button").find((b) => /обнов/i.test(`${b.getAttribute("title") ?? ""} ${b.getAttribute("aria-label") ?? ""}`));
 		expect(reload).toBeTruthy();
-		await act(async () => { fireEvent.click(reload!); });
+		act(() => { fireEvent.click(reload!); });
 		await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
 		const uuids = latest.map((r) => r.uuid);
