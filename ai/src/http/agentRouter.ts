@@ -19,7 +19,7 @@ import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
-import { BUSY_RETRY_DELAYS_SECS, RETRY_LATER_CODES, runningLeaseSecs } from "../commands/queue.ts";
+import { BUSY_RETRY_DELAYS_SECS, isBusyFailure, runningLeaseSecs } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, checkShowInListIntent, parseEcho, roleVerdictMessage, showInListVerdictMessage } from "../onec/echo.ts";
@@ -732,7 +732,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// База занята — команде задания даётся ещё попытка в конце очереди (С10): агент сам советует
 		// повторить такие базы, а ночное обслуживание иначе пропускало базу из-за одного входа.
 		// То же — «агент занят» и «служба останавливалась до начала» (С31, С25): команда не выполнялась.
-		if (wire.status === "ERROR" && RETRY_LATER_CODES.has(wire.error?.code ?? "") && row.batch_id) {
+		if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id) {
 			const again = await queue.retryBusy(row.id, BATCH_QUEUE_WAIT_SECS);
 			if (again) {
 				const attempt = (row.attempt ?? 1) + 1;

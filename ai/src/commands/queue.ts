@@ -155,6 +155,20 @@ export type WireCommand = {
 // IB_TIMEOUT (С25): утилита не ответила за свой предел и снята — по контракту повтор допустим.
 export const RETRY_LATER_CODES = new Set(["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING", "IB_TIMEOUT"]);
 
+/**
+ * «БАЗА ЗАНЯТА» ПО ТЕКСТУ ПЛАТФОРМЫ, а не только по коду (С38).
+ *
+ * Живой случай 16.09 на `_transition`: установку расширения не пустило фоновое задание — «Ошибка разделенного
+ * доступа к базе данных. База данных заблокирована: … приложение: Фоновое задание», — но код пришёл общий.
+ * Задание объявило «Не выполнено» и не повторило, хотя это ровно тот случай, ради которого повтор и сделан:
+ * база освободится сама. Агент научится отвечать `IB_BUSY` (А39); до его обновления узнаём случай по тексту.
+ */
+const BUSY_TEXT = /разделен\w* доступ|разделённ\w* доступ|база данных заблокирована|монопольн|exclusive (?:access|mode)/i;
+
+/** Отказ означает «база занята» — команду задания стоит повторить. */
+export const isBusyFailure = (code: string | undefined | null, message: string | undefined | null): boolean =>
+	RETRY_LATER_CODES.has(code ?? "") || BUSY_TEXT.test(message ?? "");
+
 export type WireResult = {
 	commandId: string;
 	agentId: string;

@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { humanizeAgentError } from "../src/onec/errorHints.ts";
 import { ibFailureReason } from "../src/bases/service.ts";
-import { RETRY_LATER_CODES } from "../src/commands/queue.ts";
+import { RETRY_LATER_CODES, isBusyFailure } from "../src/commands/queue.ts";
 
 const COM_MEMBER_NOT_FOUND = {
 	code: "IB_ERROR",
@@ -80,4 +80,24 @@ test("IB_EXTENSION_NOT_APPLICABLE: совет пересобрать; ни по�
 	assert.match(out.message, /не повторяет/);
 	assert.equal(ibFailureReason(e), null);
 	assert.equal(RETRY_LATER_CODES.has(e.code), false);
+});
+
+// С37/С38: базу держит чужой сеанс — текст платформы приходит и с общим кодом (16.09, `_transition`).
+test("«разделённый доступ»: подсказка про сеанс, повтор в задании, база исправна", () => {
+	const e = {
+		code: "IB_ERROR",
+		message: "Ошибка разделенного доступа к базе данных База данных заблокирована: компьютер: SERVER, "
+			+ "сеанс: 2, начат: 16.09.2026 в 9:54:27, приложение: Фоновое задание",
+	};
+	const out = humanizeAgentError(e)!;
+	assert.ok(out.message.startsWith(e.message));
+	assert.match(out.message, /Фоновое задание|снимите сеанс/i);
+	// Повторяем как «база занята», хотя код общий: база освободится сама.
+	assert.equal(isBusyFailure(e.code, e.message), true);
+	// И не помечаем базу недоступной: вход тут ни при чём.
+	assert.equal(ibFailureReason(e), null);
+	// Прежнее правило по кодам не изменилось.
+	assert.equal(isBusyFailure("IB_BUSY", ""), true);
+	assert.equal(isBusyFailure("IB_ERROR", "иная ошибка"), false);
+	assert.equal(RETRY_LATER_CODES.has("IB_BUSY"), true);
 });
