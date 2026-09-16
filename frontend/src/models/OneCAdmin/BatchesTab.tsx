@@ -27,7 +27,7 @@
  * строки, которую прервать нельзя, итог говорит почему — запись не обрывают, или агент
  * старый. Подтверждение обязательно: работа уже идёт на сервере 1С.
  */
-import { formatDuration } from "./queueStats";
+import { formatDuration, stagesText } from "./queueStats";
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
@@ -145,7 +145,7 @@ export function timingNote(it: { queuedSecs?: number | null; runSecs?: number | 
 export function itemOutcome(batchType: string, it: {
 	state: string; abortable?: boolean; outcome: string | null; error: { code: string; message: string } | null;
 	warning?: string | null; attempt?: number; retryAt?: string | null; late?: boolean; lateWait?: boolean; stillRunning?: boolean;
-	queuedSecs?: number | null; runSecs?: number | null;
+	queuedSecs?: number | null; runSecs?: number | null; stages?: { name: string; ms: number }[] | null;
 }): string {
 	const main = it.error
 		? `${it.error.code}: ${it.error.message}`
@@ -156,6 +156,8 @@ export function itemOutcome(batchType: string, it: {
 		(it.attempt ?? 1) > 1 ? `${translate("onecBatchAttempt")} ${it.attempt}` : "",
 		// Куда ушло время (С40): ожидание очереди по базе и собственно работа — раздельно.
 		timingNote(it),
+		// Время по этапам успеха (П28); у отказа раскладка уже в тексте агента.
+		!it.error ? stagesText(it.stages) : "",
 		it.retryAt ? `${translate("onecBusyRetryAt")} ${getFormatDate(it.retryAt)}` : "",
 		it.stillRunning ? translate("onecStillRunning") : "",
 		it.lateWait ? translate("onecLateWaiting") : "",

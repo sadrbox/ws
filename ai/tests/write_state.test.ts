@@ -217,26 +217,66 @@ describe("С32: защитные отказы удаления регистра�
 	});
 });
 
-describe("С39: запрет регламентных и фоновых заданий", () => {
-	it("ответ команды: блокировка в реестр и признак заданий отдельным действием", () => {
+describe("С39, С40: запрет регламентных и фоновых заданий — откуда известно", () => {
+	it("признак в блокировке после записи — источник «кластер» со временем чтения", () => {
 		const a = planWriteState("CLUSTER_SET_SCHEDULED_JOBS", { baseKey: "b", denied: true }, {
-			ok: true, baseKey: "b", denied: true, was: false,
+			ok: true, requested: true, denied: false, was: false,
 			state: { lock: { enabled: false, message: "", from: null, to: null, readAt: "2026-09-16T07:00:00Z", scheduledJobsDenied: true } },
 		});
-		assert.equal(a.length, 2);
 		assert.equal(a[0].kind, "lock");
-		assert.deepEqual(a[1], { kind: "scheduledJobs", denied: true });
-		// Признак пришёл и внутри блокировки — реестр получит его обоими путями.
-		assert.equal(a[0].kind === "lock" && a[0].lock.scheduledJobsDenied, true);
+		// Блокировка важнее `denied`: она прочитана у кластера целиком.
+		assert.deepEqual(a[1], { kind: "scheduledJobs", denied: true, source: "cluster", seenAt: "2026-09-16T07:00:00Z" });
 	});
 
-	it("кластер промолчал — признак берём из того, что велели", () => {
-		const a = planWriteState("CLUSTER_SET_SCHEDULED_JOBS", { baseKey: "b", denied: false }, { ok: true });
-		assert.deepEqual(a, [{ kind: "scheduledJobs", denied: false }]);
+	it("блокировки нет, есть `denied` — это факт агента (с 23:45)", () => {
+		const a = planWriteState("CLUSTER_SET_SCHEDULED_JOBS", { baseKey: "b", denied: true }, { ok: true, requested: true, denied: true });
+		assert.deepEqual(a, [{ kind: "scheduledJobs", denied: true, source: "cluster", seenAt: null }]);
+	});
+
+	it("кластер промолчал — пишем то, что просили, с пометкой «по команде» и без времени чтения", () => {
+		const a = planWriteState("CLUSTER_SET_SCHEDULED_JOBS", { baseKey: "b", denied: false }, { ok: true, unverified: ["denied"] });
+		assert.deepEqual(a, [{ kind: "scheduledJobs", denied: false, source: "command", seenAt: null }]);
 	});
 
 	it("закрытие входа о заданиях не говорит: прежнее значение не трогается", () => {
 		const a = planWriteState("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b", enabled: true }, { ok: true });
 		assert.equal(a[0].kind === "lock" && a[0].lock.scheduledJobsDenied, null);
+	});
+});
+
+describe("С41: оговорки успеха по типу команды", () => {
+	it("запрет заданий: warning кластера и «не проверено»", async () => {
+		const { commandCaveat } = await import("../src/onec/caveats.ts");
+		const w = commandCaveat("CLUSTER_SET_SCHEDULED_JOBS", { ok: true, warning: "после записи регламентные задания по-прежнему разрешены" });
+		assert.match(w ?? "", /по-прежнему разрешены/);
+		assert.match(commandCaveat("CLUSTER_SET_SESSIONS_LOCK", { ok: true, unverified: ["enabled"] }) ?? "", /кластер не отдал состояние/);
+		assert.equal(commandCaveat("CLUSTER_SET_SESSIONS_LOCK", { ok: true, enabled: true }), null);
+	});
+
+	it("установка расширения: другое имя и непринятые свойства", async () => {
+		const { commandCaveat } = await import("../src/onec/caveats.ts");
+		assert.match(commandCaveat("IB_INSTALL_EXTENSION", { ok: true, name: "Доработки_v2", requestedName: "Доработки" }) ?? "", /«Доработки_v2».*«Доработки»/);
+		assert.equal(commandCaveat("IB_INSTALL_EXTENSION", { ok: true, name: "Доработки", requestedName: "Доработки" }), null);
+		assert.match(commandCaveat("IB_INSTALL_EXTENSION", { ok: true, skipped: ["SafeMode"] }) ?? "", /SafeMode/);
+	});
+
+	it("запись пользователя — прежний разбор", async () => {
+		const { commandCaveat } = await import("../src/onec/caveats.ts");
+		assert.ok(commandCaveat("IB_UPDATE_USER", { ok: true, unverified: ["showInList"] }));
+	});
+});
+
+describe("С42: держатель базы — поля агента в форме панели", () => {
+	it("session/application/startedText → sessionId/appId/startedAt; ISO отдельно", async () => {
+		const { normalizeLockedBy } = await import("../src/onec/errorHints.ts");
+		assert.deepEqual(normalizeLockedBy({
+			computer: "SERVER", session: 2, application: "Фоновое задание", user: "Регламент",
+			startedAt: "2026-09-16T09:54:27", startedText: "16.09.2026 в 9:54:27",
+		}), {
+			computer: "SERVER", sessionId: "2", appId: "Фоновое задание", startedAt: "16.09.2026 в 9:54:27",
+			user: "Регламент", startedAtIso: "2026-09-16T09:54:27",
+		});
+		assert.equal(normalizeLockedBy(null), null);
+		assert.equal(normalizeLockedBy({}), null);
 	});
 });

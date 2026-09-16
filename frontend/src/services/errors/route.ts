@@ -60,6 +60,7 @@ function heldByText(e: unknown): string {
 	if (!d) return "";
 	const parts = [
 		d.appId,
+		d.user,
 		d.sessionId ? `${translate("onecSessionShort")} ${d.sessionId}` : null,
 		d.computer,
 		d.startedAt,

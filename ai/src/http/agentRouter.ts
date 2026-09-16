@@ -589,7 +589,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 					}
 					if (!cmd.base_key) continue;
 					if (a.kind === "lock") await bases.setSessionsLock(me.serverId, cmd.base_key, a.lock, a.source);
-					else if (a.kind === "scheduledJobs") await bases.setScheduledJobs(me.serverId, cmd.base_key, a.denied);
+					else if (a.kind === "scheduledJobs") await bases.setScheduledJobs(me.serverId, cmd.base_key, a.denied, a.source, a.seenAt);
 					else if (a.kind === "missing") await bases.markMissing(me.serverId, cmd.base_key);
 					else if (a.kind === "config") await bases.setConfig(me.serverId, cmd.base_key, a.config, a.exact);
 					else if (a.kind === "publication") {

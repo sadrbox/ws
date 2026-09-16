@@ -38,7 +38,7 @@ export type WriteStateAction =
 	| { kind: "config"; config: ConfigState; exact: boolean }
 	| { kind: "processes"; items: AgentProcess[] }
 	/** Запрет регламентных заданий по факту команды: эха блокировки в ответе может не быть (С39). */
-	| { kind: "scheduledJobs"; denied: boolean }
+	| { kind: "scheduledJobs"; denied: boolean; source: "cluster" | "command"; seenAt: string | null }
 	| { kind: "publication"; published: boolean; url: string | null; seenAt: string | null };
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -120,13 +120,21 @@ export function planWriteState(
 		 * блокировки его может не быть, а знать его надо — по нему панель предлагает вернуть как было.
 		 */
 		case "CLUSTER_SET_SCHEDULED_JOBS": {
+			/*
+			 * ОТКУДА ИЗВЕСТНО — ПО ПОРЯДКУ ДОСТОВЕРНОСТИ (С40): признак в блокировке, прочитанной после записи → `denied`
+			 * ответа (с агента 23:45 — факт, прочитанный после записи) → то, что просили. Последнее — не факт: пишем с
+			 * пометкой «по команде» и без времени чтения, иначе панель покажет «запрещены · 23:45», будто прочитано.
+			 */
 			const out: WriteStateAction[] = [];
 			const lock = parseLock(stateOf(result, "lock"));
 			if (lock) out.push({ kind: "lock", lock, source: "cluster" });
-			const denied = isObj(result) && typeof result.denied === "boolean"
-				? result.denied
-				: (typeof payload.denied === "boolean" ? payload.denied : null);
-			if (denied !== null) out.push({ kind: "scheduledJobs", denied });
+			if (lock?.scheduledJobsDenied != null) {
+				out.push({ kind: "scheduledJobs", denied: lock.scheduledJobsDenied, source: "cluster", seenAt: lock.seenAt });
+			} else if (isObj(result) && typeof result.denied === "boolean") {
+				out.push({ kind: "scheduledJobs", denied: result.denied, source: "cluster", seenAt: lock?.seenAt ?? null });
+			} else if (typeof payload.denied === "boolean") {
+				out.push({ kind: "scheduledJobs", denied: payload.denied, source: "command", seenAt: null });
+			}
 			return out;
 		}
 		case "CLUSTER_DROP_INFOBASE": {

@@ -15,8 +15,9 @@
 // Права: пока администратор организации или суперадмин. Именованное право OneCAdmin
 // заводится в ERP вместе с панелью (A5) — тогда проверка переедет на него.
 
+import { commandCaveat } from "../onec/caveats.ts";
 import { isBusyFailure } from "../commands/queue.ts";
-import { humanizeAgentError, parseLockedBy } from "../onec/errorHints.ts";
+import { humanizeAgentError, normalizeLockedBy, parseLockedBy } from "../onec/errorHints.ts";
 import { isDestructive } from "../onec/access.ts";
 import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAllows } from "../onec/permissions.ts";
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
@@ -312,14 +313,24 @@ export function onecRouter(deps: Deps) {
 			 * группового задания сервис повторяет сам, а одиночную команду человек ждёт на экране, и решать ему.
 			 * `lockedBy` — кто держит базу, полями: по ним панель предложит снять сеанс, а не пересказывать абзац.
 			 */
-			const lockedBy = parseLockedBy(e.message);
+			// Поля агента — главные; свой разбор текста — только у агентов старше 12:13 (С42).
+			const agentHeld = typeof e.details === "object" && e.details ? (e.details as { lockedBy?: unknown }).lockedBy : undefined;
+			const lockedBy = normalizeLockedBy(agentHeld) ?? parseLockedBy(e.message);
 			return { status: 422, body: { success: false, error: {
 				...e,
 				retryable: isBusyFailure(e.code, e.message),
 				...(lockedBy ? { details: { ...(typeof e.details === "object" && e.details ? e.details : {}), lockedBy } } : {}),
 			} } };
 		}
-		return { status: 200, body: { success: true, data: done.result ?? null }, data: done.result ?? null };
+		/*
+		 * ОГОВОРКИ УСПЕХА (С41): «кластер не отдал состояние», «расширение встало под другим именем» — одним текстом
+		 * в `caveat`, рядом с ответом агента. Раньше до итога операции доезжал только голый успех.
+		 */
+		const caveat = commandCaveat(spec.type, done.result);
+		const data = caveat && done.result && typeof done.result === "object" && !Array.isArray(done.result)
+			? { ...(done.result as Record<string, unknown>), caveat }
+			: done.result ?? null;
+		return { status: 200, body: { success: true, data }, data };
 	}
 
 	/**

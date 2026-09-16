@@ -178,7 +178,9 @@ export const SessionsTab: FC = () => {
 			// Кластер прочитал состояние после команды (агент E1) и оно не то, что просили, —
 			// говорим это, а не «вход закрыт»: иначе человек уйдёт с открытой базой.
 			const echo = r?.state?.lock;
-			if (echo && echo.enabled !== p.enabled) showToast(translate("onecLockNotApplied"), "warning");
+			// Кластер не отдал состояние после записи (агент 23:45) — это «не проверено», а не «применено» (П30).
+			if (r?.unverified?.includes("enabled")) showToast(r.caveat || translate("onecLockUnverified"), "warning");
+			else if (echo && echo.enabled !== p.enabled) showToast(translate("onecLockNotApplied"), "warning");
 			// Включили, но вход не закрыт (агент 23:16): осталось окно прошлой блокировки. Текст агента
 			// называет это окно; нет текста — наш. И сброшено ли прежнее (П10, агент 23:52): не `all` —
 			// прежние окно, сообщение или код разрешения остались, и человек должен об этом знать.

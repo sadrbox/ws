@@ -103,7 +103,33 @@ const HINTS: Hint[] = [
  * с одного взгляда, что мешает — конфигуратор коллеги или фоновое задание, которое блокировкой входа не убрать.
  * Разбираем узко: не узнали — возвращаем null, и панель покажет текст как есть.
  */
-export type LockedBy = { computer: string | null; sessionId: string | null; startedAt: string | null; appId: string | null };
+export type LockedBy = {
+	computer: string | null; sessionId: string | null; startedAt: string | null; appId: string | null;
+	/** Пользователь сеанса и начало в ISO — есть только у полей агента (с 12:13). */
+	user?: string | null; startedAtIso?: string | null;
+};
+
+/**
+ * ДЕРЖАТЕЛЬ ОТ АГЕНТА — в форму панели (С42). Агент с `2026-09-16 12:13` сам кладёт `details.lockedBy`
+ * `{computer, session, application, user?, startedAt (ISO), startedText}`. Разбирать текст поверх — хуже: агент
+ * обрезает его до 400 символов, и приложение в хвосте пропадает. Поля переименовываем под панель; разбор текста —
+ * только для агентов старше.
+ */
+export function normalizeLockedBy(v: unknown): LockedBy | null {
+	const o = Array.isArray(v) ? v[0] : v;
+	if (!o || typeof o !== "object") return null;
+	const r = o as Record<string, unknown>;
+	const s = (x: unknown): string | null => (typeof x === "string" && x.trim() ? x.trim() : typeof x === "number" ? String(x) : null);
+	const out: LockedBy = {
+		computer: s(r.computer),
+		sessionId: s(r.session ?? r.sessionId),
+		appId: s(r.application ?? r.appId),
+		startedAt: s(r.startedText) ?? s(r.startedAt),
+		user: s(r.user),
+		startedAtIso: s(r.startedAt),
+	};
+	return out.computer || out.sessionId || out.appId ? out : null;
+}
 
 const FIELD = (name: string, text: string): string | null => {
 	const m = new RegExp(`${name}\\s*:\\s*([^,]+?)\\s*(?:,|$)`, "i").exec(text);

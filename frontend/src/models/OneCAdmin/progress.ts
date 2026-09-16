@@ -15,6 +15,7 @@
  * ПРЕЖНИЕ ИМЕНА СОХРАНЕНЫ. Панель зовёт `startOp`/`finishOp`/`useOnecOps` из двух десятков
  * мест; реэкспорт позволяет перенести реестр, не трогая ни одно из них.
  */
+import { stagesText } from "./queueStats";
 import { useEffect, useSyncExternalStore } from "react";
 import { queryClient } from "src/app/queryClient";
 import {
@@ -239,6 +240,8 @@ export function mergeBatch(p: BatchProgress): void {
 	// Успех с оговоркой (П12): признак не перечитан или свойства не приняты — поимённо, до трёх баз.
 	const warned = p.items.filter((i) => i.warning).map((i) => `${i.baseKey ? `${i.baseKey}: ` : ""}${i.warning}`);
 	const warning = warned.length > 3 ? `${warned.slice(0, 3).join("; ")}; …` : warned.join("; ");
+	// Одиночное задание кончилось — куда ушло время, по этапам (П28).
+	const stagesNote = !running && p.total === 1 ? stagesText(p.items[0]?.stages) : "";
 	updateOp(target.id, (o) => ({
 		...o,
 		total: p.total,
@@ -255,7 +258,7 @@ export function mergeBatch(p: BatchProgress): void {
 		note: p.failed > 0 && failedItem?.error
 			? `${failedItem.baseKey ?? ""}: ${failedItem.error.message}`.trim()
 				+ (lateWaiting.length ? ` · ${translate("onecLateWaiting")}` : "")
-			: (retryNote || warning || (running ? o.note : "")),
+			: (retryNote || warning || stagesNote || (running ? o.note : "")),
 		...(warning ? { warning } : {}),
 	}));
 	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к

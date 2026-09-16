@@ -271,7 +271,7 @@ export const isSettledError = (e: unknown): boolean =>
  * Закрыть операцию, считаемую на клиенте. `error` — исключение, из-за которого не вышло: итог
  * операции о нём скажет, и маршрутизатор ошибок не запишет его второй раз.
  */
-export function finishOp(id: string, r: { failed?: number; note?: string; error?: unknown } = {}): void {
+export function finishOp(id: string, r: { failed?: number; note?: string; error?: unknown; warning?: string } = {}): void {
 	// Итог пишет реестр (не вызывающий) — только тогда об ошибке уже сказано.
 	if ((r.failed ?? 0) > 0 && r.error && typeof r.error === "object" && !ownOutcome.has(id)
 		&& ops.some((o) => o.id === id)) {
@@ -282,6 +282,8 @@ export function finishOp(id: string, r: { failed?: number; note?: string; error?
 		done: o.total,
 		failed: r.failed ?? o.failed,
 		note: r.note ?? o.note,
+		// Успех с оговоркой (С41): итог операции выйдет предупреждением, а не чистым «Выполнено».
+		...(r.warning ? { warning: r.warning } : {}),
 		state: (r.failed ?? o.failed) > 0 ? "failed" : "done",
 		finishedAt: Date.now(),
 	}));

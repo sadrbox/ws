@@ -69,3 +69,15 @@ export function queueReason(stats: OnecQueueStats | undefined): string {
 	if (stats.queued) return translate("onecQueueWaiting");
 	return translate("onecQueueRunning");
 }
+
+
+/**
+ * ВРЕМЯ ПО ЭТАПАМ — одной строкой (П28): «вход в базу 3 мин 12 с; запись 41 с». Отвечает на «почему так долго»: у
+ * типовой на БСП минуты обычно уходят на вход в базу, а не на саму операцию. Этапы короче секунды не показываем.
+ */
+export function stagesText(stages: { name: string; ms: number }[] | null | undefined): string {
+	const parts = (stages ?? [])
+		.filter((s) => s && typeof s.name === "string" && typeof s.ms === "number" && s.ms >= 1000)
+		.map((s) => `${s.name} ${formatDuration(Math.round(s.ms / 1000))}`);
+	return parts.join("; ");
+}

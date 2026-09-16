@@ -62,6 +62,8 @@ export type OnecBase = {
 	 */
 	scheduledJobsDenied?: boolean | null;
 	scheduledJobsSeenAt?: string | null;
+	/** `cluster` — прочитано у кластера (со временем), `command` — записано по команде, не прочитано (С40). */
+	scheduledJobsSource?: "cluster" | "command" | null;
 	/** Задан ли код разрешения входа в закрытую базу (С26); null — не сообщал. */
 	sessionsDeniedCodeSet?: boolean | null;
 	/** Конфигурация базы (имя и версия); onecVersion — версия платформы. */
@@ -222,10 +224,26 @@ export type SessionsLockResult = {
 	 */
 	reset?: "all" | "dates" | "none";
 	note?: string;
+	/** Кластер не отдал состояние после записи (агент 23:45): `["enabled"]` — «не проверено», а не «применено» (П30). */
+	unverified?: string[];
+	/** Оговорки успеха, собранные сервисом (С41). */
+	caveat?: string | null;
 };
 
 /** Запрет регламентных и фоновых заданий базы (С39). `was` — как было до команды: по нему предлагаем вернуть. */
-export type ScheduledJobsResult = { ok?: boolean; baseKey?: string; denied?: boolean; was?: boolean };
+export type ScheduledJobsResult = {
+	ok?: boolean; baseKey?: string;
+	/** Что просили. */
+	requested?: boolean;
+	/** ФАКТ после записи (агент 23:45); нет — прочитать не удалось, см. `unverified`. */
+	denied?: boolean;
+	/** Как было до команды — по нему «Вернуть как было» (П27). */
+	was?: boolean;
+	unverified?: string[];
+	warning?: string;
+	/** Оговорки успеха, собранные сервисом (С41). */
+	caveat?: string | null;
+};
 
 export const setScheduledJobs = (baseKey: string, denied: boolean) =>
 	aiFetch<ScheduledJobsResult | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/scheduled-jobs`, {
@@ -528,6 +546,8 @@ export type BatchProgress = {
 		/** Сколько ждала очереди и сколько работала (С40): «20 минут» без этого не объяснить. */
 		queuedSecs?: number | null;
 		runSecs?: number | null;
+		/** Время по этапам успешной команды (агент 12:37, П28). */
+		stages?: { name: string; ms: number }[] | null;
 		attempt?: number;
 		/** Повтор стоит на паузе до этого времени (С19). */
 		retryAt?: string | null;

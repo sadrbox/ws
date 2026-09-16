@@ -63,6 +63,7 @@ export type BaseRow = {
 	sessions_denied_code_set?: boolean | null;
 	scheduled_jobs_denied?: boolean | null;
 	scheduled_jobs_seen_at?: Date | null;
+	scheduled_jobs_source?: string | null;
 	config_name?: string | null;
 	config_version?: string | null;
 	config_seen_at?: Date | null;
@@ -98,6 +99,8 @@ export type BaseView = {
 	/** Запрещены ли регламентные и фоновые задания базы (С39); null — не знаем. */
 	scheduledJobsDenied: boolean | null;
 	scheduledJobsSeenAt: string | null;
+	/** `cluster` — прочитано у кластера, `command` — записано по команде без чтения (времени чтения нет). */
+	scheduledJobsSource: "cluster" | "command" | null;
 	/** Конфигурация базы (S3); onecVersion — версия платформы, это другое. */
 	configName: string | null;
 	configVersion: string | null;
@@ -338,7 +341,7 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	b.ib_unreachable_reason,
 	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,
 	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.sessions_denied_code_set,
-	b.scheduled_jobs_denied, b.scheduled_jobs_seen_at, b.config_name, b.config_version, b.config_seen_at,
+	b.scheduled_jobs_denied, b.scheduled_jobs_seen_at, b.scheduled_jobs_source, b.config_name, b.config_version, b.config_seen_at,
 	x.n AS extensions_count, x.seen AS extensions_seen_at, x.names AS extension_names`;
 
 /** Подзапрос счётчика расширений: NULL в n означает «базу ещё не проверяли». */
@@ -738,8 +741,8 @@ export class BaseService {
 		);
 		// Признак заданий приходит в той же блокировке (С39) и к включённости входа не привязан: запрет живёт
 		// сам по себе. Не сообщили — прежнее значение не трогаем.
-		if (lock.scheduledJobsDenied !== null) {
-			await this.setScheduledJobs(serverId, key, lock.scheduledJobsDenied);
+		if (lock.scheduledJobsDenied !== null && source === "cluster") {
+			await this.setScheduledJobs(serverId, key, lock.scheduledJobsDenied, "cluster", lock.seenAt);
 		}
 	}
 
@@ -749,11 +752,15 @@ export class BaseService {
 	 * Отдельно от блокировки входа: она фоновые задания не останавливает, а держат базу именно они. Признак нужен
 	 * не только для показа: по нему панель предлагает вернуть прежнее состояние после работ.
 	 */
-	async setScheduledJobs(serverId: string, key: string, denied: boolean): Promise<void> {
+	async setScheduledJobs(
+		serverId: string, key: string, denied: boolean, source: "cluster" | "command", seenAt: string | null,
+	): Promise<void> {
+		// «По команде» — без времени чтения: его не читали (С40).
 		await this.db.query(
-			`UPDATE bases SET scheduled_jobs_denied = $3, scheduled_jobs_seen_at = now()
+			`UPDATE bases SET scheduled_jobs_denied = $3, scheduled_jobs_source = $4,
+			        scheduled_jobs_seen_at = CASE WHEN $4 = 'command' THEN NULL ELSE COALESCE($5::timestamptz, now()) END
 			  WHERE server_id = $1 AND key = $2`,
-			[serverId, key, denied],
+			[serverId, key, denied, source, seenAt],
 		);
 	}
 
@@ -935,6 +942,7 @@ export class BaseService {
 			sessionsDeniedCodeSet: r.sessions_denied_code_set ?? null,
 			scheduledJobsDenied: r.scheduled_jobs_denied ?? null,
 			scheduledJobsSeenAt: r.scheduled_jobs_seen_at?.toISOString() ?? null,
+			scheduledJobsSource: (r.scheduled_jobs_source as "cluster" | "command" | null | undefined) ?? null,
 			configName: r.config_name ?? null,
 			configVersion: r.config_version ?? null,
 			configSeenAt: r.config_seen_at?.toISOString() ?? null,

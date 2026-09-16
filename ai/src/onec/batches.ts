@@ -9,7 +9,7 @@
  * дублировать их колонками — значит держать две правды в согласии, а команда может
  * завершиться, истечь по TTL или быть переставлена в очереди.
  */
-import { userWriteWarning } from "./writeBack.ts";
+import { commandCaveat } from "./caveats.ts";
 import { humanizeAgentError } from "./errorHints.ts";
 import { isAbortable } from "../commands/admin.ts";
 import { DEFAULT_LATE_GRACE_SECS, TIMEOUT_STILL_RUNNING } from "../commands/queue.ts";
@@ -54,6 +54,8 @@ export type BatchProgress = {
 		 * всё это время команда могла стоять за чужой операцией по той же базе (С40, 16.09).
 		 */
 		queuedSecs?: number | null;
+		/** Время по этапам успешной команды (агент 12:37, П28): «вход в базу», «запись»… */
+		stages?: { name: string; ms: number }[] | null;
 		runSecs?: number | null;
 		/** Номер попытки (повтор «база занята», С19). */
 		attempt?: number;
@@ -184,7 +186,7 @@ export class BatchService {
 			batch_id: string; id: string; base_key: string | null; state: string;
 			error: { code: string; message: string } | null; outcome: string | null;
 			type: string; can_abort: boolean | null; can_abort_check: boolean | null; repair: string | null;
-			user_result: { unverified?: unknown; skipped?: unknown } | null;
+			caveat_result: Record<string, unknown> | null;
 			attempt: number | null; retry_at: Date | null; late: boolean | null; late_wait: boolean | null;
 			queued_secs: number | null; run_secs: number | null;
 			check_result: { issues?: unknown; repaired?: unknown; repairMode?: unknown; skipped?: unknown } | null;
@@ -199,9 +201,12 @@ export class BatchService {
 			             THEN EXTRACT(EPOCH FROM (COALESCE(c.finished_at, now()) - c.dispatched_at))::int END AS run_secs,
 			        COALESCE(c.result->>'path', c.result->>'url') AS outcome,
 			        -- Оговорки записи пользователя (П12): только эти два поля, а не весь ответ.
-			        CASE WHEN c.type IN ('IB_CREATE_USER', 'IB_UPDATE_USER') AND c.state = 'done'
-			             THEN jsonb_build_object('unverified', c.result->'unverified', 'skipped', c.result->'skipped')
-			        END AS user_result,
+			        -- Оговорки успеха по типу команды (С41) и время по этапам (П28): только эти поля, не весь ответ.
+			        CASE WHEN c.state = 'done'
+			             THEN jsonb_build_object('unverified', c.result->'unverified', 'skipped', c.result->'skipped',
+			                                     'warning', c.result->'warning', 'requestedName', c.result->'requestedName',
+			                                     'name', c.result->'name', 'stages', c.result->'stages')
+			        END AS caveat_result,
 			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort,
 			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_abort_check,
 			        c.payload->>'repair' AS repair, c.attempt, c.late,
@@ -263,7 +268,8 @@ export class BatchService {
 					abortable: isAbortable(r.state, r.type,
 						{ canCancel: r.can_abort === true, canCancelCheck: r.can_abort_check === true },
 						{ repair: r.repair === "true" }),
-					warning: userWriteWarning(r.user_result) ?? check?.warning ?? null,
+					warning: commandCaveat(r.type, r.caveat_result) ?? check?.warning ?? null,
+					stages: Array.isArray(r.caveat_result?.stages) ? r.caveat_result.stages as { name: string; ms: number }[] : null,
 					attempt: r.attempt ?? 1,
 					retryAt: r.retry_at ? new Date(r.retry_at).toISOString() : null,
 					queuedSecs: r.queued_secs ?? null,

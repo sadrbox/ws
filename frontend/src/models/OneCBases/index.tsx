@@ -10,6 +10,8 @@
  * СОЗДАНИЕ И УДАЛЕНИЕ НЕПРИМЕНИМЫ: базы заводят и удаляют в кластере 1С, а не в панели.
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
+import { finishOp } from "src/models/OneCAdmin/progress";
+import { startOp } from "src/models/OneCAdmin/progress";
 import { useOnecWrite } from "src/models/OneCAdmin/shared";
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -426,12 +428,49 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	 */
 	const jobsKnown = agents.isLoading || (agents.data?.items ?? [])
 		.some((a) => a.role === "admin" && !a.disabled && a.capabilities.includes("CLUSTER_SET_SCHEDULED_JOBS"));
+	/*
+	 * «ВЕРНУТЬ КАК БЫЛО» (П27). Ответ несёт `was` — состояние до команды. Переключатель его не знает: после работ человек
+	 * не помнит, были ли задания запрещены до него. Запоминаем `was` у базы (в браузере — переживёт перезагрузку) и
+	 * предлагаем вернуть именно его, пока текущее состояние от него отличается.
+	 */
+	const wasKey = `onec_jobs_was_${key}`;
+	const [jobsWas, setJobsWas] = useState<boolean | null>(() => {
+		try { const v = localStorage.getItem(wasKey); return v === "true" ? true : v === "false" ? false : null; } catch { return null; }
+	});
+	const rememberWas = (v: boolean | null) => {
+		setJobsWas(v);
+		try { if (v === null) localStorage.removeItem(wasKey); else localStorage.setItem(wasKey, String(v)); } catch { /* хранилище недоступно */ }
+	};
 	const setJobs = useMutation({
-		mutationFn: (denied: boolean) => withOp(
-			{ kind: "update", title: translate(denied ? "onecScheduledJobsDeny" : "onecScheduledJobsAllow"), target: key, scope: { bases: [key] } },
-			() => setScheduledJobs(key, denied),
-		),
-		onSuccess: () => { void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] }); },
+		mutationFn: async (p: { denied: boolean; restore?: boolean }) => {
+			const op = startOp({
+				kind: "update", title: translate(p.denied ? "onecScheduledJobsDeny" : "onecScheduledJobsAllow"),
+				target: key, total: 1, scope: { bases: [key] },
+			});
+			try {
+				const r = await setScheduledJobs(key, p.denied);
+				/*
+				 * ИТОГ ПО ФАКТУ, А НЕ ПО НАЖАТИЮ. `denied` — прочитано после записи; расходится с запросом — задания
+				 * остались, как были; нет вовсе — кластер не отдал состояние. Оговорки сервиса (С41) — туда же.
+				 */
+				const warning = [
+					r?.caveat,
+					typeof r?.denied === "boolean" && r.denied !== p.denied ? translate("onecScheduledJobsNotApplied") : "",
+					!r?.caveat && r?.unverified?.includes("denied") ? translate("onecScheduledJobsUnverified") : "",
+				].filter(Boolean).join(". ");
+				finishOp(op, warning ? { warning } : {});
+				return r;
+			} catch (e) {
+				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+				throw e;
+			}
+		},
+		onSuccess: (r, p) => {
+			if (p.restore) rememberWas(null);
+			// Запоминаем исходное только у первой команды серии работ: второй запрет подряд не должен затереть «как было».
+			else if (typeof r?.was === "boolean" && jobsWas === null && r.was !== p.denied) rememberWas(r.was);
+			void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] });
+		},
 		onError: (e: unknown) => reportError(e, { source: translate("onecScheduledJobs"), scope }),
 	});
 
@@ -531,7 +570,10 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 												value={jobsDenied == null
 													? "—"
 													: `${translate(jobsDenied ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}`
-														+ (row.scheduledJobsSeenAt ? ` · ${getFormatDate(asText(row.scheduledJobsSeenAt))}` : "")} />
+														// Время — только у прочитанного у кластера; записанное по команде так и называем (С40).
+														+ (row.scheduledJobsSource === "command"
+															? ` · ${translate("onecScheduledJobsByCommand")}`
+															: row.scheduledJobsSeenAt ? ` · ${getFormatDate(asText(row.scheduledJobsSeenAt))}` : "")} />
 											<ValueRow label={translate("onecSessionsLockState")}
 												title={sessionsLockView(row as never).details || undefined}
 												value={sessionsLockView(row as never).label} />
@@ -542,9 +584,17 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 												title={jobsKnown
 													? translate("onecScheduledJobsHint")
 													: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
-												onClick={() => setJobs.mutate(!jobsDenied)}>
+												onClick={() => setJobs.mutate({ denied: !jobsDenied })}>
 												{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
 											</Button>
+											{jobsWas !== null && jobsWas !== jobsDenied && (
+												<Button variant="primary"
+													disabled={!key || !canWrite || !jobsKnown || setJobs.isPending}
+													title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
+													onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
+													{translate("onecScheduledJobsRestore")}
+												</Button>
+											)}
 											<Button variant="secondary" disabled={!key || !infoKnown || readInfo.isPending}
 												title={infoKnown
 													? translate("onecBaseInfoHint")
