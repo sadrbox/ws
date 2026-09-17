@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Список баз 1С: сортировка по колонке «Статус».
+// Список баз 1С: состав и сортировка по колонке «Статус».
 //
 // ЖИВОЙ СЛУЧАЙ (17.09). Щелчок по «Статусу» не менял порядок: сортировали по коду
 // кластера, а он у всех баз ONLINE — «нет в СУБД» показывает панель по отметке
@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { baseStateRank, parseSort, sortBases } from "../utils/onecBasesSort.js";
+import { baseStateRank, isListedBase, parseSort, sortBases } from "../utils/onecBasesList.js";
 
 const b = (baseKey, over = {}) => ({ baseKey, status: "ONLINE", ibUnreachableAt: null, ibUnreachableReason: null, ...over });
 const keys = (xs) => xs.map((x) => x.baseKey);
@@ -45,4 +45,21 @@ test("прочие колонки сортируются как прежде", (
 	assert.equal(sortBases(rows, null), rows);
 	assert.deepEqual(parseSort('{"status":"asc"}'), { status: "asc" });
 	assert.equal(parseSort("не json"), null);
+});
+
+// ЖИВОЙ СЛУЧАЙ (17.09): регистрацию nomadstroygroup удалили, реестр пометил базу MISSING, а строка
+// осталась в списке — повторное удаление падало с «база не найдена в кластере».
+test("база, удалённая из кластера, в список не попадает", () => {
+	assert.equal(isListedBase(b("nomadstroygroup", { status: "MISSING" })), false);
+	// После удаления реестр мог успеть скрыть базу и отметить недоступность — в списке её всё равно нет.
+	assert.equal(isListedBase(b("x", { status: "MISSING", disabled: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_INFOBASE" })), false);
+});
+
+test("остальные базы в списке остаются: рабочие, недоступные, скрытые, не проверенные", () => {
+	for (const x of [
+		b("ok"),
+		b("nodb", { ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" }),
+		b("hidden", { disabled: true }),
+		b("unknown", { status: "UNKNOWN" }),
+	]) assert.equal(isListedBase(x), true, x.baseKey);
 });

@@ -14,7 +14,7 @@
 // тут нет и быть не должно (список открывается с hideAddDelete).
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
-import { parseSort, sortBases } from "../../utils/onecBasesSort.js";
+import { isListedBase, parseSort, sortBases } from "../../utils/onecBasesList.js";
 
 const router = express.Router();
 const ROUTE = "onec-bases";
@@ -70,7 +70,11 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			// общее «недоступна» заставляет выяснять это заново по тексту ошибки.
 			ibUnreachableReason: b.ibUnreachableReason,
 			disabled: b.disabled,
-		}));
+		}))
+			// Базы, которой нет в кластере (удалили регистрацию или её нет в полном срезе), в списке нет
+			// (utils/onecBasesList). Отбор ПОСЛЕ нумерации: иначе удаление базы сдвигало бы id всех следующих
+			// строк, и отметки в таблице переезжали бы на соседние базы.
+			.filter(isListedBase);
 
 		// Поиск — по видимым текстовым полям; служебные id/uuid не ищем.
 		const needle = String(req.query.search ?? "").trim().toLowerCase();
@@ -80,7 +84,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					.some((v) => v && String(v).toLowerCase().includes(needle)))
 			: all;
 
-		// «Статус» — по показанному состоянию, а не по коду кластера (utils/onecBasesSort).
+		// «Статус» — по показанному состоянию, а не по коду кластера (utils/onecBasesList).
 		items = sortBases(items, parseSort(req.query.sort));
 
 		const total = items.length;
