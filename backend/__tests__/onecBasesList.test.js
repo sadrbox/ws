@@ -35,8 +35,9 @@ test("порядок asc и desc различается даже когда ко
 	assert.notDeepEqual(keys(sortBases(same, { status: "asc" })), keys(sortBases(same, { status: "desc" })));
 });
 
-test("ранг следует подписи: недоступность важнее кода кластера", () => {
-	assert.equal(baseStateRank(b("m", { status: "MISSING", ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" })), 3);
+test("ранг следует подписи: «нет в кластере» важнее недоступности, недоступность — важнее ONLINE", () => {
+	assert.equal(baseStateRank(b("m", { status: "MISSING", ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" })), 4);
+	assert.equal(baseStateRank(b("o", { ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" })), 3);
 	assert.equal(baseStateRank(b("u", { ibUnreachableAt: "t", ibUnreachableReason: "WHATEVER" })), 2);
 });
 
@@ -47,19 +48,35 @@ test("прочие колонки сортируются как прежде", (
 	assert.equal(parseSort("не json"), null);
 });
 
-// ЖИВОЙ СЛУЧАЙ (17.09): регистрацию nomadstroygroup удалили, реестр пометил базу MISSING, а строка
-// осталась в списке — повторное удаление падало с «база не найдена в кластере».
-test("база, удалённая из кластера, в список не попадает", () => {
-	assert.equal(isListedBase(b("nomadstroygroup", { status: "MISSING" })), false);
-	// После удаления реестр мог успеть скрыть базу и отметить недоступность — в списке её всё равно нет.
-	assert.equal(isListedBase(b("x", { status: "MISSING", disabled: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_INFOBASE" })), false);
+// ЖИВОЙ СЛУЧАЙ (17.09): nomadstroygroup скрыли и удалили её регистрацию из кластера. Сервис отдаёт скрытой базе
+// status = DISABLED, и по одному status «нет в кластере» было не отличить от «скрыта».
+test("по умолчанию в списке нет удалённых из кластера — и скрытых тоже", () => {
+	assert.equal(isListedBase(b("gone", { status: "MISSING" })), false);
+	assert.equal(isListedBase(b("nomadstroygroup", { status: "DISABLED", clusterStatus: "MISSING", disabled: true })), false);
+	assert.equal(isListedBase(b("hidden", { status: "DISABLED", clusterStatus: "ONLINE", disabled: true })), false);
 });
 
-test("остальные базы в списке остаются: рабочие, недоступные, скрытые, не проверенные", () => {
+test("по умолчанию рабочие и недоступные базы в списке", () => {
 	for (const x of [
 		b("ok"),
 		b("nodb", { ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" }),
-		b("hidden", { disabled: true }),
 		b("unknown", { status: "UNKNOWN" }),
 	]) assert.equal(isListedBase(x), true, x.baseKey);
+});
+
+test("переключатель «скрытые и удалённые из кластера» показывает всех", () => {
+	const opt = { showHidden: true };
+	assert.equal(isListedBase(b("gone", { status: "MISSING" }), opt), true);
+	assert.equal(isListedBase(b("hidden", { status: "DISABLED", disabled: true }), opt), true);
+});
+
+test("«Статус»: удалённая из кластера скрытая база сортируется как «нет в кластере», а не как «скрыта»", () => {
+	const hiddenGone = b("nomadstroygroup", { status: "DISABLED", clusterStatus: "MISSING", disabled: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_INFOBASE" });
+	assert.equal(baseStateRank(hiddenGone), baseStateRank(b("gone", { status: "MISSING" })));
+	assert.notEqual(baseStateRank(hiddenGone), baseStateRank(b("hidden", { status: "DISABLED", disabled: true })));
+});
+
+test("«Статус»: скрытая недоступная база сортируется как «скрыта» — как её и подписывает панель", () => {
+	const hiddenNoDb = b("h", { status: "DISABLED", disabled: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" });
+	assert.equal(baseStateRank(hiddenNoDb), baseStateRank(b("hidden", { status: "DISABLED", disabled: true })));
 });

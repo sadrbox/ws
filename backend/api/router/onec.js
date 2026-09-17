@@ -45,6 +45,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			baseKey: b.key,
 			name: b.name,
 			status: b.status,
+			// Что знает о базе кластер, независимо от скрытия (С44): по нему карточка решает, удалять ли регистрацию
+			// или убирать базу из списка.
+			clusterStatus: b.clusterStatus ?? b.status,
 			serverName: b.serverName,
 			onecVersion: b.onecVersion,
 			extensionsCount: b.extensionsCount,
@@ -71,10 +74,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			ibUnreachableReason: b.ibUnreachableReason,
 			disabled: b.disabled,
 		}))
-			// Базы, которой нет в кластере (удалили регистрацию или её нет в полном срезе), в списке нет
-			// (utils/onecBasesList). Отбор ПОСЛЕ нумерации: иначе удаление базы сдвигало бы id всех следующих
-			// строк, и отметки в таблице переезжали бы на соседние базы.
-			.filter(isListedBase);
+			// Скрытые и удалённые из кластера — только по переключателю (utils/onecBasesList, П33). Отбор ПОСЛЕ
+			// нумерации: иначе удаление или скрытие базы сдвигало бы id всех следующих строк, и отметки в таблице
+			// переезжали бы на соседние базы.
+			.filter((x) => isListedBase(x, { showHidden: req.query.showHidden === "1" }));
 
 		// Поиск — по видимым текстовым полям; служебные id/uuid не ищем.
 		const needle = String(req.query.search ?? "").trim().toLowerCase();

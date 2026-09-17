@@ -66,6 +66,24 @@ const statusLabel = (v: string): string => {
 };
 
 /**
+ * СОСТОЯНИЕ БАЗЫ ОДНОЙ ПОДПИСЬЮ — для списка, метки и строки «Статус» карточки.
+ *
+ * Было три места с разным порядком проверок: в списке недоступность перекрывала скрытие, в метке — наоборот, и ни
+ * одно не знало «нет в кластере» у скрытой базы (сервис отдаёт ей `status = DISABLED`). Порядок — от того, что
+ * отменяет всё остальное: регистрации нет → скрыта из работы → в базу не войти → статус кластера. Сортировка
+ * списка по «Статусу» идёт в том же порядке (backend utils/onecBasesList).
+ */
+const baseState = (row: TDataItem): { label: string; tone: "ok" | "bad" | "unknown" } => {
+	if (asText(row.clusterStatus || row.status) === "MISSING") return { label: translate("onecBaseMissing"), tone: "bad" };
+	if (row.disabled === true) return { label: translate("onecBaseDisabled"), tone: "unknown" };
+	if (row.ibUnreachableAt) {
+		return { label: unreachableShort(row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null), tone: "bad" };
+	}
+	const status = asText(row.status);
+	return { label: statusLabel(status), tone: status === "ONLINE" ? "ok" : "unknown" };
+};
+
+/**
  * «Прочитано» — когда содержимое базы читали у самой 1С.
  *
  * Метку ставит либо реестр (кэш хранит время чтения), либо сама проверка в момент
@@ -323,7 +341,7 @@ const useBaseTabs = (row: TDataItem) => {
 
 /** Запись реестра → строка карточки. Один код на открытие и на обновление после команд. */
 const baseToRow = (b: OnecBase): TDataItem => ({
-	baseKey: b.key, name: b.name, status: b.status, serverName: b.serverName,
+	baseKey: b.key, name: b.name, status: b.status, clusterStatus: b.clusterStatus ?? b.status, serverName: b.serverName,
 	onecVersion: b.onecVersion, extensionsCount: b.extensionsCount,
 	published: b.published, publishUrl: b.publishUrl,
 	publishUrlPublic: b.publishUrlPublic, publishSeenAt: b.publishSeenAt,
@@ -402,6 +420,7 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	const agents = useAgents();
 	/** Код причины и полное объяснение — нужны и метке, и строке состояния. */
 	const reasonCode = row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null;
+	const state = baseState(row);
 	const unreachableTitle = row.ibUnreachableAt
 		? unreachableReason({
 			status: asText(row.status), disabled: row.disabled === true,
@@ -523,14 +542,8 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									  */}
 									<FormArea title={translate("state")}>
 										<StateChips>
-											<StateChip
-												tone={row.disabled === true ? "unknown" : row.ibUnreachableAt ? "bad" : "ok"}
-												title={unreachableTitle}>
-												{row.disabled === true
-													? translate("onecBaseDisabled")
-													: row.ibUnreachableAt
-														? unreachableShort(reasonCode)
-														: statusLabel(asText(row.status))}
+											<StateChip tone={state.tone} title={unreachableTitle}>
+												{state.label}
 											</StateChip>
 											<StateChip tone={row.published === true ? "ok" : row.published === false ? "bad" : "unknown"}>
 												{publishLabel(row.published as boolean | null)}
@@ -575,10 +588,7 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 											<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
 											<ValueRow label={translate("name")} value={asText(row.name)} />
 											<ValueRow label={translate("onecVersion")} value={platform} />
-											<ValueRow label={translate("status")} title={unreachableTitle}
-												value={row.ibUnreachableAt
-													? unreachableShort(reasonCode)
-													: statusLabel(asText(row.status))} />
+											<ValueRow label={translate("status")} title={unreachableTitle} value={state.label} />
 											<ValueRow label={translate("lastSeenAt")}
 												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
 											{/* Конфигурация — из эха загрузки, обновления, установки расширения и из «Обновить
@@ -627,7 +637,10 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 									    сделать. Молчит, пока всё в порядке. */}
 									<BaseAvailability baseKey={asText(row.baseKey)}
 										status={asText(row.status)}
+										clusterStatus={asText(row.clusterStatus || row.status)}
 										hidden={row.disabled === true}
+										// Убранная из реестра база больше не существует для панели — её карточке нечего показывать.
+										onRemoved={close}
 										ibUnreachableAt={row.ibUnreachableAt ? asText(row.ibUnreachableAt) : null}
 										ibUnreachableReason={row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null} />
 
@@ -694,6 +707,12 @@ export const OneCBasesList: FC<{
 	// версию сервера, за который отвечает админ-агент, — см. карточку базы.
 	const agents = useAgents();
 	const platform = (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform ?? "";
+	/*
+	 * СКРЫТЫЕ И УДАЛЁННЫЕ ИЗ КЛАСТЕРА — ПО ПЕРЕКЛЮЧАТЕЛЮ (П33). По умолчанию в списке только базы, с которыми можно
+	 * работать: скрытые и те, регистрации которых в кластере нет, стояли в одном ряду с рабочими и звали на команды,
+	 * которые откажут. Отбор делает сервер (backend utils/onecBasesList), иначе счётчики и подгрузка врали бы.
+	 */
+	const [showHidden, setShowHidden] = useState(false);
 	return (
 	<ModelList
 		endpoint={ENDPOINT}
@@ -702,6 +721,7 @@ export const OneCBasesList: FC<{
 		FormComponent={OneCBasesForm as never}
 		getLabel={(d) => asText(d?.baseKey)}
 		defaultSort={{ baseKey: "asc" }}
+		extraQueryParams={showHidden ? { showHidden: "1" } : undefined}
 		/*
 		 * «Обновить» спрашивает КЛАСТЕР, а не перерисовывает снимок. Список баз — кэш:
 		 * базы заводит и удаляет кластер, и обновление, которое читает только наш кэш,
@@ -736,7 +756,7 @@ export const OneCBasesList: FC<{
 							ibUnreachableAt: asText(row.ibUnreachableAt), ibUnreachableReason: reason,
 						})
 						: undefined}>
-						{row.ibUnreachableAt ? unreachableShort(reason) : statusLabel(asText(row.status))}
+						{baseState(row).label}
 					</span>
 				);
 			}
@@ -762,7 +782,15 @@ export const OneCBasesList: FC<{
 		previewTabs={(row) => [{ id: "ext", label: translate("onecTabExtensions"), component: <PreviewTabs row={row} /> }]}
 		// Групповые команды по отмеченным базам. Отметки — заготовка: набор целей,
 		// параметры и «что произойдёт» спрашивает помощник, он же заводит задание.
-		extraButtons={(selected) => <BaseGroupCommands selected={selected} />}
+		extraButtons={(selected) => (
+			<>
+				<BaseGroupCommands selected={selected} />
+				<Button variant="secondary" active={showHidden} title={translate("onecShowHiddenBasesHint")}
+					onClick={() => setShowHidden((v) => !v)}>
+					{translate("onecShowHiddenBases")}
+				</Button>
+			</>
+		)}
 	/>
 	);
 };

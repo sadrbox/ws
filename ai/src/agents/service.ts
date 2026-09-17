@@ -286,8 +286,11 @@ export class AgentService {
 
 		// Имя базы уникально в пределах сервера, но не глобально: берём тот сервер,
 		// у которого есть агент на связи.
+		//
+		// Скрытые базы тоже (С44): исполнитель у скрытой базы есть — кластерные команды (удалить регистрацию,
+		// закрыть вход) ей нужны. Команды внутрь скрытой базы отсекает правило команды до выбора агента.
 		const rows = await this.db.query<{ server_id: string }>(
-			`SELECT b.server_id FROM bases b WHERE b.key = $1 AND b.disabled_at IS NULL`,
+			`SELECT b.server_id FROM bases b WHERE b.key = $1`,
 			[key],
 		);
 		const ids = new Set(rows.rows.map((r) => r.server_id));

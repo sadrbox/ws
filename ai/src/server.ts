@@ -136,7 +136,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// своей же БД. Решение «пора» и защита от двойного прогона — в onec/schedules.ts.
 	// Первый проход НЕ на старте: сервис перезапускают днём, и отложенный на минуту тик
 	// не отличим от обычного, зато не делает работу в момент запуска.
-	const maintenance = () => runDueSchedules({ agents, queue, batches, schedules, audit, log })
+	const maintenance = () => runDueSchedules({ agents, queue, batches, bases: baseRegistry, schedules, audit, log })
 		.then((r) => { if (r.started || r.failed) log.info(r, "расписание обслуживания: проход"); })
 		.catch((e) => log.warn({ err: e }, "расписание обслуживания"));
 	setInterval(maintenance, 60_000).unref();

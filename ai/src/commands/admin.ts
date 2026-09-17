@@ -706,6 +706,37 @@ export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spe
 export const runsInsideBase = (spec: Pick<AdminCommandSpec, "capability">): boolean => spec.capability === "ib.admin";
 
 /**
+ * МОЖНО ЛИ КОМАНДЕ К ЭТОЙ БАЗЕ — по состоянию базы в реестре (С44, С45). `null` — можно.
+ *
+ * Скрытая база (`disabled`) скрыта ИЗ РАБОТЫ: внутрь неё команды не идут, а кластерные — идут, потому что именно
+ * они её лечат (удалить регистрацию, закрыть вход). Раньше поиск по ключу скрытые не находил вовсе, и любая команда
+ * отвечала «базы нет в реестре — обновите список», хотя обновление ничего не меняло.
+ *
+ * База, которой нет в кластере (`MISSING`), — не адрес ни для одной команды: ни внутрь, ни кластерной. Удалять
+ * регистрацию, которой нет, агент отказывался бы через секунды «не найдена в кластере»; честнее сказать сразу и
+ * назвать то, что поможет.
+ */
+export function baseRefusal(
+	spec: Pick<AdminCommandSpec, "capability">,
+	base: { key: string; disabled: boolean; clusterStatus: string },
+): { status: number; code: string; message: string } | null {
+	if (base.clusterStatus === "MISSING") {
+		return {
+			status: 409, code: "BASE_NOT_IN_CLUSTER",
+			message: `Базы «${base.key}» нет в кластере — регистрация уже удалена. Уберите её из списка в карточке базы; `
+				+ "если её зарегистрировали снова — обновите список из кластера",
+		};
+	}
+	if (base.disabled && runsInsideBase(spec)) {
+		return {
+			status: 409, code: "BASE_HIDDEN",
+			message: `База «${base.key}» скрыта из работы — верните её в работу в карточке базы (раздел «Доступность»)`,
+		};
+	}
+	return null;
+}
+
+/**
  * Меняет ли ответ отметку «в базу не войти» (С5): только команды внутрь базы и не сухой прогон —
  * `dryRun` в базу по-настоящему не входит, и его успех не доказывает, что войти можно.
  */

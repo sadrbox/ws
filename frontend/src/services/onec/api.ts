@@ -13,7 +13,13 @@ export type OnecBase = {
 	/** Имя базы в кластере — им она адресуется в командах. */
 	key: string;
 	name: string;
+	/** Статус для показа: у скрытой базы — `DISABLED`. */
 	status: string;
+	/**
+	 * Что знает о базе кластер (ONLINE, MISSING…) — независимо от скрытия (С44). Сервис старее С44 его не отдаёт.
+	 * По нему карточка отличает «скрыта» от «скрыта и удалена из кластера»: второй удалять регистрацию нечего.
+	 */
+	clusterStatus?: string;
 	onecVersion: string | null;
 	/** Версия расширения buhprof_api по данным heartbeat бизнес-агента; null — неизвестно. */
 	extVersion: string | null;
@@ -929,6 +935,15 @@ export const dropBaseRegistration = (baseKey: string) =>
  * каждый раз отказывает одинаково. Скрытие — отметка в реестре сервиса, обратимая: сняли —
  * база снова в работе (например, после восстановления из копии).
  */
+/**
+ * УБРАТЬ ИЗ РЕЕСТРА базу, которой нет в кластере (С45).
+ *
+ * Сервис удаляет только строку `MISSING`: регистрации в кластере нет, данные базы не трогаются. У базы, которая
+ * есть в кластере, отказ — её строку полный срез вернул бы через минуты.
+ */
+export const removeBaseFromRegistry = (key: string) =>
+	aiFetch<{ ok: boolean; removed: boolean }>(`/v1/onec/bases/${encodeURIComponent(key)}`, { method: "DELETE" });
+
 export const setBaseHidden = (key: string, hidden: boolean) =>
 	aiFetch<{ ok: boolean; hidden: boolean }>(`/v1/onec/bases/${encodeURIComponent(key)}/hidden`, {
 		method: "POST", body: JSON.stringify({ hidden }),

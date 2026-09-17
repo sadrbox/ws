@@ -3,6 +3,7 @@
 //   GET  /v1/onec/bases                      реестр баз (из БД, без обращения к кластеру)
 //   POST /v1/onec/bases/refresh              перечитать список баз у админ-агента (rac)
 //   GET  /v1/onec/bases/:key/info            сведения о базе
+//   DELETE /v1/onec/bases/:key               убрать из реестра базу, которой нет в кластере (С45)
 //   GET  /v1/onec/sessions?baseKey=…         сеансы кластера или одной базы
 //   GET  /v1/onec/connections?baseKey=…      соединения
 //   POST /v1/onec/sessions/:id/terminate     снять сеанс                (CRITICAL)
@@ -39,7 +40,7 @@ import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
 	DEFAULT_COMMAND_TTL_SECS, LONG_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
-	runsInsideBase, validateSchedulePayload, abortAllowed, isAbortable, CANCEL_CHECK_CAPABILITY,
+	runsInsideBase, validateSchedulePayload, abortAllowed, isAbortable, CANCEL_CHECK_CAPABILITY, baseRefusal,
 } from "../commands/admin.ts";
 
 type Deps = {
@@ -222,9 +223,15 @@ export function onecRouter(deps: Deps) {
 		// реестр (база → сервер → агент), и при неизвестном ключе выбор исполнителя
 		// проваливается; раньше пользователь получал «админ-агент недоступен», хотя агент
 		// на связи, а не найдена именно база.
-		if (built.baseKey && !(await bases.findByKeyGlobal(built.baseKey))) {
-			return fail(404, "UNKNOWN_BASE",
-				`Базы «${built.baseKey}» нет в реестре. Обновите список из кластера — возможно, она появилась или была удалена`);
+		if (built.baseKey) {
+			const base = await bases.findByKeyGlobal(built.baseKey);
+			if (!base) {
+				return fail(404, "UNKNOWN_BASE",
+					`Базы «${built.baseKey}» нет в реестре. Обновите список из кластера — возможно, она появилась или была удалена`);
+			}
+			// Скрытая база и база, которой нет в кластере, — не «нет в реестре»: у каждой свой отказ и свой выход (С44).
+			const refused = baseRefusal(spec, base);
+			if (refused) return fail(refused.status, refused.code, refused.message);
 		}
 
 		const chosen = target ? await agents.findById(target.agentId) : await agents.pickAdminAgent(built.baseKey);
@@ -890,7 +897,7 @@ export function onecRouter(deps: Deps) {
 		const type = String(body.type ?? "").toUpperCase();
 		const keys = Array.isArray(body.baseKeys) ? body.baseKeys.filter((k): k is string => typeof k === "string" && !!k) : [];
 
-		const started = await startBatch({ agents, queue, batches }, {
+		const started = await startBatch({ agents, queue, batches, bases }, {
 			type, baseKeys: keys, payload: body.payload ?? {},
 			organizationUuid: u.organizationUuid ?? "", userUuid: u.uuid,
 		});
@@ -1069,7 +1076,7 @@ export function onecRouter(deps: Deps) {
 			send(res, fail(404, "NOT_FOUND", "Расписание не найдено")); return;
 		}
 
-		const started = await startBatch({ agents, queue, batches }, {
+		const started = await startBatch({ agents, queue, batches, bases }, {
 			type: existing.type, baseKeys: existing.baseKeys, payload: existing.payload,
 			organizationUuid: existing.organizationUuid, userUuid: u.uuid,
 		});
@@ -1431,6 +1438,36 @@ export function onecRouter(deps: Deps) {
 			details: { baseKey: base.key },
 		});
 		res.json({ success: true, data: { ok: true, hidden } });
+	});
+
+	/**
+	 * УБРАТЬ ИЗ РЕЕСТРА базу, которой нет в кластере (С45).
+	 *
+	 * Строка `MISSING` жила вечно: «Удалить регистрацию» ей бессмысленна (удалять в кластере нечего), скрытие
+	 * оставляло её в реестре. Удаляем только такую — у базы, которая есть в кластере, отказ: её строку полный срез
+	 * вернул бы через минуты, а человек решил бы, что удалил базу. В журнал — факт и ключ.
+	 */
+	r.delete("/bases/:key", async (req, res) => {
+		const u = req.erpUser!;
+		const base = await bases.findByKeyGlobal(req.params.key);
+		if (!base) { send(res, fail(404, "UNKNOWN_BASE", `Базы «${req.params.key}» нет в реестре`)); return; }
+		if (base.clusterStatus !== "MISSING") {
+			send(res, fail(409, "BASE_IN_CLUSTER",
+				`База «${base.key}» есть в кластере — из списка убирают только базы, регистрации которых в кластере нет. `
+				+ "Чтобы убрать её с глаз, скройте базу"));
+			return;
+		}
+		const removed = await bases.removeMissing(base.id);
+		if (!removed) {
+			// Между чтением и удалением срез вернул базе статус — сообщаем, а не делаем вид, что удалили.
+			send(res, fail(409, "BASE_IN_CLUSTER", `База «${base.key}» снова появилась в кластере — список не изменён`));
+			return;
+		}
+		await audit.write({
+			event: "onec.base.remove", agentId: null, userUuid: u.uuid,
+			details: { baseKey: base.key, serverName: base.serverName, hidden: base.disabled },
+		});
+		res.json({ success: true, data: { ok: true, removed: true } });
 	});
 
 	/**

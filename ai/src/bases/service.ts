@@ -110,7 +110,15 @@ export type BaseView = {
 	serverName: string;
 	key: string;
 	name: string;
+	/** Статус ДЛЯ ПОКАЗА: у скрытой базы — `DISABLED`, что бы ни говорил кластер. */
 	status: string;
+	/**
+	 * Что знает о базе КЛАСТЕР (ONLINE, MISSING, UNKNOWN…) — независимо от скрытия (С44).
+	 *
+	 * `status` у скрытой базы подменён на `DISABLED`, и база, которую и скрыли, и удалили из кластера, выглядела
+	 * просто скрытой: список не мог её отсеять, а панель предлагала удалить регистрацию, которой уже нет.
+	 */
+	clusterStatus: string;
 	onecVersion: string | null;
 	extVersion: string | null;
 	/** Сколько расширений видели в базе; null — базу ещё ни разу не проверяли. */
@@ -637,12 +645,18 @@ export class BaseService {
 	 * при совпадении ключей на разных серверах вернётся первая; для адресных операций
 	 * этого достаточно — исполнитель всё равно выбирается по серверу базы.
 	 */
+	/*
+	 * СКРЫТЫЕ ТОЖЕ НАХОДЯТСЯ (С44). Списки их показывают, а поиск по ключу терял: «Вернуть в работу» и «Удалить
+	 * регистрацию» у скрытой базы отвечали «базы нет в реестре» за доли секунды. Можно ли команде к скрытой базе —
+	 * решает правило команды (`hiddenBaseRefusal`), а не поиск. При одинаковом ключе на разных серверах
+	 * нескрытая идёт первой.
+	 */
 	async findByKeyGlobal(key: string): Promise<BaseView | null> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
 			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
-			  WHERE b.key = $1 AND b.disabled_at IS NULL
-			  ORDER BY s.name LIMIT 1`,
+			  WHERE b.key = $1
+			  ORDER BY (b.disabled_at IS NOT NULL), s.name LIMIT 1`,
 			[key],
 		);
 		return r.rows[0] ? this.view(r.rows[0]) : null;
@@ -901,6 +915,19 @@ export class BaseService {
 		return { marked, cleared: r.rowCount ?? 0, matched };
 	}
 
+	/**
+	 * УБРАТЬ ИЗ РЕЕСТРА базу, которой нет в кластере (С45).
+	 *
+	 * Только при `MISSING`: регистрации в кластере нет, данные базы не трогаются — их здесь и нет. Условие стоит в
+	 * самом запросе, а не только в маршруте: между проверкой и удалением полный срез мог вернуть базе статус.
+	 * Вместе со строкой уходят её кэши (пользователи, расширения, служебный вход — `ON DELETE CASCADE`); команды и
+	 * задания ссылаются на ключ текстом и остаются в журнале. Появится база в срезе снова — строка создастся заново.
+	 */
+	async removeMissing(id: string): Promise<boolean> {
+		const r = await this.db.query(`DELETE FROM bases WHERE id = $1 AND status = 'MISSING'`, [id]);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
 		const r = await this.db.query(
 			`UPDATE bases SET disabled_at = ${disabled ? "now()" : "NULL"} WHERE id = $1`,
@@ -917,6 +944,7 @@ export class BaseService {
 			key: r.key,
 			name: r.name,
 			status: r.disabled_at ? "DISABLED" : r.status,
+			clusterStatus: r.status,
 			onecVersion: r.onec_version,
 			extVersion: r.ext_version,
 			infobaseId: r.infobase_id,

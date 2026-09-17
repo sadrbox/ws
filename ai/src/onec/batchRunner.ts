@@ -12,7 +12,7 @@
  * запуска по расписанию разные субъекты (человек с правом `full` против самого сервиса), и
  * решать это должен вызывающий.
  */
-import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, buildAdminPayload, findAdminCommand, payloadRefusal, runsInsideBase } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, baseRefusal, buildAdminPayload, findAdminCommand, payloadRefusal, runsInsideBase } from "../commands/admin.ts";
 
 /**
  * Сколько команда группового задания может ждать очереди (С2). Сто баз при одном месте идут
@@ -22,6 +22,7 @@ export const BATCH_QUEUE_WAIT_SECS = 12 * 3600;
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { BatchService } from "./batches.ts";
+import type { BaseService } from "../bases/service.ts";
 
 /**
  * Что можно ставить ПАКЕТОМ по многим базам.
@@ -58,7 +59,11 @@ export type BatchStartInput = {
 	userUuid: string | null;
 };
 
-export type BatchDeps = { agents: AgentService; queue: CommandQueue; batches: BatchService };
+export type BatchDeps = {
+	agents: AgentService; queue: CommandQueue; batches: BatchService;
+	/** Состояние базы в реестре: скрытая и удалённая из кластера отсеиваются со своей причиной (С44). */
+	bases: Pick<BaseService, "findByKeyGlobal">;
+};
 
 /** Почему запуск невозможен — текстом для человека (в HTTP уходит как VALIDATION_ERROR). */
 export type BatchStartError = { error: string };
@@ -103,6 +108,10 @@ export async function startBatch(
 	for (const key of keys) {
 		const built = buildAdminPayload(spec, { ...(input.payload ?? {}), baseKey: key });
 		if (!built.ok) { skipped.push({ baseKey: key, reason: built.message }); continue; }
+		// Скрытая база и база, которой нет в кластере, — с причиной, а не «нет агента на связи» (С44).
+		const base = await deps.bases.findByKeyGlobal(key);
+		const refused = base ? baseRefusal(spec, base) : null;
+		if (refused) { skipped.push({ baseKey: key, reason: refused.message }); continue; }
 		const agent = await deps.agents.pickAdminAgent(key);
 		if (!agent || !agentCanRun(agent, spec)) {
 			skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });

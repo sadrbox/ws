@@ -28,21 +28,50 @@ import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { dropBaseRegistration, setBaseHidden } from "src/services/onec/api";
+import { dropBaseRegistration, removeBaseFromRegistry, setBaseHidden } from "src/services/onec/api";
 import { unreachableReason, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { withOp } from "src/models/OneCAdmin/progress";
 
 export const BaseAvailability: FC<{
 	baseKey: string;
 	status: string;
+	/** Что знает о базе кластер, независимо от скрытия (С44): `MISSING` — регистрации уже нет. */
+	clusterStatus: string;
 	/** Скрыта ли база в реестре: решение администратора, а не состояние сервера. */
 	hidden: boolean;
 	ibUnreachableAt: string | null;
 	ibUnreachableReason: string | null;
-}> = ({ baseKey, status, hidden, ibUnreachableAt, ibUnreachableReason }) => {
+	/** База убрана из реестра — карточке больше нечего показывать. */
+	onRemoved?: () => void;
+}> = ({ baseKey, status, clusterStatus, hidden, ibUnreachableAt, ibUnreachableReason, onRemoved }) => {
 	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const [confirmDrop, setConfirmDrop] = useState(false);
+	const [confirmRemove, setConfirmRemove] = useState(false);
+	/*
+	 * РЕГИСТРАЦИИ В КЛАСТЕРЕ НЕТ (П32). Такой базе не нужны ни «Удалить регистрацию» (удалять нечего — агент ответил
+	 * бы «не найдена в кластере»), ни «Скрыть/Вернуть в работу» (работать с ней нельзя в любом случае). Нужно одно —
+	 * убрать строку из списка (С45).
+	 */
+	const missing = clusterStatus === "MISSING";
+
+	const remove = useMutation({
+		mutationFn: () => withOp(
+			{ kind: "delete", title: translate("onecBaseRemoveFromList"), target: baseKey },
+			() => removeBaseFromRegistry(baseKey),
+		),
+		onSuccess: () => {
+			setConfirmRemove(false);
+			showToast(translate("onecBaseRemovedFromList"), "success");
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+			onRemoved?.();
+		},
+		onError: (e) => {
+			setConfirmRemove(false);
+			reportError(e, { source: translate("onecBase") });
+		},
+	});
 
 	const hide = useMutation({
 		mutationFn: (next: boolean) => withOp(
@@ -87,24 +116,34 @@ export const BaseAvailability: FC<{
 
 	// Пока с базой всё в порядке и её никто не прятал, раздел молчит: место на экране
 	// стоит дороже, чем сообщение «проблем нет».
-	if (!ibUnreachableAt && !hidden) return null;
+	if (!ibUnreachableAt && !hidden && !missing) return null;
 
 	return (
 		<FormArea title={translate("onecBaseAvailability")}>
 			<GroupCol>
-				{ibUnreachableAt && (
+				{missing && (
+					<Notice inline items={[{ type: "attention", text: translate("onecBaseMissingHint") }]} />
+				)}
+				{!missing && ibUnreachableAt && (
 					<Notice inline items={[{
 						type: ibUnreachableReason === "NO_DB" || ibUnreachableReason === "NO_INFOBASE"
 							? "attention" : "warning",
 						text: unreachableReason({ status, disabled: hidden, ibUnreachableAt, ibUnreachableReason }),
 					}]} />
 				)}
-				{hidden && (
+				{!missing && hidden && (
 					<Notice inline items={[{ type: "info", text: translate("onecBaseHiddenHint") }]} />
 				)}
 				{/* Спрятать базу и удалить её регистрацию — разрушающее: правом «только
 				    просмотр» видно причину недоступности, но не трогают саму запись (F5). */}
-				{canWrite && <GroupRow>
+				{canWrite && missing && <GroupRow>
+					<Button icon="trash" variant="danger" disabled={remove.isPending}
+						title={translate("onecBaseRemoveFromListHint")}
+						onClick={() => setConfirmRemove(true)}>
+						{translate("onecBaseRemoveFromList")}
+					</Button>
+				</GroupRow>}
+				{canWrite && !missing && <GroupRow>
 					<Button variant={hidden ? "secondary" : "danger"} disabled={hide.isPending}
 						title={translate(hidden ? "onecBaseUnhideHint" : "onecBaseHideHint")}
 						onClick={() => hide.mutate(!hidden)}>
@@ -122,6 +161,16 @@ export const BaseAvailability: FC<{
 					)}
 				</GroupRow>}
 			</GroupCol>
+
+			{confirmRemove && (
+				<Modal title={translate("onecBaseRemoveFromList")}
+					onClose={() => setConfirmRemove(false)} onApply={() => remove.mutate()}>
+					<GroupCol>
+						<div>{translate("onecBase")}: {baseKey}</div>
+						<Notice inline items={[{ type: "info", text: translate("onecBaseRemoveFromListWarning") }]} />
+					</GroupCol>
+				</Modal>
+			)}
 
 			{confirmDrop && (
 				<Modal title={translate("onecBaseDropRegistration")}

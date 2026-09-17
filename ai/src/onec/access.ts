@@ -60,6 +60,9 @@ const DESTRUCTIVE: RegExp[] = [
  */
 export function isDestructive(method: string, path: string, body?: unknown): boolean {
 	if (method.toUpperCase() === "GET") return false;
+	// Убрать из реестра базу, которой нет в кластере (С45). Только DELETE: POST того же вида — чтения
+	// (`/bases/refresh`, `/bases/check`), и регулярка без метода объявила бы их разрушающими.
+	if (method.toUpperCase() === "DELETE" && /^\/bases\/[^/]+$/.test(path)) return true;
 	// Проверка базы — чтение, пока не просят исправлять (С4): «Исправлять» меняет данные базы.
 	if (/^\/bases\/[^/]+\/check$/.test(path)) {
 		return (body as { repair?: unknown } | null | undefined)?.repair === true;
