@@ -142,7 +142,8 @@ describe("С15: обрыв связи с рабочим процессом кл�
 			message: "Тестирование начато… server_addr=tcp://SERVER:1560 descr=10054 forcibly closed. "
 				+ "Процессы после начала: rphost 7692. Недостаточно прав у процесса? база данных отсутствует?",
 		};
-		assert.match(humanizeAgentError(error)!.message, /рабочим процессом кластера/);
+		// С46: собеседника называет агент (по порту), подсказка его не назначает — но говорит, что связь оборвалась.
+		assert.match(humanizeAgentError(error)!.message, /оборвалась связь со службой 1С/);
 		assert.equal(ibFailureReason(error), null);
 		// Процессы и пределы агент прикладывает НЕ всегда (живой случай 16.09) — подсказка обещает их условно.
 		const bare = humanizeAgentError({ code: "IB_CONNECTION_LOST", message: "tcp://SERVER:1561 10054" })!.message;
@@ -157,7 +158,9 @@ describe("С16: обрыв при незаданных пределах — пр
 			code: "IB_CONNECTION_LOST",
 			message: "Оборвалась связь… Пределы перезапуска и памяти не заданы — процесс, вероятнее всего, аварийно завершился.",
 		})!.message;
-		assert.match(m, /журнал «Приложение»/);
+		// С46: оба журнала Windows — перезапуски служб агент читает в «Системе».
+		assert.match(m, /журналы Windows «Приложение»/);
+		assert.match(m, /«Система»/);
 		assert.doesNotMatch(m, /поднимите пределы/);
 	});
 	it("вывода нет — прежний совет про пределы", () => {

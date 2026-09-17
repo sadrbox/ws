@@ -14,6 +14,7 @@ import { humanizeAgentError } from "./errorHints.ts";
 import { isAbortable } from "../commands/admin.ts";
 import { DEFAULT_LATE_GRACE_SECS, TIMEOUT_STILL_RUNNING } from "../commands/queue.ts";
 import { checkOutcome } from "./checkOutcome.ts";
+import { catalogOutcome } from "./catalogOutcome.ts";
 
 /**
  * Истёкшая выданная команда без ответа, которая ещё держит место (С3): её результат может прийти (С21).
@@ -205,7 +206,10 @@ export class BatchService {
 			        CASE WHEN c.state = 'done'
 			             THEN jsonb_build_object('unverified', c.result->'unverified', 'skipped', c.result->'skipped',
 			                                     'warning', c.result->'warning', 'requestedName', c.result->'requestedName',
-			                                     'name', c.result->'name', 'stages', c.result->'stages')
+			                                     'name', c.result->'name', 'stages', c.result->'stages',
+			                                     -- Справочник «Пользователи» после команды (П31): числа и причина чтения,
+			                                     -- сами ссылки в отчёт не тащим.
+			                                     'catalog', c.result->'catalog')
 			        END AS caveat_result,
 			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort,
 			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_abort_check,
@@ -254,6 +258,8 @@ export class BatchService {
 			.map((head) => {
 				const items: BatchProgress["items"] = (byBatch.get(head.id) ?? []).map((r) => {
 				const check = checkOutcome(r.check_result);
+				// Что со справочником «Пользователи» (П31): у команд по пользователю — отдельной частью итога.
+				const catalog = catalogOutcome(r.type, r.caveat_result);
 				return {
 					commandId: r.id as string | null,
 					baseKey: r.base_key,
@@ -264,11 +270,12 @@ export class BatchService {
 					error: humanizeAgentError(r.error, r.base_key
 						? { baseAuthUser: authByKey.get(r.base_key) ?? null, agentSupportsBaseAuth: supports }
 						: {}),
-					outcome: check?.outcome ?? r.outcome,
+					outcome: [check?.outcome ?? r.outcome, catalog?.outcome].filter(Boolean).join("; ") || null,
 					abortable: isAbortable(r.state, r.type,
 						{ canCancel: r.can_abort === true, canCancelCheck: r.can_abort_check === true },
 						{ repair: r.repair === "true" }),
-					warning: commandCaveat(r.type, r.caveat_result) ?? check?.warning ?? null,
+					warning: [commandCaveat(r.type, r.caveat_result) ?? check?.warning, catalog?.warning]
+						.filter(Boolean).join("; ") || null,
 					stages: Array.isArray(r.caveat_result?.stages) ? r.caveat_result.stages as { name: string; ms: number }[] : null,
 					attempt: r.attempt ?? 1,
 					retryAt: r.retry_at ? new Date(r.retry_at).toISOString() : null,

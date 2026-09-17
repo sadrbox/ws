@@ -134,3 +134,52 @@ test("parseLockedBy: компьютер, сеанс, начало и прило�
 	assert.equal(parseLockedBy("Соединение с информационной базой не установлено"), null);
 	assert.equal(parseLockedBy(null), null);
 });
+
+// С43: дубль элемента справочника «Пользователи» — агент отказывает ДО записи (сборка 2026-09-17 19:16).
+test("IB_USER_DUPLICATE: чем лечить, что ничего не записано и ссылки на элементы", () => {
+	const e = {
+		code: "IB_USER_DUPLICATE",
+		message: "У пользователя ИБ «new2» элементов справочника: 2. Вход в программу невозможен, команда остановлена до записи",
+		details: {
+			duplicates: [
+				{ ref: "aa11-f89", catalog: "Пользователи", deleted: false },
+				{ ref: "aa11-f8a", catalog: "Пользователи", deleted: true },
+			],
+		},
+	};
+	const out = humanizeAgentError(e)!;
+	assert.ok(out.message.startsWith(e.message));
+	// Чем лечить — обработкой БСП, а не правкой учётной записи.
+	assert.match(out.message, /Поиск и удаление дублей/);
+	assert.match(out.message, /ничего не изменено/);
+	// Ссылки — списком, помеченный на удаление назван отдельно.
+	assert.match(out.message, /aa11-f89/);
+	assert.match(out.message, /aa11-f8a \(помечен на удаление\)/);
+	// Повторять нечего: это состояние базы, а не занятость.
+	assert.equal(isBusyFailure(e.code, e.message), false);
+	// Вход в базу состоялся — отметку «в базу не войти» не ставим.
+	assert.equal(ibFailureReason(e), null);
+});
+
+// С43: подсказка приписывается один раз — список задания читают многократно.
+test("IB_USER_DUPLICATE: повторная расшифровка не наращивает текст", () => {
+	const e = { code: "IB_USER_DUPLICATE", message: "У пользователя ИБ «new2» элементов справочника: 2", details: { duplicates: [{ ref: "f89", catalog: "Пользователи" }] } };
+	const once = humanizeAgentError(e)!;
+	const twice = humanizeAgentError(once)!;
+	assert.equal(twice.message, once.message);
+});
+
+// С46: собеседника называет агент — подсказка не навязывает «рабочий процесс» и знает про оба журнала.
+test("IB_CONNECTION_LOST: без «рабочего процесса» в утверждении, оба журнала Windows", () => {
+	const e = {
+		code: "IB_CONNECTION_LOST",
+		message: "Связь оборвалась: собеседник SERVER:1541 — менеджер кластера (rmngr)",
+	};
+	const out = humanizeAgentError(e)!;
+	assert.match(out.message, /ragent|rmngr|RAS/);
+	assert.match(out.message, /«Система»/);
+	assert.match(out.message, /«Приложение»/);
+	// Прежнее утверждение «оборвалась связь с рабочим процессом» ушло: собеседника называет агент.
+	assert.ok(!/оборвалась связь с рабочим процессом/.test(out.message));
+	assert.equal(ibFailureReason(e), null);
+});
