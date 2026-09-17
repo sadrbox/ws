@@ -5,6 +5,7 @@ import { translate } from 'src/i18';
 import { useAppContext } from 'src/app/context';
 import { IconButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
+import { orderPanes } from 'src/app/paneOrder';
 
 // uniqId вкладок, у которых enter-анимация уже проигралась (запускается один раз).
 const paneTabEntered = new Set<string>();
@@ -172,8 +173,13 @@ const PaneTabsMore: FC<{
 export const PanesTabs: FC = () => {
 
   const context = useAppContext();
-  const panes = context?.windows.panes;
-  const { activePane, setActivePane, requestClose } = context.windows;
+  const { activePane, setActivePane, requestClose, paneOrder } = context.windows;
+  // Ряд вкладок идёт по последней активации: активная первой, прежняя первая — второй
+  // (см. app/paneOrder). Массив панелей остаётся в порядке открытия — он задаёт DOM пейнов.
+  const panes = useMemo(
+    () => orderPanes(context.windows.panes, paneOrder),
+    [context.windows.panes, paneOrder],
+  );
 
   // Определяем, есть ли активная selector-панель → блокировка остальных вкладок
   const selectorPane = panes.find((p) => p.isSelector);

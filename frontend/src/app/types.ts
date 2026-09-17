@@ -6,6 +6,8 @@ export type TypeAppContextProps = {
 	screenRef: React.RefObject<HTMLDivElement | null>;
 	windows: {
 		panes: TPane[];
+		/** Порядок ВКЛАДОК: идентификаторы панелей, активная первой (см. app/paneOrder). */
+		paneOrder: string[];
 		activePane: string | null;
 		addPane: (pane: Partial<TPane>) => void;
 		/** Закрытие панели.

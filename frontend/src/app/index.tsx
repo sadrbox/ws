@@ -33,6 +33,7 @@ import { loadPersistedSession, savePersistedSession, restorePane, inferListResto
 import { readPaneLink, clearPaneLinkParam } from "src/utils/paneLink";
 import { getComponentName } from "./getComponentName";
 import { buildPaneUniqId } from "./paneUniqId";
+import { orderPanes, promotePaneOrder } from "./paneOrder";
 
 // getUniqId — внутренняя утилита (не экспортируется, чтобы модуль оставался
 // Fast-Refresh-совместимым: единственный value-export здесь — компонент App).
@@ -187,6 +188,25 @@ const App: React.FC = () => {
   // Стек истории активных панелей (для возврата к предыдущей при закрытии)
   const paneHistoryRef = useRef<string[]>([]);
 
+  /*
+   * ПОРЯДОК ВКЛАДОК — ПО ПОСЛЕДНЕЙ АКТИВАЦИИ, отдельно от массива `panes`.
+   *
+   * Активная вкладка встаёт первой, прежняя первая — второй и так далее. Сам массив
+   * панелей при этом НЕ переставляется: DOM пейнов переехал бы вместе с ним, а
+   * переезд узла сбрасывает положение прокрутки внутри — переключение вкладок
+   * отматывало бы таблицы к началу. Поэтому порядок живёт списком идентификаторов, и
+   * переставляется только ряд вкладок.
+   *
+   * Во время восстановления сессии перестановки нет: панели поднимаются по одной, и
+   * каждая по дороге становилась активной — ряд вышел бы перевёрнутым. Порядок в этот
+   * момент — порядок восстановления, то есть тот, что был сохранён.
+   */
+  const [paneOrder, setPaneOrder] = useState<string[]>([]);
+  const restoreDoneRef = useRef(false);
+  const promotePane = useCallback((uniqId: string) => {
+    setPaneOrder((prev) => promotePaneOrder(prev, uniqId));
+  }, []);
+
   // ── beforeClose guards ──────────────────────────────────────────────
   // Map: paneUniqId → Set<guard-функций>
   const beforeCloseGuardsRef = useRef<Map<string, Set<() => Promise<boolean> | boolean>>>(new Map());
@@ -215,7 +235,9 @@ const App: React.FC = () => {
       }
       return id;
     });
-  }, []);
+    // Активная вкладка — первая в ряду (см. paneOrder).
+    if (id && restoreDoneRef.current) promotePane(id);
+  }, [promotePane]);
 
   // Навбар (можно вынести в отдельный хук / компонент позже)
   const initialNavbar: TypeNavbarProps[] =
@@ -316,6 +338,9 @@ const App: React.FC = () => {
     // (пустым), поэтому несколько restorePane для одного списка не видят друг друга
     // и дают два ключа `Panes-SalesList`. Здесь `prev` — всегда актуальный.
     setPanes((prev) => (prev.some((p) => p.uniqId === uniqId) ? prev : [...prev, newPane]));
+    // Новая вкладка встаёт в конец ряда, а активация тут же выносит её в начало; во время
+    // восстановления сессии активации нет, и порядок остаётся сохранённым.
+    setPaneOrder((prev) => (prev.includes(uniqId) ? prev : [...prev, uniqId]));
     setActivePaneId(uniqId);
 
     // Скрываем навбар после открытия панели
@@ -369,7 +394,14 @@ const App: React.FC = () => {
 
     // Активируем следующую панель СРАЗУ (до удаления закрывающейся) — она мягко
     // проявляется, а закрывающаяся скрывается; пустого фона нет.
-    if (wasActive) _setActivePaneId(pickNextActive());
+    if (wasActive) {
+      const next = pickNextActive();
+      _setActivePaneId(next);
+      // Ставшая активной вкладка — тоже первая в ряду: правило одно на все способы
+      // активации, иначе после закрытия активная оказывалась бы в середине.
+      if (next) promotePane(next);
+    }
+    setPaneOrder((prev) => prev.filter((id) => id !== uniqId));
 
     if (!force) {
       // Событие для ВКЛАДКИ: она проигрывает свой exit, пока requestClose ждёт
@@ -379,7 +411,7 @@ const App: React.FC = () => {
     }
 
     setPanes((prev) => prev.filter((p) => p.uniqId !== uniqId));
-  }, []);
+  }, [promotePane]);
 
   const setActivePane = useCallback((uniqId: string) => {
     // Блокировка: если есть selector-панель, разрешаем переключение
@@ -410,9 +442,6 @@ const App: React.FC = () => {
   if (persistedSessionRef.current === undefined) {
     persistedSessionRef.current = loadPersistedSession();
   }
-  // restore завершён → можно персистить изменения панелей.
-  const restoreDoneRef = useRef(false);
-
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -428,7 +457,10 @@ const App: React.FC = () => {
         // Делаем активной последнюю активную вкладку (если она восстановлена).
         const activeId = session.activePaneId;
         if (activeId && session.panes.some((p) => p.uniqId === activeId)) {
-          setTimeout(() => setActivePaneId(activeId), 0);
+          // Порядок вкладок двигаем здесь же, не полагаясь на признак «restore завершён»:
+          // с ?open=… он выставляется позже этого таймера, и активная вкладка осталась бы
+          // не первой.
+          setTimeout(() => { setActivePaneId(activeId); promotePane(activeId); }, 0);
         }
       } else if (!linked) {
         // Первый визит / пустая сессия (и нет ссылки) — открываем список по умолчанию.
@@ -447,10 +479,12 @@ const App: React.FC = () => {
   }, []);
 
   // Персист открытых панелей + активной вкладки (после завершения restore).
+  // Панели сохраняем В ПОРЯДКЕ ВКЛАДОК: иначе после перезагрузки ряд перестраивался бы
+  // в порядок открытия, и человек не находил вкладку там, где оставил.
   useEffect(() => {
     if (!restoreDoneRef.current) return;
-    savePersistedSession(panes, activePaneId);
-  }, [panes, activePaneId]);
+    savePersistedSession(orderPanes(panes, paneOrder), activePaneId);
+  }, [panes, paneOrder, activePaneId]);
 
   // ────────────────────────────────────────────────
   // Глобальный confirm (замена window.confirm)
@@ -473,6 +507,7 @@ const App: React.FC = () => {
       screenRef,
       windows: {
         panes,
+        paneOrder,
         activePane: activePaneId,
         addPane,
         requestClose,
@@ -493,7 +528,7 @@ const App: React.FC = () => {
         logout: handleLogout,
       },
     }),
-    [panes, activePaneId, addPane, requestClose, reloadPane, setActivePane, updatePaneLabel, registerBeforeClose, navbarItems, currentUser, handleLogout, confirm]
+    [panes, paneOrder, activePaneId, addPane, requestClose, reloadPane, setActivePane, updatePaneLabel, registerBeforeClose, navbarItems, currentUser, handleLogout, confirm]
   );
 
   return (

@@ -33,6 +33,7 @@ function makeMockValue(overrides?: Partial<TypeAppContextProps>): TypeAppContext
     screenRef: { current: null },
     windows: {
       panes: [],
+      paneOrder: [],
       activePane: null,
       addPane: () => { },
       requestClose: async () => { },

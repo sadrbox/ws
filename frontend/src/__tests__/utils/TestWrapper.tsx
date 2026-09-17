@@ -10,6 +10,7 @@ export const TestWrapper: React.FC<PropsWithChildren> = ({ children }) => {
     screenRef,
     windows: {
       panes: [],
+      paneOrder: [],
       activePane: null,
       addPane: () => { },
       requestClose: async () => { },
