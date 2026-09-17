@@ -93,10 +93,19 @@ interface ModelFormProps {
   saveTitle?: string;
   /** Кнопки после «Закрыть» (см. FormPanel). */
   afterCloseButtons?: ReactNode;
+  /**
+   * ОТКРЫТЬ ФОРМУ НА ЭТОЙ ВКЛАДКЕ и переключать её снаружи: «Показать сеансы» у отказа «база занята»
+   * ведёт в карточку базы, и человек должен попасть на «Сеансы», а не искать вкладку глазами. Пропов
+   * нет — вкладки, как и раньше, живут сами по себе.
+   */
+  activeTab?: string;
+  onTabChange?: (tabId: string) => void;
 }
 
 const ModelForm: FC<ModelFormProps> = ({
   tabs,
+  activeTab,
+  onTabChange,
   onSave,
   onSaveAndClose,
   onClose, // закрытие теперь через ✕ в PaneHeaderControls
@@ -174,7 +183,7 @@ const ModelForm: FC<ModelFormProps> = ({
     <>
       {showSkeleton ? <FormSkeleton /> : (
         <>
-          <Tabs tabs={tabs} />
+          <Tabs tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} />
           {MARKS_IN_ALL_FORMS && !hideMarks && marksFor && marksFrom && (
             <ObjectMarks
               endpoint={marksFor}

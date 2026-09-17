@@ -28,7 +28,7 @@ import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import {
-	CapabilityGuard, ReadonlyNotice, useOnecWrite, useOnecPermissions,
+	CapabilityGuard, ReadonlyNotice, useOnecErrorActions, useOnecWrite, useOnecPermissions,
 } from "src/models/OneCAdmin/shared";
 import { agentsAllow } from "src/models/OneCAdmin/onecPermissions";
 import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/progress";
@@ -73,7 +73,13 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const [confirmSelftest, setConfirmSelftest] = useState(false);
 	const [selftest, setSelftest] = useState<SelftestResult | null>(null);
 
-	const fail = (e: unknown) => reportError(e, { source: translate("onecBase") });
+	/*
+	 * ОТКАЗ «БАЗА ЗАНЯТА» ДАЁТ КНОПКИ (П25): повторить ту же операцию и посмотреть, кто держит базу.
+	 * `retry` передаёт место вызова — только оно знает, что именно повторять.
+	 */
+	const actionsFor = useOnecErrorActions();
+	const fail = (e: unknown, retry?: () => void | Promise<void>) =>
+		reportError(e, { source: translate("onecBase"), actions: actionsFor(e, { baseKey, retry }) });
 
 	/**
 	 * ЧТО С ДОЛГОЙ ОПЕРАЦИЕЙ СЕЙЧАС (С20, П15). «0 из 1 · Выполняется» одинаково выглядело и в очереди, и в
@@ -141,7 +147,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 				? [translate("onecQueueAborted"), r.killed ? translate("onecAbortKilled") : "", r.note ?? ""].filter(Boolean).join(". ")
 				: translate("onecQueueAbortNotRunning"), r.aborted ? "success" : "warning");
 		},
-		onError: fail,
+		onError: (e) => fail(e),
 	});
 
 	/**
@@ -227,7 +233,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 			return { job, plan: translate("onecBackupWarning") };
 		},
 		onSuccess: (c) => setConfirm(c),
-		onError: fail,
+		onError: (e) => fail(e),
 	});
 
 	const apply = useMutation({
@@ -263,7 +269,8 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 		},
 		// Пустой текст — итог уже сказан самой операцией (с предупреждением или без).
 		onSuccess: (text) => { if (text) showToast(text, "success"); setConfirm(null); },
-		onError: (e) => { fail(e); setConfirm(null); },
+		// Повтор — та же работа теми же параметрами: её и предлагаем кнопкой у отказа (П25).
+		onError: (e, job) => { fail(e, () => apply.mutate(job)); setConfirm(null); },
 	});
 
 	/**

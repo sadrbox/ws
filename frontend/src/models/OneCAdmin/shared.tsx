@@ -22,6 +22,8 @@ import { previewUrl } from "./ServerParams";
 import { finishOp, progressOp, startOp } from "./progress";
 import { noteNotice, notify, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { errorText } from "src/services/errors/route";
+import { useOpenOnecBase } from "src/models/OneCBases";
+import { requestBaseTab } from "src/models/OneCBases/openAt";
 import styles from "./OneCAdmin.module.scss";
 
 /**
@@ -427,6 +429,42 @@ export const CapabilityGuard: FC<{ capability: string; children?: React.ReactNod
  *
  * Уровень берётся из того же права, что открывает панель, поэтому отдельного запроса нет.
  */
+/**
+ * КНОПКИ У ОТКАЗА «БАЗА ЗАНЯТА» (П25): «Повторить» и «Показать сеансы».
+ *
+ * Отказ отвечает, почему не вышло, но не на «что нажать»: повтор человек делает, возвращаясь в форму, а
+ * держателя ищет на другой вкладке. Обе кнопки строит одно место — здесь, потому что решение одинаково для
+ * всех команд панели: сервис уже сказал, осмыслен ли повтор (`retryable`, см. isBusyFailure) и кто держит
+ * базу (`details.lockedBy`).
+ *
+ * ПОЧЕМУ НЕ «СНЯТЬ СЕАНС». Платформа называет держателя НОМЕРОМ сеанса, а команда кластера принимает только
+ * UUID — на номер агент отвечает VALIDATION_ERROR. Поэтому ведём в список сеансов базы, где строка уже
+ * подсвечена, а снимают её там, по самой строке.
+ */
+export function useOnecErrorActions() {
+	const openBase = useOpenOnecBase();
+	return (e: unknown, opts: { baseKey?: string | null; retry?: () => void | Promise<void> } = {}):
+		{ label: string; onClick: () => void | Promise<void> }[] => {
+		const err = e as { retryable?: boolean; details?: { lockedBy?: { sessionId?: string | null } } } | null;
+		const held = err?.details?.lockedBy;
+		// Повтор предлагаем только там, где он осмыслен: сервис отмечает такие отказы сам.
+		const retryable = err?.retryable === true;
+		const actions: { label: string; onClick: () => void | Promise<void> }[] = [];
+		if (retryable && opts.retry) actions.push({ label: translate("retry"), onClick: () => opts.retry!() });
+		if (opts.baseKey && (held || retryable)) {
+			const baseKey = opts.baseKey;
+			actions.push({
+				label: translate("onecSessionsShow"),
+				onClick: () => {
+					requestBaseTab(baseKey, { tab: "sessions", session: held?.sessionId ?? null });
+					openBase(baseKey);
+				},
+			});
+		}
+		return actions;
+	};
+}
+
 export const useOnecWrite = (): boolean => useAccessPermission("OneCAdmin").canWrite;
 
 /** Вложенные разрешения «Администрирования 1С» текущего пользователя (onecPermissions.ts). */

@@ -31,7 +31,7 @@ import RolesPicker from "./RolesPicker";
 import { attachBatch, finishOp, startOp, type OpKind } from "./progress";
 import { useOpenBaseUser } from "./BaseUserForm";
 import {
-	useOnecPermissions,
+	useOnecErrorActions, useOnecPermissions,
 } from "./shared";
 import { sectionAllows } from "./onecPermissions";
 import { buildUserCreate } from "./userUpdate";
@@ -72,6 +72,8 @@ export const BaseUserCommands: FC<{
 		}
 	};
 
+	const actionsFor = useOnecErrorActions();
+
 	const done = () => {
 		showToast(translate("onecBatchQueued"), "success");
 		// Кэш реестра не сбрасываем сразу после постановки — в нём ещё прежнее: перечитает
@@ -84,13 +86,20 @@ export const BaseUserCommands: FC<{
 		mutationFn: () => send("IB_CREATE_USER", "create", translate("onecUserCreate"), name.trim(),
 			buildUserCreate({ name, fullName, password, roles, showInList })),
 		onSuccess: done,
-		onError: (e) => reportError(e, { source: translate("onecUser") }),
+		// Возвращаемый тип назван явно: без него ссылка на саму мутацию в `retry` замыкает вывод типов.
+		onError: (e): void => reportError(e, {
+			source: translate("onecUser"),
+			actions: actionsFor(e, { baseKey, retry: () => { create.mutate(); } }),
+		}),
 	});
 
 	const remove = useMutation({
 		mutationFn: () => send("IB_DELETE_USER", "delete", translate("onecUserDelete"), activeUser, { name: activeUser }),
 		onSuccess: done,
-		onError: (e) => reportError(e, { source: translate("onecUser") }),
+		onError: (e): void => reportError(e, {
+			source: translate("onecUser"),
+			actions: actionsFor(e, { baseKey, retry: () => { remove.mutate(); } }),
+		}),
 	});
 
 	const busy = create.isPending || remove.isPending;

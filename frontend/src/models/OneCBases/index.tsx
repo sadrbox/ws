@@ -14,7 +14,7 @@ import { useRunningCommand } from "src/components/TechMessages/operations";
 import { finishOp } from "src/models/OneCAdmin/progress";
 import { startOp } from "src/models/OneCAdmin/progress";
 import { useOnecWrite } from "src/models/OneCAdmin/shared";
-import { FC, useCallback, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
@@ -56,6 +56,7 @@ import { useNoticeScope, useScopeObject } from "src/components/TechMessages/stor
 import { reportError } from "src/services/errors/route";
 import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
 import BaseMaintenance from "./BaseMaintenance";
+import { onBaseTabRequest, takeBaseTab, type BaseOpenAt } from "./openAt";
 import columnsJson from "./columns.json";
 
 const ENDPOINT = "onec-bases";
@@ -152,7 +153,7 @@ function useBaseSessions(infobaseId: string, enabled: boolean) {
  * Расширения и пользователи НЕ грузятся сами: каждый такой запрос — вход в базу, десятки
  * секунд и занятый сеанс 1С. Их читают кнопкой.
  */
-const useBaseTabs = (row: TDataItem) => {
+const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 	const baseKey = asText(row.baseKey);
 	// Из карточки базы элемент открывается В КОНТЕКСТЕ ЭТОЙ БАЗЫ: она сразу отмечена,
 	// роли и реквизиты взяты из неё.
@@ -238,12 +239,24 @@ const useBaseTabs = (row: TDataItem) => {
 	const usersEmptyText = !users.isLoading && !users.error && !userRows.length
 		? translate("onecUsersNeverRead") : undefined;
 
-	const own = useBaseSessions(asText(row.infobaseId), loadSessions);
+	/*
+	 * ОТКРЫЛИ КАРТОЧКУ РАДИ СЕАНСОВ — значит, сеансы и нужны (П25). «Показать сеансы» у отказа «база занята»
+	 * ведёт сюда, и требовать после этого нажать «Обновить» значило бы задать вопрос и не ответить на него.
+	 * В остальных случаях список по-прежнему ждёт кнопки: каждый срез — обращение к кластеру.
+	 */
+	const own = useBaseSessions(asText(row.infobaseId), loadSessions || openAt?.tab === "sessions");
 	const sesRows = own.rows.map((s, i) => ({
 		id: i + 1, uuid: s.session ?? String(i), sessionId: s.sessionId || "—",
 		userName: s.userName || "—", appId: s.appId || "—", host: s.host || "—",
 		startedAt: s.startedAt ? getFormatDate(s.startedAt) : "—",
 	}));
+	/*
+	 * ПОДСВЕТИТЬ ДЕРЖАТЕЛЯ. Платформа называет его НОМЕРОМ сеанса, а снимают сеанс по UUID — поэтому из отказа
+	 * приходит номер, а строку по нему ищем здесь. Не нашли (сеанс уже закрыт) — просто не подсвечиваем: «сеанс
+	 * 2» без строки означает, что держателя больше нет.
+	 */
+	const wantedSession = openAt?.session ? String(openAt.session) : "";
+	const heldRow = wantedSession ? sesRows.find((r) => asText(r.sessionId) === wantedSession) : undefined;
 	const sesView = useStaticTableView(sesRows, { sessionId: "asc" });
 
 	return [
@@ -334,6 +347,8 @@ const useBaseTabs = (row: TDataItem) => {
 						// Живое состояние кластера: обновление всегда спрашивает его.
 						onReload: () => { setLoadSessions(true); if (loadSessions) void own.query.refetch(); },
 						reloadTitle: translate("onecSessionsShow"),
+						highlightUuid: heldRow ? asText(heldRow.uuid) : undefined,
+						highlightToken: heldRow ? 1 : undefined,
 					})} />
 				</>
 			),
@@ -404,7 +419,14 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		[registry.data, key],
 	);
 	const row = useMemo(() => (fresh ? { ...opened, ...baseToRow(fresh) } : opened), [fresh, opened]);
-	const tabs = useBaseTabs(row);
+	/*
+	 * КАРТОЧКУ МОГЛИ ОТКРЫТЬ РАДИ ВКЛАДКИ (П25, «Показать сеансы»). Просьба приходит мимо данных панели —
+	 * они задают её идентичность, и вкладка в них завела бы вторую карточку той же базы (см. openAt.ts).
+	 * Уже открытая карточка узнаёт о просьбе событием: её `addPane` только делает активной.
+	 */
+	const [openAt, setOpenAt] = useState<BaseOpenAt | null>(() => takeBaseTab(key));
+	useEffect(() => onBaseTabRequest(key, setOpenAt), [key]);
+	const tabs = useBaseTabs(row, openAt);
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
 	const { requestClose } = useAppContext().windows;
@@ -517,6 +539,9 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		<ModelForm
 			paneId={paneProps.uniqId}
 			endpoint={ENDPOINT}
+			// Вкладка управляется: карточку открывают и на «Сеансах» (П25), дальше человек ходит сам.
+			activeTab={openAt?.tab}
+			onTabChange={(id) => setOpenAt((prev) => (prev ? { ...prev, tab: id } : { tab: id }))}
 			readonly
 			isLoading={false}
 			// Реестр наполняется кластером и агентом — править и сохранять нечего.

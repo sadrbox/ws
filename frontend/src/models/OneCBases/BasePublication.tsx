@@ -25,7 +25,7 @@ import Notice from "src/components/Notice";
 import { getFormatDate } from "src/utils/datetime";
 import { runBatch, type BatchType } from "src/services/onec/api";
 import {
-	publishLabel, reportBatchStart, useOnecWrite, usePublishAddressHint,
+	publishLabel, reportBatchStart, useOnecErrorActions, useOnecWrite, usePublishAddressHint,
 } from "src/models/OneCAdmin/shared";
 import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
 import { useNoticeScope } from "src/components/TechMessages/store";
@@ -57,6 +57,7 @@ export const BasePublication: FC<{
 	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const scope = useNoticeScope();
+	const actionsFor = useOnecErrorActions();
 	const [confirm, setConfirm] = useState<Job | null>(null);
 	/*
 	 * КАКОЙ БУДЕТ ССЫЛКА — до нажатия. Публикация идёт на веб-сервер самой машины, и агент
@@ -87,11 +88,15 @@ export const BasePublication: FC<{
 			// useBatchWatch): сразу после постановки в очередь в нём ещё прежнее состояние.
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 		},
-		onError: (e: unknown) => {
+		onError: (e: unknown, job) => {
 			setConfirm(null);
 			// Один канал решает один раз: дословный дубль «тост + запись» человек читал
 			// дважды, а решение о канале принимает routeError.
-			reportError(e, { source: translate("onecPublication"), scope });
+			// Кнопки у отказа «база занята» (П25): повторить ту же публикацию и посмотреть держателя.
+			reportError(e, {
+				source: translate("onecPublication"), scope,
+				actions: actionsFor(e, { baseKey, retry: () => run.mutate(job) }),
+			});
 		},
 	});
 

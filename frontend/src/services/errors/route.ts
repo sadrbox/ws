@@ -117,6 +117,14 @@ export interface RouteErrorOptions {
 	ref?: { endpoint: string; uuid: string; label?: string };
 	/** Тип сообщения формы: по умолчанию «ошибка». */
 	type?: NoticeItem["type"];
+	/**
+	 * КНОПКИ ПРЯМО В СООБЩЕНИИ (П25): «Повторить», «Показать сеансы».
+	 *
+	 * Отказ «база занята» отвечает на вопрос «почему не вышло», но не на «что нажать»: повтор человек делает,
+	 * возвращаясь в форму, а держателя ищет на другой вкладке. Кнопки строит место вызова — только оно знает,
+	 * что именно повторять (см. useOnecErrorActions в панели 1С).
+	 */
+	actions?: { label: string; onClick: () => void | Promise<void> }[];
 }
 
 /**
@@ -151,7 +159,7 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 
 	// Тост «сейчас» и след в журнале — одним событием: тост живёт четыре секунды, а вопрос
 	// «что это было» возникает позже.
-	notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope, ref: opts.ref });
+	notify({ severity: "error", text, source: opts.source ?? translate("system"), scope: opts.scope, ref: opts.ref, actions: opts.actions });
 	return [];
 }
 
@@ -162,6 +170,9 @@ export function routeError(e: unknown, opts: RouteErrorOptions = {}): NoticeItem
 export function reportError(e: unknown, opts: RouteErrorOptions = {}): void {
 	const items = routeError(e, opts);
 	for (const it of items) {
-		notify({ severity: it.type, text: it.text, source: opts.source ?? translate("system"), scope: opts.scope, ref: opts.ref });
+		notify({
+			severity: it.type, text: it.text, source: opts.source ?? translate("system"),
+			scope: opts.scope, ref: opts.ref, actions: opts.actions,
+		});
 	}
 }
