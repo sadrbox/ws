@@ -20,7 +20,6 @@ import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import { ValueList, ValueRow } from "src/components/ValueList";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
-import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
 import { getFormatDate } from "src/utils/datetime";
@@ -117,15 +116,15 @@ export const BasePublication: FC<{
 				    людей в базе через веб-клиент. */}
 				{canWrite && (
 					<GroupRow>
-						<Button variant="secondary" disabled={run.isPending || publishRunning}
+						<Button icon="open" variant="secondary" disabled={run.isPending || publishRunning}
 							title={`${translate("onecPublish")}: ${baseKey}`}
 							onClick={() => setConfirm("publish")}>
-							<Icon name="open" /> {translate("onecPublish")}
+							{translate("onecPublish")}
 						</Button>
-						<Button variant="danger" disabled={run.isPending || publishRunning}
+						<Button icon="clear" variant="danger" disabled={run.isPending || publishRunning}
 							title={`${translate("onecUnpublish")}: ${baseKey}`}
 							onClick={() => setConfirm("unpublish")}>
-							<Icon name="clear" /> {translate("onecUnpublish")}
+							{translate("onecUnpublish")}
 						</Button>
 					</GroupRow>
 				)}

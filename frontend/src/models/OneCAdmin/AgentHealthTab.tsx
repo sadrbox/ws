@@ -13,7 +13,6 @@ import { FC } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchAgentHealth } from "src/services/onec/api";
 import { withOp } from "./progress";
@@ -47,8 +46,8 @@ export const AgentHealthTab: FC<{ agentId: string; agentName: string }> = ({ age
 		<div className={styles.Instances}>
 			<div className={styles.Hint}>{translate("onecAgentHealthHint")}</div>
 			<div>
-				<Button variant="primary" disabled={!agentId || health.isFetching || healthRunning} onClick={() => void health.refetch()}>
-					<Icon name="recalc" /> {h ? translate("onecAgentDiagRefresh") : translate("onecAgentHealthGet")}
+				<Button icon="recalc" variant="primary" disabled={!agentId || health.isFetching || healthRunning} onClick={() => void health.refetch()}>
+					{h ? translate("onecAgentDiagRefresh") : translate("onecAgentHealthGet")}
 				</Button>
 			</div>
 			<QueryError error={health.error} noticeKey={`agent-health-${agentId}`} source={translate("onecAgentHealth")} />

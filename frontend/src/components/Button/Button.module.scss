@@ -14,6 +14,8 @@
 	outline: none;
 	padding: 0 var(--space-12, 12px);
 
+	gap: var(--space-6, 6px);
+
 	border-radius: var(--radius-3, 3px);
 	/* Мягкие углы + просторный паддинг (по шкале 3/6/12) — как в согласованном варианте. */
 	height: $heightFieldInput + 4px;
@@ -72,6 +74,16 @@
 	}
 
 	&:not(:last-child) {}
+
+	// Иконка в кнопке — 16×16 из общего реестра (src/components/IconButton/icons).
+	// Размер задан здесь, а не в вызове: одна кнопка — один размер глифа, иначе
+	// «Печать» и «На основании» стоят рядом с иконками разной величины.
+	.Glyph {
+		display: block;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+	}
 
 	// Оформление для текста в кнопке
 	span {

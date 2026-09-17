@@ -1,10 +1,24 @@
 import { FC, ButtonHTMLAttributes, MouseEventHandler } from 'react';
+import { Icon, type IconName } from 'src/components/IconButton/icons';
 import styles from "./Button.module.scss";
 
+/**
+ * ЕДИНСТВЕННАЯ кнопка приложения. Иконка — её опция, а не повод завести соседний
+ * компонент: своя «кнопка с иконкой» неизбежно разойдётся с этой по высоте, отступам и
+ * цветам, и в одном ряду тулбара окажутся две кнопки разного роста. Кнопка с вложенными
+ * командами — отдельный компонент (Toolbar.ActionsDropdownButton), но рисует он ЭТУ же
+ * кнопку, добавляя каретку и меню.
+ *
+ * Иконки — из общего реестра (src/components/IconButton/icons), все 16×16.
+ */
 type TProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger';
   /** Размер кнопки: sm (маленькая) | md (средняя, по умолчанию) | lg (большая) | min (по контенту). */
   size?: 'sm' | 'md' | 'lg' | 'min';
+  /** Ведущая иконка 16×16 из общего реестра. */
+  icon?: IconName;
+  /** Замыкающая иконка: каретка у кнопки с вложенными командами, и только. */
+  trailingIcon?: IconName;
   onClick?: () => void;
   active?: boolean;
 };
@@ -16,7 +30,9 @@ const SIZE_CLASS: Record<NonNullable<TProps['size']>, string> = {
   min: styles.sizeMin,
 };
 
-export const Button: FC<TProps> = ({ variant = 'secondary', size = 'md', children, onClick, active, onMouseDown, ...props }) => {
+export const Button: FC<TProps> = ({
+  variant = 'secondary', size = 'md', icon, trailingIcon, children, onClick, active, onMouseDown, ...props
+}) => {
   const classActive = active && styles.Active;
   // Не отнимаем фокус у предыдущего элемента (TableScrollWrapper) при клике мышью —
   // см. подробное обоснование в IconButton: preventDefault на mousedown сохраняет
@@ -33,7 +49,9 @@ export const Button: FC<TProps> = ({ variant = 'secondary', size = 'md', childre
       onMouseDown={handleMouseDown}
       {...props}
     >
+      {icon && <Icon name={icon} className={styles.Glyph} />}
       {children}
+      {trailingIcon && <Icon name={trailingIcon} className={styles.Glyph} />}
     </button>
   );
 };

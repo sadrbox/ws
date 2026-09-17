@@ -14,7 +14,6 @@ import type { TDataItem } from "src/components/Table/types";
 import { FC } from "react";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { APP_SCOPE, clearNoticeHistory, isClearable, useScopedNotices } from "src/components/TechMessages/store";
 import MessagesView from "src/components/TechMessages/MessagesView";
 import main from "src/styles/main.module.scss";
@@ -37,12 +36,12 @@ const NotificationsList: FC<NotificationsListProps> = () => {
 			<div className={styles.JournalHeader}>
 				<h3 className={styles.JournalTitle}>{translate("techMessages")}</h3>
 				{/* Кнопка гаснет только при пустом списке. */}
-				<Button size="sm" variant="secondary" disabled={!history}
+				<Button icon="clear" size="sm" variant="secondary" disabled={!history}
 					title={history
 						? translate("techMessagesHistoryClear")
 						: translate("techMessagesHistoryEmpty")}
 					onClick={() => clearNoticeHistory(APP_SCOPE)}>
-					<Icon name="clear" /> {translate("techMessagesHistoryClear")}
+					{translate("techMessagesHistoryClear")}
 				</Button>
 			</div>
 			<div className={styles.JournalList}>

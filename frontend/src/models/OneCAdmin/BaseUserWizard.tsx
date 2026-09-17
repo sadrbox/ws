@@ -35,7 +35,6 @@ import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
@@ -377,7 +376,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 						if (base) openCard(userName, base);
 					},
 					extraButtons: (
-						<Button variant="primary" disabled={!activeData}
+						<Button icon="editInline" variant="primary" disabled={!activeData}
 							title={activeData ? translate("onecWizSetForAll") : translate("onecWizPickAttr")}
 							onClick={() => {
 								const attr = asText(activeData?.__attr);
@@ -390,7 +389,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 								setEditFlag(profile.disabled ?? false);
 								setEditing("disabled");
 							}}>
-							<Icon name="editInline" /> {translate("onecWizSetForAll")}
+							{translate("onecWizSetForAll")}
 						</Button>
 					),
 				})} />

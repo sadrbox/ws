@@ -218,13 +218,13 @@ export const SchedulesTab: FC = () => {
 				},
 				extraButtons: !canWrite ? undefined : (
 					<>
-						<Button variant="secondary" onClick={() => { setForm(blank()); setDialog("create"); }}>
-							<Icon name="plus" /> {translate("create")}
+						<Button icon="plus" variant="secondary" onClick={() => { setForm(blank()); setDialog("create"); }}>
+							{translate("create")}
 						</Button>
-						<Button variant="secondary" disabled={!current}
+						<Button icon="editInline" variant="secondary" disabled={!current}
 							title={current ? translate("edit") : translate("onecSchedPickFirst")}
 							onClick={() => current && openEdit(current)}>
-							<Icon name="editInline" /> {translate("edit")}
+							{translate("edit")}
 						</Button>
 						<Button variant="secondary" disabled={!current || toggle.isPending}
 							title={current ? translate(current.enabled ? "onecSchedOff" : "onecSchedOn") : translate("onecSchedPickFirst")}
@@ -232,15 +232,15 @@ export const SchedulesTab: FC = () => {
 							<Icon name={current?.enabled ? "clear" : "restore"} />
 							{" "}{translate(current?.enabled ? "onecSchedOff" : "onecSchedOn")}
 						</Button>
-						<Button variant="secondary" disabled={!current || runNow.isPending}
+						<Button icon="recalc" variant="secondary" disabled={!current || runNow.isPending}
 							title={current ? translate("onecSchedRunNowHint") : translate("onecSchedPickFirst")}
 							onClick={() => current && runNow.mutate(current)}>
-							<Icon name="recalc" /> {translate("onecSchedRunNow")}
+							{translate("onecSchedRunNow")}
 						</Button>
-						<Button variant="danger" disabled={!current}
+						<Button icon="trash" variant="danger" disabled={!current}
 							title={current ? translate("delete") : translate("onecSchedPickFirst")}
 							onClick={() => setDialog("delete")}>
-							<Icon name="trash" /> {translate("delete")}
+							{translate("delete")}
 						</Button>
 					</>
 				),

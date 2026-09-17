@@ -25,7 +25,6 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { Icon } from "src/components/IconButton/icons";
 import { getFormatDate } from "src/utils/datetime";
 import { QueryError, useAgents, useOnecWrite } from "src/models/OneCAdmin/shared";
 import { withOp } from "src/models/OneCAdmin/progress";
@@ -108,15 +107,15 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 							    видно, задана ли она и когда менялась, но не переписывают (F5). */}
 							{canWrite && (
 								<GroupRow>
-									<Button variant="primary" disabled={busy || !user.trim()}
+									<Button icon="save" variant="primary" disabled={busy || !user.trim()}
 										title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
 										onClick={() => save.mutate()}>
-										<Icon name="save" /> {translate("save")}
+										{translate("save")}
 									</Button>
-									<Button variant="secondary" disabled={busy || !isSet}
+									<Button icon="clear" variant="secondary" disabled={busy || !isSet}
 										title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
 										onClick={() => drop.mutate()}>
-										<Icon name="clear" /> {translate("onecCredsClear")}
+										{translate("onecCredsClear")}
 									</Button>
 								</GroupRow>
 							)}

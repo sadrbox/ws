@@ -34,7 +34,6 @@ import { translate } from "src/i18";
 import { getFormatDate } from "src/utils/datetime";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -407,29 +406,29 @@ export const BatchesTab: FC = () => {
 				// команды заново. Праву «только просмотр» журнал заданий виден целиком (F5).
 				extraButtons: !canWrite ? undefined : (
 					<>
-						<Button variant="danger" disabled={!cancelable.length || cancel.isPending}
+						<Button icon="close" variant="danger" disabled={!cancelable.length || cancel.isPending}
 							title={picked.size
 								? (cancelable.length
 									? `${translate("onecOpCancel")}: ${cancelable.length} / ${picked.size}`
 									: translate("onecOpCancelTooLate"))
 								: translate("onecBatchPickFirst")}
 							onClick={() => cancel.mutate(cancelable)}>
-							<Icon name="close" /> {translate("onecBatchCancelQueued")}
+							{translate("onecBatchCancelQueued")}
 							{cancelable.length ? ` (${cancelable.length})` : ""}
 						</Button>
-						<Button variant="danger" disabled={!canAbort || !abortable.length || abort.isPending}
+						<Button icon="close" variant="danger" disabled={!canAbort || !abortable.length || abort.isPending}
 							title={abortable.length ? `${translate("onecAbort")}: ${abortable.length}` : translate("onecAbortNone")}
 							onClick={() => void askAbort(abortable)}>
-							<Icon name="close" /> {translate("onecAbort")}
+							{translate("onecAbort")}
 							{abortable.length ? ` (${abortable.length})` : ""}
 						</Button>
-						<Button variant="secondary"
+						<Button icon="restore" variant="secondary"
 							disabled={!retryCount || retry.isPending}
 							title={retryCount
 								? `${translate("onecBatchRetryFailed")}: ${retryCount}`
 								: translate("onecBatchNothingToRetry")}
 							onClick={() => targets.forEach((t) => retry.mutate(t))}>
-							<Icon name="restore" /> {translate("onecBatchRetryFailed")}
+							{translate("onecBatchRetryFailed")}
 							{retryCount ? ` (${retryCount})` : ""}
 						</Button>
 					</>

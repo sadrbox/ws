@@ -38,7 +38,6 @@ import { reportError } from "src/services/errors/route";
 import {
 	fetchBaseExtensionsCached, fetchBases, fetchExtensionSummary, refreshBases,
 } from "src/services/onec/api";
-import { Icon } from "src/components/IconButton/icons";
 import {
 	CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseContentCheck,
 } from "./shared";
@@ -243,9 +242,9 @@ export const ExtensionsTab: FC = () => {
 			<div className={styles.ModeBar}>
 				{/* Один переключатель, а не два состояния кнопками: раскладок ровно две,
 				    и «поменять местами» — одно действие, а не выбор из списка. */}
-				<Button variant="secondary" title={translate("onecSwapTablesHint")}
+				<Button icon="syncFromBasis" variant="secondary" title={translate("onecSwapTablesHint")}
 					onClick={() => setPrimary((p) => (p === "extensions" ? "bases" : "extensions"))}>
-					<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
+					{translate("onecSwapTables")}
 				</Button>
 			</div>
 
@@ -262,10 +261,10 @@ export const ExtensionsTab: FC = () => {
 			<div className={styles.StatusBar}>
 				<span className={styles.StatusText}>{status}</span>
 				<span className={styles.HeadActions}>
-					<Button variant="primary" disabled={!activeExtRow}
+					<Button icon="open" variant="primary" disabled={!activeExtRow}
 						title={activeExtRow ? translate("onecOpenCard") : translate("onecPickExtFirst")}
 						onClick={() => activeExtRow && openExt(activeExtRow, primary === "bases" ? activeBase : undefined)}>
-						<Icon name="open" /> {translate("onecOpenCard")}
+						{translate("onecOpenCard")}
 					</Button>
 				</span>
 			</div>

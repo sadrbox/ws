@@ -11,7 +11,6 @@ import { FC, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { Field, FieldSelect } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
@@ -79,8 +78,8 @@ export const AgentLogTab: FC<{ agentId: string; agentName: string }> = ({ agentI
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setContains(e.target.value.slice(0, 100))} />
 			</GroupRow>
 			<GroupRow>
-				<Button variant="primary" disabled={!agentId || log.isFetching || logRunning} onClick={() => void log.refetch()}>
-					<Icon name="recalc" /> {d ? translate("onecAgentDiagRefresh") : translate("onecAgentLogGet")}
+				<Button icon="recalc" variant="primary" disabled={!agentId || log.isFetching || logRunning} onClick={() => void log.refetch()}>
+					{d ? translate("onecAgentDiagRefresh") : translate("onecAgentLogGet")}
 				</Button>
 				<Button variant="secondary" disabled={!shown.length} onClick={() => void copy()}>
 					{translate("onecAgentLogCopy")}

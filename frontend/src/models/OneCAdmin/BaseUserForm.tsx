@@ -45,7 +45,6 @@ import {
 } from "src/services/onec/api";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
-import { Icon } from "src/components/IconButton/icons";
 import {
 	QueryError, useAgents, useOnecPermissions,
 } from "./shared";
@@ -799,12 +798,12 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 							onRowClick: (r) => openOnecBase(asText(r.baseKey)),
 							onActiveRowChange: (r) => setActiveOccurrence(r ? asText(r.baseKey) : ""),
 							extraButtons: (
-								<Button variant="secondary" disabled={!activeOccurrence}
+								<Button icon="open" variant="secondary" disabled={!activeOccurrence}
 									title={activeOccurrence
 										? `${translate("onecBaseUserCard")}: ${userName} — ${activeOccurrence}`
 										: translate("onecPickBaseFirst")}
 									onClick={() => openBase({ baseKey: activeOccurrence })}>
-									<Icon name="open" /> {translate("onecOpenInOtherBase")}
+									{translate("onecOpenInOtherBase")}
 								</Button>
 							),
 						})} />

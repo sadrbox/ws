@@ -17,7 +17,6 @@ import Table from "src/components/Table";
 import Notice from "src/components/Notice";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
@@ -139,8 +138,8 @@ export const AgentsTab: FC = () => {
 				onRowClick: openAgent,
 				// Регистрация агента — это выдача доступа к серверу 1С: только полный доступ (F5).
 				extraButtons: !canManage ? undefined : (
-					<Button variant="secondary" onClick={() => { setName(""); setDialog("create"); }}>
-						<Icon name="plus" /> {translate("onecAgentCreate")}
+					<Button icon="plus" variant="secondary" onClick={() => { setName(""); setDialog("create"); }}>
+						{translate("onecAgentCreate")}
 					</Button>
 				),
 			})} />

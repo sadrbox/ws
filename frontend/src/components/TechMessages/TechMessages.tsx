@@ -239,13 +239,13 @@ export const TechMessages: FC = () => {
 							  * Гаснет только при пустом списке: очистка убирает всё видимое, и сообщения
 							  * открытых форм тоже — до изменения их состояния (store.hidden).
 							  */}
-							<Button size="sm" variant="secondary"
+							<Button icon="clear" size="sm" variant="secondary"
 								disabled={!clearable}
 								title={clearable
 									? translate("techMessagesHistoryClear")
 									: translate("techMessagesHistoryEmpty")}
 								onClick={() => { clearNoticeHistory(scope); clearFinished(); }}>
-								<Icon name="clear" /> {translate("techMessagesHistoryClear")}
+								{translate("techMessagesHistoryClear")}
 							</Button>
 						</>
 					)}

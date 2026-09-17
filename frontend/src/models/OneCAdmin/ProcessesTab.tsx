@@ -25,7 +25,6 @@ import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { formatDuration } from "./queueStats";
@@ -188,12 +187,12 @@ export const ProcessesTab: FC = () => {
 				extraButtons: !canWrite ? undefined : (
 					// Пока агента нет на связи, снимать нечего: команда уйдёт в очередь и умрёт
 					// по сроку, а список всё равно принадлежит прошлому.
-					<Button variant="danger" disabled={!active || kill.isPending || offline}
+					<Button icon="close" variant="danger" disabled={!active || kill.isPending || offline}
 						title={offline
 							? translate("onecProcAgentOffline")
 							: active ? `${translate("onecProcKill")}: ${active}` : translate("onecProcPickFirst")}
 						onClick={() => active && setConfirm({ pid: active, force: false })}>
-						<Icon name="close" /> {translate("onecProcKill")}
+						{translate("onecProcKill")}
 					</Button>
 				),
 			})} />

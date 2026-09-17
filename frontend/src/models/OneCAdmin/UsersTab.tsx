@@ -30,7 +30,6 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary, refreshBases,
 } from "src/services/onec/api";
-import { Icon } from "src/components/IconButton/icons";
 import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
@@ -260,9 +259,9 @@ export const UsersTab: FC = () => {
 			<div className={styles.ModeBar}>
 				{/* Один переключатель, а не два состояния кнопками: раскладок ровно две,
 				    и «поменять местами» — одно действие, а не выбор из списка. */}
-				<Button variant="secondary" title={translate("onecSwapTablesHint")}
+				<Button icon="syncFromBasis" variant="secondary" title={translate("onecSwapTablesHint")}
 					onClick={() => setPrimary((p) => (p === "bases" ? "users" : "bases"))}>
-					<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
+					{translate("onecSwapTables")}
 				</Button>
 			</div>
 
@@ -279,14 +278,14 @@ export const UsersTab: FC = () => {
 			<div className={styles.StatusBar}>
 				<span className={styles.StatusText}>{status}</span>
 				<span className={styles.HeadActions}>
-					<Button variant="primary"
+					<Button icon="open" variant="primary"
 						disabled={primary === "bases" ? !activeBase || !activeUser : !activeUser}
 						title={primary === "bases"
 							? (!activeBase ? translate("onecPickBaseFirst")
 								: !activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))
 							: (!activeUser ? translate("onecPickUserFirst") : translate("onecOpenCard"))}
 						onClick={() => openCard(activeUser, activeBase)}>
-						<Icon name="open" /> {translate("onecOpenCard")}
+						{translate("onecOpenCard")}
 					</Button>
 					{/*
 					  * Групповая правка одного человека сразу в нескольких базах — помощником:
@@ -294,10 +293,10 @@ export const UsersTab: FC = () => {
 					  * пары правит ОДНУ базу и в чужие не лезет.
 					  */}
 					{canWrite && (
-						<Button variant="secondary" disabled={!activeUser}
+						<Button icon="editInline" variant="secondary" disabled={!activeUser}
 							title={activeUser ? `${translate("onecUserGroupEdit")}: ${activeUser}` : translate("onecPickUserFirst")}
 							onClick={() => openWizard(activeUser)}>
-							<Icon name="editInline" /> {translate("onecUserGroupEdit")}
+							{translate("onecUserGroupEdit")}
 						</Button>
 					)}
 				</span>

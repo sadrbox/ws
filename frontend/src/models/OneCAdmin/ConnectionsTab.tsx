@@ -14,7 +14,6 @@ import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { asText } from "src/utils/asText";
@@ -110,8 +109,8 @@ export const ConnectionsTab: FC = () => {
 					setPicked(all.filter((r: TDataItem) => sel.has(Number(r.id))).map((r) => asText(r.uuid))),
 				// Разрыв соединения — вмешательство в работу базы: только полный доступ.
 				extraButtons: canWrite && picked.length > 0
-					? <Button variant="danger" onClick={() => setConfirm(true)}>
-						<Icon name="close" /> {translate("onecDisconnect")} ({picked.length})
+					? <Button icon="close" variant="danger" onClick={() => setConfirm(true)}>
+						{translate("onecDisconnect")} ({picked.length})
 					</Button>
 					: undefined,
 			})} /></>}

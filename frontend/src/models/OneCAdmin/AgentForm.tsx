@@ -18,7 +18,6 @@ import ServerParams from "./ServerParams";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { Field } from "src/components/Field";
 import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
@@ -200,9 +199,9 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 														disabled onChange={() => {}} width={FIELD_WIDTH.date} />
 													{/* Переименование агента — изменение: правом «просмотр» карточка читается. */}
 													{canEditAgent && (
-														<Button disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
+														<Button icon="editInline" disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
 															onClick={() => rename.mutate()}>
-															<Icon name="editInline" /> {translate("onecAgentRename")}
+															{translate("onecAgentRename")}
 														</Button>
 													)}
 												</GroupRow>
@@ -226,26 +225,26 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 										{canManageAgent && (
 										<FormArea title={translate("onecCommands")}>
 											<GroupRow>
-												<Button variant="danger" disabled={rotate.isPending} onClick={() => setConfirm("rotate")}>
-													<Icon name="link" /> {translate("onecAgentRotate")}
+												<Button icon="link" variant="danger" disabled={rotate.isPending} onClick={() => setConfirm("rotate")}>
+													{translate("onecAgentRotate")}
 												</Button>
 												<Button disabled={toggle.isPending || !agent}
 													onClick={() => agent && toggle.mutate(!agent.disabled)}>
 													{agent?.disabled ? translate("onecAgentEnable") : translate("onecAgentDisable")}
 												</Button>
-												<Button variant="danger"
+												<Button icon="trash" variant="danger"
 													disabled={remove.isPending || !agent || !agent.disabled}
 													title={agent && !agent.disabled ? translate("onecAgentDeleteHint") : undefined}
 													onClick={() => setConfirm("delete")}>
-													<Icon name="trash" /> {translate("onecAgentDelete")}
+													{translate("onecAgentDelete")}
 												</Button>
-												<Button
+												<Button icon="clear"
 													disabled={release.isPending || !agent?.owner?.instanceId}
 													title={agent?.owner?.instanceId
 														? `${translate("ownerInstance")}: ${agent.owner.instanceId}`
 														: translate("onecAgentNoOwnerHint")}
 													onClick={() => setConfirm("release")}>
-													<Icon name="clear" /> {translate("onecAgentReleaseInstance")}
+													{translate("onecAgentReleaseInstance")}
 												</Button>
 											</GroupRow>
 										</FormArea>
@@ -346,9 +345,9 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											{isOwner
 												? <span className={styles.InstanceOwnerMark}>{translate("onecAgentOwnerNow")}</span>
 												: canManageAgent && (
-													<Button variant="primary" disabled={assign.isPending}
+													<Button icon="makePrimary" variant="primary" disabled={assign.isPending}
 														onClick={() => assign.mutate(inst.instanceId)}>
-														<Icon name="makePrimary" /> {translate("onecAgentMakeOwner")}
+														{translate("onecAgentMakeOwner")}
 													</Button>
 												)}
 										</div>

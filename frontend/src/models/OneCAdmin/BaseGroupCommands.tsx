@@ -145,6 +145,19 @@ export const BaseGroupCommands: FC<{
 		backup: "onecBackup", checkBase: "onecMaintCheck",
 	};
 
+	/*
+	 * Иконка вложенной команды — та же 16×16 из общего реестра, что и у кнопок: пункт
+	 * меню и кнопка, которая делает то же самое (например «Установить расширение» в
+	 * карточке базы), должны выглядеть одинаково. Разрушающее — «корзиной», создающее —
+	 * «плюсом» или «загрузкой», чтение — «поиском».
+	 */
+	const OP_ICON: Record<GroupOp, IconName> = {
+		publish: "open", unpublish: "close",
+		createUser: "plus", deleteUser: "trash",
+		installExt: "download", deleteExt: "trash",
+		backup: "save", checkBase: "search",
+	};
+
 	return (
 		<>
 			{groups.map((g) => {
@@ -152,12 +165,12 @@ export const BaseGroupCommands: FC<{
 				const options = [
 					// Изменения (публикация, пользователи, расширения, выгрузка) — только полному
 					// доступу: правом «только просмотр» их не показываем вовсе (F5).
-					...spec.ops.filter(opAllowed).map((o) => ({ id: o, label: translate(OP_LABEL[o]) })),
+					...spec.ops.filter(opAllowed).map((o) => ({ id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o] })),
 					// Чтения — всем, кому открыта панель.
 					...(g === "publication"
 						? [
-							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), disabled: checkPublications.isPending || pubChecking },
-							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), disabled: checkDb.isPending || dbChecking },
+							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), icon: "search" as IconName, disabled: checkPublications.isPending || pubChecking },
+							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), icon: "search" as IconName, disabled: checkDb.isPending || dbChecking },
 						]
 						: []),
 				];

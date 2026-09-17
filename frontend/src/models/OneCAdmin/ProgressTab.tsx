@@ -19,7 +19,6 @@ import { FC, useCallback, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -147,12 +146,12 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 					  * останавливает он сам на сервере 1С; назвать отменой прекращение
 					  * ожидания значило бы соврать о состоянии чужой системы.
 					  */}
-					<Button variant="danger" disabled={!active?.cancelable}
+					<Button icon="close" variant="danger" disabled={!active?.cancelable}
 						title={!active ? translate("onecOpPickFirst")
 							: active.cancelable ? `${translate("onecOpCancel")}: ${active.cancelable}`
 								: translate("onecOpCancelTooLate")}
 						onClick={() => void cancel()}>
-						<Icon name="close" /> {translate("onecOpCancel")}
+						{translate("onecOpCancel")}
 						{active?.cancelable ? ` (${active.cancelable})` : ""}
 					</Button>
 					{/*
@@ -162,17 +161,17 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 					  * об этом не узнала (задание не отвечало). Подпись говорит прямо, что на
 					  * сервере ничего не изменится.
 					  */}
-					<Button variant="secondary" disabled={!active || active.state !== "running"}
+					<Button icon="clear" variant="secondary" disabled={!active || active.state !== "running"}
 						title={active?.state === "running"
 							? translate("onecOpAbandonHint")
 							: translate("onecOpAbandonPick")}
 						onClick={() => { if (active) { abandonOp(active.id); setActive(null); } }}>
-						<Icon name="clear" /> {translate("onecOpAbandon")}
+						{translate("onecOpAbandon")}
 					</Button>
-					<Button variant="secondary" disabled={!finished}
+					<Button icon="clear" variant="secondary" disabled={!finished}
 						title={finished ? translate("onecOpsClear") : translate("onecOpsNothingToClear")}
 						onClick={clearFinished}>
-						<Icon name="clear" /> {translate("onecOpsClear")}
+						{translate("onecOpsClear")}
 					</Button>
 				</>
 			),

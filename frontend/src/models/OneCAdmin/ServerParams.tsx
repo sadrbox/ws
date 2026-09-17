@@ -29,7 +29,6 @@ import Notice from "src/components/Notice";
 import { Field } from "src/components/Field";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import {
 	useOnecPermissions,
@@ -130,11 +129,11 @@ export const ServerParams: FC<{ server: OnecServer; showName?: boolean }> = ({ s
 			{/* Настройки сервера правит только полный доступ (F5): от них зависит, куда
 			    панель публикует базы и через какой rac говорит с кластером. */}
 			{canWrite && <GroupRow>
-				<Button variant="primary" disabled={!dirty || portBad || save.isPending}
+				<Button icon="save" variant="primary" disabled={!dirty || portBad || save.isPending}
 					title={portBad ? translate("onecSettingsPortInvalid")
 						: dirty ? translate("save") : translate("onecNoChanges")}
 					onClick={() => save.mutate()}>
-					<Icon name="save" /> {translate("save")}
+					{translate("save")}
 				</Button>
 			</GroupRow>}
 

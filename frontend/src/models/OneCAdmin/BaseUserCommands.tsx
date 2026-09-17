@@ -24,7 +24,6 @@ import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { runBatch, type BatchType } from "src/services/onec/api";
@@ -101,22 +100,22 @@ export const BaseUserCommands: FC<{
 			{/* Создание и удаление пользователя ИБ — разрушающее (F5). «Изменить» открывает
 			    карточку: смотреть права правом «просмотр» можно, записывать — нет. */}
 			{canCreateUser && (
-				<Button variant="secondary" disabled={!baseKey || busy}
+				<Button icon="plus" variant="secondary" disabled={!baseKey || busy}
 					title={baseKey ? translate("onecUserCreate") : translate("onecPickBaseFirst")}
 					onClick={() => setDialog("create")}>
-					<Icon name="plus" /> {translate("onecUserCreate")}
+					{translate("onecUserCreate")}
 				</Button>
 			)}
-			<Button variant="secondary" disabled={!activeUser || busy}
+			<Button icon="open" variant="secondary" disabled={!activeUser || busy}
 				title={activeUser ? `${translate("onecOpenCard")}: ${activeUser}` : translate("onecPickUserFirst")}
 				onClick={() => openCard(activeUser, baseKey)}>
-				<Icon name="open" /> {translate("onecUserEdit")}
+				{translate("onecUserEdit")}
 			</Button>
 			{canDeleteUser && (
-				<Button variant="secondary" disabled={!activeUser || busy}
+				<Button icon="trash" variant="secondary" disabled={!activeUser || busy}
 					title={activeUser ? `${translate("onecUserDelete")}: ${activeUser}` : translate("onecPickUserFirst")}
 					onClick={() => setDialog("delete")}>
-					<Icon name="trash" /> {translate("onecUserDelete")}
+					{translate("onecUserDelete")}
 				</Button>
 			)}
 

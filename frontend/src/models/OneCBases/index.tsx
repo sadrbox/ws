@@ -22,7 +22,6 @@ import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { Button } from "src/components/Button";
-import { Icon } from "src/components/IconButton/icons";
 import Notice from "src/components/Notice";
 import { ValueList, ValueRow } from "src/components/ValueList";
 import { StateChip, StateChips } from "src/components/StateChip";
@@ -614,12 +613,12 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 													{translate("onecScheduledJobsRestore")}
 												</Button>
 											)}
-											<Button variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
+											<Button icon="reload" variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
 												title={infoKnown
 													? translate("onecBaseInfoHint")
 													: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}
 												onClick={() => readInfo.mutate()}>
-												<Icon name="reload" /> {translate("onecBaseInfoRefresh")}
+												{translate("onecBaseInfoRefresh")}
 											</Button>
 										</GroupRow>
 									</FormArea>

@@ -114,10 +114,10 @@ export const Wizard: FC<{
 					</Button>
 				)}
 				{isLast && (
-					<Button variant="primary" disabled={!!finishBlockedReason || finishing}
+					<Button icon="save" variant="primary" disabled={!!finishBlockedReason || finishing}
 						title={finishBlockedReason || finishLabel}
 						onClick={onFinish}>
-						<Icon name="save" /> {finishLabel}
+						{finishLabel}
 					</Button>
 				)}
 			</div>

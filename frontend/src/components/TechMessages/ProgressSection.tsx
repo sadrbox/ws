@@ -195,10 +195,10 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 					  * когда отменять есть что, и говорит, сколько именно.
 					  */}
 					{running && op.cancelable > 0 && (
-						<Button size="sm" variant="secondary"
+						<Button icon="close" size="sm" variant="secondary"
 							title={`${translate("onecOpCancel")}: ${op.cancelable}`}
 							onClick={() => void cancel()}>
-							<Icon name="close" /> {translate("onecOpCancel")} ({op.cancelable})
+							{translate("onecOpCancel")} ({op.cancelable})
 						</Button>
 					)}
 				</div>

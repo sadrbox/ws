@@ -4,6 +4,8 @@
 // в пунктах).
 import { FC, type ReactNode } from "react";
 import IconButton from "src/components/IconButton/IconButton";
+import { Button } from "src/components/Button";
+import type { IconName } from "src/components/IconButton/icons";
 import { useDropdownMenu } from "./useDropdownPosition";
 import styles from "./Toolbar.module.scss";
 
@@ -19,10 +21,13 @@ export interface ToolbarDropdownOption {
 interface ToolbarDropdownProps {
   options: ToolbarDropdownOption[];
   onSelect: (id: string) => void;
-  /** Содержимое кнопки-триггера (иконка, либо иконка+подпись+каретка). */
-  trigger: ReactNode;
-  /** icon — компактный IconButton; button — текст-кнопка (ActionsButton). */
+  /** Содержимое кнопки-триггера для варианта icon. */
+  trigger?: ReactNode;
+  /** icon — компактный IconButton; button — обычная кнопка приложения с кареткой. */
   triggerVariant?: "icon" | "button";
+  /** Вариант button: подпись и ведущая иконка — каретку дорисовывает сам триггер. */
+  triggerLabel?: ReactNode;
+  triggerIcon?: IconName;
   title?: string;
   disabled?: boolean;
 }
@@ -32,23 +37,32 @@ const ToolbarDropdown: FC<ToolbarDropdownProps> = ({
   onSelect,
   trigger,
   triggerVariant = "icon",
+  triggerLabel,
+  triggerIcon,
   title,
   disabled,
 }) => {
   const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
 
+  /*
+   * Триггер варианта button — ОБЫЧНАЯ кнопка приложения (components/Button), а не своя
+   * разметка со своими цветами: «На основании ▾» и «Печать» стоят в одном ряду с
+   * «Добавить» и «Удалить», и собственная высота с собственным градиентом делали ряд
+   * разнобойным. Всё, что добавляет дропдаун, — каретка и нажатый вид открытого меню.
+   */
   const triggerNode = triggerVariant === "button" ? (
-    <button
-      type="button"
-      className={styles.ActionsButton}
+    <Button
+      icon={triggerIcon}
+      trailingIcon="caretDown"
       disabled={disabled}
       title={title}
+      active={open}
       onClick={toggle}
       aria-haspopup="menu"
       aria-expanded={open}
     >
-      {trigger}
-    </button>
+      {triggerLabel ?? trigger}
+    </Button>
   ) : (
     <IconButton
       size="md"

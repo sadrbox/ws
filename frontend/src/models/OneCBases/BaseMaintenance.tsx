@@ -24,7 +24,6 @@ import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
-import { Icon } from "src/components/IconButton/icons";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
@@ -329,9 +328,9 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 									+ (liveProc ? `. ${translate("onecOpProcess")}: ${liveProc.tool} ${liveProc.pid} (${translate("onecOpProcessHint")})` : ""),
 							}]} />
 							{canAbort && live.pending.abortable && (
-								<Button variant="danger" disabled={abortLive.isPending} title={translate("onecQueueAbort")}
+								<Button icon="close" variant="danger" disabled={abortLive.isPending} title={translate("onecQueueAbort")}
 									onClick={() => abortLive.mutate(live.commandId)}>
-									<Icon name="close" /> {translate("onecQueueAbort")}
+									{translate("onecQueueAbort")}
 								</Button>
 							)}
 						</GroupRow>
@@ -361,8 +360,8 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 									<FieldToggle name="mnt_repair" label={translate("onecMaintRepair")} value={check.repair}
 										disabled={busy} onChange={(v) => setCheck((c) => ({ ...c, repair: v }))} />
 								)}
-								<Button variant="primary" disabled={busy} title={translate("onecMaintCheck")} onClick={runCheck}>
-									<Icon name="recalc" /> {translate("onecMaintCheck")}
+								<Button icon="recalc" variant="primary" disabled={busy} title={translate("onecMaintCheck")} onClick={runCheck}>
+									{translate("onecMaintCheck")}
 								</Button>
 							</GroupRow>
 						</GroupCol>
@@ -375,9 +374,9 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 							<GroupRow>
 								<Field name="mnt_dir" label={translate("onecBackupDir")} value={backupDir} noAutofill width={FIELD_WIDTH.lg}
 									disabled={busy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBackupDir(e.target.value)} />
-								<Button variant="secondary" disabled={busy} title={translate("onecBackup")}
+								<Button icon="download" variant="secondary" disabled={busy} title={translate("onecBackup")}
 									onClick={() => apply.mutate("backup")}>
-									<Icon name="download" /> {translate("onecBackup")}
+									{translate("onecBackup")}
 								</Button>
 							</GroupRow>
 						</FormArea>
@@ -391,10 +390,10 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 										disabled={busy} onChange={setRestoreLock} />
 								</GroupRow>
 								<GroupRow>
-									<Button variant="danger" disabled={busy || !restorePath.trim()}
+									<Button icon="restore" variant="danger" disabled={busy || !restorePath.trim()}
 										title={restorePath.trim() ? translate("onecMaintRestore") : translate("onecMaintNeedFile")}
 										onClick={() => plan.mutate("restore")}>
-										<Icon name="restore" /> {translate("onecMaintRestore")}
+										{translate("onecMaintRestore")}
 									</Button>
 								</GroupRow>
 							</GroupCol>
@@ -411,10 +410,10 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 										disabled={busy} onChange={setUpdateLock} />
 								</GroupRow>
 								<GroupRow>
-									<Button variant="danger" disabled={busy || !updatePath.trim()}
+									<Button icon="editInline" variant="danger" disabled={busy || !updatePath.trim()}
 										title={updatePath.trim() ? translate("onecMaintUpdate") : translate("onecMaintNeedFile")}
 										onClick={() => plan.mutate("update")}>
-										<Icon name="editInline" /> {translate("onecMaintUpdate")}
+										{translate("onecMaintUpdate")}
 									</Button>
 								</GroupRow>
 							</GroupCol>
@@ -424,9 +423,9 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 						<FormArea title={translate("onecSelftest")}>
 							<GroupCol>
 								<GroupRow>
-									<Button variant="secondary" disabled={busy} title={translate("onecSelftest")}
+									<Button icon="recalc" variant="secondary" disabled={busy} title={translate("onecSelftest")}
 										onClick={() => setConfirmSelftest(true)}>
-										<Icon name="recalc" /> {translate("onecSelftest")}
+										{translate("onecSelftest")}
 									</Button>
 								</GroupRow>
 								{selftest && (

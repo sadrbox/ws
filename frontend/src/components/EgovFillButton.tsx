@@ -7,7 +7,7 @@ import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { fetchEgovLegalEntity, applyEgov } from "src/services/egov/api";
-import styles from "src/components/Toolbar/Toolbar.module.scss";
+import { Button } from "src/components/Button";
 
 interface Props {
 	ownerType: "organization" | "counterparty";
@@ -47,10 +47,10 @@ const EgovFillButton: FC<Props> = ({ ownerType, bin, uuid, disabled, onFillName,
 	}, [valid, bin, uuid, ownerType, onFillName, onReload]);
 
 	return (
-		<button type="button" className={styles.ActionsButton} disabled={busy || disabled || !valid}
+		<Button icon="download" disabled={busy || disabled || !valid}
 			title={valid ? translate("egovFillHint") : translate("egovNeedBin")} onClick={() => void run()}>
-			{busy ? "…" : `⭳ ${translate("egovFill")}`}
-		</button>
+			{busy ? "…" : translate("egovFill")}
+		</Button>
 	);
 };
 

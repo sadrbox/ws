@@ -114,10 +114,10 @@ export const BaseAvailability: FC<{
 					{/* Кнопка только у базы, в которую не войти: у рабочей агент всё равно
 					    откажет, и предлагать её значило бы звать на отказ. */}
 					{ibUnreachableAt && (
-						<Button variant="danger" disabled={drop.isPending || dropRunning}
+						<Button icon="trash" variant="danger" disabled={drop.isPending || dropRunning}
 							title={translate("onecBaseDropRegistrationHint")}
 							onClick={() => setConfirmDrop(true)}>
-							<Icon name="trash" /> {translate("onecBaseDropRegistration")}
+							{translate("onecBaseDropRegistration")}
 						</Button>
 					)}
 				</GroupRow>}
