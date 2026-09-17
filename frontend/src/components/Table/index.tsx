@@ -9,7 +9,7 @@ import {
   TDataItem,
   TypeFormAction,
 } from './types';
-import { pruneSelection, isNarrowedView, toggleRowSelection, type SelectionState } from './services';
+import { pruneSelection, isNarrowedView, isRowSelected, toggleRowSelection, type SelectionState } from './services';
 
 import { translate } from 'src/i18';
 import {
@@ -473,26 +473,36 @@ const Table: FC<TableProps> = memo((props) => {
   visibleIdsRef.current = rows.map((r) => Number(r.id));
 
   /*
-   * Список СУЗИЛСЯ (быстрый поиск, отбор), а включён режим «выбраны все» — переводим режим в явный
+   * Список СУЗИЛСЯ (быстрый поиск, отбор, период), а включён режим «выбраны все» — переводим режим в явный
    * список отметок по тому составу, который был виден до сужения.
    *
-   * Иначе выбор молча схлопывался бы до найденного: наружу (onSelectionChange) уходят «все строки за
-   * вычетом исключённых», а строки при поиске — только найденные. Перевод делаем лишь когда весь
-   * список уже загружен (нет следующей страницы): у серверного списка «выбраны все» значит «все в
-   * базе», и перечислить их панель не может.
+   * Иначе выбор молча схлопывался бы до найденного. Перевод делаем лишь когда весь список уже загружен (нет
+   * следующей страницы): у серверного списка «выбраны все» значит «все в базе», и перечислить их панель не может.
+   *
+   * В РЕНДЕРЕ, а не в эффекте — по той же причине, что и пересев presetSelectedRows выше: уведомление об отметках
+   * — эффект, и в том же коммите оно успевало отдать наружу схлопнутый набор. Там, где отметки возвращаются
+   * пропом (роли в помощнике), этот набор приходил обратно и закреплялся.
    */
-  const fullRowIdsRef = useRef<number[]>([]);
-  if (!narrowedRef.current) fullRowIdsRef.current = visibleIdsRef.current;
-  const wasNarrowedRef = useRef(narrowedRef.current);
   const narrowed = narrowedRef.current;
-  useEffect(() => {
-    const wasNarrowed = wasNarrowedRef.current;
-    wasNarrowedRef.current = narrowed;
-    if (!narrowed || wasNarrowed || !isAllSelectedMode || hasNextPage) return;
-    setSelectedRows(new Set(fullRowIdsRef.current.filter((id) => !excludedRows.has(id))));
-    setIsAllSelectedMode(false);
-    setExcludedRows(new Set());
-  }, [narrowed, isAllSelectedMode, excludedRows, hasNextPage]);
+  const fullRowIdsRef = useRef<number[]>([]);
+  if (!narrowed) fullRowIdsRef.current = visibleIdsRef.current;
+  const [wasNarrowed, setWasNarrowed] = useState(narrowed);
+  if (narrowed !== wasNarrowed) {
+    setWasNarrowed(narrowed);
+    if (narrowed && isAllSelectedMode && !hasNextPage) {
+      setSelectedRows(new Set(fullRowIdsRef.current.filter((id) => !excludedRows.has(id))));
+      setIsAllSelectedMode(false);
+      setExcludedRows(new Set());
+    }
+  }
+
+  /*
+   * Строки, какими таблица видела их последний раз. Наружу (onSelectionChange) вторым аргументом уходят не только
+   * видимые строки, но и ОТМЕЧЕННЫЕ СКРЫТЫЕ: владельцы строят выбор как «строки, которые отмечены», и при поиске
+   * отмеченное вне найденного у них пропадало — роль, отмеченная до поиска другой, не доходила до команды.
+   */
+  const seenRowsRef = useRef(new Map<number, TDataItem>());
+  for (const r of rows) seenRowsRef.current.set(Number(r.id), r);
 
   const toggleRowSelect = useCallback((id: number, checked: boolean) => {
     const next = toggleRowSelection(selectionRef.current, id, checked, visibleIdsRef.current, narrowedRef.current);
@@ -509,10 +519,20 @@ const Table: FC<TableProps> = memo((props) => {
     // В режиме «выбраны все» selectedRows намеренно ПУСТ (иначе пришлось бы держать в нём
     // весь список), а фактический выбор — это все строки за вычетом исключённых. Без этого
     // «отметить всё» отдавало бы наружу пустой набор.
+    //
+    // На суженном списке «все» — это все известные строки, а не только найденные: скрытое поиском остаётся
+    // отмеченным (services: правило 1).
+    const universe = narrowedRef.current ? [...seenRowsRef.current.keys()] : rows.map((r) => Number(r.id));
     const effective = isAllSelectedMode
-      ? new Set(rows.map((r) => Number(r.id)).filter((id) => !excludedRows.has(id)))
+      ? new Set(universe.filter((id) => !excludedRows.has(id)))
       : selectedRows;
-    notify(effective, rows);
+    const visible = new Set(rows.map((r) => Number(r.id)));
+    const hiddenPicked: TDataItem[] = [];
+    for (const id of effective) {
+      const row = visible.has(id) ? undefined : seenRowsRef.current.get(id);
+      if (row) hiddenPicked.push(row);
+    }
+    notify(effective, hiddenPicked.length ? [...rows, ...hiddenPicked] : rows);
     // rows намеренно вне зависимостей: сообщаем именно о СМЕНЕ ОТМЕТОК, а не о
     // каждой перезагрузке данных.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -821,6 +841,12 @@ const Table: FC<TableProps> = memo((props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
+  // «Удалить» доступна, когда отмечена хоть одна ВИДИМАЯ строка: удаляется только видимое (см. ниже).
+  const hasVisibleSelection = useMemo(
+    () => rows.some(r => isRowSelected({ selected: selectedRows, allMode: isAllSelectedMode, excluded: excludedRows }, r.id)),
+    [rows, selectedRows, isAllSelectedMode, excludedRows],
+  );
+
   const handleDeleteClick = useCallback(async () => {
     // Собираем реальный набор id выбранных строк
     let effectiveIds: Set<number>;
@@ -832,7 +858,10 @@ const Table: FC<TableProps> = memo((props) => {
     } else {
       // ТОЛЬКО ОТМЕЧЕННОЕ ЧЕКБОКСОМ. Активная строка — это «где я сейчас», а не «что я выбрал»: она переезжает
       // от стрелок и от клика по любой ячейке, и удалять по ней значило удалять то, чего человек не выбирал.
-      effectiveIds = selectedRows;
+      //
+      // И ТОЛЬКО ВИДИМОЕ: отметки переживают поиск и отбор (services), но удалять строку, которую поиск скрыл,
+      // значит удалять то, чего человек сейчас не видит. Скрытые отметки остаются — до снятия поиска.
+      effectiveIds = new Set(rows.map(r => r.id).filter(id => selectedRows.has(id)));
     }
 
     if (effectiveIds.size === 0) return;
@@ -1060,7 +1089,7 @@ const Table: FC<TableProps> = memo((props) => {
           onRefresh={handleRefresh}
           onAddClick={handleCreate}
           onDeleteClick={handleDeleteClick}
-          hasSelection={isAllSelectedMode || selectedRows.size > 0}
+          hasSelection={hasVisibleSelection}
           search={search}
           extraButtons={extraButtons}
           readonly={isReadonly}

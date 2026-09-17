@@ -8,7 +8,7 @@
 import { memo, useCallback, useMemo, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { getTranslateColumn } from 'src/i18';
 import { useTableContext, useTableVolatile } from './context';
-import { normalizeLastColumnWidth, isNarrowedView, toggleAllSelection } from './services';
+import { normalizeLastColumnWidth, isNarrowedView, selectionIndicator, toggleAllSelection } from './services';
 import { spreadResize, type ResizeColumn } from './columnResize';
 import styles from './Table.module.scss';
 
@@ -30,17 +30,18 @@ export const TableHeader = memo(() => {
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
 
-  // isAllSelected = true если режим "все" без исключений
-  const isAllSelected = useMemo(() => {
-    if (isAllSelectedMode) return excludedRows.size === 0;
-    return rows.length > 0 && rows.every(r => selectedRows.has(r.id));
-  }, [isAllSelectedMode, excludedRows, rows, selectedRows]);
-
-  // indeterminate = частичный выбор
-  const isIndeterminate = useMemo(() => {
-    if (isAllSelectedMode) return excludedRows.size > 0;
-    return selectedRows.size > 0 && !isAllSelected;
-  }, [isAllSelectedMode, excludedRows, isAllSelected, selectedRows]);
+  /*
+   * Индикатор — только по ВИДИМЫМ строкам (services.selectionIndicator): при поиске или отборе по периоду отметки
+   * скрытых строк не зажигают над найденным ни галочку, ни «частично». Раньше режим «все» с исключением скрытой
+   * строки показывал «частично», а отметки вне поиска — «частично» над списком без единой отметки.
+   */
+  const { all: isAllSelected, some: isIndeterminate } = useMemo(
+    () => selectionIndicator(
+      { selected: selectedRows, allMode: isAllSelectedMode, excluded: excludedRows },
+      rows.map(r => r.id),
+    ),
+    [isAllSelectedMode, excludedRows, rows, selectedRows],
+  );
 
   // В групповой таблице «отметить всё» — это «выдать/снять всё во всех вложенных
   // строках»: своих отметок у неё нет (см. groupSelection).
@@ -63,12 +64,11 @@ export const TableHeader = memo(() => {
       { selected: selectedRows, allMode: isAllSelectedMode, excluded: excludedRows },
       rows.map(r => r.id),
       isNarrowedView(search.value, filtering.filters),
-      isAllSelected || isIndeterminate,
     );
     setIsAllSelectedMode(next.allMode);
     setSelectedRows(next.selected);
     setExcludedRows(next.excluded);
-  }, [rows, search, filtering, selectedRows, excludedRows, isAllSelectedMode, isAllSelected, isIndeterminate,
+  }, [rows, search, filtering, selectedRows, excludedRows, isAllSelectedMode,
     setIsAllSelectedMode, setExcludedRows, setSelectedRows]);
 
   const isResizingRef = useRef(false);

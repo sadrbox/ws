@@ -540,18 +540,47 @@ export function normalizeLastColumnWidth(cols: TColumn[]): TColumn[] {
 
 
 /**
- * ОТМЕТКИ И БЫСТРЫЙ ПОИСК (17.09). «Выбраны все» — это режим: в нём отмечены все записи, а не только загруженные, и
- * он включался, как только отмечены ВСЕ ВИДИМЫЕ строки. При быстром поиске видима одна строка — отметка на ней
- * включала режим, и после снятия поиска выбранным оказывался весь список. Пока список сужен поиском или отбором,
- * режим «все» не включается: отмечаются именно те строки, которые человек видит.
+ * ОТМЕТКИ, БЫСТРЫЙ ПОИСК И ОТБОР (17.09).
+ *
+ * Отметка — состояние СТРОКИ, а поиск и отбор (в том числе по периоду) только СКРЫВАЮТ строки. Отсюда три правила:
+ *   1. Скрытое поиском не трогаем: ни «выбрать все» в шапке, ни отметка строки не меняют отметок невидимых строк.
+ *   2. Режим «выбраны все» включается только на несуженном списке: при поиске видима одна строка, и её отметка
+ *      иначе выбирала весь список после снятия поиска.
+ *   3. Индикатор шапки говорит о ВИДИМЫХ строках: отмечены все видимые — галочка, часть — промежуточное, ни одной —
+ *      пусто. Отмеченное вне поиска на него не влияет — иначе шапка горела «частично» над списком без единой отметки.
  */
 export type SelectionState = { selected: Set<number>; allMode: boolean; excluded: Set<number> };
 
-/** Список сужен: виден не весь набор, а результат поиска или отбора. */
+/** Значение отбора пустое — отбора по этому полю нет (`undefined`, `''`, `{value: ''}`, период без дат). */
+const isEmptyFilterValue = (v: unknown): boolean => {
+	if (v == null || v === '') return true;
+	if (Array.isArray(v)) return v.length === 0;
+	if (typeof v === 'object') {
+		const o = v as Record<string, unknown>;
+		if ('value' in o) return isEmptyFilterValue(o.value);
+		return Object.values(o).every(isEmptyFilterValue);
+	}
+	return false;
+};
+
+/** Список сужен: виден не весь набор, а результат поиска или отбора (в том числе по периоду). */
 export const isNarrowedView = (
 	search: string | null | undefined,
 	filters: Record<string, unknown> | null | undefined,
-): boolean => !!search?.trim() || Object.keys(filters ?? {}).length > 0;
+): boolean => !!search?.trim() || Object.values(filters ?? {}).some((v) => !isEmptyFilterValue(v));
+
+/** Отмечена ли строка — с учётом режима «выбраны все». */
+export const isRowSelected = (state: SelectionState, id: number): boolean =>
+	state.allMode ? !state.excluded.has(id) : state.selected.has(id);
+
+/** Индикатор чекбокса в шапке — только по видимым строкам (правило 3). */
+export function selectionIndicator(
+	state: SelectionState, visibleIds: readonly number[],
+): { all: boolean; some: boolean } {
+	let count = 0;
+	for (const id of visibleIds) if (isRowSelected(state, id)) count++;
+	return { all: visibleIds.length > 0 && count === visibleIds.length, some: count > 0 && count < visibleIds.length };
+}
 
 const EMPTY: Set<number> = new Set();
 
@@ -563,7 +592,7 @@ export function toggleRowSelection(
 		const excluded = new Set(state.excluded);
 		if (checked) excluded.delete(id); else excluded.add(id);
 		// Исключили всё, что видно, и список не сужен — режим «все» больше не значит «все».
-		if (!narrowed && excluded.size >= visibleIds.length) return { selected: new Set(), allMode: false, excluded: new Set() };
+		if (!narrowed && visibleIds.every((rid) => excluded.has(rid))) return { selected: new Set(), allMode: false, excluded: new Set() };
 		return { selected: new Set(), allMode: true, excluded };
 	}
 	const selected = new Set(state.selected);
@@ -574,17 +603,29 @@ export function toggleRowSelection(
 	return { selected, allMode: false, excluded: EMPTY };
 }
 
-/** «Выбрать все» в шапке: при суженном списке — ровно видимые строки, иначе прежний режим «все». */
+/**
+ * «Выбрать все» в шапке. Щелчок при частичном или полном выборе снимает, при пустом — отмечает (как и раньше).
+ *
+ * Суженный список: «все» — это ВИДИМЫЕ строки, отметки скрытых остаются как были (правило 1), и решение «снять или
+ * отметить» принимается по видимым (правило 3). Режим «выбраны все», если он уже включён, сохраняется: видимые
+ * строки уходят в исключения или возвращаются из них.
+ */
 export function toggleAllSelection(
-	state: SelectionState, visibleIds: readonly number[], narrowed: boolean, allSelected: boolean,
+	state: SelectionState, visibleIds: readonly number[], narrowed: boolean,
 ): SelectionState {
 	if (narrowed) {
-		const selected = new Set(state.allMode ? visibleIds.filter((id) => !state.excluded.has(id)) : state.selected);
-		for (const id of visibleIds) { if (allSelected) selected.delete(id); else selected.add(id); }
+		const { all, some } = selectionIndicator(state, visibleIds);
+		const unselect = all || some;
+		if (state.allMode) {
+			const excluded = new Set(state.excluded);
+			for (const id of visibleIds) { if (unselect) excluded.add(id); else excluded.delete(id); }
+			return { selected: new Set(), allMode: true, excluded };
+		}
+		const selected = new Set(state.selected);
+		for (const id of visibleIds) { if (unselect) selected.delete(id); else selected.add(id); }
 		return { selected, allMode: false, excluded: new Set() };
 	}
-	const somethingSelected = allSelected || state.selected.size > 0 || (state.allMode && state.excluded.size > 0);
-	return somethingSelected
+	return state.allMode || state.selected.size > 0
 		? { selected: new Set(), allMode: false, excluded: new Set() }
 		: { selected: new Set(), allMode: true, excluded: new Set() };
 }
