@@ -26,19 +26,23 @@ import { notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
 import { GROUP_OPS, useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
 import {
-	changesNothing, useOnecWrite, useOnecPermissions,
+	changesNothing, isApplicable, useOnecWrite, useOnecPermissions,
 } from "./shared";
 import { SECTION_OF_TYPE, sectionAllows } from "./onecPermissions";
 
 export type CommandGroup = "operations" | "maintenance" | "users" | "extensions";
 
-const GROUPS: Record<CommandGroup, { label: string; icon: IconName; ops: GroupOp[] }> = {
+const GROUPS: Record<CommandGroup, { label: string; icon: IconName; ops: GroupOp[]; dangerOps?: GroupOp[] }> = {
 	/*
 	 * «ОПЕРАЦИИ» (17.09) — всё, что делают с самой базой, одним меню: сведения, регламентные задания, публикация, а
 	 * ниже — проверки публикаций и баз данных. Раньше публикация жила отдельной группой, а сведения и регламентные
 	 * задания — только в карточке одной базы.
 	 */
-	operations: { label: "onecOperations", icon: "settings", ops: ["info", "denyJobs", "allowJobs", "publish", "unpublish"] },
+	operations: {
+		label: "onecOperations", icon: "settings", ops: ["info", "denyJobs", "allowJobs", "publish", "unpublish"],
+		// Отдельным разделом в конце меню, красным: запись в кластере восстанавливается только вручную.
+		dangerOps: ["dropRegistration"],
+	},
 	maintenance: { label: "onecTabMaintenance", icon: "save", ops: ["checkBase", "backup"] },
 	users: { label: "onecTabUsers", icon: "plus", ops: ["createUser", "deleteUser"] },
 	extensions: { label: "onecTabExtensions", icon: "download", ops: ["installExt", "deleteExt"] },
@@ -70,6 +74,15 @@ export const BaseGroupCommands: FC<{
 	 * (alreadyInTarget), — меню и помощник не спорят.
 	 */
 	const nothingToChange = (o: GroupOp) => changesNothing(selected, GROUP_OPS[o].target);
+	/*
+	 * Удалить регистрацию можно только у базы, в которую не войти. Отмечены одни рабочие — пункт недоступен сразу,
+	 * а не после шага помощника с пустым списком целей.
+	 */
+	const noPhantomSelected = selected.length > 0 && !selected.some((r) => isApplicable({
+		status: asText(r.status), disabled: r.disabled === true, published: null,
+		clusterStatus: r.clusterStatus ? asText(r.clusterStatus) : undefined,
+		ibUnreachableAt: r.ibUnreachableAt ? asText(r.ibUnreachableAt) : null,
+	}, "drop"));
 	const qc = useQueryClient();
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
@@ -105,6 +118,7 @@ export const BaseGroupCommands: FC<{
 	const OP_LABEL: Record<GroupOp, string> = {
 		publish: "onecPublish", unpublish: "onecUnpublish",
 		info: "onecBaseInfoRefresh", denyJobs: "onecScheduledJobsDeny", allowJobs: "onecScheduledJobsAllow",
+		dropRegistration: "onecBaseDropRegistration",
 		createUser: "onecUserCreate", deleteUser: "onecUserDelete",
 		installExt: "onecExtInstall", deleteExt: "onecExtRemove",
 		backup: "onecBackup", checkBase: "onecMaintCheck",
@@ -118,7 +132,7 @@ export const BaseGroupCommands: FC<{
 	 */
 	const OP_ICON: Record<GroupOp, IconName> = {
 		publish: "open", unpublish: "close",
-		info: "reload", denyJobs: "clear", allowJobs: "restore",
+		info: "reload", denyJobs: "clear", allowJobs: "restore", dropRegistration: "trash",
 		createUser: "plus", deleteUser: "trash",
 		installExt: "download", deleteExt: "trash",
 		backup: "save", checkBase: "search",
@@ -141,6 +155,11 @@ export const BaseGroupCommands: FC<{
 							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), icon: "search" as IconName, disabled: checkDb.isPending || dbChecking },
 						]
 						: []),
+					// Опасные команды — последним разделом; только полному доступу.
+					...(spec.dangerOps ?? []).filter(opAllowed).map((o) => ({
+						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o], group: translate("onecDangerousCommands"), danger: true,
+						...(o === "dropRegistration" && noPhantomSelected ? { disabled: true, hint: translate("onecDropOnlyUnreachable") } : {}),
+					})),
 				];
 				if (!options.length) return null;
 				return (

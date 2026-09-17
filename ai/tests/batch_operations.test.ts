@@ -26,7 +26,7 @@ function deps(bases: Record<string, { disabled: boolean; clusterStatus: string }
 		agents: {
 			pickAdminAgent: async () => ({
 				id: "adm", organizationUuid: "org-1", role: "admin", disabled: false,
-				capabilities: ["cluster.admin", "ib.admin", "CLUSTER_SET_SCHEDULED_JOBS", "IB_INFO"],
+				capabilities: ["cluster.admin", "ib.admin", "CLUSTER_SET_SCHEDULED_JOBS", "IB_INFO", "CLUSTER_DROP_INFOBASE"],
 			}),
 		},
 		queue: {
@@ -67,4 +67,25 @@ test("«Обновить сведения»: скрытая база и база
 	assert.equal(r.queued, 1);
 	assert.equal(t.enqueued[0].inBase, true);
 	assert.deepEqual(t.skipped().map((s) => s.baseKey), ["hidden", "gone"]);
+});
+
+test("удаление регистрации — групповым заданием, только с confirm: true и не для базы, которой уже нет в кластере", async () => {
+	assert.ok(BATCHABLE.has("CLUSTER_DROP_INFOBASE"));
+	assert.equal(isDestructive("POST", "/batch", { type: "CLUSTER_DROP_INFOBASE", baseKeys: ["a"] }), true);
+
+	const noConfirm = deps({ a: { disabled: false, clusterStatus: "ONLINE" } });
+	const refused = await startBatch(noConfirm.d, { type: "CLUSTER_DROP_INFOBASE", baseKeys: ["a"], organizationUuid: "org-1", userUuid: "u1" });
+	assert.ok("error" in refused, "без confirm задание не ставится вовсе");
+
+	const t = deps({
+		phantom: { disabled: true, clusterStatus: "ONLINE" },
+		gone: { disabled: false, clusterStatus: "MISSING" },
+	});
+	const r = await startBatch(t.d, {
+		type: "CLUSTER_DROP_INFOBASE", baseKeys: ["phantom", "gone"], payload: { confirm: true },
+		organizationUuid: "org-1", userUuid: "u1",
+	});
+	assert.ok(!("error" in r));
+	assert.deepEqual(t.enqueued.map((e) => [e.baseKey, e.inBase]), [["phantom", false]]);
+	assert.deepEqual(t.skipped().map((s) => s.baseKey), ["gone"]);
 });

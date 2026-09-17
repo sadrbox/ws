@@ -116,11 +116,31 @@
 		background: $accentBlueSoft;
 	}
 
+	// Без pointer-events: none — иначе у недоступного пункта не видно подсказки, ПОЧЕМУ он недоступен
+	// (title). Нажатие недоступной кнопки браузер и так не передаёт.
 	&:disabled {
 		opacity: 0.45;
 		cursor: default;
-		pointer-events: none;
 	}
+}
+
+// Разрушающая команда: цвет — тот же, что у кнопки variant="danger".
+.DropdownItemDanger {
+	color: var(--sv-attention);
+}
+
+// Заголовок раздела меню («Опасные команды»): не пункт, а подпись над пунктами.
+.DropdownGroup {
+	padding: 6px 10px 3px;
+	color: $color51;
+	font-size: 12px;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.DropdownGroupSeparated {
+	margin-top: 3px;
+	border-top: 1px solid $color10;
 }
 
 .DropdownItemIcon {

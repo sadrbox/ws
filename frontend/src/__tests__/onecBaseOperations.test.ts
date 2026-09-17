@@ -61,3 +61,18 @@ describe("помощник пропускает базы, которым ком�
 		expect(GROUP_OPS.info).toMatchObject({ type: "IB_INFO", kind: "read", exclusive: false });
 	});
 });
+
+describe("«Удалить регистрацию из кластера» — опасная команда «Операций»", () => {
+	const base = { status: "ONLINE", disabled: false, published: null };
+
+	it("пригодна только база, в которую не войти, пока её регистрация есть; скрытый фантом — тоже", () => {
+		expect(isApplicable({ ...base, ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" }, "drop")).toBe(true);
+		expect(isApplicable({ ...base, status: "DISABLED", disabled: true, clusterStatus: "ONLINE", ibUnreachableAt: "t" }, "drop")).toBe(true);
+		expect(isApplicable(base, "drop")).toBe(false);
+		expect(isApplicable({ ...base, status: "DISABLED", disabled: true, clusterStatus: "MISSING", ibUnreachableAt: "t" }, "drop")).toBe(false);
+	});
+
+	it("тело команды — confirm: true; вид операции — удаление", () => {
+		expect(GROUP_OPS.dropRegistration).toMatchObject({ type: "CLUSTER_DROP_INFOBASE", needs: "drop", kind: "delete", payload: { confirm: true } });
+	});
+});

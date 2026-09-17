@@ -53,7 +53,7 @@ import styles from "./OneCAdmin.module.scss";
 /** Что умеет помощник. Набор тот же, что был у групповых команд списка баз. */
 export type GroupOp =
 	| "publish" | "unpublish"
-	| "info" | "denyJobs" | "allowJobs"
+	| "info" | "denyJobs" | "allowJobs" | "dropRegistration"
 	| "createUser" | "deleteUser"
 	| "installExt" | "deleteExt"
 	| "backup" | "checkBase";
@@ -96,6 +96,11 @@ export const GROUP_OPS: Record<GroupOp, OpSpec> = {
 	allowJobs: {
 		type: "CLUSTER_SET_SCHEDULED_JOBS", title: "onecScheduledJobsAllow", warning: "onecScheduledJobsAllowPlan",
 		needs: "cluster", kind: "update", target: { jobsDenied: false }, payload: { denied: false },
+	},
+	// Опасная команда: запись в кластере восстанавливается только вручную. `confirm` сервис требует явно.
+	dropRegistration: {
+		type: "CLUSTER_DROP_INFOBASE", title: "onecBaseDropRegistration", warning: "onecBaseDropRegistrationWarning",
+		needs: "drop", kind: "delete", payload: { confirm: true },
 	},
 	createUser: { type: "IB_CREATE_USER", title: "onecUserCreate", warning: "onecUserCreateWarning", needs: "ib", needsName: "user", kind: "create" },
 	deleteUser: { type: "IB_DELETE_USER", title: "onecUserDelete", warning: "onecUserDeleteWarning", needs: "ib", needsName: "user", kind: "delete" },
@@ -164,7 +169,11 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	// ей ничего не изменит (alreadyInTarget).
 	const fitOf = useCallback((b: OnecBase) => {
 		if (!spec) return "";
-		if (!isApplicable(b, spec.needs)) return unreachableReason(b);
+		if (!isApplicable(b, spec.needs)) {
+			// У рабочей базы «почему нельзя» — не причина недоступности (её нет), а правило самой команды.
+			if (spec.needs === "drop" && !b.ibUnreachableAt) return translate("onecDropOnlyUnreachable");
+			return unreachableReason(b);
+		}
 		return alreadyInTarget(b, spec.target);
 	}, [spec]);
 	const baseRows = useMemo(() => items.map((b, i) => ({

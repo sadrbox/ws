@@ -2,7 +2,7 @@
 // клик-вне) — общий хук useDropdownMenu; здесь только разметка. Print/Save/Actions —
 // тонкие обёртки над этим компонентом (отличаются лишь триггером и наличием иконок
 // в пунктах).
-import { FC, type ReactNode } from "react";
+import { FC, Fragment, type ReactNode } from "react";
 import IconButton from "src/components/IconButton/IconButton";
 import { Button } from "src/components/Button";
 import type { IconName } from "src/components/IconButton/icons";
@@ -16,6 +16,13 @@ export interface ToolbarDropdownOption {
   icon?: ReactNode;
   hint?: string;
   disabled?: boolean;
+  /**
+   * Раздел меню. Пункты с одним разделом идут подряд; на смене раздела рисуются черта и его заголовок. Пункты без
+   * раздела — обычный список, как прежде.
+   */
+  group?: string;
+  /** Разрушающая команда: красный текст — чтобы её не нажимали по привычке рядом с безопасными. */
+  danger?: boolean;
 }
 
 interface ToolbarDropdownProps {
@@ -83,24 +90,33 @@ const ToolbarDropdown: FC<ToolbarDropdownProps> = ({
       {triggerNode}
       {open && (
         <div ref={dropRef} role="menu" className={styles.DropdownMenu} style={dropStyle}>
-          {options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              role="menuitem"
-              className={styles.DropdownItem}
-              disabled={o.disabled}
-              title={o.hint}
-              onClick={() => {
-                if (o.disabled) return;
-                setOpen(false);
-                onSelect(o.id);
-              }}
-            >
-              {o.icon && <span className={styles.DropdownItemIcon}>{o.icon}</span>}
-              <span className={styles.DropdownItemLabel}>{o.label}</span>
-            </button>
-          ))}
+          {options.map((o, i) => {
+            const opensGroup = !!o.group && o.group !== options[i - 1]?.group;
+            return (
+              <Fragment key={o.id}>
+                {opensGroup && (
+                  <div role="presentation" className={[styles.DropdownGroup, i > 0 ? styles.DropdownGroupSeparated : null].filter(Boolean).join(" ")}>
+                    {o.group}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={[styles.DropdownItem, o.danger ? styles.DropdownItemDanger : null].filter(Boolean).join(" ")}
+                  disabled={o.disabled}
+                  title={o.hint}
+                  onClick={() => {
+                    if (o.disabled) return;
+                    setOpen(false);
+                    onSelect(o.id);
+                  }}
+                >
+                  {o.icon && <span className={styles.DropdownItemIcon}>{o.icon}</span>}
+                  <span className={styles.DropdownItemLabel}>{o.label}</span>
+                </button>
+              </Fragment>
+            );
+          })}
         </div>
       )}
     </div>

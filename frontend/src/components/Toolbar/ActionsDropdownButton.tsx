@@ -14,6 +14,10 @@ export interface ActionDropdownOption {
   hint?: string;
   /** Иконка пункта — 16×16 из общего реестра, как у кнопок. */
   icon?: IconName;
+  /** Раздел меню — см. ToolbarDropdownOption.group. */
+  group?: string;
+  /** Разрушающая команда — см. ToolbarDropdownOption.danger. */
+  danger?: boolean;
 }
 
 interface ActionsDropdownButtonProps {

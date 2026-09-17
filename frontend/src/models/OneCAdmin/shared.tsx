@@ -44,17 +44,27 @@ import styles from "./OneCAdmin.module.scss";
  *        запрещённой оказывалась ровно та команда, которой это расхождение и лечится.
  *        Обе операции идемпотентны по контракту, поэтому лишний запуск безвреден.
  */
-/** Канал операции: `cluster` — команда кластера по базе (rac), в базу не входит (регламентные задания). */
-export type OnecOperation = "ib" | "http" | "publish" | "unpublish" | "cluster";
+/**
+ * Канал операции: `cluster` — команда кластера по базе (rac), в базу не входит (регламентные задания); `drop` —
+ * удаление регистрации базы-фантома: ей пригодны как раз те базы, которые непригодны всему остальному.
+ */
+export type OnecOperation = "ib" | "http" | "publish" | "unpublish" | "cluster" | "drop";
 
 /** Принимает всё, у чего есть эти три поля: строку списка баз или запись реестра. */
 export function isApplicable(
 	b: Pick<OnecBase, "status" | "disabled" | "published"> & {
 		ibUnreachableAt?: string | null;
 		ibUnreachableReason?: string | null;
+		clusterStatus?: string;
 	},
 	op: OnecOperation,
 ): boolean {
+	/*
+	 * УДАЛИТЬ РЕГИСТРАЦИЮ — только у базы, в которую не войти (тот же признак, что у кнопки в карточке), и только пока
+	 * регистрация есть. Скрытая база пригодна: фантомы и прячут, а удалить их регистрацию от этого не менее нужно.
+	 * Что базы данных действительно нет, проверяет сам агент через СУБД и у живой базы отказывает.
+	 */
+	if (op === "drop") return (b.clusterStatus ?? b.status) !== "MISSING" && !!b.ibUnreachableAt;
 	// Базы, которой нет в кластере, нет ни для одной операции.
 	if (b.status === "MISSING" || b.disabled) return false;
 	/*
