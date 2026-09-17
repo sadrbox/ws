@@ -169,11 +169,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	// ей ничего не изменит (alreadyInTarget).
 	const fitOf = useCallback((b: OnecBase) => {
 		if (!spec) return "";
-		if (!isApplicable(b, spec.needs)) {
-			// У рабочей базы «почему нельзя» — не причина недоступности (её нет), а правило самой команды.
-			if (spec.needs === "drop" && !b.ibUnreachableAt) return translate("onecDropOnlyUnreachable");
-			return unreachableReason(b);
-		}
+		if (!isApplicable(b, spec.needs)) return unreachableReason(b);
 		return alreadyInTarget(b, spec.target);
 	}, [spec]);
 	const baseRows = useMemo(() => items.map((b, i) => ({
@@ -181,7 +177,12 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 		status: b.status,
 		// Почему база непригодна — сразу в строке: иначе «применимо 40 из 100» выглядит
 		// как потеря половины выбора без объяснения.
-		fitLabel: fitOf(b) || translate("onecFitOk"),
+		/*
+		 * Снятие регистрации: у базы, в которую не войти, ответ предсказуем, а у остальных решает агент — он смотрит
+		 * СУБД и у работающей базы откажет. Говорим это в строке, а не прячем команду (17.09).
+		 */
+		fitLabel: fitOf(b)
+			|| (spec?.needs === "drop" && !b.ibUnreachableAt ? translate("onecDropAgentWillVerify") : translate("onecFitOk")),
 		__fit: fitOf(b) === "",
 	})), [items, fitOf]);
 	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });

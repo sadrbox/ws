@@ -45,32 +45,31 @@ describe("«Доступность» по состоянию базы", () => {
 		expect(container.textContent).toBe("");
 	});
 
-	it("недоступная база — «Скрыть базу в панели» и «Удалить базу из кластера 1С»", () => {
+	it("недоступная база — «Скрыть базу в панели» и «Снять регистрацию базы в кластере 1С»", () => {
 		show({ ibUnreachableAt: "2026-09-17T08:00:00Z", ibUnreachableReason: "NO_DB" });
-		expect(buttons()).toEqual(expect.arrayContaining(["Скрыть базу в панели", "Удалить базу из кластера 1С"]));
-		expect(buttons()).not.toContain("Убрать базу из панели");
+		expect(buttons()).toEqual(expect.arrayContaining(["Скрыть базу в панели", "Снять регистрацию базы в кластере 1С"]));
+		expect(buttons()).not.toContain("Удалить запись о базе в панели");
 	});
 
 	it("скрытая база, которая есть в кластере, — «Вернуть в работу»", () => {
 		show({ status: "DISABLED", hidden: true });
 		expect(buttons().some((t) => t?.includes("Вернуть"))).toBe(true);
-		expect(buttons()).not.toContain("Убрать базу из панели");
+		expect(buttons()).not.toContain("Удалить запись о базе в панели");
 	});
 
-	it("базы нет в кластере (и она скрыта) — только «Убрать базу из панели»: удалять в кластере нечего", () => {
+	it("базы нет в кластере (и она скрыта) — только «Удалить запись о базе в панели»: в кластере снимать нечего", () => {
 		show({ status: "DISABLED", clusterStatus: "MISSING", hidden: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_INFOBASE" });
-		expect(buttons()).toEqual(["Убрать базу из панели"]);
+		expect(buttons()).toEqual(["Удалить запись о базе в панели"]);
 		expect(screen.getByText(/Регистрации этой базы в кластере 1С нет/)).toBeTruthy();
 	});
 
-	it("«Убрать базу из панели» — после подтверждения вызывает сервис и закрывает карточку", async () => {
+	it("«Удалить запись о базе в панели» — после подтверждения вызывает сервис и закрывает карточку", async () => {
 		const onRemoved = vi.fn();
 		show({ clusterStatus: "MISSING", status: "MISSING", onRemoved });
-		fireEvent.click(screen.getByRole("button", { name: "Убрать базу из панели" }));
+		fireEvent.click(screen.getByRole("button", { name: "Удалить запись о базе в панели" }));
 		expect(api.removeBaseFromRegistry).not.toHaveBeenCalled();
-		const apply = screen.getAllByRole("button").find((b) => /Применить|ОК|Да|Выполнить/i.test(b.textContent ?? ""));
-		expect(apply).toBeTruthy();
-		fireEvent.click(apply!);
+		// Кнопка подтверждения — по точному имени: нестрогий образец («Да») ловил и саму кнопку «Удалить…».
+		fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 		await waitFor(() => expect(api.removeBaseFromRegistry).toHaveBeenCalledWith("nomadstroygroup"));
 		await waitFor(() => expect(onRemoved).toHaveBeenCalled());
 	});

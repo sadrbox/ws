@@ -26,7 +26,7 @@ import { notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
 import { GROUP_OPS, useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
 import {
-	changesNothing, isApplicable, useOnecWrite, useOnecPermissions,
+	changesNothing, useOnecWrite, useOnecPermissions,
 } from "./shared";
 import { SECTION_OF_TYPE, sectionAllows } from "./onecPermissions";
 
@@ -74,15 +74,6 @@ export const BaseGroupCommands: FC<{
 	 * (alreadyInTarget), — меню и помощник не спорят.
 	 */
 	const nothingToChange = (o: GroupOp) => changesNothing(selected, GROUP_OPS[o].target);
-	/*
-	 * Удалить базу ИЗ КЛАСТЕРА можно только у базы, в которую не войти. Отмечены одни рабочие — пункт недоступен сразу,
-	 * а не после шага помощника с пустым списком целей.
-	 */
-	const noPhantomSelected = selected.length > 0 && !selected.some((r) => isApplicable({
-		status: asText(r.status), disabled: r.disabled === true, published: null,
-		clusterStatus: r.clusterStatus ? asText(r.clusterStatus) : undefined,
-		ibUnreachableAt: r.ibUnreachableAt ? asText(r.ibUnreachableAt) : null,
-	}, "drop"));
 	const qc = useQueryClient();
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
@@ -160,8 +151,7 @@ export const BaseGroupCommands: FC<{
 						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o], group: translate("onecDangerousCommands"), danger: true,
 						// Подсказка — прямо в меню: чем удаление из КЛАСТЕРА отличается от «убрать из панели», по одной
 						// подписи не видно, а цена ошибки разная.
-						hint: noPhantomSelected ? translate("onecDropOnlyUnreachable") : translate("onecBaseDropRegistrationHint"),
-						...(o === "dropRegistration" && noPhantomSelected ? { disabled: true } : {}),
+						hint: translate("onecBaseDropRegistrationHint"),
 					})),
 				];
 				if (!options.length) return null;

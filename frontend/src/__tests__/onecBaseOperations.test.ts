@@ -62,13 +62,21 @@ describe("помощник пропускает базы, которым ком�
 	});
 });
 
-describe("«Удалить базу из кластера 1С» — опасная команда «Операций»", () => {
+describe("«Снять регистрацию базы в кластере 1С» — опасная команда «Операций»", () => {
 	const base = { status: "ONLINE", disabled: false, published: null };
 
-	it("пригодна только база, в которую не войти, пока её регистрация есть; скрытый фантом — тоже", () => {
+	/*
+	 * Признак «в базу не войти» появляется только после «Проверить базы данных» или неудачной команды: до того панель
+	 * считает базу рабочей. Требовать его — значит прятать команду ровно тогда, когда она нужна (17.09). Судит агент.
+	 */
+	it("пригодна любая база, пока её регистрация в кластере есть — в том числе выглядящая рабочей и скрытая", () => {
 		expect(isApplicable({ ...base, ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" }, "drop")).toBe(true);
-		expect(isApplicable({ ...base, status: "DISABLED", disabled: true, clusterStatus: "ONLINE", ibUnreachableAt: "t" }, "drop")).toBe(true);
-		expect(isApplicable(base, "drop")).toBe(false);
+		expect(isApplicable(base, "drop")).toBe(true);
+		expect(isApplicable({ ...base, status: "DISABLED", disabled: true, clusterStatus: "ONLINE" }, "drop")).toBe(true);
+	});
+
+	it("базе, которой в кластере уже нет, снимать нечего", () => {
+		expect(isApplicable({ ...base, status: "MISSING" }, "drop")).toBe(false);
 		expect(isApplicable({ ...base, status: "DISABLED", disabled: true, clusterStatus: "MISSING", ibUnreachableAt: "t" }, "drop")).toBe(false);
 	});
 
