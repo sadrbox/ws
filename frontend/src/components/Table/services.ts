@@ -97,6 +97,96 @@ export function sortTableRows<T>(
  * пользователя, задачи расписания), строки приходят позже отметок, и чистка на пустом списке прочиталась бы
  * как «сняли всё».
  */
+/**
+ * ОТМЕТКА ПРИНАДЛЕЖИТ СТРОКЕ, А НЕ ЕЁ НОМЕРУ (17.09).
+ *
+ * ЖИВОЙ СЛУЧАЙ. В «Базах», «Сеансах» и «Соединениях» `id` строки — её ПОРЯДКОВЫЙ НОМЕР в ответе. Сняли сеанс —
+ * список перечитан, номера сдвинулись, и галочка осталась на прежнем НОМЕРЕ, то есть переехала на соседнюю строку.
+ * То же с активной строкой. Списки такие не только в панели 1С, поэтому правило здесь, в самой таблице.
+ *
+ * Правило: помним, какой строке принадлежал номер (`uuid` — постоянный ключ строки), и при новых данных переносим
+ * отметку на НОВЫЙ номер той же строки. Строки не стало — отметка снимается (иначе групповое действие уйдёт по
+ * чужой строке с тем же номером). При быстром поиске и отборе «не стало» не значит «удалена»: строка скрыта, и
+ * отметка остаётся ждать снятия поиска.
+ *
+ * Строка без `uuid` (такие бывают у черновиков) работает по-старому — по номеру.
+ */
+export type RowIdentity = { id: number; uuid?: unknown };
+
+const uuidOf = (r: RowIdentity): string => (typeof r.uuid === "string" ? r.uuid : "");
+
+/** Кто сейчас стоит за номером строки: номер → постоянный ключ. Запоминается до прихода новых данных. */
+export function rowIdentities(rows: readonly RowIdentity[]): Map<number, string> {
+	const m = new Map<number, string>();
+	for (const r of rows) {
+		const u = uuidOf(r);
+		if (u) m.set(Number(r.id), u);
+	}
+	return m;
+}
+
+/** Номера строк по их постоянным ключам — и все номера, которые сейчас есть. */
+const currentRows = (rows: readonly RowIdentity[]) => {
+	const byUuid = new Map<string, number>();
+	const alive = new Set<number>();
+	for (const r of rows) {
+		const id = Number(r.id);
+		alive.add(id);
+		const u = uuidOf(r);
+		if (u && !byUuid.has(u)) byUuid.set(u, id);
+	}
+	return { byUuid, alive };
+};
+
+/** Куда переехал номер строки: новый номер, `null` — строки больше нет, `undefined` — остаётся как был. */
+function movedTo(
+	id: number, was: ReadonlyMap<number, string>, rows: readonly RowIdentity[], narrowed: boolean,
+): number | null | undefined {
+	const { byUuid, alive } = currentRows(rows);
+	const key = was.get(id);
+	if (key) {
+		const now = byUuid.get(key);
+		if (now !== undefined) return now === id ? undefined : now;
+		// Ключ известен, строки с ним нет: при поиске и отборе она скрыта, иначе — исчезла.
+		return narrowed ? undefined : null;
+	}
+	// Ключа не знаем (строка без uuid или данные пришли впервые) — судим по номеру, как раньше.
+	if (alive.has(id)) return undefined;
+	return narrowed ? undefined : null;
+}
+
+/** Перенести набор отметок на новые номера строк. `null` — менять нечего. */
+export function remapSelection(
+	ids: ReadonlySet<number>,
+	was: ReadonlyMap<number, string>,
+	rows: readonly RowIdentity[],
+	narrowed: boolean,
+): Set<number> | null {
+	// Пустой набор строк — не повод трогать отметки: у таблиц, где галочка означает состояние данных, строки
+	// приходят позже отметок (см. pruneSelection).
+	if (ids.size === 0 || rows.length === 0) return null;
+	const next = new Set<number>();
+	let changed = false;
+	for (const id of ids) {
+		const to = movedTo(id, was, rows, narrowed);
+		if (to === undefined) { next.add(id); continue; }
+		changed = true;
+		if (to !== null) next.add(to);
+	}
+	return changed ? next : null;
+}
+
+/** Куда переехала активная строка: `undefined` — никуда. */
+export function remapActiveRow(
+	active: number | null,
+	was: ReadonlyMap<number, string>,
+	rows: readonly RowIdentity[],
+	narrowed: boolean,
+): number | null | undefined {
+	if (active === null || rows.length === 0) return undefined;
+	return movedTo(active, was, rows, narrowed);
+}
+
 export function pruneSelection(selected: ReadonlySet<number>, rowIds: readonly number[]): Set<number> | null {
 	if (selected.size === 0 || rowIds.length === 0) return null;
 	const alive = new Set(rowIds);

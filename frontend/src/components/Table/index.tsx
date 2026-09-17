@@ -9,7 +9,7 @@ import {
   TDataItem,
   TypeFormAction,
 } from './types';
-import { pruneSelection, isNarrowedView, isRowSelected, toggleRowSelection, type SelectionState } from './services';
+import { isNarrowedView, isRowSelected, remapActiveRow, remapSelection, rowIdentities, toggleRowSelection, type SelectionState } from './services';
 
 import { translate } from 'src/i18';
 import {
@@ -823,20 +823,25 @@ const Table: FC<TableProps> = memo((props) => {
   const handleRefresh = useCallback(() => refetch(), [refetch]);
 
   /*
-   * Отметки строк, которых больше нет (удалены здесь, ушли после обновления), снимаются: иначе «выбрано N»
-   * считает призраков, а групповое действие уходит по чужим строкам с теми же id (services.pruneSelection).
+   * ОТМЕТКИ И АКТИВНАЯ СТРОКА ПЕРЕЕЗЖАЮТ ВМЕСТЕ СО СТРОКОЙ (services.remapSelection).
    *
-   * НО НЕ ПРИ БЫСТРОМ ПОИСКЕ И ОТБОРЕ: там строка не исчезла, а скрыта. Чистка снимала отметки со всего,
-   * что не попало в найденное, — человек отмечал одну роль, искал следующую, и первая молча теряла галочку.
-   * Снятый поиск вернёт строки, и чистка отработает уже по полному списку.
+   * У части списков `id` строки — порядковый номер в ответе («Базы», «Сеансы», «Соединения»): строка исчезла —
+   * номера сдвинулись, и галочка осталась на прежнем НОМЕРЕ, то есть на чужой строке. Поэтому помним, какой
+   * строке принадлежал номер, и переносим отметку на новый номер той же строки; строки не стало — снимаем.
+   *
+   * При быстром поиске и отборе «строки нет» значит «скрыта», а не «удалена»: отметка остаётся (см. правило).
    */
+  const rowIdentityRef = useRef<Map<number, string>>(new Map());
   useEffect(() => {
-    if (narrowedRef.current) return;
-    const ids = rows.map((r) => Number(r.id));
-    const nextSelected = pruneSelection(selectedRows, ids);
+    const was = rowIdentityRef.current;
+    rowIdentityRef.current = rowIdentities(rows);
+    const narrowedNow = narrowedRef.current;
+    const nextSelected = remapSelection(selectedRows, was, rows, narrowedNow);
     if (nextSelected) setSelectedRows(nextSelected);
-    const nextExcluded = pruneSelection(excludedRows, ids);
+    const nextExcluded = remapSelection(excludedRows, was, rows, narrowedNow);
     if (nextExcluded) setExcludedRows(nextExcluded);
+    const nextActive = remapActiveRow(activeRow, was, rows, narrowedNow);
+    if (nextActive !== undefined) setActiveRow(nextActive);
     // Намеренно только по смене строк: набор отметок правит сам пользователь.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
