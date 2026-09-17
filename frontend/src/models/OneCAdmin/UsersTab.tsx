@@ -250,7 +250,6 @@ export const UsersTab: FC = () => {
 					onClick={() => setPrimary((p) => (p === "bases" ? "users" : "bases"))}>
 					<Icon name="syncFromBasis" /> {translate("onecSwapTables")}
 				</Button>
-				<span className={styles.ModeSpacer} />
 			</div>
 
 			<div className={styles.PairBody} ref={split.containerRef}>
@@ -266,8 +265,6 @@ export const UsersTab: FC = () => {
 			<div className={styles.StatusBar}>
 				<span className={styles.StatusText}>{status}</span>
 				<span className={styles.HeadActions}>
-					<QueryError error={bases.error ?? summary.error ?? baseUsers.error ?? occurrences.error}
-						noticeKey="base-users" source={translate("onecTabUsers")} />
 					<Button variant="primary"
 						disabled={primary === "bases" ? !activeBase || !activeUser : !activeUser}
 						title={primary === "bases"
@@ -304,6 +301,10 @@ export const UsersTab: FC = () => {
 			<CapabilityGuard capability="ib.admin" />
 			{/* Изменение прав обновит таблицу сразу или с задержкой — это зависит от агента. */}
 			<EchoDelayNotice />
+			{/* Ошибки запросов рисуют НИЧЕГО (уходят сообщением) — и стоят наверху вкладки,
+			    а не внутри полосы состояния: в разметке им там делать нечего. */}
+			<QueryError error={bases.error ?? summary.error ?? baseUsers.error ?? occurrences.error}
+				noticeKey="base-users" source={translate("onecTabUsers")} />
 			{screen}
 		</>
 	);

@@ -22,7 +22,7 @@ import Table from "src/components/Table";
 import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
-import { GroupCol, GroupRow } from "src/components/UI";
+import { GroupRow } from "src/components/UI";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
@@ -121,34 +121,32 @@ export const ExtensionsTab: FC = () => {
 			<CapabilityGuard capability="ib.admin" />
 			{/* Установка и удаление расширения обновят сводку сразу или с задержкой. */}
 			<EchoDelayNotice />
+			<QueryError error={summary.error} noticeKey="ext-summary" source={translate("onecTabExtensions")} />
 
 			<div className={styles.UsersLayout}>
-				<div className={styles.UsersList}>
-					<QueryError error={summary.error} noticeKey="ext-summary" source={translate("onecTabExtensions")} />
-					<Table {...buildStaticTableProps({
-						componentName: "OneCAdmin_extSummary", rows: sumView.rows, columns: sumCols,
-						setColumns: setSumCols, sorting: sumView.sorting, search: sumView.search,
-						isLoading: summary.isLoading,
-						onReload: () => void summary.refetch(),
-						reloadTitle: translate("onecReloadCached"),
-						/*
-						 * ОДНО расширение за раз — и отметок здесь нет.
-						 *
-						 * Команды всё равно уходят по одному расширению: отметить три и получить
-						 * установку первого — обман, а в шапке карточки при этом честно писалось
-						 * «целей: 3». Работаем с активной строкой, а множественность живёт там,
-						 * где она настоящая, — в выборе БАЗ ниже.
-						 */
-						onActiveRowChange: (r) => setPickedExt(r ? [asText(r.name)] : []),
-						extraButtons: !canCreateExt ? undefined : (
-							<Button variant="secondary"
-								title={translate("onecExtInstall")}
-								onClick={() => { setPickedExt([]); openWizard("installExt", pickedBases, ""); }}>
-								<Icon name="plus" /> {translate("create")}
-							</Button>
-						),
-					})} />
-				</div>
+				<Table {...buildStaticTableProps({
+					componentName: "OneCAdmin_extSummary", rows: sumView.rows, columns: sumCols,
+					setColumns: setSumCols, sorting: sumView.sorting, search: sumView.search,
+					isLoading: summary.isLoading,
+					onReload: () => void summary.refetch(),
+					reloadTitle: translate("onecReloadCached"),
+					/*
+					 * ОДНО расширение за раз — и отметок здесь нет.
+					 *
+					 * Команды всё равно уходят по одному расширению: отметить три и получить
+					 * установку первого — обман, а в шапке карточки при этом честно писалось
+					 * «целей: 3». Работаем с активной строкой, а множественность живёт там,
+					 * где она настоящая, — в выборе БАЗ ниже.
+					 */
+					onActiveRowChange: (r) => setPickedExt(r ? [asText(r.name)] : []),
+					extraButtons: !canCreateExt ? undefined : (
+						<Button variant="secondary"
+							title={translate("onecExtInstall")}
+							onClick={() => { setPickedExt([]); openWizard("installExt", pickedBases, ""); }}>
+							<Icon name="plus" /> {translate("create")}
+						</Button>
+					),
+				})} />
 
 				<div className={styles.UsersCard}>
 					{!current ? (
@@ -161,15 +159,13 @@ export const ExtensionsTab: FC = () => {
 								{translate("onecExtCard")}: {current}
 							</div>
 							<div className={styles.SecBody}>
-								<GroupCol>
-									<GroupRow>
-										<Field name="ex_name" label={translate("onecExtName")} value={current} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
-										<Field name="ex_syn" label={translate("onecExtSynonym")} value={currentRow?.synonym || "—"} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
-										<Field name="ex_bases" label={translate("bases")} value={String(currentRow?.bases ?? 0)} disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
-										<Field name="ex_ver" label={translate("version")}
-											value={(currentRow?.versions ?? []).join(", ") || "—"} disabled width={FIELD_WIDTH.md} onChange={() => {}} />
-									</GroupRow>
-								</GroupCol>
+								<GroupRow>
+									<Field name="ex_name" label={translate("onecExtName")} value={current} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
+									<Field name="ex_syn" label={translate("onecExtSynonym")} value={currentRow?.synonym || "—"} disabled width={FIELD_WIDTH.wide} onChange={() => {}} />
+									<Field name="ex_bases" label={translate("bases")} value={String(currentRow?.bases ?? 0)} disabled width={FIELD_WIDTH.sm} onChange={() => {}} />
+									<Field name="ex_ver" label={translate("version")}
+										value={(currentRow?.versions ?? []).join(", ") || "—"} disabled width={FIELD_WIDTH.md} onChange={() => {}} />
+								</GroupRow>
 							</div>
 
 							<div className={styles.SecHead}>{translate("onecTabBases")}</div>
