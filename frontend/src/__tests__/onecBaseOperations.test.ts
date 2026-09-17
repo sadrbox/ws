@@ -121,3 +121,36 @@ describe("отбор целей среди отмеченных баз", () => {
 		expect(GROUP_OPS.backup).toMatchObject({ type: "IB_BACKUP", needsDir: true });
 	});
 });
+
+/**
+ * Опасные команды доступны только при отмеченных базах, к которым они применимы (18.09): снятие регистрации — пока
+ * она есть, удаление записи идентификатора — наоборот, когда базы в кластере уже нет.
+ */
+describe("применимость опасных команд", () => {
+	const base = (over: Record<string, unknown> = {}) => ({
+		key: "b", status: "ONLINE", disabled: false, published: null, ibUnreachableAt: null,
+		ibUnreachableReason: null, scheduledJobsDenied: null, ...over,
+	});
+	const gone = base({ key: "gone", status: "MISSING" });
+	const live = base({ key: "live" });
+
+	it("«Удалить запись идентификатора базы» — только базам, которых нет в кластере", () => {
+		expect(isApplicable(gone, "record")).toBe(true);
+		expect(isApplicable(live, "record")).toBe(false);
+		expect(isApplicable(base({ status: "DISABLED", disabled: true, clusterStatus: "MISSING" }), "record")).toBe(true);
+	});
+
+	it("две опасные команды не пересекаются: у базы применима ровно одна", () => {
+		for (const b of [gone, live]) {
+			expect(isApplicable(b, "drop")).toBe(!isApplicable(b, "record"));
+		}
+	});
+
+	it("из отмеченных каждая команда берёт своё", () => {
+		const rows = [live, gone];
+		expect(splitTargets(rows, "drop").targets.map((r) => r.key)).toEqual(["live"]);
+		expect(splitTargets(rows, "record").targets.map((r) => r.key)).toEqual(["gone"]);
+		// Не отмечено ничего подходящего — целей нет, и пункт в меню недоступен.
+		expect(splitTargets([live], "record").targets).toEqual([]);
+	});
+});

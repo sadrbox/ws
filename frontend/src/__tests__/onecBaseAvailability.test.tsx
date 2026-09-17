@@ -44,31 +44,31 @@ describe("«Доступность» по состоянию базы", () => {
 		show();
 		expect(buttons()).toEqual(["Скрыть базу в панели", "Снять регистрацию базы в кластере 1С"]);
 		// Запись панели у базы, которая есть в кластере, не удаляют: полный срез вернул бы её через минуты.
-		expect(buttons()).not.toContain("Удалить запись о базе в панели");
+		expect(buttons()).not.toContain("Удалить запись идентификатора базы");
 	});
 
 	it("недоступная база — «Скрыть базу в панели» и «Снять регистрацию базы в кластере 1С»", () => {
 		show({ ibUnreachableAt: "2026-09-17T08:00:00Z", ibUnreachableReason: "NO_DB" });
 		expect(buttons()).toEqual(expect.arrayContaining(["Скрыть базу в панели", "Снять регистрацию базы в кластере 1С"]));
-		expect(buttons()).not.toContain("Удалить запись о базе в панели");
+		expect(buttons()).not.toContain("Удалить запись идентификатора базы");
 	});
 
 	it("скрытая база, которая есть в кластере, — «Вернуть в работу»", () => {
 		show({ status: "DISABLED", hidden: true });
 		expect(buttons().some((t) => t?.includes("Вернуть"))).toBe(true);
-		expect(buttons()).not.toContain("Удалить запись о базе в панели");
+		expect(buttons()).not.toContain("Удалить запись идентификатора базы");
 	});
 
-	it("базы нет в кластере (и она скрыта) — только «Удалить запись о базе в панели»: в кластере снимать нечего", () => {
+	it("базы нет в кластере (и она скрыта) — только «Удалить запись идентификатора базы»: в кластере снимать нечего", () => {
 		show({ status: "DISABLED", clusterStatus: "MISSING", hidden: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_INFOBASE" });
-		expect(buttons()).toEqual(["Удалить запись о базе в панели"]);
+		expect(buttons()).toEqual(["Удалить запись идентификатора базы"]);
 		expect(screen.getByText(/Регистрации этой базы в кластере 1С нет/)).toBeTruthy();
 	});
 
-	it("«Удалить запись о базе в панели» — после подтверждения вызывает сервис и закрывает карточку", async () => {
+	it("«Удалить запись идентификатора базы» — после подтверждения вызывает сервис и закрывает карточку", async () => {
 		const onRemoved = vi.fn();
 		show({ clusterStatus: "MISSING", status: "MISSING", onRemoved });
-		fireEvent.click(screen.getByRole("button", { name: "Удалить запись о базе в панели" }));
+		fireEvent.click(screen.getByRole("button", { name: "Удалить запись идентификатора базы" }));
 		expect(api.removeBaseFromRegistry).not.toHaveBeenCalled();
 		// Кнопка подтверждения — по точному имени: нестрогий образец («Да») ловил и саму кнопку «Удалить…».
 		fireEvent.click(screen.getByRole("button", { name: "Применить" }));

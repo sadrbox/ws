@@ -20,7 +20,7 @@ import type { IconName } from "src/components/IconButton/icons";
 import { reportError } from "src/services/errors/route";
 import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
-import { checkBasesDb } from "src/services/onec/api";
+import { checkBasesDb, removeBaseFromRegistry } from "src/services/onec/api";
 import { withOp } from "./progress";
 import { notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
@@ -51,8 +51,6 @@ type GroupSpec = {
 	ops: GroupOp[];
 	/** Разделы меню: заголовок и свои команды (17.09) — «Обслуживание» внутри «Операций». */
 	sections?: { label: string; ops: GroupOp[] }[];
-	/** Разрушающие команды — последним разделом, красным. */
-	dangerOps?: GroupOp[];
 };
 
 const GROUPS: Record<CommandGroup, GroupSpec> = {
@@ -62,12 +60,19 @@ const GROUPS: Record<CommandGroup, GroupSpec> = {
 	 * задания — только в карточке одной базы.
 	 */
 	operations: {
-		label: "onecOperations", icon: "settings", ops: ["info", "denyJobs", "allowJobs", "publish", "unpublish"],
-		// «Обслуживание» — разделом внутри «Операций» (17.09): отдельная кнопка рядом делила один и тот же предмет
-		// («что сделать с отмеченными базами») на две кнопки без причины.
-		sections: [{ label: "onecTabMaintenance", ops: ["checkBase", "backup"] }],
-		// Отдельным разделом в конце меню, красным: регистрацию в кластере возвращают только вручную.
-		dangerOps: ["dropRegistration"],
+		label: "onecOperations", icon: "settings",
+		// Без раздела — то, что про саму базу целиком.
+		ops: ["info"],
+		/*
+		 * РАЗДЕЛЫ (18.09): публикация, регламентные задания и обслуживание — три разных предмета, и вперемешку
+		 * читались как один список из семи строк. Отдельные кнопки рядом с «Операциями» им не нужны: предмет у всех
+		 * один — что сделать с отмеченными базами.
+		 */
+		sections: [
+			{ label: "onecPublication", ops: ["publish", "unpublish"] },
+			{ label: "onecScheduledJobs", ops: ["denyJobs", "allowJobs"] },
+			{ label: "onecTabMaintenance", ops: ["checkBase", "backup"] },
+		],
 	},
 	users: { label: "onecTabUsers", icon: "plus", ops: ["createUser", "deleteUser"] },
 	extensions: { label: "onecTabExtensions", icon: "download", ops: ["installExt", "deleteExt"] },
@@ -111,6 +116,11 @@ export const BaseGroupCommands: FC<{
 	 * итог пишем сами — содержательнее безликого «Выполнено».
 	 */
 	const CHECK_DB = "checkBasesDb";
+	/**
+	 * «Удалить запись идентификатора базы» — не команда 1С, а удаление записи ПАНЕЛИ по каждой отмеченной базе
+	 * (сервис удаляет по одной, задания для этого нет). Поэтому не через GROUP_OPS: у него нет типа команды агента.
+	 */
+	const REMOVE_RECORD = "removeBaseRecord";
 
 	const checkDb = useMutation({
 		mutationFn: () => withOp(
@@ -150,13 +160,53 @@ export const BaseGroupCommands: FC<{
 		onError: (e, { op }) => reportError(e, { source: translate(GROUP_OPS[op].title) }),
 	});
 
+	/*
+	 * Удаление записей панели идёт по одной базе: сервис удаляет по ключу и отказывает базе, которая есть в кластере.
+	 * Отказ по одной базе не отменяет остальные — итог собираем и говорим числом.
+	 */
+	const removeRecords = useMutation({
+		mutationFn: (targets: string[]) => withOp(
+			{ kind: "delete", title: translate("onecBaseRemoveFromList"), target: `${translate("onecBases")}: ${targets.length}`, total: targets.length },
+			async () => {
+				let removed = 0;
+				const failed: string[] = [];
+				for (const key of targets) {
+					try {
+						const r = await removeBaseFromRegistry(key);
+						if (r.removed) removed += 1; else failed.push(key);
+					} catch { failed.push(key); }
+				}
+				return { removed, failed };
+			},
+		),
+		onSuccess: ({ removed, failed }) => {
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+			notify({
+				severity: failed.length ? "warning" : "success", source: translate("onecBaseRemoveFromList"),
+				text: `${translate("onecBaseRemovedFromList")}: ${removed}`
+					+ (failed.length ? ` · ${translate("onecBatchNotQueued")}: ${failed.length} (${failed[0]})` : ""),
+			});
+		},
+		onError: (e) => reportError(e, { source: translate("onecBaseRemoveFromList") }),
+	});
+
+	/** Отмеченные базы в виде, который понимают правила пригодности. */
+	const chosenBases = selected
+		.filter((r) => keys.includes(asText(r.baseKey)))
+		.map((r) => ({ key: asText(r.baseKey), ...asBase(r) }));
+	/** Цели опасных команд: только отмеченные и только те, к которым команда применима (18.09). */
+	const dangerTargets = {
+		dropRegistration: splitTargets(chosenBases, "drop").targets,
+		[REMOVE_RECORD]: splitTargets(chosenBases, "record").targets,
+	} as Record<string, { key: string }[]>;
+
 	const start = async (op: GroupOp) => {
 		const spec = GROUP_OPS[op];
 		// Помощник: целей нет или команде нужны параметры (имя, файл, каталог выгрузки).
 		if (!keys.length || spec.needsName || spec.needsFile || spec.needsDir) { openWizard(op, keys, presetName); return; }
 
-		const chosen = selected.filter((r) => keys.includes(asText(r.baseKey))).map((r) => ({ key: asText(r.baseKey), ...asBase(r) }));
-		const { targets, skipped } = splitTargets(chosen, spec.needs, spec.target);
+		const { targets, skipped } = splitTargets(chosenBases, spec.needs, spec.target);
 		if (!targets.length) {
 			const reason = skipped[0]?.reason ?? "";
 			notify({
@@ -175,6 +225,17 @@ export const BaseGroupCommands: FC<{
 			if (!(await confirm(lines.join("\n\n")))) return;
 		}
 		run.mutate({ op, targets: targets.map((r) => r.key) });
+	};
+
+	const startRemoveRecords = async () => {
+		const targets = dangerTargets[REMOVE_RECORD];
+		if (!targets.length) return;
+		const lines = [
+			translate("onecBaseRemoveFromListWarning"),
+			`${translate("onecBatchTargets")}: ${targets.length}`,
+		];
+		if (!(await confirm(lines.join("\n\n")))) return;
+		removeRecords.mutate(targets.map((r) => r.key));
 	};
 
 	/** Подпись операции в списке группы — та же, что была на отдельной кнопке. */
@@ -223,13 +284,21 @@ export const BaseGroupCommands: FC<{
 							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), icon: "search" as IconName, disabled: checkDb.isPending || dbChecking },
 						]
 						: []),
-					// Опасные команды — последним разделом; только полному доступу.
-					...(spec.dangerOps ?? []).filter(opAllowed).map((o) => ({
-						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o], group: translate("onecDangerousCommands"), danger: true,
-						// Подсказка — прямо в меню: чем удаление из КЛАСТЕРА отличается от «убрать из панели», по одной
-						// подписи не видно, а цена ошибки разная.
-						hint: translate("onecBaseDropRegistrationHint"),
-					})),
+					/*
+					 * Опасные команды — последним разделом; только полному доступу и только когда среди ОТМЕЧЕННЫХ есть
+					 * базы, к которым команда применима (18.09): снятие регистрации — пока она есть, удаление записи
+					 * панели — наоборот, когда базы в кластере уже нет. Подсказка прямо в меню: по одной подписи разницу
+					 * между кластером и панелью не видно, а цена ошибки разная.
+					 */
+					...(g === "operations" && canWrite
+						? [
+							{ id: "dropRegistration", label: translate(OP_LABEL.dropRegistration), icon: OP_ICON.dropRegistration, hint: translate("onecBaseDropRegistrationHint") },
+							{ id: REMOVE_RECORD, label: translate("onecBaseRemoveFromList"), icon: "trash" as IconName, hint: translate("onecBaseRemoveFromListHint") },
+						].map((o) => ({
+							...o, group: translate("onecDangerousCommands"), danger: true,
+							...(dangerTargets[o.id]?.length ? {} : { disabled: true, hint: translate("onecOpPickApplicable") }),
+						}))
+						: []),
 				];
 				if (!options.length) return null;
 				return (
@@ -243,6 +312,7 @@ export const BaseGroupCommands: FC<{
 							: translate("onecWizPickInside")}
 						onSelect={(id) => {
 							if (id === CHECK_DB) { checkDb.mutate(); return; }
+							if (id === REMOVE_RECORD) { void startRemoveRecords(); return; }
 							void start(id as GroupOp);
 						}}
 					/>

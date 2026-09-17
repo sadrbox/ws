@@ -48,9 +48,9 @@ import styles from "./OneCAdmin.module.scss";
  */
 /**
  * Канал операции: `cluster` — команда кластера по базе (rac), в базу не входит (регламентные задания); `drop` —
- * удаление регистрации базы-фантома: ей пригодны как раз те базы, которые непригодны всему остальному.
+ * снятие регистрации в кластере; `record` — удаление записи о базе в самой панели (ни кластера, ни базы не касается).
  */
-export type OnecOperation = "ib" | "http" | "publish" | "unpublish" | "cluster" | "drop";
+export type OnecOperation = "ib" | "http" | "publish" | "unpublish" | "cluster" | "drop" | "record";
 
 /** Принимает всё, у чего есть эти три поля: строку списка баз или запись реестра. */
 export function isApplicable(
@@ -70,6 +70,11 @@ export function isApplicable(
 	 * отказывает — предсказать его ответ панель не может и не должна.
 	 */
 	if (op === "drop") return (b.clusterStatus ?? b.status) !== "MISSING";
+	/*
+	 * УДАЛИТЬ ЗАПИСЬ ИДЕНТИФИКАТОРА — только у базы, которой в кластере нет: у остальных запись вернёт полный срез
+	 * через минуты, и человек решил бы, что удалил базу (сервис такую попытку и отклоняет).
+	 */
+	if (op === "record") return (b.clusterStatus ?? b.status) === "MISSING";
 	// Базы, которой нет в кластере, нет ни для одной операции.
 	if (b.status === "MISSING" || b.disabled) return false;
 	/*
