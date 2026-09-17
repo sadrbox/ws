@@ -713,6 +713,16 @@ export const OneCBasesList: FC<{
 	 * которые откажут. Отбор делает сервер (backend utils/onecBasesList), иначе счётчики и подгрузка врали бы.
 	 */
 	const [showHidden, setShowHidden] = useState(false);
+	/*
+	 * СКОЛЬКО ИХ — на самой кнопке. Без числа переключатель выглядел неработающим: из ста десяти баз он прячет одну-две,
+	 * и строка, появившаяся где-то в середине списка, не видна. Нечего прятать — нет и кнопки. Число — по реестру
+	 * сервиса: в нём все базы, в том числе скрытые.
+	 */
+	const registry = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
+	const hiddenCount = useMemo(
+		() => (registry.data?.items ?? []).filter((b) => b.disabled || (b.clusterStatus ?? b.status) === "MISSING").length,
+		[registry.data],
+	);
 	return (
 	<ModelList
 		endpoint={ENDPOINT}
@@ -785,10 +795,12 @@ export const OneCBasesList: FC<{
 		extraButtons={(selected) => (
 			<>
 				<BaseGroupCommands selected={selected} />
-				<Button variant="secondary" active={showHidden} title={translate("onecShowHiddenBasesHint")}
-					onClick={() => setShowHidden((v) => !v)}>
-					{translate("onecShowHiddenBases")}
-				</Button>
+				{(hiddenCount > 0 || showHidden) && (
+					<Button variant="secondary" active={showHidden} title={translate("onecShowHiddenBasesHint")}
+						onClick={() => setShowHidden((v) => !v)}>
+						{translate("onecShowHiddenBases")}{hiddenCount > 0 ? ` (${hiddenCount})` : ""}
+					</Button>
+				)}
 			</>
 		)}
 	/>

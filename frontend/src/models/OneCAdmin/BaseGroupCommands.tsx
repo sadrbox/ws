@@ -8,7 +8,7 @@
  * вовсе — человек узнавал итог из отчёта задания.
  *
  * Исключения — чтения, которым помощник не нужен: «Проверить публикации» (одно чтение
- * веб-сервера на все базы) и «Проверить базы данных» (отмеченные базы или все). Они доступны
+ * веб-сервера на все базы) и «Проверить базы данных» (отмеченные базы или все) — в меню «Операции». Они доступны
  * и уровню «только просмотр» — чтение ничего не меняет (F5).
  */
 import { useRunningCommand } from "src/components/TechMessages/operations";
@@ -27,14 +27,19 @@ import { noteNotice, notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
 import { GROUP_OPS, useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
 import {
-	useOnecWrite, useOnecPermissions,
+	changesNothing, useOnecWrite, useOnecPermissions,
 } from "./shared";
 import { SECTION_OF_TYPE, sectionAllows } from "./onecPermissions";
 
-export type CommandGroup = "publication" | "maintenance" | "users" | "extensions";
+export type CommandGroup = "operations" | "maintenance" | "users" | "extensions";
 
 const GROUPS: Record<CommandGroup, { label: string; icon: IconName; ops: GroupOp[] }> = {
-	publication: { label: "onecPublication", icon: "open", ops: ["publish", "unpublish"] },
+	/*
+	 * «ОПЕРАЦИИ» (17.09) — всё, что делают с самой базой, одним меню: сведения, регламентные задания, публикация, а
+	 * ниже — проверки публикаций и баз данных. Раньше публикация жила отдельной группой, а сведения и регламентные
+	 * задания — только в карточке одной базы.
+	 */
+	operations: { label: "onecOperations", icon: "settings", ops: ["info", "denyJobs", "allowJobs", "publish", "unpublish"] },
 	maintenance: { label: "onecTabMaintenance", icon: "save", ops: ["checkBase", "backup"] },
 	users: { label: "onecTabUsers", icon: "plus", ops: ["createUser", "deleteUser"] },
 	extensions: { label: "onecTabExtensions", icon: "download", ops: ["installExt", "deleteExt"] },
@@ -46,22 +51,33 @@ export const BaseGroupCommands: FC<{
 	groups?: CommandGroup[];
 	/** Имя объекта, подставляемое в помощник: экран расширений знает его заранее. */
 	presetName?: string;
-}> = ({ selected, groups = ["publication", "maintenance"], presetName }) => {
+}> = ({ selected, groups = ["operations", "maintenance"], presetName }) => {
 	const canWrite = useOnecWrite();
 	const perms = useOnecPermissions();
 	const pubChecking = useRunningCommand(["CLUSTER_LIST_PUBLICATIONS"]);
 	const dbChecking = useRunningCommand(["CLUSTER_CHECK_BASES"]);
-	/** Пользователи и расширения — по вложенным разрешениям, прочие операции — по общему праву. */
+	/**
+	 * Пользователи и расширения — по вложенным разрешениям, прочие операции — по общему праву. «Обновить сведения»
+	 * — чтение: доступно и просмотру (сервис такое задание разрушающим не считает).
+	 */
 	const opAllowed = (o: GroupOp) => {
+		if (GROUP_OPS[o].type === "IB_INFO") return true;
 		const need = SECTION_OF_TYPE[GROUP_OPS[o].type];
 		return need ? sectionAllows(perms, need.section, need.action, 1) : canWrite;
 	};
+	/*
+	 * ПУНКТ — ПО СОСТОЯНИЮ ОТМЕЧЕННЫХ БАЗ. «Запретить регламентные задания» нужен, если хоть у одной отмеченной они
+	 * не запрещены; «Разрешить» — если хоть у одной запрещены; отмечены базы в обоих состояниях — доступны оба. Без
+	 * отметок доступно всё: базы выбирают в помощнике. Правило то же, по которому помощник отсеивает базы
+	 * (alreadyInTarget), — меню и помощник не спорят.
+	 */
+	const nothingToChange = (o: GroupOp) => changesNothing(selected, GROUP_OPS[o].target);
 	const qc = useQueryClient();
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
 
 	/**
-	 * «Проверить публикации» стоит В ГРУППЕ «Публикация», но отметок строк ей не нужно:
+	 * «Проверить публикации» стоит в меню «Операции», но отметок строк ей не нужно:
 	 * это одно чтение веб-сервера, одно на все базы. Поэтому единственный пункт группы,
 	 * доступный без выбора, — и единственный, который не открывает помощник.
 	 */
@@ -140,6 +156,7 @@ export const BaseGroupCommands: FC<{
 	/** Подпись операции в списке группы — та же, что была на отдельной кнопке. */
 	const OP_LABEL: Record<GroupOp, string> = {
 		publish: "onecPublish", unpublish: "onecUnpublish",
+		info: "onecBaseInfoRefresh", denyJobs: "onecScheduledJobsDeny", allowJobs: "onecScheduledJobsAllow",
 		createUser: "onecUserCreate", deleteUser: "onecUserDelete",
 		installExt: "onecExtInstall", deleteExt: "onecExtRemove",
 		backup: "onecBackup", checkBase: "onecMaintCheck",
@@ -153,6 +170,7 @@ export const BaseGroupCommands: FC<{
 	 */
 	const OP_ICON: Record<GroupOp, IconName> = {
 		publish: "open", unpublish: "close",
+		info: "reload", denyJobs: "clear", allowJobs: "restore",
 		createUser: "plus", deleteUser: "trash",
 		installExt: "download", deleteExt: "trash",
 		backup: "save", checkBase: "search",
@@ -165,9 +183,12 @@ export const BaseGroupCommands: FC<{
 				const options = [
 					// Изменения (публикация, пользователи, расширения, выгрузка) — только полному
 					// доступу: правом «только просмотр» их не показываем вовсе (F5).
-					...spec.ops.filter(opAllowed).map((o) => ({ id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o] })),
+					...spec.ops.filter(opAllowed).map((o) => ({
+						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o],
+						...(nothingToChange(o) ? { disabled: true, hint: translate("onecOpNothingToChange") } : {}),
+					})),
 					// Чтения — всем, кому открыта панель.
-					...(g === "publication"
+					...(g === "operations"
 						? [
 							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), icon: "search" as IconName, disabled: checkPublications.isPending || pubChecking },
 							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), icon: "search" as IconName, disabled: checkDb.isPending || dbChecking },

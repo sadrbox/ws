@@ -42,7 +42,7 @@ import {
 	fetchBases, runBatch, type BatchType, type OnecBase, fetchRoles, fetchSessions
 } from "src/services/onec/api";
 import {
-	isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation, useOnecPermissions,
+	alreadyInTarget, isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation, type OpTarget, useOnecPermissions,
 } from "./shared";
 import { SECTION_OF_TYPE, deniedText, sectionAllows } from "./onecPermissions";
 import { estimateSecs, formatDuration, useQueueStats } from "./queueStats";
@@ -53,6 +53,7 @@ import styles from "./OneCAdmin.module.scss";
 /** Что умеет помощник. Набор тот же, что был у групповых команд списка баз. */
 export type GroupOp =
 	| "publish" | "unpublish"
+	| "info" | "denyJobs" | "allowJobs"
 	| "createUser" | "deleteUser"
 	| "installExt" | "deleteExt"
 	| "backup" | "checkBase";
@@ -70,6 +71,12 @@ type OpSpec = {
 	needsDir?: boolean;
 	/** Вид операции для реестра прогресса. */
 	kind: "create" | "update" | "delete" | "read";
+	/** К какому состоянию ведёт операция: базы, которые уже в нём, отсеиваются с причиной (alreadyInTarget). */
+	target?: OpTarget;
+	/** Готовое тело команды — у операций без полей ввода. */
+	payload?: Record<string, unknown>;
+	/** Нужен ли операции монопольный доступ к базе: только тогда предупреждаем об активных сеансах. */
+	exclusive?: boolean;
 };
 
 /** Колонка шага «Права»: одна роль в строке — отметка значит «выдать новому пользователю». */
@@ -78,8 +85,18 @@ const rightsColumns = (): TColumn[] => ([
 ] as unknown as TColumn[]);
 
 export const GROUP_OPS: Record<GroupOp, OpSpec> = {
-	publish: { type: "IB_PUBLISH", title: "onecPublish", warning: "onecPublishWarning", needs: "publish", kind: "update" },
-	unpublish: { type: "IB_UNPUBLISH", title: "onecUnpublish", warning: "onecUnpublishWarning", needs: "unpublish", kind: "update" },
+	publish: { type: "IB_PUBLISH", title: "onecPublish", warning: "onecPublishWarning", needs: "publish", kind: "update", target: { published: true } },
+	unpublish: { type: "IB_UNPUBLISH", title: "onecUnpublish", warning: "onecUnpublishWarning", needs: "unpublish", kind: "update", target: { published: false } },
+	// Сведения — чтение: вход в базу за конфигурацией, расширениями и блокировкой. Монопольного доступа не требует.
+	info: { type: "IB_INFO", title: "onecBaseInfoRefresh", warning: "onecBaseInfoGroupPlan", needs: "ib", kind: "read", exclusive: false },
+	denyJobs: {
+		type: "CLUSTER_SET_SCHEDULED_JOBS", title: "onecScheduledJobsDeny", warning: "onecScheduledJobsDenyPlan",
+		needs: "cluster", kind: "update", target: { jobsDenied: true }, payload: { denied: true },
+	},
+	allowJobs: {
+		type: "CLUSTER_SET_SCHEDULED_JOBS", title: "onecScheduledJobsAllow", warning: "onecScheduledJobsAllowPlan",
+		needs: "cluster", kind: "update", target: { jobsDenied: false }, payload: { denied: false },
+	},
 	createUser: { type: "IB_CREATE_USER", title: "onecUserCreate", warning: "onecUserCreateWarning", needs: "ib", needsName: "user", kind: "create" },
 	deleteUser: { type: "IB_DELETE_USER", title: "onecUserDelete", warning: "onecUserDeleteWarning", needs: "ib", needsName: "user", kind: "delete" },
 	installExt: { type: "IB_INSTALL_EXTENSION", title: "onecExtInstall", warning: "onecExtInstallWarning", needs: "ib", needsName: "extension", needsFile: true, kind: "create" },
@@ -143,7 +160,13 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 
 	// ── Шаг 1: базы и их пригодность ────────────────────────────────────────
 	const [baseCols, setBaseCols] = useState<TColumn[]>(() => getModelColumns(baseColumns(), "OneCAdmin_gcwBases"));
-	const fitOf = useCallback((b: OnecBase) => (spec && isApplicable(b, spec.needs) ? "" : unreachableReason(b)), [spec]);
+	// Непригодна (нет в кластере, не войти) — причина; пригодна, но уже в нужном состоянии — тоже причина: команда
+	// ей ничего не изменит (alreadyInTarget).
+	const fitOf = useCallback((b: OnecBase) => {
+		if (!spec) return "";
+		if (!isApplicable(b, spec.needs)) return unreachableReason(b);
+		return alreadyInTarget(b, spec.target);
+	}, [spec]);
 	const baseRows = useMemo(() => items.map((b, i) => ({
 		id: i + 1, uuid: b.key, baseKey: b.key, name: b.name || "—",
 		status: b.status,
@@ -173,7 +196,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	 * расширения, загрузку и обновление. Узнавать об этом из отказа через двадцать минут ожидания в очереди — поздно,
 	 * а «Фоновое задание» вдобавок не убирается блокировкой входа: его снимают сеансом или запретом регламентных.
 	 */
-	const needsExclusive = spec?.needs === "ib";
+	const needsExclusive = spec?.needs === "ib" && spec.exclusive !== false;
 	const sessions = useQuery({
 		queryKey: ["onec", "sessions"], queryFn: fetchSessions,
 		enabled: needsExclusive && picked.size > 0, staleTime: 30_000,
@@ -223,7 +246,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 						? { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" }
 						: spec.needsDir
 							? (dir.trim() ? { dir: dir.trim() } : {})
-							: spec.needsName ? { name: name.trim() } : {};
+							: spec.needsName ? { name: name.trim() } : { ...(spec.payload ?? {}) };
 
 			const opId = startOp({
 				kind: spec.kind, title: translate(spec.title),

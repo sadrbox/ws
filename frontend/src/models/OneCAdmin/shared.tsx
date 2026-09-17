@@ -44,7 +44,8 @@ import styles from "./OneCAdmin.module.scss";
  *        запрещённой оказывалась ровно та команда, которой это расхождение и лечится.
  *        Обе операции идемпотентны по контракту, поэтому лишний запуск безвреден.
  */
-export type OnecOperation = "ib" | "http" | "publish" | "unpublish";
+/** Канал операции: `cluster` — команда кластера по базе (rac), в базу не входит (регламентные задания). */
+export type OnecOperation = "ib" | "http" | "publish" | "unpublish" | "cluster";
 
 /** Принимает всё, у чего есть эти три поля: строку списка баз или запись реестра. */
 export function isApplicable(
@@ -81,6 +82,43 @@ export function isApplicable(
 	if (op === "http") return b.published !== false;
 	return true;
 }
+
+/** К какому состоянию базы ведёт операция: опубликована ли, запрещены ли регламентные задания. */
+export type OpTarget = { published?: boolean; jobsDenied?: boolean };
+
+/**
+ * БАЗА УЖЕ ТАМ, КУДА ВЕДЁТ ОПЕРАЦИЯ — почему команда ей не нужна; `""` — нужна.
+ *
+ * «Операции» списка баз (17.09): запрет регламентных заданий у базы, где они уже запрещены, и публикация
+ * опубликованной ничего не меняют, а занимают очередь агента и строку в отчёте. Незнание (`null`) — не «уже»:
+ * состояние не читали, и прятать такую базу значило бы решать за человека.
+ *
+ * По этому же правилу меню «Операции» решает, какие пункты доступны для отмеченных баз: пункт нужен, если хоть
+ * одной из них он что-то изменит.
+ */
+export function alreadyInTarget(
+	// Индекс-сигнатура — чтобы подходили и запись реестра, и строка таблицы (TDataItem).
+	b: { published?: unknown; scheduledJobsDenied?: unknown; [field: string]: unknown },
+	target: OpTarget | undefined,
+): string {
+	if (!target) return "";
+	if (target.published !== undefined && b.published === target.published) {
+		return translate(target.published ? "onecAlreadyPublished" : "onecAlreadyUnpublished");
+	}
+	if (target.jobsDenied !== undefined && b.scheduledJobsDenied === target.jobsDenied) {
+		return translate(target.jobsDenied ? "onecJobsAlreadyDenied" : "onecJobsAlreadyAllowed");
+	}
+	return "";
+}
+
+/**
+ * Пункт «Операций» ничего не изменит отмеченным базам: все они уже в нужном состоянии. Без отметок — изменит
+ * (базы выбирают в помощнике); операция без целевого состояния (сведения, проверки) — всегда нужна.
+ */
+export const changesNothing = (
+	selected: { published?: unknown; scheduledJobsDenied?: unknown; [field: string]: unknown }[],
+	target: OpTarget | undefined,
+): boolean => !!target && selected.length > 0 && selected.every((r) => alreadyInTarget(r, target) !== "");
 
 /** Колонки списка баз в режиме выбора цели: только то, что помогает выбрать. */
 /** Публикация: null — «не проверялась», а не «нет» (см. миграцию 008). */

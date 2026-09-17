@@ -20,6 +20,9 @@
  * ни express, ни базы: он описывает ПОЛИТИКУ доступа, а ошибка в нём не видна на глаз.
  */
 
+/** Типы заданий, которые только читают 1С: такое задание — не разрушающее. */
+const READ_BATCH_TYPES = new Set(["IB_INFO"]);
+
 /** Пути внутри роутера `/v1/onec`, меняющие 1С, агентов или их доступ. */
 const DESTRUCTIVE: RegExp[] = [
 	// Пакетные изменения: пользователи ИБ, расширения, публикация, выгрузка базы.
@@ -63,6 +66,11 @@ export function isDestructive(method: string, path: string, body?: unknown): boo
 	// Убрать из реестра базу, которой нет в кластере (С45). Только DELETE: POST того же вида — чтения
 	// (`/bases/refresh`, `/bases/check`), и регулярка без метода объявила бы их разрушающими.
 	if (method.toUpperCase() === "DELETE" && /^\/bases\/[^/]+$/.test(path)) return true;
+	// Задание из одних чтений — чтение (17.09): «Обновить сведения» по отмеченным базам в карточке доступно и
+	// просмотру, в списке — тоже. Изменяющие типы заданий по-прежнему требуют полного доступа.
+	if (path === "/batch" && READ_BATCH_TYPES.has(String((body as { type?: unknown } | null | undefined)?.type ?? "").toUpperCase())) {
+		return false;
+	}
 	// Проверка базы — чтение, пока не просят исправлять (С4): «Исправлять» меняет данные базы.
 	if (/^\/bases\/[^/]+\/check$/.test(path)) {
 		return (body as { repair?: unknown } | null | undefined)?.repair === true;
