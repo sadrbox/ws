@@ -284,7 +284,7 @@ export const SessionsTab: FC = () => {
 							{/* Снятие сеансов и блокировка входа — вмешательство в работу людей в
 							    базе: правом «только просмотр» их не делают (см. useOnecWrite). */}
 							{canWrite && pickedSessions.length > 0 && (
-								<Button variant="danger"
+								<Button icon="close" variant="danger"
 									onClick={() => setConfirm({ kind: "terminateMany", ids: pickedSessions })}>
 									{translate("onecTerminateMany")} ({pickedSessions.length})
 								</Button>
@@ -315,13 +315,13 @@ export const SessionsTab: FC = () => {
 								);
 							})()}
 							{canWrite && selectedBase && !(sessionsLockView(selectedBase).known && sessionsLockView(selectedBase).enabled) && (
-								<Button variant="secondary"
+								<Button icon="minus" variant="secondary"
 									onClick={() => { setLockMessage(""); setConfirm({ kind: "lock", base: selectedBase, enabled: true }); }}>
 									{translate("onecLockSessions")}
 								</Button>
 							)}
 							{canWrite && selectedBase && !(sessionsLockView(selectedBase).known && !sessionsLockView(selectedBase).enabled) && (
-								<Button variant="secondary"
+								<Button icon="plus" variant="secondary"
 									onClick={() => setConfirm({ kind: "lock", base: selectedBase, enabled: false })}>
 									{translate("onecUnlockSessions")}
 								</Button>
