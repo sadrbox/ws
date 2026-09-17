@@ -8,7 +8,7 @@
 import { memo, useCallback, useMemo, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { getTranslateColumn } from 'src/i18';
 import { useTableContext, useTableVolatile } from './context';
-import { normalizeLastColumnWidth } from './services';
+import { normalizeLastColumnWidth, isNarrowedView, toggleAllSelection } from './services';
 import { spreadResize, type ResizeColumn } from './columnResize';
 import styles from './Table.module.scss';
 
@@ -17,6 +17,8 @@ export const TableHeader = memo(() => {
     variant, selectable,
     columns, rows, componentName,
     sorting: { sort, onSortChange },
+    // search/filtering — чтобы «выбрать все» при сужённом списке не включало режим «все записи».
+    search, filtering,
     states: { setSelectedRows, setIsAllSelectedMode, setExcludedRows },
     isLoading, canSelect, groupSelection, selectionLocked,
   } = useTableContext();
@@ -52,19 +54,22 @@ export const TableHeader = memo(() => {
     groupSelection?.toggleAll(!groupSelection.all);
   }, [groupSelection]);
 
+  /*
+   * «Выбрать все» при быстром поиске или отборе значит «все ВИДИМЫЕ»: режим «все записи» здесь не включаем — после
+   * снятия поиска он выбрал бы весь список, чего человек не просил (services.toggleAllSelection).
+   */
   const toggleAll = useCallback(() => {
-    if (isAllSelected || isIndeterminate) {
-      // Есть хоть что-то выбранное (или всё) — сбрасываем всё
-      setIsAllSelectedMode(false);
-      setExcludedRows(new Set());
-      setSelectedRows(new Set());
-    } else {
-      // Ничего не выбрано → включаем режим "все"
-      setIsAllSelectedMode(true);
-      setExcludedRows(new Set());
-      setSelectedRows(new Set());
-    }
-  }, [isAllSelected, isIndeterminate, setIsAllSelectedMode, setExcludedRows, setSelectedRows]);
+    const next = toggleAllSelection(
+      { selected: selectedRows, allMode: isAllSelectedMode, excluded: excludedRows },
+      rows.map(r => r.id),
+      isNarrowedView(search.value, filtering.filters),
+      isAllSelected || isIndeterminate,
+    );
+    setIsAllSelectedMode(next.allMode);
+    setSelectedRows(next.selected);
+    setExcludedRows(next.excluded);
+  }, [rows, search, filtering, selectedRows, excludedRows, isAllSelectedMode, isAllSelected, isIndeterminate,
+    setIsAllSelectedMode, setExcludedRows, setSelectedRows]);
 
   const isResizingRef = useRef(false);
 

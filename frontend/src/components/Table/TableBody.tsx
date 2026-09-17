@@ -288,7 +288,6 @@ export const TableBody = memo(() => {
             // Активную ячейку передаём ТОЛЬКО активной строке — тогда переезд
             // активной ячейки внутри другой строки не трогает остальные.
             activeCellId={isActive ? activeCell : null}
-            isAllSelectedMode={isAllSelectedMode}
           />
         );
       })}
@@ -327,8 +326,6 @@ interface TableBodyRowProps {
   rowIndex: number;
   /** Активная ячейка — только если активна ЭТА строка, иначе null. */
   activeCellId: string | null;
-  /** Режим «выбрать все» — нужен в обработчике чекбокса. Меняется редко. */
-  isAllSelectedMode: boolean;
   /**
    * Строка-потомок раскрытой строки. Рисуется ТЕМ ЖЕ компонентом и в тех же классах —
    * потомок отличается только отступом первой ячейки. Своей разметки для раскрытия нет
@@ -341,11 +338,10 @@ interface TableBodyRowProps {
 }
 
 
-const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isAllSelectedMode, isChild, onToggleSelect }) => {
+const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSelected, rowIndex, activeCellId, isChild, onToggleSelect }) => {
   const {
     variant, selectable,
     onSelectItem,
-    rows,
     renderCellRef,
     inlineEditingRef,
     getCellMetaRef,
@@ -355,13 +351,11 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
     onChildToggle,
     onToggleExpand,
     canSelect, selectionLocked,
-    // Только сеттеры — значения выделения/навигации приходят пропсами.
+    // Только сеттеры и стабильные операции — значения выделения/навигации приходят пропсами.
     states: {
       setActiveRow,
       setActiveCell,
-      setSelectedRows,
-      setIsAllSelectedMode,
-      setExcludedRows,
+      toggleRowSelect,
     },
     actions: { openModelForm, refetch },
     isLoading,
@@ -391,48 +385,14 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
   // isActive/isSelected/activeCellId — пропсы (см. TableBodyRowProps).
   const isCheckboxCellActive = showCheckbox && isActive && activeCellId === CHECKBOX_COL_ID;
 
+  /*
+   * Отметка строки — по общим правилам (services.toggleRowSelection): при быстром поиске или отборе режим «выбраны
+   * все» не включается, иначе отметка единственной найденной строки выбирала весь список.
+   */
   const toggleSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
-    const id = row.id;
-    if (isAllSelectedMode) {
-      // В режиме "все" управляем исключениями
-      setExcludedRows(prev => {
-        const next = new Set(prev);
-        if (!e.target.checked) {
-          next.add(id);     // Снимаем → добавляем в исключения
-        } else {
-          next.delete(id);  // Ставим → убираем из исключений
-        }
-        // Если исключены ВСЕ загруженные строки — выключаем режим "все"
-        if (next.size >= rows.length) {
-          setIsAllSelectedMode(false);
-          setExcludedRows(new Set());
-          setSelectedRows(new Set());
-          return new Set(); // не используется, но нужен для типа
-        }
-        return next;
-      });
-    } else {
-      // Обычный режим — управляем selectedRows
-      setSelectedRows(prev => {
-        const next = new Set(prev);
-        if (e.target.checked) {
-          next.add(id);
-        } else {
-          next.delete(id);
-        }
-        // Если выбраны ВСЕ загруженные строки — переключаемся в режим "все"
-        const allLoadedIds = rows.map(r => r.id);
-        if (allLoadedIds.every(rid => next.has(rid))) {
-          setIsAllSelectedMode(true);
-          setExcludedRows(new Set());
-          setSelectedRows(new Set());
-          return new Set(); // не используется, но нужен для типа
-        }
-        return next;
-      });
-    }
-  }, [row.id, rows, isAllSelectedMode, setIsAllSelectedMode, setSelectedRows, setExcludedRows]);
+    toggleRowSelect(row.id, e.target.checked);
+  }, [row.id, toggleRowSelect]);
 
   // Флаг: mousedown произошёл на уже сфокусированном поле — клик должен быть стандартным
   const clickedFocusedInputRef = useRef(false);
@@ -775,7 +735,6 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
           isSelected={child.__selected === true}
           rowIndex={rowIndex + ci + 1}
           activeCellId={null}
-          isAllSelectedMode={false}
           isChild
           onToggleSelect={(next) => onChildToggle?.(row, child, next)}
         />

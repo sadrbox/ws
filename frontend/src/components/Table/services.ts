@@ -537,3 +537,54 @@ export function normalizeLastColumnWidth(cols: TColumn[]): TColumn[] {
 		return c;
 	});
 }
+
+
+/**
+ * ОТМЕТКИ И БЫСТРЫЙ ПОИСК (17.09). «Выбраны все» — это режим: в нём отмечены все записи, а не только загруженные, и
+ * он включался, как только отмечены ВСЕ ВИДИМЫЕ строки. При быстром поиске видима одна строка — отметка на ней
+ * включала режим, и после снятия поиска выбранным оказывался весь список. Пока список сужен поиском или отбором,
+ * режим «все» не включается: отмечаются именно те строки, которые человек видит.
+ */
+export type SelectionState = { selected: Set<number>; allMode: boolean; excluded: Set<number> };
+
+/** Список сужен: виден не весь набор, а результат поиска или отбора. */
+export const isNarrowedView = (
+	search: string | null | undefined,
+	filters: Record<string, unknown> | null | undefined,
+): boolean => !!search?.trim() || Object.keys(filters ?? {}).length > 0;
+
+const EMPTY: Set<number> = new Set();
+
+/** Отметить или снять ОДНУ строку (галочка в строке, пробел на активной строке). */
+export function toggleRowSelection(
+	state: SelectionState, id: number, checked: boolean, visibleIds: readonly number[], narrowed: boolean,
+): SelectionState {
+	if (state.allMode) {
+		const excluded = new Set(state.excluded);
+		if (checked) excluded.delete(id); else excluded.add(id);
+		// Исключили всё, что видно, и список не сужен — режим «все» больше не значит «все».
+		if (!narrowed && excluded.size >= visibleIds.length) return { selected: new Set(), allMode: false, excluded: new Set() };
+		return { selected: new Set(), allMode: true, excluded };
+	}
+	const selected = new Set(state.selected);
+	if (checked) selected.add(id); else selected.delete(id);
+	if (!narrowed && visibleIds.length > 0 && visibleIds.every((rid) => selected.has(rid))) {
+		return { selected: new Set(), allMode: true, excluded: new Set() };
+	}
+	return { selected, allMode: false, excluded: EMPTY };
+}
+
+/** «Выбрать все» в шапке: при суженном списке — ровно видимые строки, иначе прежний режим «все». */
+export function toggleAllSelection(
+	state: SelectionState, visibleIds: readonly number[], narrowed: boolean, allSelected: boolean,
+): SelectionState {
+	if (narrowed) {
+		const selected = new Set(state.allMode ? visibleIds.filter((id) => !state.excluded.has(id)) : state.selected);
+		for (const id of visibleIds) { if (allSelected) selected.delete(id); else selected.add(id); }
+		return { selected, allMode: false, excluded: new Set() };
+	}
+	const somethingSelected = allSelected || state.selected.size > 0 || (state.allMode && state.excluded.size > 0);
+	return somethingSelected
+		? { selected: new Set(), allMode: false, excluded: new Set() }
+		: { selected: new Set(), allMode: true, excluded: new Set() };
+}

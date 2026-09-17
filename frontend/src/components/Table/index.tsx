@@ -9,7 +9,7 @@ import {
   TDataItem,
   TypeFormAction,
 } from './types';
-import { pruneSelection } from './services';
+import { pruneSelection, isNarrowedView, toggleRowSelection, type SelectionState } from './services';
 
 import { translate } from 'src/i18';
 import {
@@ -460,6 +460,47 @@ const Table: FC<TableProps> = memo((props) => {
     setSelectedRows(new Set(presetKey ? presetKey.split(",").map(Number) : []));
   }
 
+  /*
+   * Текущие отметки и «сужен ли список» — в ref: колбэк отметки строки (toggleRowSelect)
+   * должен быть СТАБИЛЬНЫМ, иначе смена выбора перерисовывала бы все строки в обход memo,
+   * но правила выбора (services) считаются по актуальному набору.
+   */
+  const selectionRef = useRef<SelectionState>({ selected: selectedRows, allMode: isAllSelectedMode, excluded: excludedRows });
+  selectionRef.current = { selected: selectedRows, allMode: isAllSelectedMode, excluded: excludedRows };
+  const narrowedRef = useRef(false);
+  narrowedRef.current = isNarrowedView(search.value, filtering.filters);
+  const visibleIdsRef = useRef<number[]>([]);
+  visibleIdsRef.current = rows.map((r) => Number(r.id));
+
+  /*
+   * Список СУЗИЛСЯ (быстрый поиск, отбор), а включён режим «выбраны все» — переводим режим в явный
+   * список отметок по тому составу, который был виден до сужения.
+   *
+   * Иначе выбор молча схлопывался бы до найденного: наружу (onSelectionChange) уходят «все строки за
+   * вычетом исключённых», а строки при поиске — только найденные. Перевод делаем лишь когда весь
+   * список уже загружен (нет следующей страницы): у серверного списка «выбраны все» значит «все в
+   * базе», и перечислить их панель не может.
+   */
+  const fullRowIdsRef = useRef<number[]>([]);
+  if (!narrowedRef.current) fullRowIdsRef.current = visibleIdsRef.current;
+  const wasNarrowedRef = useRef(narrowedRef.current);
+  const narrowed = narrowedRef.current;
+  useEffect(() => {
+    const wasNarrowed = wasNarrowedRef.current;
+    wasNarrowedRef.current = narrowed;
+    if (!narrowed || wasNarrowed || !isAllSelectedMode || hasNextPage) return;
+    setSelectedRows(new Set(fullRowIdsRef.current.filter((id) => !excludedRows.has(id))));
+    setIsAllSelectedMode(false);
+    setExcludedRows(new Set());
+  }, [narrowed, isAllSelectedMode, excludedRows, hasNextPage]);
+
+  const toggleRowSelect = useCallback((id: number, checked: boolean) => {
+    const next = toggleRowSelection(selectionRef.current, id, checked, visibleIdsRef.current, narrowedRef.current);
+    setIsAllSelectedMode(next.allMode);
+    setSelectedRows(next.selected);
+    setExcludedRows(next.excluded);
+  }, []);
+
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   useEffect(() => {
@@ -717,6 +758,7 @@ const Table: FC<TableProps> = memo((props) => {
       emptyText,
       // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
+        toggleRowSelect,
         setSelectedRows,
         setIsAllSelectedMode,
         setExcludedRows,
@@ -737,6 +779,7 @@ const Table: FC<TableProps> = memo((props) => {
       disableActiveRow, emptyText, groupSelection, wrapCells,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
+      toggleRowSelect,
       setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow, setActiveCell,
     ]
   );
@@ -864,41 +907,8 @@ const Table: FC<TableProps> = memo((props) => {
     if (e.key === ' ' && variant !== 'select' && !selectionLocked && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
       e.preventDefault();
       e.stopPropagation();
-      const id = activeRow;
-      if (isAllSelectedMode) {
-        setExcludedRows(prev => {
-          const next = new Set(prev);
-          if (next.has(id)) {
-            next.delete(id);
-          } else {
-            next.add(id);
-          }
-          if (next.size >= rows.length) {
-            setIsAllSelectedMode(false);
-            setExcludedRows(new Set());
-            setSelectedRows(new Set());
-            return new Set();
-          }
-          return next;
-        });
-      } else {
-        setSelectedRows(prev => {
-          const next = new Set(prev);
-          if (next.has(id)) {
-            next.delete(id);
-          } else {
-            next.add(id);
-          }
-          const allLoadedIds = rows.map(r => r.id);
-          if (allLoadedIds.every(rid => next.has(rid))) {
-            setIsAllSelectedMode(true);
-            setExcludedRows(new Set());
-            setSelectedRows(new Set());
-            return new Set();
-          }
-          return next;
-        });
-      }
+      const { selected, allMode, excluded } = selectionRef.current;
+      toggleRowSelect(activeRow, allMode ? excluded.has(activeRow) : !selected.has(activeRow));
       return;
     }
     // ── Enter: открыть форму активной строки ─────────────────────────────
@@ -970,7 +980,7 @@ const Table: FC<TableProps> = memo((props) => {
     e.preventDefault();
     e.stopPropagation();
     setActiveRow(nextId);
-  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch, isAllSelectedMode, setSelectedRows, setIsAllSelectedMode, setExcludedRows]);
+  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch, selectionLocked, toggleRowSelect]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');

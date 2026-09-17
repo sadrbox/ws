@@ -147,6 +147,14 @@ export interface TableContextProps {
   // нажатие стрелки меняла бы contextValue и перерисовывала ВСЕ строки в обход
   // memo (P1: шторм перерисовок). Теперь основной контекст стабилен при навигации.
   states: {
+    /**
+     * Отметить/снять строку по общим правилам выбора (services.toggleRowSelection).
+     *
+     * Колбэк СТАБИЛЕН и читает текущие отметки сам: строка таблицы не подписана на
+     * наборы выбранных (иначе memo терял бы смысл — перерисовывались бы все строки),
+     * а правило «отмечены все видимые → режим „все записи“» требует полного набора.
+     */
+    toggleRowSelect: (id: number, checked: boolean) => void;
     setSelectedRows: Dispatch<SetStateAction<Set<number>>>;
     setIsAllSelectedMode: Dispatch<SetStateAction<boolean>>;
     setExcludedRows: Dispatch<SetStateAction<Set<number>>>;
