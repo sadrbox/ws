@@ -251,14 +251,35 @@ function load(): TechMessage[] {
 			.filter((n) => !n.fromSource)
 			.filter((n) => (n.lastAt ?? n.firstAt ?? 0) >= oldest)
 			.map((n) => (n.active ? { ...n, active: false } : n));
-		return own;
+		return uniqueIds(own);
 	} catch {
 		return [];
 	}
 }
 
-let notices: TechMessage[] = load();
+/**
+ * ИДЕНТИФИКАТОР ЗАПИСИ — УНИКАЛЕН И МЕЖДУ ПЕРЕЗАГРУЗКАМИ (17.09).
+ *
+ * История живёт в localStorage вместе с идентификаторами, а счётчик — в памяти: после перезагрузки он снова
+ * начинался с нуля, и первое же новое сообщение получало `m1`, который уже лежал в поднятой истории. React
+ * предупреждал о повторяющемся ключе, а `dismissMessage("m1")` убирал обе записи. Отметка времени в
+ * идентификаторе разводит сеансы, счётчик — записи внутри одной миллисекунды.
+ */
 let seq = 0;
+const newId = (prefix: "m" | "n"): string => `${prefix}${Date.now().toString(36)}-${(++seq).toString(36)}`;
+
+/** Повторы идентификаторов в истории прежних версий — развести, сохранив первую запись с этим id как есть. */
+function uniqueIds(list: TechMessage[]): TechMessage[] {
+	const seen = new Set<string>();
+	return list.map((n, i) => {
+		if (!seen.has(n.id)) { seen.add(n.id); return n; }
+		const id = `${n.id}~${i}`;
+		seen.add(id);
+		return { ...n, id };
+	});
+}
+
+let notices: TechMessage[] = load();
 
 /**
  * УБРАННОЕ ЧЕЛОВЕКОМ СОСТОЯНИЕ: ключ источника → подписи строк, которые он просил не показывать.
@@ -401,7 +422,7 @@ export function reportNotices(scope: string, rawKey: string, source: string, rep
 		const prev = matched.get(i);
 		if (!prev) {
 			fresh.push({
-				id: `n${++seq}`, scope, key, type: it.type, text: it.text, source,
+				id: newId("n"), scope, key, type: it.type, text: it.text, source,
 				firstAt: now, lastAt: now, active: true,
 				...(scopeObjects.has(scope) ? { ref: scopeObjects.get(scope) } : {}),
 				// За этой записью стоит ЖИВОЙ ИСТОЧНИК: экран сообщает её заново, пока она
@@ -563,7 +584,7 @@ export function notify(o: NotifyOptions): string {
 		return prev.id;
 	}
 
-	const id = `m${++seq}`;
+	const id = newId("m");
 	notices = [{
 		id, scope, key: key ?? id, type: o.severity, text: o.text, source: o.source,
 		// Своей ссылки нет — объект области (форма, в которой это случилось).
