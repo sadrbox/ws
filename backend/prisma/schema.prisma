@@ -3006,7 +3006,7 @@ model ProductBatch {
   @@map("product_batches")
 }
 
-// Лицензирование ЭСФ по БИН для 1С-расширения esf_exchange. Публичные эндпоинты
+// Лицензирование ЭСФ по БИН для 1С-расширения buhprof_esf. Публичные эндпоинты
 // /api1/esf-license/* (token/heartbeat/activation-request) вызывает 1С; активацией
 // управляет админ-панель (superadmin). См. api/router/esfLicense.js.
 model EsfLicense {
@@ -3048,10 +3048,18 @@ model EsfLicenseInstall {
   lastIp      String?
   releasedAt  DateTime?
   note        String?
+  // Сборка расширения из последнего heartbeat (1С BPESF_ТелеметрияЭСФ): водяной знак
+  // клиентской сборки (соответствие «знак → клиент» — в реестре сборок у поставщика),
+  // версия, режим лицензирования (observe | enforce) и хеш-сумма расширения.
+  buildWatermark String?
+  buildVersion   String?
+  buildMode      String?
+  buildHash      String?
   license     EsfLicense @relation(fields: [bin], references: [bin], onDelete: Cascade)
 
   @@unique([bin, installId])
   @@index([bin, lastSeenAt])
+  @@index([buildWatermark])
   @@map("esf_license_installs")
 }
 

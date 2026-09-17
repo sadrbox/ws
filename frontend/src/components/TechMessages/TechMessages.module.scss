@@ -14,7 +14,7 @@
 // область не поместилась бы и кнопка.
 .Dock {
 	flex: 0 0 var(--tech-width, clamp(260px, 24%, 420px));
-	min-width: 220px;
+	min-width: 380px;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
@@ -422,7 +422,7 @@
 		var(--tm-time, 84px) var(--tm-rail, 14px) minmax(0, 1fr) var(--tm-close, 20px);
 	gap: 0 var(--tm-gap, 6px);
 	min-height: $heightFieldInput;
-	padding: 4px 6px 4px 0;
+	padding: 6px 6px 6px 3px;
 	border-bottom: 1px solid $color34;
 
 	&:hover {
@@ -431,10 +431,11 @@
 
 	// Строка, внутри которой работают (навели фокус на кнопку), — как активная строка
 	// таблицы: подложка $color2 и рамка акцентом.
-	&:focus-within {
-		background-color: $color2;
-		box-shadow: inset 0 0 0 1px $color1;
-	}
+	// &:focus-within {
+	// 	background-color: $color2;
+	// 	box-shadow: inset 0 0 0 1px $color60;
+	// 	border-bottom: 1px solid $color1;
+	// }
 
 	// Прошедшее — бледнее: оно уже не требует действия, но и прятать его незачем.
 	&[data-past] {

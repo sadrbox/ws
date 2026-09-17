@@ -28,7 +28,9 @@ import { ENDPOINT_TO_MODEL } from "src/utils/accessPermissionsMap";
 // Признак: искомое не сводится к колонкам списка (у товара — несколько штрих-кодов,
 // доп. коды лежат в отдельной таблице). Роутер такой модели ОБЯЗАН искать по
 // надмножеству видимых колонок — иначе поиск по колонке молча сломается.
-const SERVER_WORD_SEARCH = new Set(["products"]);
+// «onec-bases»: «Статус» показывает подпись состояния, а не код кластера, «Адрес публикации» по умолчанию
+// скрыт — клиент по сырым значениям их не находил (backend utils/onecBasesList → matchesBaseSearch).
+const SERVER_WORD_SEARCH = new Set(["products", "onec-bases"]);
 
 export interface UseModelListStateOptions {
 	/** API endpoint (например "organizations") */

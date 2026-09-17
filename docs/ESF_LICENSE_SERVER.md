@@ -1,6 +1,6 @@
 # Сервер лицензирования ЭСФ (esf.buhprof.kz) — состояние на 2026-08-28
 
-Серверная часть лицензирования 1С-расширения `esf_exchange`. Код:
+Серверная часть лицензирования 1С-расширения `buhprof_esf`. Код:
 `backend/services/esfLicense.js` (логика) + `backend/api/router/esfLicense.js` (HTTP),
 админка — `frontend/src/models/EsfLicenses/`.
 
@@ -11,7 +11,7 @@
 | Метод | Путь | Ответ |
 |---|---|---|
 | GET | `/token?bin=` | 200 `{token}` · 403 `{error, message}` (`unknown`/`inactive`/`expired`/`install_limit`) · 429 · 500 |
-| POST | `/heartbeat` `{bin, installId, time}` | 200 `{ok:true}` либо `{ok:true, revoked:true}` |
+| POST | `/heartbeat` `{bin, installId, time, watermark?, version?, mode?, extHash?}` | 200 `{ok:true}` либо `{ok:true, revoked:true}` (для `mode=observe` — всегда `{ok:true}`) |
 | POST | `/activation-request` `{bin, installId}` | 200 `{ok:true}` |
 | POST | `/verify` `{bin, token, installId}` | 200 `{valid:true, expiresAt}` · 200 `{valid:false, reason}` (`signature`/`expired`/`revoked`/`unknown`) |
 | GET | `/health` | 200 `{ok:true, signing, tokenTtlHours, at}` · 503 (БД недоступна) |
@@ -38,6 +38,40 @@
 
 Не закрыто намеренно: T-13 в 1С (пока не сделана — секрет остаётся в коде расширения,
 и это по-прежнему главная дыра), внешняя система мониторинга и алертов.
+
+## Сборка расширения и водяной знак (2026-09-17)
+
+С версии расширения от 2026-09-17 heartbeat отправляет 1С-модуль `BPESF_ТелеметрияЭСФ` — после
+открытия сессии ИС ЭСФ/ВС и независимо от проверки лицензии. Дополнительные поля:
+
+| Поле | Что это | Куда пишется |
+|---|---|---|
+| `watermark` | водяной знак клиентской сборки (`wm-` + 12 hex; `DEV` — из исходников). Кому выдан — реестр `releases\builds.csv` у поставщика | `esf_license_installs.buildWatermark` |
+| `version` | версия расширения | `buildVersion` |
+| `mode` | `observe` — сборка без проверки лицензии, `enforce` — с проверкой | `buildMode` |
+| `extHash` | хеш-сумма установленного расширения (base64) | `buildHash` |
+
+Поведение:
+
+- `mode=observe`: `revoked` не отправляется (клиент лицензию не спрашивает), в журнал — `ok`
+  с причиной `observe`, без предупреждения «heartbeat от неактивного БИН». БИН без записи
+  по-прежнему заводится как `active:false` — так видно, кто пользуется расширением.
+- Сравнение с прошлым heartbeat той же установки (`detectBuildChange`), причина в журнале и
+  `console.warn`: `watermark_changed` — в базе сменился знак; `hash_changed` — знак и версия
+  прежние, хеш другой (код расширения правили после выдачи). Смена версии — штатно.
+- Старые версии расширения полей не шлют — поля установки не трогаются.
+
+В карточке лицензии, вкладка «Установки»: колонки «Водяной знак», «Версия», «Режим»
+(`observe` подсвечен), «Хеш-сумма расширения» (скрыта по умолчанию).
+
+Выкладка — строго в таком порядке (иначе heartbeat новых версий расширения получит 500 — обмен у
+клиентов это не ломает, но знак не сохранится):
+
+1. `cd backend && npx prisma migrate deploy` — миграция `20260917120000_esf_license_install_build`
+   (только `ADD COLUMN` nullable + индекс, существующие строки не меняются);
+2. `npx prisma generate`;
+3. `cd ../frontend && npm run build`;
+4. `pm2 restart backend-node frontend`.
 
 ## Админка (только superadmin)
 

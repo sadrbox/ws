@@ -9,11 +9,14 @@ import {
 	DEFAULT_TOKEN_TTL_HOURS,
 	checkInstallLimit,
 	countActiveInstalls,
+	detectBuildChange,
+	hasBuildInfo,
 	installLimitFor,
 	isLicenseActive,
 	issueToken,
 	licenseDenyReason,
 	logLicenseRequest,
+	normBuildInfo,
 	parseToken,
 	pruneLicenseLog,
 	registerInstall,
@@ -172,6 +175,44 @@ test("registerInstall: upsert по (bin, installId), снимает отвязк
 	assert.deepEqual(calls.upsert[0].where, { bin_installId: { bin: "123", installId: "hash1" } });
 	assert.equal(calls.upsert[0].update.releasedAt, null);
 	assert.equal(calls.upsert[0].update.lastIp, "10.0.0.1");
+});
+
+test("registerInstall: сведения о сборке пишутся только присланные — заявка без сборки их не затирает", async () => {
+	const { client, calls } = installsMock();
+	await registerInstall(client, { bin: "123", installId: "hash1", build: { buildWatermark: "wm-1", buildVersion: null, buildMode: "observe", buildHash: null } });
+	assert.equal(calls.upsert[0].update.buildWatermark, "wm-1");
+	assert.equal(calls.upsert[0].create.buildMode, "observe");
+	assert.equal("buildVersion" in calls.upsert[0].update, false);
+	assert.equal("buildHash" in calls.upsert[0].create, false);
+
+	await registerInstall(client, { bin: "123", installId: "hash1" });
+	assert.equal("buildWatermark" in calls.upsert[1].update, false);
+});
+
+// ── Сборка расширения (водяной знак) ─────────────────────────────────────────
+
+test("normBuildInfo: поля heartbeat → поля установки; неизвестный режим отбрасывается", () => {
+	assert.deepEqual(
+		normBuildInfo({ watermark: " wm-abc ", version: "1.1", mode: "enforce", extHash: "h==" }),
+		{ buildWatermark: "wm-abc", buildVersion: "1.1", buildMode: "enforce", buildHash: "h==" },
+	);
+	assert.equal(normBuildInfo({ mode: "off" }).buildMode, null);
+	assert.equal(normBuildInfo({ watermark: "x".repeat(100) }).buildWatermark.length, 64);
+	// Старое расширение шлёт только bin/installId/time.
+	const legacy = normBuildInfo({ bin: "123", installId: "h", time: "2026-09-17T10:00:00" });
+	assert.equal(hasBuildInfo(legacy), false);
+	assert.equal(hasBuildInfo(normBuildInfo({ watermark: "wm-1" })), true);
+});
+
+test("detectBuildChange: смена знака, правка кода без смены версии, штатное обновление", () => {
+	const prev = { buildWatermark: "wm-1", buildVersion: "1.0", buildMode: "observe", buildHash: "h1" };
+	assert.equal(detectBuildChange(null, prev), null, "первый heartbeat — сравнивать не с чем");
+	assert.equal(detectBuildChange(prev, { ...prev }), null);
+	assert.equal(detectBuildChange(prev, { ...prev, buildWatermark: "wm-2" }), "watermark_changed");
+	assert.equal(detectBuildChange(prev, { ...prev, buildHash: "h2" }), "hash_changed");
+	assert.equal(detectBuildChange(prev, { ...prev, buildVersion: "1.1", buildHash: "h2" }), null, "новая версия — новый хеш законно");
+	// Старый heartbeat без сборки после нового — не повод для тревоги.
+	assert.equal(detectBuildChange(prev, normBuildInfo({})), null);
 });
 
 test("registerInstall: без installId ничего не пишет", async () => {

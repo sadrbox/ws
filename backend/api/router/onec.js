@@ -14,7 +14,7 @@
 // тут нет и быть не должно (список открывается с hideAddDelete).
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
-import { isListedBase, parseSort, sortBases } from "../../utils/onecBasesList.js";
+import { isListedBase, matchesBaseSearch, parseSort, sortBases } from "../../utils/onecBasesList.js";
 
 const router = express.Router();
 const ROUTE = "onec-bases";
@@ -82,13 +82,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			// переезжали бы на соседние базы.
 			.filter((x) => isListedBase(x, { showHidden: req.query.showHidden === "1" }));
 
-		// Поиск — по видимым текстовым полям; служебные id/uuid не ищем.
-		const needle = String(req.query.search ?? "").trim().toLowerCase();
-		let items = needle
-			? all.filter((x) =>
-				[x.baseKey, x.name, x.status, x.serverName, x.onecVersion]
-					.some((v) => v && String(v).toLowerCase().includes(needle)))
-			: all;
+		// Поиск — по тому, что видно в колонках: подпись «Статуса», адрес публикации (utils/onecBasesList).
+		let items = all.filter((x) => matchesBaseSearch(x, req.query.search));
 
 		// «Статус» — по показанному состоянию, а не по коду кластера (utils/onecBasesList).
 		items = sortBases(items, parseSort(req.query.sort));

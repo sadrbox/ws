@@ -1,4 +1,4 @@
-// Лицензирование ЭСФ по БИН для 1С-расширения esf_exchange.
+// Лицензирование ЭСФ по БИН для 1С-расширения buhprof_esf.
 //
 // ── publicRouter (/api1/esf-license/*) — БЕЗ авторизации, вызывает 1С ──────────
 //   GET  /token?bin=            — токен, если лицензия активна (иначе 403);
@@ -19,6 +19,8 @@ import {
 	DENY_MESSAGES,
 	checkInstallLimit,
 	countActiveInstalls,
+	detectBuildChange,
+	hasBuildInfo,
 	installActiveSince,
 	installLimitEnforced,
 	installLimitFor,
@@ -26,6 +28,7 @@ import {
 	issueToken,
 	licenseDenyReason,
 	logLicenseRequest,
+	normBuildInfo,
 	notifyActivationRequest,
 	registerInstall,
 	signingConfigured,
@@ -145,13 +148,15 @@ publicRouter.get("/token", tokenIpLimiter, tokenBinLimiter, async (req, res) => 
 	}
 });
 
-// POST /api1/esf-license/heartbeat  { bin, installId, time }
+// POST /api1/esf-license/heartbeat  { bin, installId, time, watermark?, version?, mode?, extHash? }
+// Поля сборки шлёт 1С-модуль BPESF_ТелеметрияЭСФ (с 2026-09-17); старые версии — только первые три.
 publicRouter.post("/heartbeat", writeIpLimiter, writeBinLimiter, async (req, res) => {
 	const ip = ipOf(req);
 	try {
 		const bin = normBin(req.body?.bin);
 		if (!bin) return res.status(400).json({ error: "bad_request", message: "Не указан БИН." });
 		const installId = normInstallId(req.body?.installId);
+		const build = normBuildInfo(req.body);
 
 		// Пишем heartbeat даже для неизвестного/неактивного БИН — это и есть сигнал
 		// несанкционированного использования (кто-то обошёл проверку в копии расширения).
@@ -160,11 +165,26 @@ publicRouter.post("/heartbeat", writeIpLimiter, writeBinLimiter, async (req, res
 			update: { lastHeartbeatAt: new Date(), lastHeartbeatInstallId: installId },
 			create: { bin, active: false, lastHeartbeatAt: new Date(), lastHeartbeatInstallId: installId },
 		});
-		if (installId) await registerInstall(prisma, { bin, installId, ip });
+
+		// Сравниваем сборку с прошлым heartbeat этой же базы ДО записи новой.
+		let buildChange = null;
+		if (installId) {
+			if (hasBuildInfo(build)) {
+				const prev = await prisma.esfLicenseInstall.findUnique({ where: { bin_installId: { bin, installId } } });
+				buildChange = detectBuildChange(prev, build);
+			}
+			await registerInstall(prisma, { bin, installId, ip, build });
+		}
+		if (buildChange) {
+			console.warn(`[esf-license] БИН ${bin} (installId=${installId}): ${buildChange}, знак ${build.buildWatermark ?? "-"}, версия ${build.buildVersion ?? "-"}`);
+		}
 
 		// S-02: отзыв. Клиент уже умеет обрабатывать revoked:true — чистит кэш токена
-		// и отметку heartbeat, сразу идёт за новым токеном и получает 403 (S-01).
-		const revoked = !isLicenseActive(lic);
+		// и сразу идёт за новым токеном, получая 403 (S-01).
+		// Сборка «без проверки» (mode=observe) лицензию не спрашивает: отзывать нечего,
+		// и предупреждение про неактивный БИН здесь — шум, а не сигнал.
+		const observe = build.buildMode === "observe";
+		const revoked = !observe && !isLicenseActive(lic);
 		if (revoked) {
 			console.warn(`[esf-license] heartbeat от НЕАКТИВНОГО БИН ${bin} (installId=${installId ?? "-"}) — отправлен revoked`);
 		}
@@ -173,7 +193,7 @@ publicRouter.post("/heartbeat", writeIpLimiter, writeBinLimiter, async (req, res
 			installId,
 			endpoint: "heartbeat",
 			result: revoked ? "revoked" : "ok",
-			reason: revoked ? licenseDenyReason(lic) : null,
+			reason: buildChange ?? (revoked ? licenseDenyReason(lic) : observe ? "observe" : null),
 			status: 200,
 			ip,
 		});

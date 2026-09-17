@@ -4,5 +4,9 @@
 	{ "identifier": "firstSeenAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Первое обращение", "visible": true, "inlist": true },
 	{ "identifier": "lastSeenAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Последнее обращение", "visible": true, "inlist": true },
 	{ "identifier": "lastIp", "type": "string", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "IP последнего обращения", "visible": true, "inlist": true },
+	{ "identifier": "buildWatermark", "type": "string", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Водяной знак сборки расширения (кому выдана — в реестре сборок)", "visible": true, "inlist": true },
+	{ "identifier": "buildVersion", "type": "string", "width": "90px", "minWidth": "70px", "alignment": "left", "hint": "Версия расширения", "visible": true, "inlist": true },
+	{ "identifier": "buildMode", "type": "string", "width": "130px", "minWidth": "100px", "alignment": "left", "hint": "Режим лицензирования сборки", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "buildHash", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Хеш-сумма установленного расширения", "visible": false, "inlist": true },
 	{ "identifier": "__release", "type": "string", "width": "110px", "minWidth": "110px", "alignment": "center", "hint": "Отвязать установку", "visible": true, "inlist": true, "sortable": false }
 ]

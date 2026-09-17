@@ -13,6 +13,7 @@
 		display: flex;
 		flex-direction: column;
 		z-index: 1;
+		// cursor: default;
 
 		/* Table itself */
 		table {
@@ -106,7 +107,7 @@
 
 		/* Пустая таблица объясняет, почему она пуста (см. context.emptyText): строка во всю
 		   ширину, приглушённым текстом — это не данные, а ответ на вопрос. */
-		.TableEmptyRow > td {
+		.TableEmptyRow>td {
 			padding: 16px 12px;
 			color: $color51;
 			text-align: center;
@@ -230,12 +231,12 @@
 							cursor: default;
 						}
 
-						input:not([type="checkbox"]):focus,
-						textarea:focus,
-						select:focus {
-							cursor: text;
-							user-select: text;
-						}
+						// input:not([type="checkbox"]):focus,
+						// textarea:focus,
+						// select:focus {
+						// 	cursor: text;
+						// 	user-select: text;
+						// }
 
 
 

@@ -116,6 +116,12 @@ const InstallsPanel: FC<PanelProps> = ({ licenseUuid }) => {
 			const color = status === "active" ? "var(--success)" : status === "released" ? "var(--text-muted)" : "var(--warning)";
 			return <span style={{ color, fontWeight: 600 }}>{translate(key)}</span>;
 		}
+		if (col.identifier === "buildMode") {
+			// Сборка «без проверки» — не нарушение, но заметно: такая база работает без лицензии.
+			const mode = asText(row.buildMode);
+			if (!mode) return <span style={{ color: "var(--text-muted)" }}>—</span>;
+			return <span style={{ color: mode === "observe" ? "var(--warning)" : undefined }}>{translate(`esfBuildMode_${mode}`)}</span>;
+		}
 		if (col.identifier === "__release") {
 			if (row.releasedAt) return <span style={{ color: "var(--text-muted)" }}>—</span>;
 			return <Button size="sm" variant="secondary" onClick={() => void release(row)}>{translate("esfInstallRelease")}</Button>;

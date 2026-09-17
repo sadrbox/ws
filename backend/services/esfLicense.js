@@ -201,15 +201,73 @@ export function installActiveSince(now = Date.now()) {
  * Зафиксировать обращение установки. Возврат к жизни отвязанной (releasedAt)
  * установки СБРАСЫВАЕТ отвязку: раз база снова обращается, она реально работает
  * (отвязка рассчитана на перенесённую/погашенную базу, которая больше не придёт).
+ * `build` — сведения о сборке из heartbeat (см. normBuildInfo); пишутся только
+ * присланные поля, чтобы заявка на активацию (без сборки) их не затирала.
  */
-export async function registerInstall(client, { bin, installId, ip = null }) {
+export async function registerInstall(client, { bin, installId, ip = null, build = null }) {
 	if (!bin || !installId) return null;
 	const now = new Date();
+	const buildData = {};
+	for (const [k, v] of Object.entries(build ?? {})) if (v != null) buildData[k] = v;
 	return client.esfLicenseInstall.upsert({
 		where: { bin_installId: { bin, installId } },
-		update: { lastSeenAt: now, lastIp: ip, releasedAt: null },
-		create: { bin, installId, firstSeenAt: now, lastSeenAt: now, lastIp: ip },
+		update: { lastSeenAt: now, lastIp: ip, releasedAt: null, ...buildData },
+		create: { bin, installId, firstSeenAt: now, lastSeenAt: now, lastIp: ip, ...buildData },
 	});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Сборка расширения (водяной знак) — телеметрия 1С
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const BUILD_MODES = ["observe", "enforce"];
+
+function shortText(v, max) {
+	return typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null;
+}
+
+/**
+ * Сведения о сборке из тела heartbeat (1С BPESF_ТелеметрияЭСФ): водяной знак клиентской
+ * сборки, версия расширения, режим лицензирования (observe — без проверки лицензии,
+ * enforce — с проверкой) и хеш-сумма установленного расширения. Старые версии
+ * расширения этих полей не шлют — тогда все null.
+ */
+export function normBuildInfo(body) {
+	const mode = shortText(body?.mode, 16);
+	return {
+		buildWatermark: shortText(body?.watermark, 64),
+		buildVersion: shortText(body?.version, 32),
+		buildMode: BUILD_MODES.includes(mode) ? mode : null,
+		buildHash: shortText(body?.extHash, 128),
+	};
+}
+
+/** Прислана ли хоть какая-то информация о сборке. */
+export function hasBuildInfo(build) {
+	return !!build && Object.values(build).some((v) => v != null);
+}
+
+/**
+ * Признак подмены по сравнению с прошлым heartbeat той же установки:
+ *   watermark_changed — в той же базе теперь работает сборка с другим знаком
+ *     (чужая копия расширения или знак вычищен);
+ *   hash_changed — знак и версия прежние, а хеш-сумма другая: код расширения
+ *     правили после выдачи сборки. Смена версии — штатное обновление, не сигнал.
+ * null — изменений, заслуживающих внимания, нет (или сравнивать не с чем).
+ */
+export function detectBuildChange(prev, build) {
+	if (!prev || !build) return null;
+	if (prev.buildWatermark && build.buildWatermark && prev.buildWatermark !== build.buildWatermark) {
+		return "watermark_changed";
+	}
+	if (
+		prev.buildHash && build.buildHash && prev.buildHash !== build.buildHash
+		&& prev.buildVersion === build.buildVersion
+		&& prev.buildWatermark === build.buildWatermark
+	) {
+		return "hash_changed";
+	}
+	return null;
 }
 
 /** Сколько «живых» (не отвязанных, свежих) установок у БИН. */
