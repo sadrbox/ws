@@ -308,3 +308,33 @@ export function roleCatalog(baseRoles: string[], grantedHere: string[]): string[
 	}
 	return out.sort((a, b) => a.localeCompare(b, "ru"));
 }
+
+/**
+ * ТЕЛО КОМАНДЫ `IB_CREATE_USER` — одно на все формы, где заводят пользователя базы.
+ *
+ * ЖИВОЙ СЛУЧАЙ (17.09). Помощник групповых команд спрашивал права отдельным шагом, отмеченные
+ * роли складывал в состояние — и не клал их в команду: пользователь заводился во всех базах без
+ * единого права, а шаг «Права» выглядел рабочим. Карточка и общая форма элемента роли слали.
+ * Поэтому тело команды считается здесь, рядом с правкой (buildGroupUserUpdate), и под тестом.
+ *
+ * Пустые значения не отправляются: полное имя и пароль «не задано» — это ОТСУТСТВИЕ поля, а не
+ * пустая строка (пустая строка для пароля значит «вход без пароля»). `showInList` трёхзначен:
+ * `undefined` — форма этим не управляет и поле не шлёт.
+ */
+export function buildUserCreate(draft: {
+	name: string;
+	fullName?: string;
+	password?: string;
+	roles?: string[];
+	showInList?: boolean;
+}): Record<string, unknown> {
+	const fullName = (draft.fullName ?? "").trim();
+	const roles = (draft.roles ?? []).filter((r) => r.trim());
+	return {
+		name: draft.name.trim(),
+		...(fullName ? { fullName } : {}),
+		...(draft.password ? { password: draft.password } : {}),
+		...(roles.length ? { roles } : {}),
+		...(draft.showInList === undefined ? {} : { showInList: draft.showInList }),
+	};
+}

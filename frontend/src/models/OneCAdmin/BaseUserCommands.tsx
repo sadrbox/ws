@@ -35,6 +35,7 @@ import {
 	useOnecPermissions,
 } from "./shared";
 import { sectionAllows } from "./onecPermissions";
+import { buildUserCreate } from "./userUpdate";
 import styles from "./OneCAdmin.module.scss";
 
 export const BaseUserCommands: FC<{
@@ -81,13 +82,8 @@ export const BaseUserCommands: FC<{
 	};
 
 	const create = useMutation({
-		mutationFn: () => send("IB_CREATE_USER", "create", translate("onecUserCreate"), name.trim(), {
-			name: name.trim(),
-			...(fullName.trim() ? { fullName: fullName.trim() } : {}),
-			...(password ? { password } : {}),
-			...(roles.length ? { roles } : {}),
-			showInList,
-		}),
+		mutationFn: () => send("IB_CREATE_USER", "create", translate("onecUserCreate"), name.trim(),
+			buildUserCreate({ name, fullName, password, roles, showInList })),
 		onSuccess: done,
 		onError: (e) => reportError(e, { source: translate("onecUser") }),
 	});

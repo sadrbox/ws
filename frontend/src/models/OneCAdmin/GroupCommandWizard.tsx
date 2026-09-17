@@ -23,6 +23,7 @@ import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
+import { buildUserCreate } from "./userUpdate";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
 import Wizard, { WizardForm, type WizardStep } from "src/components/Wizard";
@@ -215,11 +216,9 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 			if (!spec) throw new Error(translate("unknownError"));
 			const payload: Record<string, unknown> =
 				spec.type === "IB_CREATE_USER"
-					? {
-						name: name.trim(),
-						...(fullName.trim() ? { fullName: fullName.trim() } : {}),
-						...(password ? { password } : {}),
-					}
+					// Роли шага «Права» уходят вместе с именем и паролем (userUpdate.buildUserCreate):
+					// без них пользователь заводился без единого права, а шаг выглядел рабочим.
+					? buildUserCreate({ name, fullName, password, roles: [...roles] })
 					: spec.type === "IB_INSTALL_EXTENSION"
 						? { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" }
 						: spec.needsDir
@@ -394,6 +393,22 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 								<span className={styles.PlanAdd}>{targets.join(", ") || translate("onecNoChanges")}</span>
 							</div>
 						</FormArea>
+						{/*
+						  * ПРАВА — В ПЛАНЕ. Отмеченные роли уходят вместе с командой создания, и человек
+						  * должен видеть их здесь же, рядом с базами: шаг «Права» остаётся позади, а
+						  * пользователь без единой роли — самый заметный способ ошибиться молча.
+						  */}
+						{isCreateUser && (
+							<FormArea title={translate("onecTabRights")}>
+								<div className={styles.PlanRow}>
+									<span className={roles.size ? styles.PlanAdd : styles.PlanDel}>
+										{roles.size
+											? [...roles].sort((a, b) => a.localeCompare(b, "ru")).join(", ")
+											: translate("onecWizNoRoles")}
+									</span>
+								</div>
+							</FormArea>
+						)}
 						{skipped.length > 0 && (
 							<FormArea title={translate("onecSkippedBases")}>
 								<div className={styles.PlanRow}>

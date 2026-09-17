@@ -48,7 +48,7 @@ import { deniedText, sectionAllows } from "./onecPermissions";
 import { attachBatch, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
-import { buildGroupUserUpdate } from "./userUpdate";
+import { buildGroupUserUpdate, buildUserCreate } from "./userUpdate";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 
@@ -161,12 +161,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 					: dialog === "update" ? buildGroupUserUpdate(elementName,
 						{ fullName: asText(row.fullName), disabled: row.disabledFlag === true, roles: rolesOriginal },
 						{ name, fullName, password, disabled, roles })
-						: isUser ? {
-							name: name.trim(),
-							...(fullName.trim() ? { fullName: fullName.trim() } : {}),
-							...(password ? { password } : {}),
-							...(roles.length ? { roles } : {}),
-						}
+						: isUser ? buildUserCreate({ name, fullName, password, roles })
 							: { name: name.trim(), safeMode, contentBase64: file ? await toBase64(file) : "" };
 
 			if (!payload) return null;

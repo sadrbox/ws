@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-	MASS_ROLES, applyRoleChanges, buildGroupUserUpdate, buildSavePlan, buildUserUpdate, diffRoles, massRoleChange, rebaseForm, roleCatalog,
+	MASS_ROLES, applyRoleChanges, buildGroupUserUpdate, buildSavePlan, buildUserCreate, buildUserUpdate, diffRoles, massRoleChange, rebaseForm, roleCatalog,
 } from "src/models/OneCAdmin/userUpdate";
 
 const current = { fullName: "Оператор бухгалтер", disabled: false, showInList: null as boolean | null };
@@ -376,3 +376,32 @@ describe("групповая правка пользователя: только
 	});
 });
 
+/**
+ * ЖИВОЙ СЛУЧАЙ (17.09). «Пользователи баз» → групповое создание: на шаге «Права» роли отмечались,
+ * а пользователь заводился без единого права — отмеченное не попадало в команду.
+ */
+describe("Создание пользователя базы: тело команды", () => {
+	it("отмеченные роли уходят в команду", () => {
+		expect(buildUserCreate({ name: "Оператор", roles: ["Кассир", "Кладовщик"] }))
+			.toEqual({ name: "Оператор", roles: ["Кассир", "Кладовщик"] });
+	});
+
+	it("без ролей поле не отправляется вовсе", () => {
+		expect(buildUserCreate({ name: "Оператор", roles: [] })).toEqual({ name: "Оператор" });
+		expect(buildUserCreate({ name: "Оператор" })).toEqual({ name: "Оператор" });
+	});
+
+	it("пустые значения не отправляются, имя обрезается", () => {
+		expect(buildUserCreate({ name: "  Оператор  ", fullName: "   ", password: "", roles: ["  "] }))
+			.toEqual({ name: "Оператор" });
+	});
+
+	it("полное имя, пароль и показ в списке уходят, когда заданы", () => {
+		expect(buildUserCreate({ name: "Оператор", fullName: " Оператор бухгалтер ", password: "p", showInList: false }))
+			.toEqual({ name: "Оператор", fullName: "Оператор бухгалтер", password: "p", showInList: false });
+	});
+
+	it("показ в списке не отправляется, когда форма им не управляет", () => {
+		expect("showInList" in buildUserCreate({ name: "Оператор" })).toBe(false);
+	});
+});
