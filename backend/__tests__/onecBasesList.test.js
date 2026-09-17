@@ -7,7 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { baseStateRank, isListedBase, parseSort, sortBases } from "../utils/onecBasesList.js";
+import { readFileSync } from "node:fs";
+import { BASE_STATE_LABELS, PUBLISH_LABELS, baseStateRank, isListedBase, matchesBaseSearch, parseSort, sortBases } from "../utils/onecBasesList.js";
 
 const b = (baseKey, over = {}) => ({ baseKey, status: "ONLINE", ibUnreachableAt: null, ibUnreachableReason: null, ...over });
 const keys = (xs) => xs.map((x) => x.baseKey);
@@ -79,4 +80,63 @@ test("«Статус»: удалённая из кластера скрытая 
 test("«Статус»: скрытая недоступная база сортируется как «скрыта» — как её и подписывает панель", () => {
 	const hiddenNoDb = b("h", { status: "DISABLED", disabled: true, ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" });
 	assert.equal(baseStateRank(hiddenNoDb), baseStateRank(b("hidden", { status: "DISABLED", disabled: true })));
+});
+
+// ЖИВОЙ СЛУЧАЙ (17.09): быстрый поиск не находил базы ни по «Статусу», ни по «Адресу публикации» — искал по коду
+// кластера (ONLINE), а адрес в поиск не входил вовсе.
+test("поиск по «Статусу» — по показанной подписи на RU и KK, регистр не важен", () => {
+	const nodb = b("nodb", { ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" });
+	assert.equal(matchesBaseSearch(nodb, "нет в субд"), true);
+	assert.equal(matchesBaseSearch(nodb, "ДҚБЖ"), true);
+	assert.equal(matchesBaseSearch(b("ok"), "доступна"), true);
+	assert.equal(matchesBaseSearch(b("ok"), "нет в субд"), false);
+	assert.equal(matchesBaseSearch(b("hidden", { status: "DISABLED", disabled: true }), "скрыта"), true);
+	const results = [b("a_ok"), nodb, b("gone", { status: "MISSING" })].filter((x) => matchesBaseSearch(x, "недоступ"));
+	assert.deepEqual(keys(results), []);
+	assert.deepEqual(keys([b("a_ok"), nodb, b("u", { ibUnreachableAt: "t" })].filter((x) => matchesBaseSearch(x, "недоступна"))), ["u"]);
+});
+
+test("поиск по «Адресу публикации» — и по публичному адресу, и по адресу от агента", () => {
+	const pub = b("pub", { publishUrl: "http://localhost/trade", publishUrlPublic: "https://1c.example.kz/trade" });
+	assert.equal(matchesBaseSearch(pub, "1c.example"), true);
+	assert.equal(matchesBaseSearch(pub, "localhost/trade"), true);
+	assert.equal(matchesBaseSearch(b("nopub"), "localhost"), false);
+});
+
+test("пустой поиск пропускает всех; прежние поля ищутся как раньше", () => {
+	assert.equal(matchesBaseSearch(b("x"), ""), true);
+	assert.equal(matchesBaseSearch(b("x"), "   "), true);
+	assert.equal(matchesBaseSearch(b("buh_main", { name: "Бухгалтерия", serverName: "srv1", onecVersion: "8.3.24" }), "SRV1"), true);
+	assert.equal(matchesBaseSearch(b("buh_main"), "online"), true);
+});
+
+test("подписи состояний совпадают с переводами панели", () => {
+	const ru = JSON.parse(readFileSync(new URL("../../frontend/src/i18/translations.json", import.meta.url), "utf8"));
+	const kk = JSON.parse(readFileSync(new URL("../../frontend/src/i18/translations.kk.json", import.meta.url), "utf8"));
+	const keysByRank = ["onecBaseOnline", "onecBaseNoAccessShort", "onecBaseUnreachableShort", "onecBaseNoDbShort", "onecBaseMissing", "onecBaseDisabled", "onecBaseUnknown"];
+	keysByRank.forEach((k, rank) => assert.deepEqual(BASE_STATE_LABELS[rank], [ru[k], kk[k]], k));
+	const publishKeys = { true: "onecPublished", false: "onecNotPublished", null: "onecPublishUnknown" };
+	for (const [v, k] of Object.entries(publishKeys)) assert.deepEqual(PUBLISH_LABELS[v], [ru[k], kk[k]], k);
+});
+
+test("поиск по нескольким словам: каждое должно найтись, порядок не важен", () => {
+	const nodb = b("trade_main", { ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" });
+	assert.equal(matchesBaseSearch(nodb, "субд trade"), true);
+	assert.equal(matchesBaseSearch(nodb, "субд склад"), false);
+});
+
+test("поиск по «Публикации» — по подписи, а не по true/false", () => {
+	assert.equal(matchesBaseSearch(b("p", { published: true }), "опубликована"), true);
+	assert.equal(matchesBaseSearch(b("n", { published: false }), "нет публикации"), true);
+	assert.equal(matchesBaseSearch(b("p", { published: true }), "true"), false);
+});
+
+test("«Регламентные задания» сортируются по показанному: включено → отключено → не знаем", () => {
+	const rows = [
+		b("unknown"),
+		b("off", { scheduledJobsDenied: true }),
+		b("on", { scheduledJobsDenied: false }),
+	];
+	assert.deepEqual(keys(sortBases(rows, { scheduledJobsDenied: "asc" })), ["on", "off", "unknown"]);
+	assert.deepEqual(keys(sortBases(rows, { scheduledJobsDenied: "desc" })), ["unknown", "off", "on"]);
 });

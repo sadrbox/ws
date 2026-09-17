@@ -805,6 +805,14 @@ export const OneCBasesList: FC<{
 			 * базы нет. Показывать такую базу как рабочую значит звать в неё командой,
 			 * которая заведомо откажет; поэтому состояние называет именно это.
 			 */
+			/*
+			 * Регламентные задания (18.09): «Включено»/«Отключено» — про сами задания базы, а не про наш запрет.
+			 * Неизвестно (`null`) — «—»: кластер об этом не сообщал, и выдавать незнание за «включено» нельзя.
+			 */
+			if (col.identifier === "scheduledJobsDenied") {
+				const denied = row.scheduledJobsDenied;
+				return <span>{typeof denied === "boolean" ? translate(denied ? "onecScheduledJobsOff" : "onecScheduledJobsOn") : "—"}</span>;
+			}
 			if (col.identifier === "status") {
 				const reason = row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null;
 				return (

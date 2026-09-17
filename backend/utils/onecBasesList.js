@@ -47,9 +47,67 @@ export function baseStateRank(x) {
 	return { ONLINE: 0, MISSING: 4, DISABLED: 5, UNKNOWN: 6 }[x.status] ?? 7;
 }
 
+/**
+ * ПОДПИСЬ СОСТОЯНИЯ — для быстрого поиска. Панель показывает в «Статусе» не код кластера, а подпись по рангу
+ * (baseState в models/OneCBases), и человек ищет то, что видит: «нет в СУБД», «скрыта». Поиск шёл по сырому коду
+ * (`ONLINE`) и такие запросы не находил ничего. Ищем по подписям на обоих языках панели (RU/KK) и по коду.
+ *
+ * Тексты — копия ключей onecBase* из frontend/src/i18 (бэкенд переводов не грузит); расхождение ловит
+ * __tests__/onecBasesList.test.js.
+ */
+export const BASE_STATE_LABELS = {
+	0: ["Доступна", "Қолжетімді"],
+	1: ["Нет доступа", "Қолжетімі жоқ"],
+	2: ["Недоступна", "Қолжетімсіз"],
+	3: ["Нет в СУБД", "ДҚБЖ-де жоқ"],
+	4: ["Нет в кластере", "Кластерде жоқ"],
+	5: ["Скрыта", "Жасырылған"],
+	6: ["Не проверялась", "Тексерілмеген"],
+};
+
+/** Подпись колонки «Публикация»: null — «не проверялась» (копия onecPublished/onecNotPublished/onecPublishUnknown). */
+export const PUBLISH_LABELS = {
+	true: ["Опубликована", "Жарияланған"],
+	false: ["Нет публикации", "Жарияланбаған"],
+	null: ["Не проверялась", "Тексерілмеген"],
+};
+
+/**
+ * СОВПАДАЕТ ЛИ СТРОКА С БЫСТРЫМ ПОИСКОМ — по тому, что видно в колонках, а не по тому, что хранится.
+ *
+ * Слова ищет сервер (SERVER_WORD_SEARCH в useModelListState): клиент искал по сырым значениям видимых колонок —
+ * по коду ONLINE вместо подписи «Статуса» и мимо «Адреса публикации», который по умолчанию скрыт. Поэтому правило
+ * покрывает надмножество колонок списка. «Адрес публикации» панель показывает под публичным именем сервера, а в
+ * подсказке — адрес от агента; ищем по обоим. Каждое слово должно найтись (как в клиентском поиске). Служебные
+ * id/uuid не ищем.
+ */
+export function matchesBaseSearch(x, needle) {
+	const words = String(needle ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+	if (!words.length) return true;
+	const haystack = [
+		x.baseKey, x.name, x.status, ...(BASE_STATE_LABELS[baseStateRank(x)] ?? []),
+		x.serverName, x.onecVersion,
+		...PUBLISH_LABELS[x.published === true ? "true" : x.published === false ? "false" : "null"],
+		x.publishUrlPublic, x.publishUrl,
+		x.extensionsCount, x.sessionsCount,
+	]
+		.filter((v) => v !== null && v !== undefined && v !== "")
+		.map((v) => String(v).toLowerCase())
+		.join(" \u0000 ");
+	return words.every((w) => haystack.includes(w));
+}
+
+/**
+ * Регламентные задания (18.09): в колонке — «Включено» / «Отключено» / «—». Сортируем по показанному: булево
+ * поле `scheduled_jobs_denied` иначе давало бы порядок «false, true», в котором «не знаем» (null) уезжает в конец
+ * по общему правилу пустых, а «Включено» и «Отключено» стоят по алфавиту английских слов.
+ */
+const jobsRank = (x) => (x.scheduledJobsDenied === false ? 0 : x.scheduledJobsDenied === true ? 1 : 2);
+
 /** Значение поля для сортировки: у вычисляемых колонок — то, что показано, а не то, что хранится. */
 const SORT_VALUE = {
 	status: baseStateRank,
+	scheduledJobsDenied: jobsRank,
 };
 
 /** Сравнение значений строки: числа как числа, пустые — в конец. */
