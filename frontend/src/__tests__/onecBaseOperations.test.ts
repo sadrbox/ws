@@ -5,7 +5,7 @@
  * базе что-то изменит; отмечены базы в обоих состояниях — доступны оба пункта.
  */
 import { describe, it, expect } from "vitest";
-import { alreadyInTarget, changesNothing, isApplicable } from "src/models/OneCAdmin/shared";
+import { alreadyInTarget, changesNothing, isApplicable, splitTargets } from "src/models/OneCAdmin/shared";
 import { GROUP_OPS } from "src/models/OneCAdmin/GroupCommandWizard";
 
 const denied = { baseKey: "a", scheduledJobsDenied: true, published: true };
@@ -82,5 +82,42 @@ describe("«Снять регистрацию базы в кластере 1С»
 
 	it("тело команды — confirm: true; вид операции — удаление", () => {
 		expect(GROUP_OPS.dropRegistration).toMatchObject({ type: "CLUSTER_DROP_INFOBASE", needs: "drop", kind: "delete", payload: { confirm: true } });
+	});
+});
+
+/**
+ * «Операции» выполняют команду по ОТМЕЧЕННЫМ базам (17.09), поэтому перед запуском отмеченные делятся на те, кому
+ * команда нужна, и остальные — с причиной, которую видно в подтверждении.
+ */
+describe("отбор целей среди отмеченных баз", () => {
+	const base = (over: Record<string, unknown> = {}) => ({
+		key: "b", status: "ONLINE", disabled: false, published: null, ibUnreachableAt: null,
+		ibUnreachableReason: null, scheduledJobsDenied: null, ...over,
+	});
+
+	it("«Запретить регламентные задания»: базы, где уже запрещены, отсеиваются с причиной", () => {
+		const rows = [base({ key: "a" }), base({ key: "b", scheduledJobsDenied: true })];
+		const r = splitTargets(rows, GROUP_OPS.denyJobs.needs, GROUP_OPS.denyJobs.target);
+		expect(r.targets.map((x) => x.key)).toEqual(["a"]);
+		expect(r.skipped[0].reason).toMatch(/уже запрещены/);
+	});
+
+	it("«Обновить сведения»: база без входа и база вне кластера отсеиваются, рабочая остаётся", () => {
+		const rows = [base({ key: "ok" }), base({ key: "nodb", ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" }), base({ key: "gone", status: "MISSING" })];
+		const r = splitTargets(rows, GROUP_OPS.info.needs, GROUP_OPS.info.target);
+		expect(r.targets.map((x) => x.key)).toEqual(["ok"]);
+		expect(r.skipped.map((x) => x.row.key)).toEqual(["nodb", "gone"]);
+	});
+
+	it("«Снять регистрацию»: подходит и рабочая, и недоступная база; та, которой нет в кластере, — нет", () => {
+		const rows = [base({ key: "ok" }), base({ key: "nodb", ibUnreachableAt: "t", ibUnreachableReason: "NO_DB" }), base({ key: "gone", status: "MISSING" })];
+		const r = splitTargets(rows, GROUP_OPS.dropRegistration.needs, GROUP_OPS.dropRegistration.target);
+		expect(r.targets.map((x) => x.key)).toEqual(["ok", "nodb"]);
+		expect(r.skipped.map((x) => x.row.key)).toEqual(["gone"]);
+	});
+
+	it("«Обслуживание» переехало в «Операции» и сохранило команды", () => {
+		expect(GROUP_OPS.checkBase).toMatchObject({ type: "IB_CHECK", kind: "read" });
+		expect(GROUP_OPS.backup).toMatchObject({ type: "IB_BACKUP", needsDir: true });
 	});
 });

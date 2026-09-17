@@ -39,14 +39,14 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { useAppContext } from "src/app/context";
 import {
-	fetchBases, runBatch, type BatchType, type OnecBase, fetchRoles, fetchSessions
+	fetchBases, type BatchType, type OnecBase, fetchRoles, fetchSessions
 } from "src/services/onec/api";
 import {
-	alreadyInTarget, isApplicable, reportBatchStart, unreachableReason, usePublishAddressHint, type OnecOperation, type OpTarget, useOnecPermissions,
+	fitReason, reportBatchStart, usePublishAddressHint, type OnecOperation, type OpTarget, useOnecPermissions,
 } from "./shared";
 import { SECTION_OF_TYPE, deniedText, sectionAllows } from "./onecPermissions";
 import { estimateSecs, formatDuration, useQueueStats } from "./queueStats";
-import { attachBatch, finishOp, startOp } from "./progress";
+import { runGroupCommand } from "./runGroupCommand";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
@@ -167,11 +167,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 	const [baseCols, setBaseCols] = useState<TColumn[]>(() => getModelColumns(baseColumns(), "OneCAdmin_gcwBases"));
 	// Непригодна (нет в кластере, не войти) — причина; пригодна, но уже в нужном состоянии — тоже причина: команда
 	// ей ничего не изменит (alreadyInTarget).
-	const fitOf = useCallback((b: OnecBase) => {
-		if (!spec) return "";
-		if (!isApplicable(b, spec.needs)) return unreachableReason(b);
-		return alreadyInTarget(b, spec.target);
-	}, [spec]);
+	const fitOf = useCallback((b: OnecBase) => (spec ? fitReason(b, spec.needs, spec.target) : ""), [spec]);
 	const baseRows = useMemo(() => items.map((b, i) => ({
 		id: i + 1, uuid: b.key, baseKey: b.key, name: b.name || "—",
 		status: b.status,
@@ -258,20 +254,7 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 							? (dir.trim() ? { dir: dir.trim() } : {})
 							: spec.needsName ? { name: name.trim() } : { ...(spec.payload ?? {}) };
 
-			const opId = startOp({
-				kind: spec.kind, title: translate(spec.title),
-				target: `${translate("onecBases")}: ${targets.length}`,
-				total: targets.length, scope: { bases: targets },
-			});
-			try {
-				const r = await runBatch(spec.type, targets, payload);
-				attachBatch(opId, r.batchId, r.total,
-					r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
-				return r;
-			} catch (e) {
-				finishOp(opId, { failed: targets.length, note: e instanceof Error ? e.message : String(e), error: e });
-				throw e;
-			}
+			return await runGroupCommand(spec, targets, payload);
 		},
 		onSuccess: (r) => {
 			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });

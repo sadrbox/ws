@@ -118,9 +118,13 @@ export const BaseAvailability: FC<{
 		},
 	});
 
-	// Пока с базой всё в порядке и её никто не прятал, раздел молчит: место на экране
-	// стоит дороже, чем сообщение «проблем нет».
-	if (!ibUnreachableAt && !hidden && !missing) return null;
+	/*
+	 * У РАБОЧЕЙ БАЗЫ РАЗДЕЛ ТОЖЕ НУЖЕН (17.09). Он молчал, пока всё в порядке, — и команды «Скрыть базу в панели» и
+	 * «Снять регистрацию базы в кластере 1С» у рабочей базы было негде взять: их приходилось искать в списке. Теперь
+	 * раздел показывает состояние (когда есть что сказать) и всегда даёт команды тому, кто вправе их делать.
+	 * Право «только просмотр» у беспроблемной базы по-прежнему не видит ничего: сообщения «проблем нет» не нужно.
+	 */
+	if (!ibUnreachableAt && !hidden && !missing && !canWrite) return null;
 
 	return (
 		<FormArea title={translate("onecBaseAvailability")}>
@@ -154,15 +158,16 @@ export const BaseAvailability: FC<{
 						<Icon name={hidden ? "restore" : "clear"} />
 						{" "}{translate(hidden ? "onecBaseUnhide" : "onecBaseHide")}
 					</Button>
-					{/* Кнопка только у базы, в которую не войти: у рабочей агент всё равно
-					    откажет, и предлагать её значило бы звать на отказ. */}
-					{ibUnreachableAt && (
-						<Button icon="trash" variant="danger" disabled={drop.isPending || dropRunning}
-							title={translate("onecBaseDropRegistrationHint")}
-							onClick={() => setConfirmDrop(true)}>
-							{translate("onecBaseDropRegistration")}
-						</Button>
-					)}
+					{/*
+					  * Снять регистрацию можно, пока она есть. У рабочей базы агент откажет — и это его решение, а не
+					  * догадка панели: признак «в базу не войти» появляется только после проверки, и прятать команду
+					  * до неё значило прятать её ровно тогда, когда она нужна (17.09).
+					  */}
+					<Button icon="trash" variant="danger" disabled={drop.isPending || dropRunning}
+						title={translate("onecBaseDropRegistrationHint")}
+						onClick={() => setConfirmDrop(true)}>
+						{translate("onecBaseDropRegistration")}
+					</Button>
 				</GroupRow>}
 			</GroupCol>
 

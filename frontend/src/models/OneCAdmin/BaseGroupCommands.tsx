@@ -26,13 +26,36 @@ import { notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
 import { GROUP_OPS, useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
 import {
-	changesNothing, useOnecWrite, useOnecPermissions,
+	changesNothing, reportBatchStart, splitTargets, useOnecWrite, useOnecPermissions,
 } from "./shared";
+import { runGroupCommand } from "./runGroupCommand";
+import { useAppContext } from "src/app/context";
 import { SECTION_OF_TYPE, sectionAllows } from "./onecPermissions";
 
-export type CommandGroup = "operations" | "maintenance" | "users" | "extensions";
+export type CommandGroup = "operations" | "users" | "extensions";
 
-const GROUPS: Record<CommandGroup, { label: string; icon: IconName; ops: GroupOp[]; dangerOps?: GroupOp[] }> = {
+/** Строка таблицы баз — в вид, который понимают правила пригодности (shared.isApplicable / alreadyInTarget). */
+const asBase = (r: TDataItem) => ({
+	status: asText(r.status),
+	disabled: r.disabled === true,
+	published: typeof r.published === "boolean" ? r.published : null,
+	clusterStatus: r.clusterStatus ? asText(r.clusterStatus) : undefined,
+	ibUnreachableAt: r.ibUnreachableAt ? asText(r.ibUnreachableAt) : null,
+	ibUnreachableReason: r.ibUnreachableReason ? asText(r.ibUnreachableReason) : null,
+	scheduledJobsDenied: typeof r.scheduledJobsDenied === "boolean" ? r.scheduledJobsDenied : null,
+});
+
+type GroupSpec = {
+	label: string;
+	icon: IconName;
+	ops: GroupOp[];
+	/** Разделы меню: заголовок и свои команды (17.09) — «Обслуживание» внутри «Операций». */
+	sections?: { label: string; ops: GroupOp[] }[];
+	/** Разрушающие команды — последним разделом, красным. */
+	dangerOps?: GroupOp[];
+};
+
+const GROUPS: Record<CommandGroup, GroupSpec> = {
 	/*
 	 * «ОПЕРАЦИИ» (17.09) — всё, что делают с самой базой, одним меню: сведения, регламентные задания, публикация, а
 	 * ниже — проверки публикаций и баз данных. Раньше публикация жила отдельной группой, а сведения и регламентные
@@ -40,10 +63,12 @@ const GROUPS: Record<CommandGroup, { label: string; icon: IconName; ops: GroupOp
 	 */
 	operations: {
 		label: "onecOperations", icon: "settings", ops: ["info", "denyJobs", "allowJobs", "publish", "unpublish"],
-		// Отдельным разделом в конце меню, красным: запись в кластере восстанавливается только вручную.
+		// «Обслуживание» — разделом внутри «Операций» (17.09): отдельная кнопка рядом делила один и тот же предмет
+		// («что сделать с отмеченными базами») на две кнопки без причины.
+		sections: [{ label: "onecTabMaintenance", ops: ["checkBase", "backup"] }],
+		// Отдельным разделом в конце меню, красным: регистрацию в кластере возвращают только вручную.
 		dangerOps: ["dropRegistration"],
 	},
-	maintenance: { label: "onecTabMaintenance", icon: "save", ops: ["checkBase", "backup"] },
 	users: { label: "onecTabUsers", icon: "plus", ops: ["createUser", "deleteUser"] },
 	extensions: { label: "onecTabExtensions", icon: "download", ops: ["installExt", "deleteExt"] },
 };
@@ -54,7 +79,7 @@ export const BaseGroupCommands: FC<{
 	groups?: CommandGroup[];
 	/** Имя объекта, подставляемое в помощник: экран расширений знает его заранее. */
 	presetName?: string;
-}> = ({ selected, groups = ["operations", "maintenance"], presetName }) => {
+}> = ({ selected, groups = ["operations"], presetName }) => {
 	const canWrite = useOnecWrite();
 	const perms = useOnecPermissions();
 	const dbChecking = useRunningCommand(["CLUSTER_CHECK_BASES"]);
@@ -75,6 +100,7 @@ export const BaseGroupCommands: FC<{
 	 */
 	const nothingToChange = (o: GroupOp) => changesNothing(selected, GROUP_OPS[o].target);
 	const qc = useQueryClient();
+	const { confirm } = useAppContext().actions;
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
 
@@ -104,6 +130,52 @@ export const BaseGroupCommands: FC<{
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabBases") }),
 	});
+
+	/*
+	 * КОМАНДА ВЫПОЛНЯЕТСЯ ПО ОТМЕЧЕННЫМ БАЗАМ (17.09), а помощник остаётся там, где без него нельзя: базы не отмечены
+	 * (их надо выбрать) или у команды есть параметры — имя пользователя, файл расширения.
+	 *
+	 * Перед запуском отмеченные базы отсеиваются тем же правилом, что показывает помощник (fitReason): непригодные
+	 * (нет в кластере, не войти) и те, которым команда ничего не изменит, в задание не уходят, а называются в
+	 * подтверждении. Не осталось ни одной — команды нет вовсе, и панель говорит почему.
+	 */
+	const run = useMutation({
+		mutationFn: ({ op, targets }: { op: GroupOp; targets: string[] }) =>
+			runGroupCommand(GROUP_OPS[op], targets, GROUP_OPS[op].payload ?? {}),
+		onSuccess: (r, { op }) => {
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+			reportBatchStart(r, translate(GROUP_OPS[op].title));
+		},
+		onError: (e, { op }) => reportError(e, { source: translate(GROUP_OPS[op].title) }),
+	});
+
+	const start = async (op: GroupOp) => {
+		const spec = GROUP_OPS[op];
+		// Помощник: целей нет или команде нужны параметры (имя, файл, каталог выгрузки).
+		if (!keys.length || spec.needsName || spec.needsFile || spec.needsDir) { openWizard(op, keys, presetName); return; }
+
+		const chosen = selected.filter((r) => keys.includes(asText(r.baseKey))).map((r) => ({ key: asText(r.baseKey), ...asBase(r) }));
+		const { targets, skipped } = splitTargets(chosen, spec.needs, spec.target);
+		if (!targets.length) {
+			const reason = skipped[0]?.reason ?? "";
+			notify({
+				severity: "warning", source: translate(spec.title),
+				text: `${translate("onecBatchNothingQueued")}${reason ? `: ${reason}` : ""}`,
+			});
+			return;
+		}
+		// Изменение подтверждаем: команда уходит сразу, без шага «что произойдёт».
+		if (spec.kind !== "read") {
+			const lines = [
+				translate(spec.warning),
+				`${translate("onecBatchTargets")}: ${targets.length}`
+					+ (skipped.length ? ` · ${translate("onecBatchNotQueued")}: ${skipped.length} (${skipped[0].reason})` : ""),
+			];
+			if (!(await confirm(lines.join("\n\n")))) return;
+		}
+		run.mutate({ op, targets: targets.map((r) => r.key) });
+	};
 
 	/** Подпись операции в списке группы — та же, что была на отдельной кнопке. */
 	const OP_LABEL: Record<GroupOp, string> = {
@@ -140,6 +212,11 @@ export const BaseGroupCommands: FC<{
 						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o],
 						...(nothingToChange(o) ? { disabled: true, hint: translate("onecOpNothingToChange") } : {}),
 					})),
+					// Разделы группы («Обслуживание») — своим заголовком, теми же правилами доступа.
+					...(spec.sections ?? []).flatMap((sec) => sec.ops.filter(opAllowed).map((o) => ({
+						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o], group: translate(sec.label),
+						...(nothingToChange(o) ? { disabled: true, hint: translate("onecOpNothingToChange") } : {}),
+					}))),
 					// Чтения — всем, кому открыта панель.
 					...(g === "operations"
 						? [
@@ -166,8 +243,7 @@ export const BaseGroupCommands: FC<{
 							: translate("onecWizPickInside")}
 						onSelect={(id) => {
 							if (id === CHECK_DB) { checkDb.mutate(); return; }
-							// Отметки списка — заготовка: набор целей правят в самом помощнике.
-							openWizard(id as GroupOp, keys, presetName);
+							void start(id as GroupOp);
 						}}
 					/>
 				);

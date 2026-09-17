@@ -40,9 +40,11 @@ const buttons = () => screen.queryAllByRole("button").map((b) => b.textContent?.
 describe("«Доступность» по состоянию базы", () => {
 	beforeEach(() => { api.removeBaseFromRegistry.mockClear(); });
 
-	it("рабочая база — раздел молчит", () => {
-		const { container } = show();
-		expect(container.textContent).toBe("");
+	it("у рабочей базы есть обе команды — скрыть и снять регистрацию", () => {
+		show();
+		expect(buttons()).toEqual(["Скрыть базу в панели", "Снять регистрацию базы в кластере 1С"]);
+		// Запись панели у базы, которая есть в кластере, не удаляют: полный срез вернул бы её через минуты.
+		expect(buttons()).not.toContain("Удалить запись о базе в панели");
 	});
 
 	it("недоступная база — «Скрыть базу в панели» и «Снять регистрацию базы в кластере 1С»", () => {

@@ -135,6 +135,37 @@ export const changesNothing = (
 	target: OpTarget | undefined,
 ): boolean => !!target && selected.length > 0 && selected.every((r) => alreadyInTarget(r, target) !== "");
 
+/**
+ * ПОЧЕМУ БАЗЕ НЕ НУЖНА (ИЛИ НЕ ПОДХОДИТ) КОМАНДА — одной строкой; `""` — подходит.
+ *
+ * Одно правило на два места: помощник пишет это в колонке «Пригодна», а меню «Операции» по нему отсеивает
+ * отмеченные базы перед запуском — иначе задание уходило бы с заведомо непригодными целями.
+ */
+export function fitReason(
+	b: Parameters<typeof isApplicable>[0] & Parameters<typeof alreadyInTarget>[0],
+	needs: OnecOperation,
+	target?: OpTarget,
+): string {
+	if (!isApplicable(b, needs)) return unreachableReason(b);
+	return alreadyInTarget(b, target);
+}
+
+/**
+ * Отмеченные базы — на те, которым команда нужна, и остальные (с причиной). По этому разбору меню «Операции»
+ * запускает задание и говорит в подтверждении, сколько баз отсеяно и почему.
+ */
+export function splitTargets<T extends Parameters<typeof fitReason>[0]>(
+	rows: readonly T[], needs: OnecOperation, target?: OpTarget,
+): { targets: T[]; skipped: { row: T; reason: string }[] } {
+	const targets: T[] = [];
+	const skipped: { row: T; reason: string }[] = [];
+	for (const r of rows) {
+		const reason = fitReason(r, needs, target);
+		if (reason) skipped.push({ row: r, reason }); else targets.push(r);
+	}
+	return { targets, skipped };
+}
+
 /** Колонки списка баз в режиме выбора цели: только то, что помогает выбрать. */
 /** Публикация: null — «не проверялась», а не «нет» (см. миграцию 008). */
 export const publishLabel = (v: boolean | null | undefined): string =>
