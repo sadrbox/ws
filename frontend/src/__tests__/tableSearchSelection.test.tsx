@@ -26,12 +26,17 @@ const allRows: TDataItem[] = [
 ];
 
 // Мини-аналог useStaticTableView: быстрый поиск отбирает строки на клиенте.
-const Harness = ({ onSelectionChange }: { onSelectionChange: (s: Set<number>, rows: TDataItem[]) => void }) => {
+const Harness = ({ onSelectionChange, source = allRows }: {
+	onSelectionChange: (s: Set<number>, rows: TDataItem[]) => void;
+	/** Данные списка: тест подменяет их, чтобы строка «исчезла» (удалена, перечитан список). */
+	source?: TDataItem[];
+}) => {
 	const [query, setQuery] = useState("");
-	const rows = query ? allRows.filter((r) => String(r.role).toLowerCase().includes(query.toLowerCase())) : allRows;
+	const rows = query ? source.filter((r) => String(r.role).toLowerCase().includes(query.toLowerCase())) : source;
 	return (
 		<>
 			<button type="button" data-testid="search-one" onClick={() => setQuery("Аудитор")}>искать</button>
+			<button type="button" data-testid="search-two" onClick={() => setQuery("Кассир")}>искать ещё</button>
 			<button type="button" data-testid="search-clear" onClick={() => setQuery("")}>сбросить</button>
 			<Table {...buildStaticTableProps({
 				componentName: "TestSearchSelection", rows, columns: columns(), setColumns: () => {},
@@ -101,5 +106,47 @@ describe("Table: отметки при быстром поиске", () => {
 		const { container } = render(<TestWrapper><Harness onSelectionChange={onSelectionChange} /></TestWrapper>);
 		for (const box of rowBoxes(container)) fireEvent.click(box);
 		expect(lastSelection(onSelectionChange)).toEqual([1, 2, 3, 4, 5]);
+	});
+});
+
+/**
+ * ЖИВОЙ СЛУЧАЙ (17.09). Роли отмечали по одной, находя каждую поиском: набрал «Кассир» — отметил,
+ * набрал «Кладовщик» — отметил, и первая галочка исчезала. Отметки снимала чистка «строк, которых
+ * больше нет»: при поиске строка не исчезла, а скрыта.
+ */
+describe("Table: отметки переживают смену быстрого поиска", () => {
+	it("отмеченное прежним поиском остаётся при новом поиске", () => {
+		const onSelectionChange = vi.fn();
+		const { container, getByTestId } = render(<TestWrapper><Harness onSelectionChange={onSelectionChange} /></TestWrapper>);
+
+		fireEvent.click(getByTestId("search-one"));
+		fireEvent.click(rowBoxes(container)[0]);
+		expect(lastSelection(onSelectionChange)).toEqual([5]);
+
+		// Ищем другую роль — прежняя отметка не должна сняться.
+		fireEvent.click(getByTestId("search-two"));
+		expect(rowBoxes(container)).toHaveLength(1);
+		expect(lastSelection(onSelectionChange)).toEqual([5]);
+
+		fireEvent.click(rowBoxes(container)[0]);
+		expect(lastSelection(onSelectionChange)).toEqual([2, 5]);
+
+		fireEvent.click(getByTestId("search-clear"));
+		expect(lastSelection(onSelectionChange)).toEqual([2, 5]);
+	});
+
+	it("после снятия поиска отметки исчезнувших строк всё же снимаются", () => {
+		const onSelectionChange = vi.fn();
+		const { container, getByTestId, rerender } = render(
+			<TestWrapper><Harness onSelectionChange={onSelectionChange} /></TestWrapper>,
+		);
+		fireEvent.click(rowBoxes(container)[0]);
+		fireEvent.click(rowBoxes(container)[1]);
+		expect(lastSelection(onSelectionChange)).toEqual([1, 2]);
+
+		// Строка 1 ушла из данных (удалена, перечитан список) — её отметка не должна остаться.
+		rerender(<TestWrapper><Harness onSelectionChange={onSelectionChange} source={allRows.slice(1)} /></TestWrapper>);
+		expect(lastSelection(onSelectionChange)).toEqual([2]);
+		expect(getByTestId("search-clear")).toBeTruthy();
 	});
 });
