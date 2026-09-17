@@ -230,21 +230,17 @@
 // таблицей и не резервирует под себя строку на каждом экране — оно уходит сообщением
 // в общую область «Технические сообщения» (components/TechMessages).
 
-.UsersScreen {
-	display: grid;
-	grid-template-rows: auto minmax(0, 1fr) auto;
-	flex: 1 1 auto;
-	min-height: 0;
-	padding: 12px;
-	gap: 12px;
-}
-
+// Полоса режима, тело и полоса состояния лежат ПРЯМО во вкладке — своей обёртки-каркаса
+// у экрана нет (вкладка и так колонка флекса). Отступ, который раньше давал каркас,
+// каждая полоса держит сама.
 .ModeBar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex: 0 0 auto;
 	flex-wrap: nowrap;
 	overflow: hidden;
+	padding: 6px;
 }
 
 // Две связанные таблицы: равные по важности, поэтому равной ширины. Какая слева —
@@ -254,6 +250,7 @@
 .PairBody {
 	display: flex;
 	gap: 6px;
+	flex: 1 1 auto;
 	min-height: 0;
 }
 
@@ -438,6 +435,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex: 0 0 auto;
 	height: 38px;
 	padding: 0 12px;
 	border-top: 1px solid $color34;
