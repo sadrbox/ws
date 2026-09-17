@@ -7,8 +7,8 @@
  * модальном окне размером с записку перемешивались, а «что произойдёт» не показывалось
  * вовсе — человек узнавал итог из отчёта задания.
  *
- * Исключения — чтения, которым помощник не нужен: «Проверить публикации» (одно чтение
- * веб-сервера на все базы) и «Проверить базы данных» (отмеченные базы или все) — в меню «Операции». Они доступны
+ * Исключение — чтение, которому помощник не нужен: «Проверить базы данных» (отмеченные базы или все) — в меню
+ * «Операции». Публикации проверяет сама кнопка «Обновить» списка баз (17.09): отдельный пункт стал не нужен. Они доступны
  * и уровню «только просмотр» — чтение ничего не меняет (F5).
  */
 import { useRunningCommand } from "src/components/TechMessages/operations";
@@ -17,13 +17,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import type { IconName } from "src/components/IconButton/icons";
-import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import type { TDataItem } from "src/components/Table/types";
 import { asText } from "src/utils/asText";
-import { checkBasesDb, refreshPublications } from "src/services/onec/api";
+import { checkBasesDb } from "src/services/onec/api";
 import { withOp } from "./progress";
-import { noteNotice, notify } from "src/components/TechMessages/store";
+import { notify } from "src/components/TechMessages/store";
 import { checkDbOutcome } from "./checkBasesDb";
 import { GROUP_OPS, useOpenGroupCommand, type GroupOp } from "./GroupCommandWizard";
 import {
@@ -54,7 +53,6 @@ export const BaseGroupCommands: FC<{
 }> = ({ selected, groups = ["operations", "maintenance"], presetName }) => {
 	const canWrite = useOnecWrite();
 	const perms = useOnecPermissions();
-	const pubChecking = useRunningCommand(["CLUSTER_LIST_PUBLICATIONS"]);
 	const dbChecking = useRunningCommand(["CLUSTER_CHECK_BASES"]);
 	/**
 	 * Пользователи и расширения — по вложенным разрешениям, прочие операции — по общему праву. «Обновить сведения»
@@ -75,56 +73,6 @@ export const BaseGroupCommands: FC<{
 	const qc = useQueryClient();
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
-
-	/**
-	 * «Проверить публикации» стоит в меню «Операции», но отметок строк ей не нужно:
-	 * это одно чтение веб-сервера, одно на все базы. Поэтому единственный пункт группы,
-	 * доступный без выбора, — и единственный, который не открывает помощник.
-	 */
-	const CHECK_PUBLICATIONS = "checkPublications";
-
-	const checkPublications = useMutation({
-		mutationFn: () => withOp(
-			{ kind: "read", title: translate("onecPublicationsCheck"), target: translate("onecTabBases") },
-			refreshPublications,
-		),
-		onSuccess: (d) => {
-			// Список баз приходит и в старой форме ответа — его показываем в любом случае.
-			if (Array.isArray(d.items)) qc.setQueryData(["onec", "bases"], { items: d.items });
-			void qc.invalidateQueries({ queryKey: ["onec-bases"] });
-
-			/*
-			 * ГОВОРИМ ТО, ЧТО ПРОИЗОШЛО НА САМОМ ДЕЛЕ. Раньше здесь было «Проверено
-			 * публикаций: 110» — по длине списка. На деле опубликованной не нашлось ни
-			 * одной, срез был отвергнут как недостоверный, и состояние баз не изменилось.
-			 *
-			 * РАЗБОРА МОЖЕТ НЕ БЫТЬ: панель и сервис обновляются по отдельности, и пока
-			 * сервис старый, он отвечает в прежней форме. Это не ошибка, а известное
-			 * состояние — «не знаем, что нашлось», и сказать надо именно это, а не уронить
-			 * обработчик обращением к несуществующему полю.
-			 */
-			const r = d.report;
-			if (!r) {
-				noteNotice(translate("onecPublication"),
-					{ type: "warning", text: translate("onecPublicationsNoReport") });
-				showToast(translate("onecPublicationsNoReport"), "warning");
-				return;
-			}
-			if (r.accepted) {
-				showToast(`${translate("onecPublicationsChecked")}: ${r.published} / ${r.total}`, "success");
-				return;
-			}
-			const where = r.lookedIn
-				? ` ${translate("onecPublicationsLookedIn")}: ${r.lookedIn}${r.source ? ` (${r.source})` : ""}.`
-				: "";
-			noteNotice(translate("onecPublication"), {
-				type: "warning",
-				text: `${translate("onecPublicationsNoneFound")} ${translate("onecPublicationsNotApplied")}${where}`,
-			});
-			showToast(translate("onecPublicationsNoneFound"), "warning");
-		},
-		onError: (e) => reportError(e, { source: translate("onecTabBases") }),
-	});
 
 	/**
 	 * «Проверить базы данных» (P2): есть ли у зарегистрированных баз их база данных в СУБД —
@@ -190,7 +138,6 @@ export const BaseGroupCommands: FC<{
 					// Чтения — всем, кому открыта панель.
 					...(g === "operations"
 						? [
-							{ id: CHECK_PUBLICATIONS, label: translate("onecPublicationsCheck"), icon: "search" as IconName, disabled: checkPublications.isPending || pubChecking },
 							{ id: CHECK_DB, label: translate("onecBasesDbCheck"), icon: "search" as IconName, disabled: checkDb.isPending || dbChecking },
 						]
 						: []),
@@ -206,7 +153,6 @@ export const BaseGroupCommands: FC<{
 							? `${translate("onecBatchTargets")}: ${keys.length}`
 							: translate("onecWizPickInside")}
 						onSelect={(id) => {
-							if (id === CHECK_PUBLICATIONS) { checkPublications.mutate(); return; }
 							if (id === CHECK_DB) { checkDb.mutate(); return; }
 							// Отметки списка — заготовка: набор целей правят в самом помощнике.
 							openWizard(id as GroupOp, keys, presetName);

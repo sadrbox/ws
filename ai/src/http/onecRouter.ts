@@ -1,7 +1,7 @@
 // Администрирование 1С для панели aleppo.kz (E15/A3, A5-P0).
 //
 //   GET  /v1/onec/bases                      реестр баз (из БД, без обращения к кластеру)
-//   POST /v1/onec/bases/refresh              перечитать список баз у админ-агента (rac)
+//   POST /v1/onec/bases/refresh              перечитать список баз у админ-агента (rac); { publications: true } — и публикации
 //   GET  /v1/onec/bases/:key/info            сведения о базе
 //   DELETE /v1/onec/bases/:key               убрать из реестра базу, которой нет в кластере (С45)
 //   GET  /v1/onec/sessions?baseKey=…         сеансы кластера или одной базы
@@ -395,18 +395,25 @@ export function onecRouter(deps: Deps) {
 	 * для ответа после ожидания (`GET /commands/:id`, С7): сырые строки агента другой формы, и
 	 * панель клала их в список баз.
 	 */
-	const publicationsAnswer = async (raw: unknown) => {
+	/** Срез публикаций из ответа агента: строки, признак полноты и где агент искал. */
+	const parsePublications = (raw: unknown) => {
 		const data = raw as {
 			items?: PublicationItem[]; complete?: boolean; source?: string; lookedIn?: string[];
 		} | null;
-		const items = Array.isArray(data?.items) ? data.items : [];
-		const evidence = {
-			source: typeof data?.source === "string" ? data.source : null,
-			lookedIn: Array.isArray(data?.lookedIn) ? data.lookedIn.length : 0,
+		return {
+			items: Array.isArray(data?.items) ? data.items : [],
+			complete: data?.complete === true,
+			evidence: {
+				source: typeof data?.source === "string" ? data.source : null,
+				lookedIn: Array.isArray(data?.lookedIn) ? data.lookedIn.length : 0,
+			},
 		};
-		const report = publicationReport(items, data?.complete === true, evidence);
-		return { items: await bases.listAll(), report: { ...report, ...evidence } };
 	};
+	const publicationsReport = (raw: unknown) => {
+		const { items, complete, evidence } = parsePublications(raw);
+		return { ...publicationReport(items, complete, evidence), ...evidence };
+	};
+	const publicationsAnswer = async (raw: unknown) => ({ items: await bases.listAll(), report: publicationsReport(raw) });
 
 	r.post("/publications/refresh", async (req, res) => {
 		const outcome = await run(req, "CLUSTER_LIST_PUBLICATIONS", {});
@@ -421,9 +428,27 @@ export function onecRouter(deps: Deps) {
 
 	// Ручное обновление реестра: спрашиваем список у кластера и сразу применяем к базе сервиса,
 	// чтобы панель обновилась в этом же запросе, не дожидаясь ближайшего heartbeat.
+	/*
+	 * `{ publications: true }` — заодно проверить публикации (17.09): кнопка «Обновить» списка баз.
+	 *
+	 * ОБЕ КОМАНДЫ СРАЗУ, а не друг за другом. Это команды кластера: сервис выдаёт их агенту без очереди друг за
+	 * другом и места базы они не занимают (queue.claim). Сколько бы агент ни выполнял их сам, лишнего ожидания
+	 * на стороне сервиса нет: ни второго запроса панели, ни второго ожидания результата.
+	 *
+	 * ПОРЯДОК ПРИМЕНЕНИЯ всё же нужен: срез публикаций сопоставляется с базами реестра, и ответ, пришедший раньше
+	 * списка, не находил только что зарегистрированных баз. Поэтому после синхронизации списка срез публикаций
+	 * применяется ещё раз — запись идемпотентна (один словарь, один UPDATE), зато новые базы получают свой признак.
+	 *
+	 * Публикации не решают судьбу обновления: список баз обновлён — ответ 200, а по публикациям отдельно разбор,
+	 * «ещё идёт» или отказ.
+	 */
 	r.post("/bases/refresh", async (req, res) => {
+		const withPublications = (req.body as { publications?: unknown } | undefined)?.publications === true;
 		const agent = await agents.pickAdminAgent(null);
-		const outcome = await run(req, "CLUSTER_LIST_INFOBASES", {});
+		const [outcome, pub] = await Promise.all([
+			run(req, "CLUSTER_LIST_INFOBASES", {}),
+			withPublications ? run(req, "CLUSTER_LIST_PUBLICATIONS", {}) : Promise.resolve(null),
+		]);
 		if (outcome.status !== 200) {
 			// 202 (команда ещё идёт), 422 (агент отказал), 409 (агента нет) — как есть.
 			send(res, outcome);
@@ -434,11 +459,19 @@ export function onecRouter(deps: Deps) {
 		// базы как пропавшие. Агент, вернувший ноль баз, скорее сломан, чем прав.
 		if (agent?.serverId && Array.isArray(items) && items.length) {
 			await bases.sync(agent.serverId, items, { complete: true, authoritative: true });
+			if (pub?.status === 200) {
+				const p = parsePublications(pub.data);
+				if (p.items.length) await bases.applyPublications(agent.serverId, p.items, p.complete, p.evidence);
+			}
 		}
+		const publications = !pub ? undefined
+			: pub.status === 200 ? { report: publicationsReport(pub.data) }
+				: pub.status === 202 ? { pending: true, commandId: (pub.body.data as { commandId?: string } | undefined)?.commandId ?? null }
+					: { error: (pub.body as { error?: unknown }).error ?? { code: "COMMAND_FAILED", message: "Проверка публикаций не выполнена" } };
 		// Отвечаем ВСЕГДА реестром, а не сырым ответом rac: у них разная форма (у rac нет
 		// ни сервера, ни счётчика расширений), и панель на сыром ответе рисовала пустые
 		// колонки. Если применить было нечего — вернём то, что знаем сейчас.
-		send(res, { status: 200, body: { success: true, data: { items: await bases.listAll() } } });
+		send(res, { status: 200, body: { success: true, data: { items: await bases.listAll(), ...(publications ? { publications } : {}) } } });
 	});
 
 	/**

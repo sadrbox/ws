@@ -171,6 +171,30 @@ export const refreshBases = () =>
 		.then((d) => (isPending(d) ? awaitCommand<{ items: unknown[] }>(d).then(() => fetchBases()) : d));
 
 /**
+ * «Обновить» списка баз (17.09): список баз из кластера И публикации — одним запросом к сервису.
+ *
+ * Сервис ставит обе команды кластера сразу и отвечает реестром, в котором уже учтены обе. Публикации не решают
+ * судьбу обновления: список обновлён, а по ним — разбор среза, «ещё идёт» (`pending`) или отказ (`error`).
+ * Сервис старее этой правки поле `publications` не отдаёт — тогда обновляется только список, как раньше.
+ */
+export type PublicationsRefresh =
+	| { report: PublicationReport }
+	| { pending: true; commandId: string | null }
+	| { error: { code?: string; message?: string } };
+
+export const refreshBasesAndPublications = () =>
+	aiFetch<{ items: OnecBase[]; publications?: PublicationsRefresh } | Pending>(
+		"/v1/onec/bases/refresh", { method: "POST", body: JSON.stringify({ publications: true }) },
+	).then(async (d) => (isPending(d)
+		// Список не успел за время запроса: дожидаемся, срез применит сервис при приёме; публикации — тоже там.
+		? { items: (await awaitCommand<{ items: unknown[] }>(d).then(() => fetchBases())).items, publications: undefined }
+		: d));
+
+/** Дождаться проверки публикаций, которая не успела за время запроса «Обновить». */
+export const awaitPublicationsCheck = (commandId: string) =>
+	awaitCommand<{ report?: PublicationReport } | null>({ pending: true, commandId } as Pending);
+
+/**
  * Сеансы ВСЕГО кластера, одним запросом.
  *
  * По базе не фильтруем на стороне агента: у него отбор по baseKey ломается там, где сеансов

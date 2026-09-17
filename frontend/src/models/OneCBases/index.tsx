@@ -36,7 +36,7 @@ import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBases, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
+	awaitPublicationsCheck, fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBasesAndPublications, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
 } from "src/services/onec/api";
 import {
 	EchoDelayNotice, QueryError, ReadonlyNotice, publishLabel, unreachableReason, unreachableShort,
@@ -50,6 +50,8 @@ import BaseCredentialsTab from "./BaseCredentials";
 import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
+import { publicationsProblem, rejectedReportText } from "src/models/OneCAdmin/publicationsOutcome";
+import { noteNotice } from "src/components/TechMessages/store";
 import { useNoticeScope, useScopeObject } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
@@ -713,6 +715,7 @@ export const OneCBasesList: FC<{
 	 * которые откажут. Отбор делает сервер (backend utils/onecBasesList), иначе счётчики и подгрузка врали бы.
 	 */
 	const [showHidden, setShowHidden] = useState(false);
+	const qc = useQueryClient();
 	/*
 	 * СКОЛЬКО ИХ — на самой кнопке. Без числа переключатель выглядел неработающим: из ста десяти баз он прячет одну-две,
 	 * и строка, появившаяся где-то в середине списка, не видна. Нечего прятать — нет и кнопки. Число — по реестру
@@ -738,10 +741,30 @@ export const OneCBasesList: FC<{
 		 * честно показывает вчерашний состав, называя это обновлением. Отдельная кнопка
 		 * «Обновить из кластера» после этого не нужна: у обновления один смысл.
 		 */
+		/*
+		 * И ПУБЛИКАЦИИ — тем же запросом (17.09). Обе команды кластера сервис ставит сразу, и «Обновить» ждёт одного
+		 * ответа, а не двух кнопок по очереди. Сказать о публикациях есть что только при проблеме — успех виден в
+		 * колонке «Публикация» (publicationsOutcome). Проверка, не успевшая за время запроса, дожидается в фоне.
+		 */
 		onReload={() => withOp(
 			{ kind: "read", title: translate("onecRefreshFromCluster"), target: translate("onecTabBases") },
-			refreshBases,
-		)}
+			refreshBasesAndPublications,
+		).then(async (d) => {
+			const warn = (text: string) => noteNotice(translate("onecPublication"), { type: "warning", text });
+			const problem = publicationsProblem(d.publications);
+			if (problem) warn(problem);
+			const p = d.publications;
+			if (p && "pending" in p && p.commandId) {
+				const late = await awaitPublicationsCheck(p.commandId).catch((e: unknown) => {
+					warn(`${translate("onecPublicationsCheckFailed")}: ${e instanceof Error ? e.message : String(e)}`);
+					return null;
+				});
+				const text = late?.report ? rejectedReportText(late.report) : null;
+				if (text) warn(text);
+				void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
+				void qc.invalidateQueries({ queryKey: ["onec-bases"] });
+			}
+		})}
 		// Создание и удаление неприменимы: базы приходят из кластера 1С.
 		hideAddDelete
 		variant={variant}
