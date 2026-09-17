@@ -14,33 +14,13 @@
 // тут нет и быть не должно (список открывается с hideAddDelete).
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
+import { parseSort, sortBases } from "../../utils/onecBasesSort.js";
 
 const router = express.Router();
 const ROUTE = "onec-bases";
 
 /** Адрес сервиса ai. Тот же, что у панели; на одной машине — локальный. */
 const AI_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:3100";
-
-/** Сортировка приходит как JSON-строка { "поле": "asc" | "desc" }. */
-function parseSort(raw) {
-	if (typeof raw !== "string" || !raw) return null;
-	try {
-		const o = JSON.parse(raw);
-		return o && typeof o === "object" ? o : null;
-	} catch {
-		return null;
-	}
-}
-
-/** Сравнение значений строки: числа как числа, пустые — в конец. */
-function compare(a, b, dir) {
-	if (a == null && b == null) return 0;
-	if (a == null) return 1;
-	if (b == null) return -1;
-	const sign = dir === "desc" ? -1 : 1;
-	if (typeof a === "number" && typeof b === "number") return (a - b) * sign;
-	return String(a).localeCompare(String(b), "ru") * sign;
-}
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
@@ -100,17 +80,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					.some((v) => v && String(v).toLowerCase().includes(needle)))
 			: all;
 
-		const sort = parseSort(req.query.sort);
-		if (sort) {
-			const entries = Object.entries(sort);
-			items = [...items].sort((a, b) => {
-				for (const [field, dir] of entries) {
-					const c = compare(a[field], b[field], dir);
-					if (c !== 0) return c;
-				}
-				return 0;
-			});
-		}
+		// «Статус» — по показанному состоянию, а не по коду кластера (utils/onecBasesSort).
+		items = sortBases(items, parseSort(req.query.sort));
 
 		const total = items.length;
 		const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 1000);
