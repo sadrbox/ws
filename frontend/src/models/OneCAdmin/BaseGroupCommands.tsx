@@ -75,7 +75,7 @@ export const BaseGroupCommands: FC<{
 	 */
 	const nothingToChange = (o: GroupOp) => changesNothing(selected, GROUP_OPS[o].target);
 	/*
-	 * Удалить регистрацию можно только у базы, в которую не войти. Отмечены одни рабочие — пункт недоступен сразу,
+	 * Удалить базу ИЗ КЛАСТЕРА можно только у базы, в которую не войти. Отмечены одни рабочие — пункт недоступен сразу,
 	 * а не после шага помощника с пустым списком целей.
 	 */
 	const noPhantomSelected = selected.length > 0 && !selected.some((r) => isApplicable({
@@ -158,7 +158,10 @@ export const BaseGroupCommands: FC<{
 					// Опасные команды — последним разделом; только полному доступу.
 					...(spec.dangerOps ?? []).filter(opAllowed).map((o) => ({
 						id: o, label: translate(OP_LABEL[o]), icon: OP_ICON[o], group: translate("onecDangerousCommands"), danger: true,
-						...(o === "dropRegistration" && noPhantomSelected ? { disabled: true, hint: translate("onecDropOnlyUnreachable") } : {}),
+						// Подсказка — прямо в меню: чем удаление из КЛАСТЕРА отличается от «убрать из панели», по одной
+						// подписи не видно, а цена ошибки разная.
+						hint: noPhantomSelected ? translate("onecDropOnlyUnreachable") : translate("onecBaseDropRegistrationHint"),
+						...(o === "dropRegistration" && noPhantomSelected ? { disabled: true } : {}),
 					})),
 				];
 				if (!options.length) return null;

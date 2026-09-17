@@ -13,7 +13,7 @@ const open = (onSelect = vi.fn()) => {
 		<ActionsDropdownButton label="Операции" onSelect={onSelect} options={[
 			{ id: "info", label: "Обновить сведения" },
 			{ id: "publish", label: "Опубликовать" },
-			{ id: "drop", label: "Удалить регистрацию из кластера", group: "Опасные команды", danger: true },
+			{ id: "drop", label: "Удалить базу из кластера 1С", group: "Опасные команды", danger: true },
 			{ id: "blocked", label: "Недоступная", group: "Опасные команды", danger: true, disabled: true, hint: "почему нельзя" },
 		]} />,
 	);
@@ -27,7 +27,7 @@ describe("разделы выпадающего меню", () => {
 		const menu = screen.getByRole("menu");
 		const texts = Array.from(menu.children).map((el) => el.textContent);
 		expect(texts).toEqual([
-			"Обновить сведения", "Опубликовать", "Опасные команды", "Удалить регистрацию из кластера", "Недоступная",
+			"Обновить сведения", "Опубликовать", "Опасные команды", "Удалить базу из кластера 1С", "Недоступная",
 		]);
 		expect(screen.getAllByText("Опасные команды")).toHaveLength(1);
 		// Заголовок — не пункт меню.
@@ -40,7 +40,7 @@ describe("разделы выпадающего меню", () => {
 		expect(blocked.getAttribute("title")).toBe("почему нельзя");
 		fireEvent.click(blocked);
 		expect(onSelect).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Удалить регистрацию из кластера" }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Удалить базу из кластера 1С" }));
 		expect(onSelect).toHaveBeenCalledWith("drop");
 	});
 });
