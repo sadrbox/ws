@@ -9,6 +9,20 @@
  * и строка внизу про связь с агентом.
  */
 
+/*
+ * ФОРМА ВО ВСЮ ШИРИНУ. Общий каркас форм держит колонку 600 px — она рассчитана на поля ввода, которые читают по
+ * одному. Здесь другое: два столбца реквизитов и строки состояния, у которых справа своё действие; в узкой колонке
+ * столбцы схлопываются в один, а кнопки переносятся под текст.
+ */
+.Page {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	width: 100%;
+	max-width: 1100px;
+	padding: 0 12px 12px 0;
+}
+
 // Панель команд карточки: как в конфигураторе — над формой, а не внутри группы полей.
 .Toolbar {
 	display: flex;
@@ -36,7 +50,19 @@
 	grid-template-columns: 180px minmax(0, 1fr) auto;
 	align-items: center;
 	column-gap: 12px;
-	row-gap: 3px;
+	row-gap: 6px;
+}
+
+// Узкая панель: действие переезжает под состояние, а не сжимает его до многоточия.
+@container (max-width: 720px) {
+	.StateGrid {
+		grid-template-columns: 150px minmax(0, 1fr);
+	}
+
+	.StateAction {
+		grid-column: 2;
+		justify-self: start;
+	}
 }
 
 .StateLabel {
@@ -98,6 +124,11 @@
 	border-top: 1px solid $color10;
 	color: $color51;
 	font-size: 12px;
+}
+
+// Распорка в строке связи: слева — кто отвечает за базу, справа — почему здесь ничего не правят.
+.FooterSpacer {
+	flex-grow: 1;
 }
 
 .Dot {

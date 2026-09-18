@@ -2330,6 +2330,7 @@
   "onecBaseId": "Дерекқор идентификаторы",
   "onecBaseDbCheckedAt": "дерекқор тексерілген",
   "onecBaseDbNotChecked": "дерекқор әлі тексерілмеген",
+  "onecBaseDbCheckOne": "Тексеру",
   "onecBasesDbCheckHint": "ДҚБЖ-дан осы дерекқордың деректер қоры бар-жоғын сұрау: «фантомдар» — деректерсіз кластер жазбалары — осылай табылады.",
   "onecBasesDbChecked": "Тексерілген базалар",
   "onecBasesDbMissing": "дерекқоры жоқ",

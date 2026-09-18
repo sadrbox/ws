@@ -22,7 +22,6 @@ import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
 import { FormArea, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
-import Notice from "src/components/Notice";
 import { ValueList, ValueRow } from "src/components/ValueList";
 import main from "src/styles/main.module.scss";
 import dense from "./OneCBases.module.scss";
@@ -612,48 +611,20 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 					component: (
 						<div className={main.FormContainer}>
 							<div className={main.FormWrapper}>
-								<GroupCol className={main.Form}>
+								<GroupCol className={dense.Page}>
 									{/*
 									  * ПАНЕЛЬ КОМАНД — НАД ФОРМОЙ (18.09), как в конфигураторе. Раньше команды карточки лежали
 									  * внутри группы «Реквизиты», под десятком строк «подпись — значение»: там их не искали, а
 									  * группа обещала реквизиты, а не действия.
 									  */}
 									<div className={dense.Toolbar}>
-										<Button icon="reload" variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
+										<Button size="sm" icon="reload" variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
 											title={infoKnown
 												? translate("onecBaseInfoHint")
 												: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}
 											onClick={() => readInfo.mutate()}>
 											{translate("onecBaseInfoRefresh")}
 										</Button>
-										<Button icon="search" variant="secondary" disabled={!key || checkDb.isPending || dbCheckRunning}
-											title={translate("onecBasesDbCheckHint")}
-											onClick={() => checkDb.mutate()}>
-											{translate("onecBasesDbCheck")}
-										</Button>
-										<div className={dense.ToolbarGap} />
-										<Button variant={jobsDenied ? "primary" : "secondary"}
-											disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
-											title={jobsKnown
-												? translate("onecScheduledJobsHint")
-												: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
-											onClick={() => setJobs.mutate({ denied: !jobsDenied })}>
-											{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
-										</Button>
-										{jobsWas !== null && jobsWas !== jobsDenied && (
-											<Button variant="primary"
-												disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
-												title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
-												onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
-												{translate("onecScheduledJobsRestore")}
-											</Button>
-										)}
-										<BasePublication compact baseKey={asText(row.baseKey)}
-											serverName={row.serverName ? asText(row.serverName) : null}
-											published={row.published as boolean | null}
-											publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
-											publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
-											seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
 									</div>
 
 									{/*
@@ -688,7 +659,14 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 												value={state.label}
 												note={row.dbCheckedAt
 													? `${translate("onecBaseDbCheckedAt")}: ${getFormatDate(asText(row.dbCheckedAt))}`
-													: translate("onecBaseDbNotChecked")} />
+													: translate("onecBaseDbNotChecked")}
+												action={(
+													<Button size="sm" icon="search" variant="secondary" disabled={!key || checkDb.isPending || dbCheckRunning}
+														title={translate("onecBasesDbCheckHint")}
+														onClick={() => checkDb.mutate()}>
+														{translate("onecBaseDbCheckOne")}
+													</Button>
+												)} />
 
 											<OverviewRow label={translate("onecPublication")}
 												title={row.publishUrlPublic && row.publishUrl && row.publishUrlPublic !== row.publishUrl
@@ -699,7 +677,15 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 												note={[
 													row.publishUrlPublic || row.publishUrl ? asText(row.publishUrlPublic || row.publishUrl) : "",
 													row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "",
-												].filter(Boolean).join(" · ")} />
+												].filter(Boolean).join(" · ")}
+												action={(
+													<BasePublication compact baseKey={asText(row.baseKey)}
+														serverName={row.serverName ? asText(row.serverName) : null}
+														published={row.published as boolean | null}
+														publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
+														publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
+														seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
+												)} />
 
 											<OverviewRow label={translate("onecScheduledJobs")}
 												tone={jobsDenied === true ? "warn" : jobsDenied === false ? "ok" : undefined}
@@ -709,7 +695,27 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 												// Время — только у прочитанного у кластера; записанное по команде так и называем (С40).
 												note={row.scheduledJobsSource === "command"
 													? translate("onecScheduledJobsByCommand")
-													: row.scheduledJobsSeenAt ? getFormatDate(asText(row.scheduledJobsSeenAt)) : ""} />
+													: row.scheduledJobsSeenAt ? getFormatDate(asText(row.scheduledJobsSeenAt)) : ""}
+												action={canWrite ? (
+													<>
+														<Button size="sm" variant={jobsDenied ? "primary" : "secondary"}
+															disabled={!key || !jobsKnown || setJobs.isPending || jobsRunning}
+															title={jobsKnown
+																? translate("onecScheduledJobsHint")
+																: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
+															onClick={() => setJobs.mutate({ denied: !jobsDenied })}>
+															{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
+														</Button>
+														{jobsWas !== null && jobsWas !== jobsDenied && (
+															<Button size="sm" variant="primary"
+																disabled={!key || !jobsKnown || setJobs.isPending || jobsRunning}
+																title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
+																onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
+																{translate("onecScheduledJobsRestore")}
+															</Button>
+														)}
+													</>
+												) : undefined} />
 
 											{(() => {
 												const lock = sessionsLockView(row as never);
@@ -751,6 +757,9 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 										{adminAgent?.lastSeenAt && (
 											<span>· {translate("lastSeenAt")}: {getFormatDate(adminAgent.lastSeenAt)}</span>
 										)}
+										{/* Реестр наполняют кластер и агент: править здесь нечего — и это сказано, а не додумано. */}
+										<span className={dense.FooterSpacer} />
+										<span>{translate("onecBaseCardReadonly")}</span>
 									</div>
 
 									{/* Доступность: почему в базу не войти и что панель может с этим
@@ -772,11 +781,9 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 								</GroupCol>
 
 								<GroupCol className={main.FormNotice}>
-									{/* Реестр наполняют кластер и агент: править здесь нечего, и это
-									    должно быть сказано, а не додумано по серым полям. */}
-									<Notice inline items={[{ type: "info", text: translate("onecBaseCardReadonly") }]} />
-									{/* А если и команд карточки не видно — причина в правах, и сказать
-									    об этом надо в самой карточке: её вкладки живут своей доской. */}
+									{/* Команд карточки не видно — причина в правах, и сказать об этом надо в самой
+									    карточке: её вкладки живут своей доской. Подсказка «здесь не правят» ушла в строку
+									    под формой: в отдельной колонке она отнимала ширину у двух столбцов реквизитов. */}
 									<ReadonlyNotice />
 								</GroupCol>
 							</div>

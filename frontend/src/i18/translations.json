@@ -2330,6 +2330,7 @@
   "onecBaseId": "Идентификатор базы",
   "onecBaseDbCheckedAt": "базу данных проверяли",
   "onecBaseDbNotChecked": "базу данных ещё не проверяли",
+  "onecBaseDbCheckOne": "Проверить",
   "onecBasesDbCheckHint": "Спросить у СУБД, есть ли база данных этой базы: так находят «фантомы» — записи кластера без данных.",
   "onecBasesDbChecked": "Проверено баз",
   "onecBasesDbMissing": "нет базы данных",
