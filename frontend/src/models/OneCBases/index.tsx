@@ -50,7 +50,7 @@ import BaseCredentialsTab from "./BaseCredentials";
 import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
-import { publicationsProblem, rejectedReportText } from "src/models/OneCAdmin/publicationsOutcome";
+import { dbCheckProblem, publicationsProblem, rejectedReportText } from "src/models/OneCAdmin/publicationsOutcome";
 import { noteNotice } from "src/components/TechMessages/store";
 import { useNoticeScope, useScopeObject } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
@@ -778,6 +778,9 @@ export const OneCBasesList: FC<{
 			const warn = (text: string) => noteNotice(translate("onecPublication"), { type: "warning", text });
 			const problem = publicationsProblem(d.publications);
 			if (problem) warn(problem);
+			// Выборочная проверка баз данных (18.09): молчит, пока всё на месте, — говорит о пропавших базах.
+			const db = dbCheckProblem(d.dbCheck);
+			if (db) noteNotice(translate("onecTabBases"), { type: db.severity, text: db.text });
 			const p = d.publications;
 			if (p && "pending" in p && p.commandId) {
 				const late = await awaitPublicationsCheck(p.commandId).catch((e: unknown) => {

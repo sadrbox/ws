@@ -2329,6 +2329,7 @@
   "onecBasesDbCheck": "Дерекқорларды тексеру",
   "onecBasesDbChecked": "Тексерілген базалар",
   "onecBasesDbMissing": "дерекқоры жоқ",
+  "onecBasesDbCheckFailed": "Дерекқорларды тексеру орындалмады",
   "onecAbort": "Тоқтату",
   "onecAbortConfirm": "Команда 1С серверінде орындалып жатыр. Тоқтату керек пе?",
   "onecAborted": "Тоқтатылған командалар",

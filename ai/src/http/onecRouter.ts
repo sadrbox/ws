@@ -1,7 +1,8 @@
 // Администрирование 1С для панели aleppo.kz (E15/A3, A5-P0).
 //
 //   GET  /v1/onec/bases                      реестр баз (из БД, без обращения к кластеру)
-//   POST /v1/onec/bases/refresh              перечитать список баз у админ-агента (rac); { publications: true } — и публикации
+//   POST /v1/onec/bases/refresh              перечитать список баз у админ-агента (rac); { publications, checkDb } — и публикации,
+//                                            и выборочную проверку баз данных (новые и давно не проверявшиеся)
 //   GET  /v1/onec/bases/:key/info            сведения о базе
 //   DELETE /v1/onec/bases/:key               убрать из реестра базу, которой нет в кластере (С45)
 //   GET  /v1/onec/sessions?baseKey=…         сеансы кластера или одной базы
@@ -58,6 +59,14 @@ type Deps = {
 };
 
 /** Итог админ-команды: HTTP-статус и тело в общем конверте {success, data|error}. */
+/**
+ * Выборочная проверка баз данных внутри «Обновить» (18.09): что считать «давно не проверяли» и сколько баз брать
+ * за раз. Сутки — потому что база из СУБД исчезает не сама по себе, а в чьих-то работах; двадцать баз при 0,3 с на
+ * базу укладываются в несколько секунд, остальные дождутся следующего обновления или полной проверки по кнопке.
+ */
+const DB_CHECK_STALE_HOURS = 24;
+const DB_CHECK_MAX_BASES = 20;
+
 type Outcome = { status: number; body: Record<string, unknown>; data?: unknown };
 
 const fail = (status: number, code: string, message: string): Outcome =>
@@ -443,7 +452,9 @@ export function onecRouter(deps: Deps) {
 	 * «ещё идёт» или отказ.
 	 */
 	r.post("/bases/refresh", async (req, res) => {
-		const withPublications = (req.body as { publications?: unknown } | undefined)?.publications === true;
+		const body = (req.body ?? {}) as { publications?: unknown; checkDb?: unknown };
+		const withPublications = body.publications === true;
+		const withDbCheck = body.checkDb === true;
 		const agent = await agents.pickAdminAgent(null);
 		const [outcome, pub] = await Promise.all([
 			run(req, "CLUSTER_LIST_INFOBASES", {}),
@@ -464,6 +475,31 @@ export function onecRouter(deps: Deps) {
 				if (p.items.length) await bases.applyPublications(agent.serverId, p.items, p.complete, p.evidence);
 			}
 		}
+		/*
+		 * ПРОВЕРКА БАЗ ДАННЫХ — ВЫБОРОЧНО (18.09). Полная проверка всех баз идёт десятки секунд и стучится в СУБД по
+		 * каждой базе (живой замер 17.09: 111 баз — 34 с), поэтому в «Обновить» она входит только для тех, кого ещё
+		 * не проверяли (новые в кластере) или проверяли давно. Обычно это ноль баз и нисколько времени; полная
+		 * проверка осталась отдельной командой «Проверить базы данных».
+		 */
+		let dbCheck: { checked: number; missing: number } | { pending: true; commandId: string | null } | { error: unknown } | undefined;
+		if (withDbCheck && agent?.serverId) {
+			const stale = await bases.staleDbCheck(agent.serverId, DB_CHECK_STALE_HOURS, DB_CHECK_MAX_BASES);
+			if (stale.length) {
+				const checked = await run(req, "CLUSTER_CHECK_BASES", { baseKeys: stale });
+				dbCheck = checked.status === 200
+					? {
+						checked: (checked.data as { checked?: number } | null)?.checked ?? stale.length,
+						missing: ((checked.data as { items?: { dbMissing?: boolean }[] } | null)?.items ?? [])
+							.filter((i) => i.dbMissing === true).length,
+					}
+					: checked.status === 202
+						? { pending: true, commandId: (checked.body.data as { commandId?: string } | undefined)?.commandId ?? null }
+						: { error: (checked.body as { error?: unknown }).error };
+			} else {
+				dbCheck = { checked: 0, missing: 0 };
+			}
+		}
+
 		const publications = !pub ? undefined
 			: pub.status === 200 ? { report: publicationsReport(pub.data) }
 				: pub.status === 202 ? { pending: true, commandId: (pub.body.data as { commandId?: string } | undefined)?.commandId ?? null }
@@ -471,7 +507,11 @@ export function onecRouter(deps: Deps) {
 		// Отвечаем ВСЕГДА реестром, а не сырым ответом rac: у них разная форма (у rac нет
 		// ни сервера, ни счётчика расширений), и панель на сыром ответе рисовала пустые
 		// колонки. Если применить было нечего — вернём то, что знаем сейчас.
-		send(res, { status: 200, body: { success: true, data: { items: await bases.listAll(), ...(publications ? { publications } : {}) } } });
+		send(res, { status: 200, body: { success: true, data: {
+			items: await bases.listAll(),
+			...(publications ? { publications } : {}),
+			...(dbCheck ? { dbCheck } : {}),
+		} } });
 	});
 
 	/**

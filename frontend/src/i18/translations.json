@@ -2329,6 +2329,7 @@
   "onecBasesDbCheck": "Проверить базы данных",
   "onecBasesDbChecked": "Проверено баз",
   "onecBasesDbMissing": "нет базы данных",
+  "onecBasesDbCheckFailed": "Проверка баз данных не выполнена",
   "onecAbort": "Прервать",
   "onecAbortConfirm": "Команда уже выполняется на сервере 1С. Прервать?",
   "onecAborted": "Прервано команд",

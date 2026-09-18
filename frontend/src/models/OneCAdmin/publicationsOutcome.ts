@@ -9,7 +9,7 @@
  * Отдельным модулем: итог проверяется тестом, а не-компонентный экспорт в модуле с компонентом ломает Fast Refresh.
  */
 import { translate } from "src/i18";
-import type { PublicationReport, PublicationsRefresh } from "src/services/onec/api";
+import type { DbCheckRefresh, PublicationReport, PublicationsRefresh } from "src/services/onec/api";
 
 /** Разбор среза, который сервис не принял, — с тем, где агент искал. `null` — срез принят. */
 export function rejectedReportText(r: PublicationReport): string | null {
@@ -31,4 +31,23 @@ export function publicationsProblem(p: PublicationsRefresh | undefined): string 
 		return `${translate("onecPublicationsCheckFailed")}${message ? `: ${message}` : ""}`;
 	}
 	return rejectedReportText(p.report);
+}
+
+/**
+ * Что сказать о выборочной проверке баз данных после «Обновить» (18.09): `null` — ничего.
+ *
+ * Молчим, когда проверять было нечего или всё на месте: человек нажал «Обновить», а не «Проверить базы данных».
+ * Говорим, когда база из СУБД пропала — это то, ради чего проверка и нужна, — и когда проверка не выполнена.
+ */
+export function dbCheckProblem(d: DbCheckRefresh | undefined): { severity: "warning"; text: string } | null {
+	if (!d || "pending" in d) return null;
+	if ("error" in d) {
+		const message = d.error?.message?.trim();
+		return { severity: "warning", text: `${translate("onecBasesDbCheckFailed")}${message ? `: ${message}` : ""}` };
+	}
+	if (!d.missing) return null;
+	return {
+		severity: "warning",
+		text: `${translate("onecBasesDbChecked")}: ${d.checked}, ${translate("onecBasesDbMissing")}: ${d.missing}`,
+	};
 }

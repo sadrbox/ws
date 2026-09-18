@@ -5,7 +5,7 @@
  * не выполнена: иначе «Обновить» оставит прежнее состояние публикаций и выдаст его за свежее.
  */
 import { describe, it, expect } from "vitest";
-import { publicationsProblem, rejectedReportText } from "src/models/OneCAdmin/publicationsOutcome";
+import { dbCheckProblem, publicationsProblem, rejectedReportText } from "src/models/OneCAdmin/publicationsOutcome";
 import type { PublicationReport } from "src/services/onec/api";
 
 const report = (over: Partial<PublicationReport> = {}): PublicationReport => ({
@@ -38,5 +38,30 @@ describe("итог публикаций после «Обновить»", () => 
 	it("разбор дождавшейся проверки — тем же правилом", () => {
 		expect(rejectedReportText(report())).toBeNull();
 		expect(rejectedReportText(report({ accepted: false, lookedIn: 0 }))).not.toMatch(/Просмотрено/);
+	});
+});
+
+/**
+ * «Обновить» заодно проверяет базы данных у новых и давно не проверявшихся баз (18.09). Обычно проверять нечего —
+ * и тогда сказать нечего: человек нажал «Обновить», а не «Проверить базы данных».
+ */
+describe("итог выборочной проверки баз данных", () => {
+	it("проверять было нечего или всё на месте — молчим", () => {
+		expect(dbCheckProblem(undefined)).toBeNull();
+		expect(dbCheckProblem({ checked: 0, missing: 0 })).toBeNull();
+		expect(dbCheckProblem({ checked: 7, missing: 0 })).toBeNull();
+		expect(dbCheckProblem({ pending: true, commandId: "cmd-1" })).toBeNull();
+	});
+
+	it("база из СУБД пропала — предупреждение с числами", () => {
+		const r = dbCheckProblem({ checked: 7, missing: 2 });
+		expect(r?.severity).toBe("warning");
+		expect(r?.text).toBe("Проверено баз: 7, нет базы данных: 2");
+	});
+
+	it("проверка не выполнена — своё сообщение с текстом отказа", () => {
+		expect(dbCheckProblem({ error: { message: "нет пароля СУБД" } })?.text)
+			.toBe("Проверка баз данных не выполнена: нет пароля СУБД");
+		expect(dbCheckProblem({ error: {} })?.text).toBe("Проверка баз данных не выполнена");
 	});
 });

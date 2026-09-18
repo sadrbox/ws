@@ -177,17 +177,23 @@ export const refreshBases = () =>
  * судьбу обновления: список обновлён, а по ним — разбор среза, «ещё идёт» (`pending`) или отказ (`error`).
  * Сервис старее этой правки поле `publications` не отдаёт — тогда обновляется только список, как раньше.
  */
+/** Итог выборочной проверки баз данных внутри «Обновить» (18.09). */
+export type DbCheckRefresh =
+	| { checked: number; missing: number }
+	| { pending: true; commandId: string | null }
+	| { error: { code?: string; message?: string } };
+
 export type PublicationsRefresh =
 	| { report: PublicationReport }
 	| { pending: true; commandId: string | null }
 	| { error: { code?: string; message?: string } };
 
 export const refreshBasesAndPublications = () =>
-	aiFetch<{ items: OnecBase[]; publications?: PublicationsRefresh } | Pending>(
-		"/v1/onec/bases/refresh", { method: "POST", body: JSON.stringify({ publications: true }) },
+	aiFetch<{ items: OnecBase[]; publications?: PublicationsRefresh; dbCheck?: DbCheckRefresh } | Pending>(
+		"/v1/onec/bases/refresh", { method: "POST", body: JSON.stringify({ publications: true, checkDb: true }) },
 	).then(async (d) => (isPending(d)
 		// Список не успел за время запроса: дожидаемся, срез применит сервис при приёме; публикации — тоже там.
-		? { items: (await awaitCommand<{ items: unknown[] }>(d).then(() => fetchBases())).items, publications: undefined }
+		? { items: (await awaitCommand<{ items: unknown[] }>(d).then(() => fetchBases())).items, publications: undefined, dbCheck: undefined }
 		: d));
 
 /** Дождаться проверки публикаций, которая не успела за время запроса «Обновить». */

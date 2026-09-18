@@ -52,6 +52,8 @@ export type BaseRow = {
 	publish_url: string | null;
 	publish_seen_at: Date | null;
 	ib_unreachable_at: Date | null;
+	/** Когда у базы проверяли наличие базы данных в СУБД (миграция 032). */
+	db_checked_at?: Date | null;
 	ib_unreachable_reason: string | null;
 	sessions_denied?: boolean | null;
 	sessions_denied_message?: string | null;
@@ -110,6 +112,8 @@ export type BaseView = {
 	serverName: string;
 	key: string;
 	name: string;
+	/** Когда проверяли наличие базы данных в СУБД; null — ни разу. */
+	dbCheckedAt: string | null;
 	/** Статус ДЛЯ ПОКАЗА: у скрытой базы — `DISABLED`, что бы ни говорил кластер. */
 	status: string;
 	/**
@@ -348,7 +352,7 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ — ext_version заполняет только heartbeat
 	-- бизнес-агента, и то лишь про своё расширение bpapi.
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
-	b.ib_unreachable_reason,
+	b.ib_unreachable_reason, b.db_checked_at,
 	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,
 	b.sessions_denied_seen_at, b.sessions_denied_source, b.sessions_denied_active, b.sessions_denied_code_set,
 	b.scheduled_jobs_denied, b.scheduled_jobs_seen_at, b.scheduled_jobs_source, b.config_name, b.config_version, b.config_seen_at,
@@ -567,6 +571,18 @@ export class BaseService {
 	 * а не про учётные записи), поля нет — база не трогается.
 	 */
 	async applyDbPresence(serverId: string, items: { key: string; dbMissing?: boolean | null }[]): Promise<void> {
+		/*
+		 * ОТМЕТКА «ПРОВЕРЕНО» — по тем базам, про которые агент ответил определённо (есть база данных или нет).
+		 * По ней «Обновить» выбирает, кого проверять: новых и давно не проверявшихся, а не все сто одиннадцать
+		 * (живой замер 17.09: полная проверка — 34 с и стук в СУБД по каждой базе).
+		 */
+		const answered = items.filter((s) => typeof s.dbMissing === "boolean").map((s) => s.key);
+		if (answered.length) {
+			await this.db.query(
+				`UPDATE bases SET db_checked_at = now() WHERE server_id = $1 AND key = ANY($2::text[])`,
+				[serverId, answered],
+			);
+		}
 		// Снятие отметки «нет в СУБД» — отдельным запросом: в UPSERT его не выразить,
 		// не запутав ветку «поля нет вовсе». Задевает только те базы, что помечены NO_DB,
 		// и только те, про которые агент сказал `false`.
@@ -606,6 +622,24 @@ export class BaseService {
 		});
 		if (answered.length) await this.applyDbPresence(serverId, answered);
 		return answered.length;
+	}
+
+	/**
+	 * Кого проверять на наличие базы данных при «Обновить» (18.09): тех, кого ещё ни разу не проверяли (новые в
+	 * кластере), и тех, кого проверяли давно. Скрытые и отсутствующие в кластере не в счёт — с ними всё равно
+	 * не работают. Ограничение сверху: «Обновить» не должно превращаться в получасовую проверку, остальные
+	 * дождутся следующего раза или полной проверки по кнопке.
+	 */
+	async staleDbCheck(serverId: string, olderThanHours: number, limit: number): Promise<string[]> {
+		const r = await this.db.query<{ key: string }>(
+			`SELECT key FROM bases
+			  WHERE server_id = $1 AND disabled_at IS NULL AND status <> 'MISSING'
+			    AND (db_checked_at IS NULL OR db_checked_at < now() - make_interval(hours => $2::int))
+			  ORDER BY db_checked_at NULLS FIRST, key
+			  LIMIT $3`,
+			[serverId, olderThanHours, limit],
+		);
+		return r.rows.map((x) => x.key);
 	}
 
 	async listByOrganization(organizationUuid: string): Promise<BaseView[]> {
@@ -953,6 +987,7 @@ export class BaseService {
 			publishUrlPublic: publicUrl(r.publish_url, r.public_host ?? null),
 			publishSeenAt: r.publish_seen_at?.toISOString() ?? null,
 			ibUnreachableAt: r.ib_unreachable_at?.toISOString() ?? null,
+			dbCheckedAt: r.db_checked_at?.toISOString() ?? null,
 			ibUnreachableReason: (r.ib_unreachable_reason as IbUnreachableReason | null) ?? null,
 			extensionsCount: r.extensions_count,
 			// Имена нужны панели, чтобы отобрать базы БЕЗ нужного расширения: иначе их
