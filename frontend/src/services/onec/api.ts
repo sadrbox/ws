@@ -28,6 +28,8 @@ export type OnecBase = {
 	/** Сколько расширений видели в базе; null — базу ещё ни разу не проверяли. */
 	extensionsCount: number | null;
 	extensionsSeenAt: string | null;
+	/** Когда у базы проверяли наличие базы данных в СУБД (миграция 032); null — ни разу. */
+	dbCheckedAt?: string | null;
 	/** Имена расширений из кэша — по ним отбираются базы БЕЗ нужного расширения. */
 	extensionNames: string[];
 	sessionsCount: number | null;

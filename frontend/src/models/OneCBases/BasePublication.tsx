@@ -53,7 +53,9 @@ export const BasePublication: FC<{
 	seenAt: string | null;
 	/** Сервер базы — по нему берётся «Адрес сервера» для предпросмотра ссылки. */
 	serverName?: string | null;
-}> = ({ baseKey, published, publishUrl, publishUrlPublic, seenAt, serverName }) => {
+	/** Только команды, без своей группы и списка значений: вкладка «Основное» показывает состояние сама. */
+	compact?: boolean;
+}> = ({ baseKey, published, publishUrl, publishUrlPublic, seenAt, serverName, compact }) => {
 	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const scope = useNoticeScope();
@@ -100,6 +102,48 @@ export const BasePublication: FC<{
 		},
 	});
 
+	// Подтверждение — одно на оба вида: в сжатом оно висит при кнопках, в полном — при группе.
+	const confirmModal = confirm ? (
+		<Modal title={translate(SPEC[confirm].title)} onClose={() => setConfirm(null)}
+			onApply={() => run.mutate(confirm)}>
+			<div className={styles.ConfirmText}>
+				<div className={styles.ConfirmDetails}>{translate("onecBase")}: {baseKey}</div>
+				<Notice inline items={[
+					{ type: "attention", text: translate(SPEC[confirm].warning) },
+					// Снятие публикации адреса не создаёт — подсказка только к публикации.
+					...(confirm === "publish" ? [address] : []),
+				]} />
+			</div>
+		</Modal>
+	) : null;
+
+	/*
+	 * СЖАТЫЙ ВИД (18.09): только команды, без своей группы и списка значений. Во вкладке «Основное» состояние
+	 * публикации стоит строкой в «Состоянии», и повторять его рядом с кнопками незачем — а подтверждение,
+	 * предупреждение об адресе и постановка задания остаются здесь, в одном месте.
+	 */
+	if (compact) {
+		return (
+			<>
+				{canWrite && (
+					<>
+						<Button icon="open" variant="secondary" disabled={run.isPending || publishRunning}
+							title={`${translate("onecPublish")}: ${baseKey}`}
+							onClick={() => setConfirm("publish")}>
+							{translate("onecPublish")}
+						</Button>
+						<Button icon="clear" variant="danger" disabled={run.isPending || publishRunning}
+							title={`${translate("onecUnpublish")}: ${baseKey}`}
+							onClick={() => setConfirm("unpublish")}>
+							{translate("onecUnpublish")}
+						</Button>
+					</>
+				)}
+				{confirmModal}
+			</>
+		);
+	}
+
 	return (
 		<FormArea title={translate("onecPublication")}>
 			<GroupCol>
@@ -135,19 +179,7 @@ export const BasePublication: FC<{
 				)}
 			</GroupCol>
 
-			{confirm && (
-				<Modal title={translate(SPEC[confirm].title)} onClose={() => setConfirm(null)}
-					onApply={() => run.mutate(confirm)}>
-					<div className={styles.ConfirmText}>
-						<div className={styles.ConfirmDetails}>{translate("onecBase")}: {baseKey}</div>
-						<Notice inline items={[
-							{ type: "attention", text: translate(SPEC[confirm].warning) },
-							// Снятие публикации адреса не создаёт — подсказка только к публикации.
-							...(confirm === "publish" ? [address] : []),
-						]} />
-					</div>
-				</Modal>
-			)}
+			{confirmModal}
 		</FormArea>
 	);
 };

@@ -31,11 +31,19 @@ export const ValueList: FC<{
 	 * должны сжиматься до многоточия ради второй колонки.
 	 */
 	columns?: 1 | 2;
+	/**
+	 * ПЛОТНЫЙ ВИД: шаг строки по тексту, а не по высоте поля ввода, подпись прижата к значению справа.
+	 *
+	 * Для форм, где реквизитов много и все они только читаются (карточка базы 1С): просторный ритм полей там
+	 * растягивал десяток строк на всю высоту вкладки, а правит их всё равно кластер, а не человек.
+	 */
+	dense?: boolean;
 	className?: string;
-}> = ({ children, labelWidth, columns = 1, className }) => (
+}> = ({ children, labelWidth, columns = 1, dense, className }) => (
 	<dl
 		className={[styles.List, className].filter(Boolean).join(" ")}
 		data-cols={columns === 2 ? "2" : undefined}
+		data-dense={dense ? "1" : undefined}
 		style={labelWidth ? ({ "--value-label": labelWidth } as React.CSSProperties) : undefined}
 	>
 		{children}

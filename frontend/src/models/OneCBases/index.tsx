@@ -14,18 +14,18 @@ import { useRunningCommand } from "src/components/TechMessages/operations";
 import { finishOp } from "src/models/OneCAdmin/progress";
 import { startOp } from "src/models/OneCAdmin/progress";
 import { useOnecWrite } from "src/models/OneCAdmin/shared";
-import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
-import { FormArea, GroupCol, GroupRow } from "src/components/UI";
+import { FormArea, GroupCol } from "src/components/UI";
 import { Button } from "src/components/Button";
 import Notice from "src/components/Notice";
 import { ValueList, ValueRow } from "src/components/ValueList";
-import { StateChip, StateChips } from "src/components/StateChip";
 import main from "src/styles/main.module.scss";
+import dense from "./OneCBases.module.scss";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
@@ -36,7 +36,7 @@ import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	awaitPublicationsCheck, fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBasesAndPublications, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
+	awaitPublicationsCheck, checkBasesDb, fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBasesAndPublications, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
 } from "src/services/onec/api";
 import {
 	EchoDelayNotice, QueryError, ReadonlyNotice, publishLabel, unreachableReason, unreachableShort,
@@ -55,6 +55,7 @@ import { noteNotice } from "src/components/TechMessages/store";
 import { useNoticeScope, useScopeObject } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
+import { checkDbOutcome } from "src/models/OneCAdmin/checkBasesDb";
 import BaseMaintenance from "./BaseMaintenance";
 import { onBaseTabRequest, takeBaseTab, type BaseOpenAt } from "./openAt";
 import columnsJson from "./columns.json";
@@ -85,6 +86,34 @@ const baseState = (row: TDataItem): { label: string; tone: "ok" | "bad" | "unkno
 	const status = asText(row.status);
 	return { label: statusLabel(status), tone: status === "ONLINE" ? "ok" : "unknown" };
 };
+
+/**
+ * СТРОКА СОСТОЯНИЯ во вкладке «Основное»: о чём речь — как сейчас — что можно сделать.
+ *
+ * Три колонки одной сетки, а не карточка на каждый предмет: у карточки базы предметов шесть, и каждому нужна
+ * ровно одна строка. Цвет поддерживает слово, а не заменяет его: «Отключены» читается и без цвета.
+ */
+const OverviewRow: FC<{
+	label: string;
+	value: ReactNode;
+	/** Подробность: когда прочитано, сколько сеансов, адрес публикации. */
+	note?: string;
+	/** Действие этой строки — рядом с её состоянием, а не общим рядом внизу формы. */
+	action?: ReactNode;
+	tone?: "ok" | "warn" | "bad";
+	title?: string;
+}> = ({ label, value, note, action, tone, title }) => (
+	<>
+		<div className={dense.StateLabel} title={title}>{label}</div>
+		<div className={dense.StateValue} title={title}>
+			<span className={tone === "ok" ? dense.Ok : tone === "warn" ? dense.Warn : tone === "bad" ? dense.Bad : undefined}>
+				{value}
+			</span>
+			{note ? <span className={dense.StateNote}>· {note}</span> : null}
+		</div>
+		<div className={dense.StateAction}>{action}</div>
+	</>
+);
 
 /**
  * «Прочитано» — когда содержимое базы читали у самой 1С.
@@ -363,6 +392,8 @@ const baseToRow = (b: OnecBase): TDataItem => ({
 	published: b.published, publishUrl: b.publishUrl,
 	publishUrlPublic: b.publishUrlPublic, publishSeenAt: b.publishSeenAt,
 	ibUnreachableAt: b.ibUnreachableAt, ibUnreachableReason: b.ibUnreachableReason,
+	// Когда проверяли наличие базы данных в СУБД (миграция 032): по нему видно, насколько свежа отметка «нет в СУБД».
+	dbCheckedAt: b.dbCheckedAt ?? null,
 	disabled: b.disabled,
 	lastSeenAt: b.lastSeenAt, infobaseId: b.infobaseId,
 	sessionsDenied: b.sessionsDenied ?? null, sessionsDeniedMessage: b.sessionsDeniedMessage ?? null,
@@ -451,6 +482,8 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 			ibUnreachableAt: asText(row.ibUnreachableAt), ibUnreachableReason: reasonCode,
 		})
 		: undefined;
+	// Админ-агент сервера этой базы: он приносит все значения карточки и исполняет её команды.
+	const adminAgent = (agents.data?.items ?? []).find((a) => a.role === "admin");
 	const platform = asText(row.onecVersion)
 		|| (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform
 		|| translate("onecPlatformUnknown");
@@ -526,6 +559,26 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		onError: (e: unknown) => reportError(e, { source: translate("onecScheduledJobs"), scope }),
 	});
 
+	/*
+	 * ПРОВЕРИТЬ БАЗУ ДАННЫХ ИМЕННО ЭТОЙ БАЗЫ (18.09). В списке команда групповая и идёт по всем базам десятки
+	 * секунд; в карточке цель одна — и ответ приходит за доли секунды. Отметку «проверено» и причину «нет в СУБД»
+	 * ставит сам сервис при приёме ответа, карточке остаётся перечитать реестр и сказать итог словами.
+	 */
+	const dbCheckRunning = useRunningCommand(["CLUSTER_CHECK_BASES"], key);
+	const checkDb = useMutation({
+		mutationFn: () => withOp(
+			{ kind: "read", title: translate("onecBasesDbCheck"), target: key, total: 0, reportsOwnOutcome: true },
+			() => checkBasesDb([key]),
+		),
+		onSuccess: (d) => {
+			void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] });
+			void cardQc.invalidateQueries({ queryKey: ["onec-bases"] });
+			const o = checkDbOutcome(d);
+			noteNotice(translate("onecBase"), { type: o.severity === "success" ? "info" : "warning", text: o.text });
+		},
+		onError: (e) => reportError(e, { source: translate("onecBase"), scope }),
+	});
+
 	const readInfo = useMutation({
 		mutationFn: () => withOp(
 			{ kind: "read", title: translate("onecBaseInfoRefresh"), target: key, scope: { bases: [key] } },
@@ -561,104 +614,144 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 							<div className={main.FormWrapper}>
 								<GroupCol className={main.Form}>
 									{/*
-									  * СОСТОЯНИЕ — МЕТКАМИ, ДО ЧТЕНИЯ. С вопросом «что с ней сейчас»
-									  * карточку и открывают, а в общем списке ответ стоял третьей строкой
-									  * наравне с именем сервера: чтобы узнать, опубликована ли база,
-									  * приходилось прочитать семь строк. Слово в метке говорит то же, что и
-									  * цвет, — цвет лишь помогает найти её взглядом.
+									  * ПАНЕЛЬ КОМАНД — НАД ФОРМОЙ (18.09), как в конфигураторе. Раньше команды карточки лежали
+									  * внутри группы «Реквизиты», под десятком строк «подпись — значение»: там их не искали, а
+									  * группа обещала реквизиты, а не действия.
 									  */}
-									<FormArea title={translate("state")}>
-										<StateChips>
-											<StateChip tone={state.tone} title={unreachableTitle}>
-												{state.label}
-											</StateChip>
-											<StateChip tone={row.published === true ? "ok" : row.published === false ? "bad" : "unknown"}>
-												{publishLabel(row.published as boolean | null)}
-											</StateChip>
-											<StateChip tone={row.extensionsCount == null ? "unknown" : "neutral"}>
-												{row.extensionsCount == null
-													? translate("onecExtNotChecked")
-													: `${translate("extensionsCount")}: ${asText(row.extensionsCount)}`}
-											</StateChip>
-											{/*
-											  * Запрещённые регламентные задания — меткой в состоянии: это временное положение на время работ,
-											  * и о нём надо помнить, чтобы разрешить задания обратно.
-											  */}
-											{row.scheduledJobsDenied === true && (
-												<StateChip tone="bad" title={translate("onecScheduledJobsHint")}>
-													{translate("onecScheduledJobsDeniedChip")}
-												</StateChip>
-											)}
-											{/* Вход в базу: закрыт ли он сейчас — видно без перехода на «Сеансы». */}
-											{(() => {
-												const lock = sessionsLockView(row as never);
-												return lock.known
-													? <StateChip tone={lock.tone} title={lock.details || undefined}>{lock.label}</StateChip>
-													: null;
-											})()}
-										</StateChips>
-									</FormArea>
+									<div className={dense.Toolbar}>
+										<Button icon="reload" variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
+											title={infoKnown
+												? translate("onecBaseInfoHint")
+												: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}
+											onClick={() => readInfo.mutate()}>
+											{translate("onecBaseInfoRefresh")}
+										</Button>
+										<Button icon="search" variant="secondary" disabled={!key || checkDb.isPending || dbCheckRunning}
+											title={translate("onecBasesDbCheckHint")}
+											onClick={() => checkDb.mutate()}>
+											{translate("onecBasesDbCheck")}
+										</Button>
+										<div className={dense.ToolbarGap} />
+										<Button variant={jobsDenied ? "primary" : "secondary"}
+											disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
+											title={jobsKnown
+												? translate("onecScheduledJobsHint")
+												: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
+											onClick={() => setJobs.mutate({ denied: !jobsDenied })}>
+											{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
+										</Button>
+										{jobsWas !== null && jobsWas !== jobsDenied && (
+											<Button variant="primary"
+												disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
+												title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
+												onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
+												{translate("onecScheduledJobsRestore")}
+											</Button>
+										)}
+										<BasePublication compact baseKey={asText(row.baseKey)}
+											serverName={row.serverName ? asText(row.serverName) : null}
+											published={row.published as boolean | null}
+											publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
+											publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
+											seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
+									</div>
 
 									{/*
-									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение», а
-									  * не выключенными полями ввода. Поле с рамкой и серым фоном обещает
-									  * правку, которой нет: по нему щёлкают, ничего не происходит, и человек
-									  * идёт искать, где она включается.
-									  *
-									  * ДВА СТОЛБЦА: семь реквизитов в один занимали высоту всей вкладки, а
-									  * правая половина ширины пустовала — публикация уезжала за нижний край.
-									  * Порядок в разметке и есть порядок чтения: слева направо, сверху вниз.
+									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение», а не выключенными
+									  * полями ввода: поле с рамкой обещает правку, которой нет. Плотный вид (`dense`): шаг
+									  * строки задаёт текст, а не высота поля, — десяток реквизитов перестал занимать всю вкладку.
 									  */}
 									<FormArea title={translate("props")}>
-										<ValueList columns={2}>
+										<ValueList columns={2} dense labelWidth="170px">
 											<ValueRow label={translate("baseKey")} value={asText(row.baseKey)} />
 											<ValueRow label={translate("onecServer")} value={asText(row.serverName)} />
 											<ValueRow label={translate("name")} value={asText(row.name)} />
 											<ValueRow label={translate("onecVersion")} value={platform} />
-											<ValueRow label={translate("status")} title={unreachableTitle} value={state.label} />
-											<ValueRow label={translate("lastSeenAt")}
-												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
 											{/* Конфигурация — из эха загрузки, обновления, установки расширения и из «Обновить
 											    сведения» (S3, С35) — со временем чтения; платформа — строкой выше. */}
 											<ValueRow label={translate("onecConfiguration")} value={configLabel(row)} />
-											<ValueRow label={translate("onecScheduledJobs")}
+											<ValueRow label={translate("onecBaseId")}>
+												<span className={dense.Mono}>{row.infobaseId ? asText(row.infobaseId) : "—"}</span>
+											</ValueRow>
+										</ValueList>
+									</FormArea>
+
+									{/*
+									  * СОСТОЯНИЕ — СТРОКАМИ «что · как · что сделать» (18.09). Метки-чипы отвечали «как», но не
+									  * говорили, что с этим делать: кнопки лежали отдельным рядом под реквизитами, и к чему
+									  * относится каждая, приходилось догадываться.
+									  */}
+									<FormArea title={translate("state")}>
+										<div className={dense.StateGrid}>
+											<OverviewRow label={translate("status")} title={unreachableTitle}
+												tone={state.tone === "ok" ? "ok" : state.tone === "bad" ? "bad" : undefined}
+												value={state.label}
+												note={row.dbCheckedAt
+													? `${translate("onecBaseDbCheckedAt")}: ${getFormatDate(asText(row.dbCheckedAt))}`
+													: translate("onecBaseDbNotChecked")} />
+
+											<OverviewRow label={translate("onecPublication")}
+												title={row.publishUrlPublic && row.publishUrl && row.publishUrlPublic !== row.publishUrl
+													? `${translate("onecPublishUrlAgent")}: ${asText(row.publishUrl)}`
+													: undefined}
+												tone={row.published === true ? "ok" : row.published === false ? "bad" : undefined}
+												value={publishLabel(row.published as boolean | null)}
+												note={[
+													row.publishUrlPublic || row.publishUrl ? asText(row.publishUrlPublic || row.publishUrl) : "",
+													row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "",
+												].filter(Boolean).join(" · ")} />
+
+											<OverviewRow label={translate("onecScheduledJobs")}
+												tone={jobsDenied === true ? "warn" : jobsDenied === false ? "ok" : undefined}
 												value={jobsDenied == null
 													? "—"
-													: `${translate(jobsDenied ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}`
-														// Время — только у прочитанного у кластера; записанное по команде так и называем (С40).
-														+ (row.scheduledJobsSource === "command"
-															? ` · ${translate("onecScheduledJobsByCommand")}`
-															: row.scheduledJobsSeenAt ? ` · ${getFormatDate(asText(row.scheduledJobsSeenAt))}` : "")} />
-											<ValueRow label={translate("onecSessionsLockState")}
-												title={sessionsLockView(row as never).details || undefined}
-												value={sessionsLockView(row as never).label} />
-										</ValueList>
-										<GroupRow>
-											<Button variant={jobsDenied ? "primary" : "secondary"}
-												disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
-												title={jobsKnown
-													? translate("onecScheduledJobsHint")
-													: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
-												onClick={() => setJobs.mutate({ denied: !jobsDenied })}>
-												{translate(jobsDenied ? "onecScheduledJobsAllow" : "onecScheduledJobsDeny")}
-											</Button>
-											{jobsWas !== null && jobsWas !== jobsDenied && (
-												<Button variant="primary"
-													disabled={!key || !canWrite || !jobsKnown || setJobs.isPending || jobsRunning}
-													title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
-													onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
-													{translate("onecScheduledJobsRestore")}
-												</Button>
-											)}
-											<Button icon="reload" variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
-												title={infoKnown
-													? translate("onecBaseInfoHint")
-													: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}
-												onClick={() => readInfo.mutate()}>
-												{translate("onecBaseInfoRefresh")}
-											</Button>
-										</GroupRow>
+													: translate(jobsDenied ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
+												// Время — только у прочитанного у кластера; записанное по команде так и называем (С40).
+												note={row.scheduledJobsSource === "command"
+													? translate("onecScheduledJobsByCommand")
+													: row.scheduledJobsSeenAt ? getFormatDate(asText(row.scheduledJobsSeenAt)) : ""} />
+
+											{(() => {
+												const lock = sessionsLockView(row as never);
+												return (
+													<OverviewRow label={translate("onecSessionsLockState")}
+														title={lock.details || undefined}
+														tone={lock.tone === "ok" ? "ok" : lock.tone === "bad" ? "bad" : undefined}
+														value={lock.label}
+														note={row.sessionsCount != null ? `${translate("onecSessions")}: ${asText(row.sessionsCount)}` : ""} />
+												);
+											})()}
+
+											<OverviewRow label={translate("onecTabExtensions")}
+												value={row.extensionsCount == null
+													? translate("onecExtNotChecked")
+													: asText(row.extensionsCount)}
+												note={row.extensionsSeenAt ? getFormatDate(asText(row.extensionsSeenAt)) : ""} />
+
+											<OverviewRow label={translate("lastSeenAt")}
+												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
+										</div>
 									</FormArea>
+
+									{/*
+									  * КТО ОТВЕЧАЕТ ЗА БАЗУ — строкой внизу формы, как строка состояния в конфигураторе. Все
+									  * значения карточки приносит админ-агент этого сервера, и «не на связи» объясняет разом и
+									  * устаревшие сведения, и недоступные команды.
+									  */}
+									<div className={dense.Footer}>
+										<span className={[dense.Dot, adminAgent?.online ? dense.DotOk : dense.DotOff].join(" ")} />
+										<span>
+											{translate("onecAgent")}
+											{adminAgent ? `: ${adminAgent.name}` : ""}
+											{" · "}
+											{adminAgent
+												? translate(adminAgent.online ? "onecAgentOnline" : "onecAgentOffline")
+												: translate("onecNoAdminAgent")}
+										</span>
+										{adminAgent?.lastSeenAt && (
+											<span>· {translate("lastSeenAt")}: {getFormatDate(adminAgent.lastSeenAt)}</span>
+										)}
+									</div>
 
 									{/* Доступность: почему в базу не войти и что панель может с этим
 									    сделать. Молчит, пока всё в порядке. */}
@@ -671,14 +764,11 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 										ibUnreachableAt={row.ibUnreachableAt ? asText(row.ibUnreachableAt) : null}
 										ibUnreachableReason={row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null} />
 
-									{/* Публикация — со своими командами по ЭТОЙ базе: в списке те же команды
-									    групповые, здесь цель уже выбрана и она на экране. */}
-									<BasePublication baseKey={asText(row.baseKey)}
-										serverName={row.serverName ? asText(row.serverName) : null}
-										published={row.published as boolean | null}
-										publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
-										publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
-										seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
+					{/*
+					  * Публикация своей группой больше не стоит (18.09): её состояние и адрес — строка в «Состоянии»,
+					  * команды — в панели сверху (BasePublication в сжатом виде). Расхождение адреса агента и публичного
+					  * имени сервера видно в подсказке той же строки.
+					  */}
 								</GroupCol>
 
 								<GroupCol className={main.FormNotice}>

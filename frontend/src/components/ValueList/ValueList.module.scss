@@ -52,3 +52,29 @@
 	overflow-wrap: anywhere;
 	white-space: pre-wrap;
 }
+
+// ПЛОТНЫЙ ВИД (18.09): шаг строки задаёт текст, а не высота поля ввода, подпись прижата к значению справа.
+// Там, где реквизиты только читают (карточка базы 1С), просторный ритм полей растягивал десяток строк на всю
+// вкладку — при том что правит их кластер, а не человек.
+.List[data-dense="1"] {
+	gap: 0;
+
+	.Row {
+		min-height: 0;
+		padding: 2px 0;
+		gap: 10px;
+	}
+
+	.Label {
+		text-align: right;
+	}
+
+	.Value {
+		font-weight: 400;
+	}
+}
+
+.List[data-dense="1"][data-cols="2"] {
+	column-gap: 28px;
+	row-gap: 0;
+}

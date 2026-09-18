@@ -1,0 +1,116 @@
+@use "src/styles/variables" as *;
+
+/*
+ * ВКЛАДКА «ОСНОВНОЕ» КАРТОЧКИ БАЗЫ — плотная форма в духе конфигуратора (18.09).
+ *
+ * Карточку открывают, чтобы узнать состояние базы и что-то с ней сделать. Просторные карточки-блоки растягивали
+ * десяток реквизитов на всю высоту, а команды лежали внутри группы «Реквизиты» — там их никто не искал. Поэтому:
+ * команды сверху одной панелью, реквизиты плотной сеткой, состояние — строками «что · как · что сделать»,
+ * и строка внизу про связь с агентом.
+ */
+
+// Панель команд карточки: как в конфигураторе — над формой, а не внутри группы полей.
+.Toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid $color10;
+}
+
+// Разделитель внутри панели: отделяет команды самой базы от переходов к её содержимому.
+.ToolbarGap {
+	width: 1px;
+	align-self: stretch;
+	margin: 3px 3px;
+	background: $color10;
+}
+
+/*
+ * СОСТОЯНИЕ — СТРОКАМИ. Три колонки: о чём речь, как сейчас, что можно сделать. Кнопка стоит в своей строке, а не
+ * общим рядом внизу: «Разрешить задания» рядом со словом «отключены» не требует догадки, к чему она относится.
+ */
+.StateGrid {
+	display: grid;
+	grid-template-columns: 180px minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 12px;
+	row-gap: 3px;
+}
+
+.StateLabel {
+	color: $color51;
+	text-align: right;
+}
+
+.StateValue {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+// Пояснение к состоянию: почему оно такое, когда прочитано, чем грозит.
+.StateNote {
+	color: $color51;
+}
+
+// Слово состояния цветом поддерживает само слово, а не заменяет его.
+.Ok {
+	color: $successText;
+	font-weight: 500;
+}
+
+.Warn {
+	color: $warningText;
+	font-weight: 500;
+}
+
+.Bad {
+	color: $attentionText;
+	font-weight: 500;
+}
+
+// Действие строки: кнопки в сетке не должны растягиваться на всю колонку.
+.StateAction {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	justify-self: end;
+}
+
+// Технические значения — моноширинным: их читают посимвольно и сверяют (ключ базы, версия, идентификатор, адрес).
+.Mono {
+	font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+	font-size: 12px;
+}
+
+// Строка связи внизу формы: кто отвечает за базу и когда отвечал в последний раз.
+.Footer {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding-top: 6px;
+	border-top: 1px solid $color10;
+	color: $color51;
+	font-size: 12px;
+}
+
+.Dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.DotOk {
+	background: $success;
+}
+
+.DotOff {
+	background: $color10;
+}
