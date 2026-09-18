@@ -15,6 +15,12 @@
  * столбцы схлопываются в один, а кнопки переносятся под текст.
  */
 .Page {
+	/*
+	 * СКВОЗНОЕ ВЫРАВНИВАНИЕ. Ширина колонки подписей — одна на всю вкладку (как в ValueList): и у реквизитов, и у
+	 * строк состояния значения начинаются на одной вертикали. Пока каждая группа мерила себя сама, колонка значений
+	 * гуляла от группы к группе, и глаз искал начало значения заново в каждом ряду.
+	 */
+	--card-label: 150px;
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
@@ -55,7 +61,7 @@
 
 .Field {
 	display: grid;
-	grid-template-columns: 130px minmax(0, 1fr);
+	grid-template-columns: var(--card-label) minmax(0, 1fr);
 	align-items: center;
 	gap: 8px;
 }
@@ -102,16 +108,21 @@
  */
 .StateGrid {
 	display: grid;
-	grid-template-columns: 180px minmax(0, 1fr) auto;
+	// Та же колонка подписей, что у реквизитов, плюс колонка действий справа.
+	grid-template-columns: var(--card-label) minmax(0, 1fr) auto;
 	align-items: center;
-	column-gap: 12px;
+	column-gap: 8px;
 	row-gap: 6px;
 }
 
 // Узкая панель: действие переезжает под состояние, а не сжимает его до многоточия.
 @container (max-width: 720px) {
+	.Page {
+		--card-label: 120px;
+	}
+
 	.StateGrid {
-		grid-template-columns: 150px minmax(0, 1fr);
+		grid-template-columns: var(--card-label) minmax(0, 1fr);
 	}
 
 	.StateAction {
