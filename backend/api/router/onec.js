@@ -14,7 +14,7 @@
 // тут нет и быть не должно (список открывается с hideAddDelete).
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
-import { isListedBase, matchesBaseSearch, parseSort, sortBases } from "../../utils/onecBasesList.js";
+import { isListedBase, matchesBaseSearch, parseSort, sortBases, withStableIds } from "../../utils/onecBasesList.js";
 
 const router = express.Router();
 const ROUTE = "onec-bases";
@@ -37,10 +37,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			});
 		}
 
-		const all = (body.data?.items ?? []).map((b, i) => ({
-			// Числовой id нужен курсорной подгрузке и идентификации строк в таблице.
-			// Порядок стабилен: сервис отдаёт базы отсортированными по серверу и ключу.
-			id: i + 1,
+		const all = (body.data?.items ?? []).map((b) => ({
 			uuid: b.id,
 			baseKey: b.key,
 			name: b.name,
@@ -76,14 +73,18 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			// Запрещены ли регламентные задания (С39): по отмеченным строкам «Операции» решают, что предлагать —
 			// запретить, разрешить или оба. null — не знаем.
 			scheduledJobsDenied: b.scheduledJobsDenied ?? null,
-		}))
-			// Скрытые и удалённые из кластера — только по переключателю (utils/onecBasesList, П33). Отбор ПОСЛЕ
-			// нумерации: иначе удаление или скрытие базы сдвигало бы id всех следующих строк, и отметки в таблице
-			// переезжали бы на соседние базы.
-			.filter((x) => isListedBase(x, { showHidden: req.query.showHidden === "1" }));
+		}));
+		/*
+		 * ЧИСЛОВОЙ id — ИЗ ИДЕНТИФИКАТОРА БАЗЫ (utils/onecBasesList.stableRowId, 18.09). На нём держатся отметки
+		 * строк, активная строка и курсорная подгрузка; номер по порядку сдвигался, когда база исчезала из списка
+		 * или пряталась отбором, и всё это переезжало на соседнюю базу.
+		 */
+		const numbered = withStableIds(all, (b) => String(b.uuid || b.baseKey || ""));
+		// Скрытые и удалённые из кластера — только по переключателю (utils/onecBasesList, П33).
+		const listed = numbered.filter((x) => isListedBase(x, { showHidden: req.query.showHidden === "1" }));
 
 		// Поиск — по тому, что видно в колонках: подпись «Статуса», адрес публикации (utils/onecBasesList).
-		let items = all.filter((x) => matchesBaseSearch(x, req.query.search));
+		let items = listed.filter((x) => matchesBaseSearch(x, req.query.search));
 
 		// «Статус» — по показанному состоянию, а не по коду кластера (utils/onecBasesList).
 		items = sortBases(items, parseSort(req.query.sort));

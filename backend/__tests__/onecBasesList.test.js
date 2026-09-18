@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BASE_STATE_LABELS, PUBLISH_LABELS, baseStateRank, isListedBase, matchesBaseSearch, parseSort, sortBases } from "../utils/onecBasesList.js";
+import { BASE_STATE_LABELS, PUBLISH_LABELS, baseStateRank, isListedBase, matchesBaseSearch, parseSort, sortBases, stableRowId, withStableIds } from "../utils/onecBasesList.js";
 
 const b = (baseKey, over = {}) => ({ baseKey, status: "ONLINE", ibUnreachableAt: null, ibUnreachableReason: null, ...over });
 const keys = (xs) => xs.map((x) => x.baseKey);
@@ -139,4 +139,23 @@ test("«Регламентные задания» сортируются по п
 	];
 	assert.deepEqual(keys(sortBases(rows, { scheduledJobsDenied: "asc" })), ["on", "off", "unknown"]);
 	assert.deepEqual(keys(sortBases(rows, { scheduledJobsDenied: "desc" })), ["unknown", "off", "on"]);
+});
+
+// Номер строки — из идентификатора базы (18.09): исчезла одна база — у остальных номера прежние, и отметки
+// в таблице не переезжают на соседей.
+test("номера строк не зависят от порядка и от числа баз в ответе", () => {
+	const key = (x) => x.uuid;
+	const before = withStableIds([{ uuid: "u1" }, { uuid: "u2" }, { uuid: "u3" }], key);
+	const after = withStableIds([{ uuid: "u2" }, { uuid: "u3" }], key);
+	for (const u of ["u2", "u3"]) {
+		assert.equal(after.find((x) => x.uuid === u).id, before.find((x) => x.uuid === u).id);
+	}
+	assert.equal(stableRowId("u1"), stableRowId("u1"));
+	assert.notEqual(stableRowId("u1"), stableRowId("u2"));
+});
+
+test("номера уникальны даже при пустых ключах", () => {
+	const list = withStableIds([{ uuid: "" }, { uuid: "" }, { uuid: "x" }], (x) => x.uuid);
+	assert.equal(new Set(list.map((x) => x.id)).size, 3);
+	assert.ok(list.every((x) => Number.isSafeInteger(x.id) && x.id > 0));
 });

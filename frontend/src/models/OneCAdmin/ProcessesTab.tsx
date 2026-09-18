@@ -29,6 +29,7 @@ import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { formatDuration } from "./queueStats";
 import { asText } from "src/utils/asText";
+import { withStableIds } from "src/utils/stableRowId";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -120,8 +121,9 @@ export const ProcessesTab: FC = () => {
 		},
 	});
 
-	const rows = useMemo(() => (procs.data?.items ?? []).map((p, i) => ({
-		id: i + 1, uuid: String(p.pid),
+	// Номер строки — из pid (utils/stableRowId): снятый процесс не сдвигает личность остальных строк.
+	const rows = useMemo(() => withStableIds((procs.data?.items ?? []).map((p) => ({
+		uuid: String(p.pid),
 		pid: String(p.pid),
 		tool: p.tool,
 		what: p.what || "—",
@@ -129,7 +131,7 @@ export const ProcessesTab: FC = () => {
 		age: age(p.ageSecs),
 		orphanLabel: p.orphan ? translate("onecProcOrphan") : "",
 		procCommand: p.commandId || "—",
-	})), [procs.data]);
+	})), (p) => p.uuid), [procs.data]);
 	const view = useStaticTableView(rows, { age: "desc" });
 
 	const orphans = (procs.data?.items ?? []).filter((p) => p.orphan).length;

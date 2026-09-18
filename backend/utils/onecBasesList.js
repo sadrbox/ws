@@ -21,6 +21,35 @@
  */
 export const clusterStatusOf = (x) => x.clusterStatus ?? x.status;
 
+/**
+ * НОМЕР СТРОКИ — ИЗ ИДЕНТИФИКАТОРА БАЗЫ, а не из порядка в ответе (18.09).
+ *
+ * Список отдаётся с числовым `id`: на нём держатся отметки строк, активная строка и курсорная подгрузка. Пока он был
+ * номером по порядку, исчезновение одной базы сдвигало номера всех следующих — и всё, что панель помнит по номеру,
+ * переезжало на соседнюю базу. Тот же ключ — тот же номер, сколько бы баз ни ушло выше.
+ *
+ * FNV-1a, 31 бит: не криптография, нужна устойчивость. Совпадения номеров разводятся при раздаче.
+ */
+export function stableRowId(key) {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < key.length; i++) {
+		h ^= key.charCodeAt(i);
+		h = Math.imul(h, 0x01000193);
+	}
+	return (h & 0x7fffffff) || 1;
+}
+
+/** Раздать номера по ключам; совпадение — следующий свободный номер (иначе две строки слились бы в одну). */
+export function withStableIds(items, keyOf) {
+	const taken = new Set();
+	return items.map((item, index) => {
+		let id = stableRowId(keyOf(item, index) || String(index));
+		while (taken.has(id)) id = (id % 0x7fffffff) + 1;
+		taken.add(id);
+		return { ...item, id };
+	});
+}
+
 export const isListedBase = (x, { showHidden = false } = {}) =>
 	showHidden || (clusterStatusOf(x) !== "MISSING" && !x.disabled);
 

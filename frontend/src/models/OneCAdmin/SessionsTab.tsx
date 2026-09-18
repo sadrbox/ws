@@ -18,6 +18,7 @@ import React, { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
+import { withStableIds } from "src/utils/stableRowId";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
@@ -222,8 +223,8 @@ export const SessionsTab: FC = () => {
 		return baseByUuid.get(raw?.infobase ?? "") || undefined;
 	}, [sessions.data, baseByUuid]);
 
-	const sessionRows = useMemo(() => sessionSource.map((s, i) => ({
-		id: i + 1,
+	// Номер строки — из ключа сеанса (utils/stableRowId): снятый сеанс не сдвигает личность остальных строк.
+	const sessionRows = useMemo(() => withStableIds(sessionSource.map((s, i) => ({
 		uuid: s.session ?? String(i),
 		sessionId: s.sessionId ?? "",
 		baseKey: baseByUuid.get(s.infobase ?? "") ?? "",
@@ -232,7 +233,7 @@ export const SessionsTab: FC = () => {
 		host: s.host || "",
 		startedAt: s.startedAt || "",
 		lastActiveAt: s.lastActiveAt || "",
-	})), [sessionSource, baseByUuid]);
+	})), (s) => s.uuid), [sessionSource, baseByUuid]);
 
 	// Сортировка — на клиенте: данные целиком в памяти.
 	const sorted = useStaticTableView(sessionRows, { startedAt: "desc" });

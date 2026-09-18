@@ -17,6 +17,7 @@ import { Button } from "src/components/Button";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { asText } from "src/utils/asText";
+import { withStableIds } from "src/utils/stableRowId";
 import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
@@ -41,8 +42,10 @@ const lockColumns = (): TColumn[] => ([
 	{ identifier: "locked", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
+// Номер строки — из её ключа (соединение, сеанс), а не из порядка: снятое соединение не должно сдвигать
+// личность соседних строк (utils/stableRowId).
 const toRows = (items: ClusterRow[], key: string) =>
-	items.map((x, i) => ({ id: i + 1, uuid: String(x[key] ?? i), ...x }));
+	withStableIds(items.map((x, i) => ({ uuid: String(x[key] ?? i), ...x })), (x) => x.uuid);
 
 export const ConnectionsTab: FC = () => {
 	const canWrite = useOnecWrite();
