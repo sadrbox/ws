@@ -263,6 +263,23 @@ describe("С41: оговорки успеха по типу команды", () 
 		assert.match(commandCaveat("IB_INSTALL_EXTENSION", { ok: true, skipped: ["SafeMode"] }) ?? "", /SafeMode/);
 	});
 
+	/*
+	 * С47 (агент 2026-09-18 13:13 / А49): публикация без эха. Агент не может сам убедиться, что веб-сервер принял
+	 * запись (у Apache он конфигурацию не читает), и отвечает `unverified: ["publication"]`. Без оговорки
+	 * «Выполнено» читается как «публикация работает», хотя её никто не проверял.
+	 */
+	it("публикация без подтверждения — оговорка «проверьте в браузере»", async () => {
+		const { commandCaveat } = await import("../src/onec/caveats.ts");
+		for (const type of ["IB_PUBLISH", "IB_UNPUBLISH"]) {
+			const w = commandCaveat(type, { ok: true, unverified: ["publication"] });
+			assert.match(w ?? "", /веб-сервер не проверен после записи/, type);
+			assert.match(w ?? "", /проверьте публикацию в браузере/, type);
+			// Подтверждённая публикация оговорок не даёт, и чужие пометки «не проверено» — не про неё.
+			assert.equal(commandCaveat(type, { ok: true, url: "http://localhost/base" }), null, type);
+			assert.equal(commandCaveat(type, { ok: true, unverified: ["enabled"] }), null, type);
+		}
+	});
+
 	it("запись пользователя — прежний разбор", async () => {
 		const { commandCaveat } = await import("../src/onec/caveats.ts");
 		assert.ok(commandCaveat("IB_UPDATE_USER", { ok: true, unverified: ["showInList"] }));

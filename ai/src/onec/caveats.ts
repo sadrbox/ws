@@ -37,6 +37,20 @@ export function commandCaveat(type: string, result: unknown): string | null {
 			}
 			break;
 		}
+		/*
+		 * ПУБЛИКАЦИЯ БЕЗ ПОДТВЕРЖДЕНИЯ (С47, агент 2026-09-18 13:13 / А49). Агент отвечает `unverified: ["publication"]`,
+		 * когда не может САМ убедиться, что веб-сервер принял запись: у Apache он конфигурацию не читает, а у IIS
+		 * адрес мог не подтвердиться. Команда при этом выполнена — но «Выполнено» без оговорки читается как
+		 * «публикация работает», хотя проверял это никто.
+		 */
+		case "IB_PUBLISH":
+		case "IB_UNPUBLISH": {
+			if (strings(result.unverified).includes("publication")) {
+				parts.push("веб-сервер не проверен после записи (у Apache агент судить не может) — "
+					+ "проверьте публикацию в браузере");
+			}
+			break;
+		}
 		case "IB_INSTALL_EXTENSION": {
 			const requested = typeof result.requestedName === "string" ? result.requestedName.trim() : "";
 			const actual = typeof result.name === "string" ? result.name.trim() : "";
