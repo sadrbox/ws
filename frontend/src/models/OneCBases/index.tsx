@@ -628,6 +628,12 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 			isLoading={false}
 			// Реестр наполняется кластером и агентом — править и сохранять нечего.
 			onSave={() => {}} onSaveAndClose={() => {}} onClose={close}
+			/*
+			 * «ОПЕРАЦИИ» — В ТУЛБАРЕ ПЕЙНА, рядом с «Закрыть» (18.09). Это команды над ВСЕЙ базой, а не над вкладкой:
+			 * из «Расширений» или «Сеансов» за ними приходилось возвращаться на «Основное». В тулбаре пейна они
+			 * доступны с любой вкладки, как «Обновить» и «Закрыть».
+			 */
+			afterCloseButtons={<BaseGroupCommands selected={[row]} />}
 			tabs={[
 				{
 					id: "main", label: translate("general"),
@@ -655,8 +661,6 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 											onClick={() => readInfo.mutate()}>
 											{translate("onecBaseInfoRefresh")}
 										</Button>
-										{/* Те же операции, что в списке, но цель уже выбрана — эта база. Здесь же «Опасные команды». */}
-										<BaseGroupCommands selected={[row]} />
 										<div className={dense.ToolbarGap} />
 										{/* Переходы к содержимому базы: вкладки карточки списком (requestBaseTab — см. openAt.ts). */}
 										<Button size="sm" variant="secondary" onClick={() => requestBaseTab(key, { tab: "sessions" })}>
