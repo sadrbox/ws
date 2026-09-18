@@ -23,6 +23,61 @@
 	padding: 0 12px 12px 0;
 }
 
+// Два блока в ряд: состояние базы и служебный вход. В узкой панели встают друг под друга.
+.Cols {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.ColMain {
+	flex: 1 1 520px;
+	min-width: 0;
+}
+
+.ColSide {
+	flex: 0 1 420px;
+	min-width: 0;
+}
+
+/*
+ * РЕКВИЗИТЫ — ДВУМЯ СТОЛБЦАМИ ПОЛЕЙ. Ровно два: третий столбец рвал длинные значения (конфигурацию, идентификатор)
+ * на три строки. Значение стоит в рамке, как поле формы, но без курсора ввода: так видно границы значения —
+ * где кончается имя базы и начинается пустое место.
+ */
+.Fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	column-gap: 24px;
+	row-gap: 6px;
+}
+
+.Field {
+	display: grid;
+	grid-template-columns: 130px minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+}
+
+.FieldLabel {
+	color: $color51;
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
+.FieldBox {
+	min-height: $heightFieldInput;
+	display: flex;
+	align-items: center;
+	padding: 3px 8px;
+	border: 1px solid $color10;
+	border-radius: $radius3;
+	background: $color30;
+	color: $color6;
+	overflow-wrap: anywhere;
+}
+
 // Панель команд карточки: как в конфигураторе — над формой, а не внутри группы полей.
 .Toolbar {
 	display: flex;
@@ -100,12 +155,21 @@
 	font-weight: 500;
 }
 
-// Действие строки: кнопки в сетке не должны растягиваться на всю колонку.
+/*
+ * Действия — колонкой одной ширины: кнопки разной длины, прижатые к правому краю, вставали лесенкой, и глазу
+ * приходилось искать каждую заново. Подписи здесь короткие — предмет назван слева, в строке.
+ */
 .StateAction {
 	display: flex;
-	align-items: center;
-	gap: 6px;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 4px;
+	width: 132px;
 	justify-self: end;
+
+	button {
+		width: 100%;
+	}
 }
 
 // Технические значения — моноширинным: их читают посимвольно и сверяют (ключ базы, версия, идентификатор, адрес).

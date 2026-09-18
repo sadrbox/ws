@@ -32,7 +32,12 @@ import {
 	clearBaseCredentials, fetchBaseCredentials, hasCapability, saveBaseCredentials,
 } from "src/services/onec/api";
 
-export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
+export const BaseCredentialsTab: FC<{
+	baseKey: string;
+	/** Встроенный вид: одна группа полей, без каркаса формы и колонки сообщений. */
+	embedded?: boolean;
+	className?: string;
+}> = ({ baseKey, embedded, className }) => {
 	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
 	const key = ["onec", "base-credentials", baseKey];
@@ -83,6 +88,55 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const busy = save.isPending || drop.isPending || creds.isLoading;
 	const isSet = !!stored?.user;
 
+	// Поля и команды — одни на оба вида: встроенный (вкладка «Основное») и полный.
+	const fields = (
+		<GroupCol>
+			<GroupRow>
+				<Field name="bc_user" label={translate("onecUserName")} value={user} width={FIELD_WIDTH.wide}
+					noAutofill disabled={busy}
+					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
+				<Field name="bc_pwd" label={translate("onecUserPassword")} type="password" value={password}
+					width={FIELD_WIDTH.wide} disabled={busy}
+					placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
+					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
+				<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}
+					value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
+					disabled width={FIELD_WIDTH.date} onChange={() => {}} />
+			</GroupRow>
+			{/* Пара «имя + пароль» — это вход агента в базу: правом «только просмотр»
+			    видно, задана ли она и когда менялась, но не переписывают (F5). */}
+			{canWrite && (
+				<GroupRow>
+					<Button icon="save" variant="primary" disabled={busy || !user.trim()}
+						title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
+						onClick={() => save.mutate()}>
+						{translate("save")}
+					</Button>
+					<Button icon="clear" variant="secondary" disabled={busy || !isSet}
+						title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
+						onClick={() => drop.mutate()}>
+						{translate("onecCredsClear")}
+					</Button>
+				</GroupRow>
+			)}
+		</GroupCol>
+	);
+
+	/*
+	 * ВСТРОЕННЫЙ ВИД (18.09): одна группа полей без каркаса формы — служебный вход стоит рядом с состоянием базы
+	 * во вкладке «Основное». Там же он и правится: своей вкладки у него больше нет.
+	 */
+	if (embedded) {
+		return (
+			<FormArea className={className} title={translate("onecCredsTitle")}>
+				<GroupCol>
+					{fields}
+					<QueryError error={creds.error} />
+				</GroupCol>
+			</FormArea>
+		);
+	}
+
 	return (
 		// Каркас — общий для форм приложения (см. SalesForm): поля слева, сообщения
 		// справа снизу.
@@ -90,36 +144,7 @@ export const BaseCredentialsTab: FC<{ baseKey: string }> = ({ baseKey }) => {
 			<div className={main.FormWrapper}>
 				<GroupCol className={main.Form}>
 					<FormArea title={translate("onecCredsTitle")}>
-						<GroupCol>
-							<GroupRow>
-								<Field name="bc_user" label={translate("onecUserName")} value={user} width={FIELD_WIDTH.wide}
-									noAutofill disabled={busy}
-									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
-								<Field name="bc_pwd" label={translate("onecUserPassword")} type="password" value={password}
-									width={FIELD_WIDTH.wide} disabled={busy}
-									placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
-									onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
-								<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}
-									value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
-									disabled width={FIELD_WIDTH.date} onChange={() => {}} />
-							</GroupRow>
-							{/* Пара «имя + пароль» — это вход агента в базу: правом «только просмотр»
-							    видно, задана ли она и когда менялась, но не переписывают (F5). */}
-							{canWrite && (
-								<GroupRow>
-									<Button icon="save" variant="primary" disabled={busy || !user.trim()}
-										title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
-										onClick={() => save.mutate()}>
-										{translate("save")}
-									</Button>
-									<Button icon="clear" variant="secondary" disabled={busy || !isSet}
-										title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
-										onClick={() => drop.mutate()}>
-										{translate("onecCredsClear")}
-									</Button>
-								</GroupRow>
-							)}
-						</GroupCol>
+						{fields}
 					</FormArea>
 				</GroupCol>
 
