@@ -1,6 +1,7 @@
-import { FC, ButtonHTMLAttributes, MouseEventHandler } from 'react';
+import { FC, ButtonHTMLAttributes, MouseEventHandler, useContext } from 'react';
 import { Icon, type IconName } from 'src/components/IconButton/icons';
 import styles from "./Button.module.scss";
+import { ButtonSizeContext, type ButtonSize } from "./sizeContext";
 
 /**
  * ЕДИНСТВЕННАЯ кнопка приложения. Иконка — её опция, а не повод завести соседний
@@ -13,8 +14,11 @@ import styles from "./Button.module.scss";
  */
 type TProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger';
-  /** Размер кнопки: sm (маленькая) | md (средняя, по умолчанию) | lg (большая) | min (по контенту). */
-  size?: 'sm' | 'md' | 'lg' | 'min';
+  /**
+   * Размер кнопки: sm (маленькая) | md (средняя, по умолчанию) | lg (большая) | min (по контенту).
+   * Не задан — берётся из области (ButtonSizeContext: тулбар пейна задаёт sm), иначе md.
+   */
+  size?: ButtonSize;
   /** Ведущая иконка 16×16 из общего реестра. */
   icon?: IconName;
   /** Замыкающая иконка: каретка у кнопки с вложенными командами, и только. */
@@ -31,8 +35,10 @@ const SIZE_CLASS: Record<NonNullable<TProps['size']>, string> = {
 };
 
 export const Button: FC<TProps> = ({
-  variant = 'secondary', size = 'md', icon, trailingIcon, children, onClick, active, onMouseDown, ...props
+  variant = 'secondary', size, icon, trailingIcon, children, onClick, active, onMouseDown, ...props
 }) => {
+  const areaSize = useContext(ButtonSizeContext);
+  const effectiveSize = size ?? areaSize ?? 'md';
   const classActive = active && styles.Active;
   // Не отнимаем фокус у предыдущего элемента (TableScrollWrapper) при клике мышью —
   // см. подробное обоснование в IconButton: preventDefault на mousedown сохраняет
@@ -44,7 +50,7 @@ export const Button: FC<TProps> = ({
   return (
     <button
       type="button"
-      className={[styles.Button, styles[variant], SIZE_CLASS[size], classActive].filter(Boolean).join(" ")}
+      className={[styles.Button, styles[variant], SIZE_CLASS[effectiveSize], classActive].filter(Boolean).join(" ")}
       onClick={onClick}
       onMouseDown={handleMouseDown}
       {...props}

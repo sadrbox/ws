@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { ButtonSizeContext } from "src/components/Button/sizeContext";
 
 // ─── Store: paneId → DOM-элемент слота тулбара ──────────────────────────
 type Listener = () => void;
@@ -109,7 +110,12 @@ export function usePaneToolbar(paneId: string | undefined, toolbar: ReactNode): 
   }, [paneId]);
 
   if (!slot) return null;
-  return createPortal(toolbar, slot);
+  /*
+   * КНОПКИ ТУЛБАРА ПЕЙНА — МАЛЕНЬКИЕ (19.09). Тулбар собирают разные компоненты (FormPanel, кнопки форм через
+   * afterClose, тулбары списков), и размер задаётся здесь один раз, а не в каждом: иначе одна забытая кнопка
+   * оказывается крупнее соседей. Явный `size` у кнопки главнее; кнопки-иконки (IconButton) этим не управляются.
+   */
+  return createPortal(<ButtonSizeContext.Provider value="sm">{toolbar}</ButtonSizeContext.Provider>, slot);
 }
 
 /**
