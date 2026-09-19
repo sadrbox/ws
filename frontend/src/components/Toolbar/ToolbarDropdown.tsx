@@ -2,11 +2,12 @@
 // клик-вне) — общий хук useDropdownMenu; здесь только разметка. Print/Save/Actions —
 // тонкие обёртки над этим компонентом (отличаются лишь триггером и наличием иконок
 // в пунктах).
-import { FC, Fragment, type ReactNode } from "react";
+import { FC, Fragment, useContext, type ReactNode } from "react";
 import IconButton from "src/components/IconButton/IconButton";
 import { Button } from "src/components/Button";
 import type { IconName } from "src/components/IconButton/icons";
 import { useDropdownMenu } from "./useDropdownPosition";
+import { ButtonSizeContext } from "src/components/Button/sizeContext";
 import styles from "./Toolbar.module.scss";
 
 export interface ToolbarDropdownOption {
@@ -50,6 +51,13 @@ const ToolbarDropdown: FC<ToolbarDropdownProps> = ({
   disabled,
 }) => {
   const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
+  /*
+   * РАЗМЕР — ИЗ ОБЛАСТИ (19.09). В тулбаре пейна кнопки маленькие (ButtonSizeContext = sm, см. usePaneToolbar), и
+   * дропдаун обязан стоять с ними в рост: кнопка-подпись берёт размер сама (это Button), а кнопку-иконку («Печать ▾»,
+   * «Сохранить ▾») переводим в sm здесь — иначе она одна выше соседей. Вне тулбара — прежний md.
+   */
+  const areaSize = useContext(ButtonSizeContext);
+  const iconSize = areaSize === "sm" ? "sm" : "md";
 
   /*
    * Триггер варианта button — ОБЫЧНАЯ кнопка приложения (components/Button), а не своя
@@ -72,7 +80,7 @@ const ToolbarDropdown: FC<ToolbarDropdownProps> = ({
     </Button>
   ) : (
     <IconButton
-      size="md"
+      size={iconSize}
       className={styles.DropdownToggleButton}
       title={title}
       aria-label={title}

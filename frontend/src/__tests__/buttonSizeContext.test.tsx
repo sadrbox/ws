@@ -10,6 +10,8 @@ import { describe, it, expect } from "vitest";
 import { Button } from "src/components/Button";
 import { ButtonSizeContext } from "src/components/Button/sizeContext";
 import styles from "src/components/Button/Button.module.scss";
+import iconStyles from "src/components/IconButton/IconButton.module.scss";
+import ToolbarDropdown from "src/components/Toolbar/ToolbarDropdown";
 
 const cls = (name: string) => screen.getByRole("button", { name }).className;
 
@@ -38,5 +40,34 @@ describe("размер кнопок по области", () => {
 			</ButtonSizeContext.Provider>,
 		);
 		expect(cls("Крупная")).toContain(styles.sizeLg);
+	});
+});
+
+/**
+ * Дропдауны тулбара (DropdownWrap) — того же роста, что соседние кнопки: и с подписью («Операции»), и иконкой
+ * («Печать ▾», «Сохранить ▾»).
+ */
+describe("дропдауны в тулбаре пейна", () => {
+	const opts = [{ id: "a", label: "Пункт" }];
+
+	it("дропдаун с подписью — sm в тулбаре", () => {
+		render(
+			<ButtonSizeContext.Provider value="sm">
+				<ToolbarDropdown options={opts} onSelect={() => {}} triggerVariant="button" triggerLabel="Операции" />
+			</ButtonSizeContext.Provider>,
+		);
+		expect(screen.getByRole("button", { name: /Операции/ }).className).toContain(styles.sizeSm);
+	});
+
+	it("дропдаун-иконка — sm в тулбаре и md вне его", () => {
+		const { unmount } = render(
+			<ButtonSizeContext.Provider value="sm">
+				<ToolbarDropdown options={opts} onSelect={() => {}} title="Печать" trigger={<span>P</span>} />
+			</ButtonSizeContext.Provider>,
+		);
+		expect(screen.getByRole("button", { name: "Печать" }).className).toContain(iconStyles.sm);
+		unmount();
+		render(<ToolbarDropdown options={opts} onSelect={() => {}} title="Печать" trigger={<span>P</span>} />);
+		expect(screen.getByRole("button", { name: "Печать" }).className).toContain(iconStyles.md);
 	});
 });
