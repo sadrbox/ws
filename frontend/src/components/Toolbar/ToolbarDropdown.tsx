@@ -52,9 +52,9 @@ const ToolbarDropdown: FC<ToolbarDropdownProps> = ({
 }) => {
   const { open, toggle, setOpen, wrapRef, dropRef, dropStyle } = useDropdownMenu();
   /*
-   * РАЗМЕР — ИЗ ОБЛАСТИ (19.09). В тулбаре пейна кнопки маленькие (ButtonSizeContext = sm, см. usePaneToolbar), и
-   * дропдаун обязан стоять с ними в рост: кнопка-подпись берёт размер сама (это Button), а кнопку-иконку («Печать ▾»,
-   * «Сохранить ▾») переводим в sm здесь — иначе она одна выше соседей. Вне тулбара — прежний md.
+   * РАЗМЕР — ИЗ ОБЛАСТИ (19.09). В шапке панели кнопки маленькие (ButtonSizeContext = sm, см. usePaneHeaderActions),
+   * и дропдаун обязан стоять с ними в рост: кнопка-подпись берёт размер сама (это Button), а кнопку-иконку («Печать ▾»,
+   * «Сохранить ▾») переводим в sm здесь — иначе она одна выше соседей. Вне шапки — прежний md.
    */
   const areaSize = useContext(ButtonSizeContext);
   const iconSize = areaSize === "sm" ? "sm" : "md";

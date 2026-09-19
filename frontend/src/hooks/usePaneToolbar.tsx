@@ -110,12 +110,7 @@ export function usePaneToolbar(paneId: string | undefined, toolbar: ReactNode): 
   }, [paneId]);
 
   if (!slot) return null;
-  /*
-   * КНОПКИ ТУЛБАРА ПЕЙНА — МАЛЕНЬКИЕ (19.09). Тулбар собирают разные компоненты (FormPanel, кнопки форм через
-   * afterClose, тулбары списков), и размер задаётся здесь один раз, а не в каждом: иначе одна забытая кнопка
-   * оказывается крупнее соседей. Явный `size` у кнопки главнее; кнопки-иконки (IconButton) этим не управляются.
-   */
-  return createPortal(<ButtonSizeContext.Provider value="sm">{toolbar}</ButtonSizeContext.Provider>, slot);
+  return createPortal(toolbar, slot);
 }
 
 /**
@@ -176,7 +171,13 @@ export function usePaneHeaderActions(
   }, [paneId]);
 
   if (!slot) return null;
-  return createPortal(actions, slot);
+  /*
+   * КНОПКИ В ШАПКЕ ПАНЕЛИ (PaneItemHeaderToolbar) — МАЛЕНЬКИЕ (19.09). Шапка — строка заголовка: рядом с
+   * кнопками-иконками обновления и закрытия кнопка обычного роста выпирает из строки. Размер задаётся здесь один раз
+   * для всего, что формы кладут в шапку («Печать», «Заметки», «Показать в списке»), а не в каждой кнопке.
+   * Явный `size` у кнопки главнее. Ряд под шапкой (PaneItemToolbar, usePaneToolbar) — прежнего размера.
+   */
+  return createPortal(<ButtonSizeContext.Provider value="sm">{actions}</ButtonSizeContext.Provider>, slot);
 }
 
 export { store as paneToolbarStore };

@@ -16,7 +16,7 @@ type TProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger';
   /**
    * Размер кнопки: sm (маленькая) | md (средняя, по умолчанию) | lg (большая) | min (по контенту).
-   * Не задан — берётся из области (ButtonSizeContext: тулбар пейна задаёт sm), иначе md.
+   * Не задан — берётся из области (ButtonSizeContext: шапка панели задаёт sm), иначе md.
    */
   size?: ButtonSize;
   /** Ведущая иконка 16×16 из общего реестра. */
