@@ -589,3 +589,152 @@
 	max-height: 30%;
 	min-height: 84px;
 }
+/*
+ * БАЗЫ БИЗНЕС-АГЕНТА И ЛИМИТ ТАРИФА (ПН, 19.09). «Сверх лимита» — отдельной пометкой цветом предупреждения:
+ * база на связи, но команды в неё сервис не пропускает, и это должно читаться с первого взгляда.
+ */
+.BasesUsage {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 0 6px;
+	color: $color6;
+	font-weight: 500;
+}
+
+.BasesLimits {
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+	padding: 0 6px;
+}
+
+.BasesTable {
+	td {
+		vertical-align: top;
+	}
+
+	// Организации — списком с переносами; остальные колонки короткие.
+	td:nth-child(5) {
+		text-align: left;
+		white-space: normal;
+	}
+
+	th:nth-child(-n + 5) {
+		text-align: left;
+	}
+
+	td:nth-child(-n + 4) {
+		text-align: left;
+	}
+}
+
+.BaseOrg {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 3px 6px;
+
+	.Hint {
+		padding: 0;
+	}
+}
+
+.OverLimit {
+	color: $attentionText;
+	font-weight: 500;
+}
+
+.OverLimitRow {
+	opacity: 0.85;
+}
+
+// Ключ базы и БИН читают посимвольно и сверяют — моноширинным.
+.Mono {
+	font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+	font-size: 12px;
+}
+
+/*
+ * ЗАЯВКИ: ПОДКЛЮЧЕНИЕ БАЗ И АКТИВАЦИЯ БИНОВ (СВ4). Состояние заявки — словом, цвет его только поддерживает.
+ * Код заявки крупнее и моноширинным: его диктуют по телефону и сверяют посимвольно.
+ */
+.ReqTable {
+	td,
+	th {
+		text-align: left;
+		vertical-align: top;
+		white-space: normal;
+	}
+}
+
+.ReqCode {
+	font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	white-space: nowrap !important;
+}
+
+.ReqWait {
+	color: $warningText;
+	font-weight: 500;
+}
+
+.ReqOk {
+	color: $successText;
+	font-weight: 500;
+}
+
+.ReqBad {
+	color: $attentionText;
+	font-weight: 500;
+}
+
+.ReqOff {
+	color: $color51;
+}
+
+// Действие в строке таблицы — ссылкой, а не кнопкой: кнопка в каждой организации перегружала бы таблицу.
+.LinkButton {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: $color6;
+	font-size: 12px;
+	text-decoration: underline dotted;
+	cursor: pointer;
+
+	&:disabled {
+		cursor: default;
+		opacity: 0.5;
+	}
+
+	&:focus-visible {
+		outline: 1px solid $color10;
+		outline-offset: 2px;
+	}
+}
+
+.SectionTitle {
+	padding: 6px 6px 0;
+	font-weight: 600;
+	color: $color6;
+}
+
+// Выбор сервера 1С (C9) — над вкладками, только когда серверов больше одного.
+.ServerPicker {
+	display: flex;
+	align-items: center;
+	padding: 3px 6px;
+}
+
+// Таблица внутри формы или окна (запросы активации в карточке агента, заявки агентов в «Подключить по коду»):
+// у <Table /> нет своей высоты — он занимает высоту родителя, а в форме её задаёт содержимое.
+.EmbeddedTable {
+	display: flex;
+	flex-direction: column;
+	height: 420px;
+	min-height: 240px;
+}

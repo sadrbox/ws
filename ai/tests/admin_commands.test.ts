@@ -28,6 +28,9 @@ test("опасные операции помечены CRITICAL — они ид�
 		// Снятие процесса агента останавливает работу на сервере 1С: конфигуратор без
 		// force агент не тронет вовсе, но rac/ibcmd снимет — команда прервётся.
 		"AGENT_KILL_PROCESS",
+		// Перезапуск и обновление службы агента: работа сервера 1С прерывается на время перезапуска, а обновление
+		// ещё и меняет сборку — решение человека, а не кнопка «на всякий случай».
+		"AGENT_RESTART", "AGENT_UPDATE",
 		// Удаление регистрации базы из кластера: данные не трогаются (их и нет), но
 		// восстановить запись можно только вручную, со всеми параметрами подключения.
 		// Опечатку в имени страхует сам агент — он проверяет через СУБД, что базы нет.
@@ -58,8 +61,11 @@ test("опасные операции помечены CRITICAL — они ид�
 	const rest = ADMIN_COMMANDS.filter((c) => c.operation !== "CRITICAL");
 	assert.deepEqual(rest.filter((c) => c.operation === "WRITE").map((c) => c.type), [// Самопроверка агента (R4) создаёт и удаляет временного пользователя — это запись в базу,
 		// но обратимая самим прогоном: подтверждение — в интерфейсе, как у проверки.
-		"IB_SELFTEST", "IB_CHECK"]);
-	assert.ok(rest.filter((c) => c.type !== "IB_CHECK" && c.type !== "IB_SELFTEST").every((c) => c.operation === "READ"));
+		"IB_SELFTEST", "IB_CHECK",
+		// Настройки самой службы (задача агенту §3): правка обратима и в 1С не заходит, но требует полного доступа.
+		"AGENT_CONFIG_SET"]);
+	const writes = new Set(["IB_CHECK", "IB_SELFTEST", "AGENT_CONFIG_SET"]);
+	assert.ok(rest.filter((c) => !writes.has(c.type)).every((c) => c.operation === "READ"));
 });
 
 test("гейт: админ-команду получает только агент с cluster.admin", () => {
@@ -329,4 +335,34 @@ test("П19: пустое имя и полное имя пользователя 
 	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "Оператор", newName: " " }).ok, false);
 	assert.equal(buildAdminPayload(create, { baseKey: "b", name: "Оператор", fullName: "" }).ok, false);
 	assert.equal(buildAdminPayload(update, { baseKey: "b", name: "Оператор", fullName: "Оператор бухгалтер" }).ok, true);
+});
+
+test("команды о самой службе исполняют обе роли (выпуск агента 2026-09-20)", () => {
+	const selfService = ["AGENT_HEALTH", "AGENT_LOG_TAIL", "AGENT_LIST_PROCESSES", "AGENT_KILL_PROCESS", "AGENT_CANCEL_COMMAND", "AGENT_CONFIG_GET", "AGENT_CONFIG_SET", "AGENT_RESTART", "AGENT_UPDATE"];
+	const caps = ["agent.procs", "agent.cancel", "agent.config", "agent.restart", "agent.update"];
+	for (const type of selfService) {
+		const spec = findAdminCommand(type)!;
+		assert.equal(spec.role, "any", type);
+		assert.equal(agentCanRun({ role: "business", capabilities: caps }, spec), true, `business: ${type}`);
+		assert.equal(agentCanRun({ role: "admin", capabilities: caps }, spec), true, `admin: ${type}`);
+		// Способность всё так же обязательна: старая сборка команду не получит.
+		assert.equal(agentCanRun({ role: "business", capabilities: [] }, spec), false, `без способности: ${type}`);
+	}
+	// Кластер и базы по-прежнему только админ-агенту.
+	assert.equal(agentCanRun({ role: "business", capabilities: ["cluster.admin"] }, findAdminCommand("CLUSTER_LIST_SESSIONS")!), false);
+});
+
+test("обновление агента: только https и настоящий SHA-256; настройки — только белый список", () => {
+	const upd = findAdminCommand("AGENT_UPDATE")!;
+	const good = { build: "2026-09-20 10:55", url: "https://ai.buhprof.kz/agent.zip", sha256: "a".repeat(64) };
+	assert.equal(buildAdminPayload(upd, good).ok, true);
+	assert.equal(buildAdminPayload(upd, { ...good, url: "http://ai.buhprof.kz/agent.zip" }).ok, false, "http не принимается");
+	assert.equal(buildAdminPayload(upd, { ...good, sha256: "коротко" }).ok, false);
+	assert.equal(buildAdminPayload(upd, { ...good, extra: 1 }).ok, false);
+
+	const cfg = findAdminCommand("AGENT_CONFIG_SET")!;
+	assert.equal(buildAdminPayload(cfg, { patch: { ibParallel: 4, bases: [{ key: "Б1", order: 0, enabled: false }], logLevel: "info" } }).ok, true);
+	// Секреты и заведение баз — дело окна агента на его компьютере.
+	assert.equal(buildAdminPayload(cfg, { patch: { password: "x" } }).ok, false);
+	assert.equal(buildAdminPayload(cfg, { patch: { bases: [{ key: "Б1", address: "srv" }] } }).ok, false);
 });

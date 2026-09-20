@@ -15,6 +15,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "tsc --noEmit && node tools/check_imports.mjs",
     "chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/chat_e2e.ts",
+    "onec-chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/onec_chat_e2e.ts",
+    "base-token": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env tools/base_token.ts",
     "onec-probe": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env tools/onec_probe.ts",
     "check-imports": "node tools/check_imports.mjs"
   },

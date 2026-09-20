@@ -33,7 +33,15 @@ import type { AgentRole, AgentView } from "../agents/service.ts";
  * `AGENT_CANCEL_COMMAND`, но у них отмена не доходит до агента, чьи пропуски заняты зависшими
  * командами. Способность объявляет сборка 13.09 14:58 и новее.
  */
-export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs" | "agent.cancel";
+export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs" | "agent.cancel" | "agent.config"
+	| "agent.restart" | "agent.update";
+
+/**
+ * КТО ИСПОЛНЯЕТ КОМАНДУ. `admin` — кластер и базы через rac/COM, `business` — внутрибазовые команды расширения,
+ * `any` — команды о САМОЙ СЛУЖБЕ (журнал, процессы, состояние, настройки, перезапуск): с выпуска агента
+ * 2026-09-20 их умеют обе роли, и адресуются они конкретному агенту, а не выбираются по базе.
+ */
+export type CommandRole = AgentRole | "any";
 
 /**
  * Сколько живёт команда в очереди, если спецификация молчит. Пятнадцати минут хватает
@@ -56,7 +64,7 @@ export type AdminCommandSpec = {
 	type: string;
 	operation: OperationClass;
 	capability: AgentCapability;
-	role: AgentRole;
+	role: CommandRole;
 	/** Нужна ли конкретная база: для неё выбирается агент того сервера, где она живёт. */
 	requiresBase: boolean;
 	/** Срок жизни команды в очереди; без него — DEFAULT_COMMAND_TTL_SECS. */
@@ -241,7 +249,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		title: "Процессы, запущенные агентом",
 		operation: "READ",
 		capability: "agent.procs",
-		role: "admin",
+		role: "any",
 		requiresBase: false,
 		// Список приходит и с heartbeat раз в полминуты; эта команда нужна кнопке
 		// «Обновить сейчас» — когда человек смотрит на зависший процесс и ждёт от него
@@ -253,7 +261,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		title: "Снять процесс агента",
 		operation: "CRITICAL",
 		capability: "agent.procs",
-		role: "admin",
+		role: "any",
 		requiresBase: false,
 		/**
 		 * `force` — согласие снять КОНФИГУРАТОР. Без него агент его не тронет и ответит
@@ -281,7 +289,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		title: "Состояние сервера 1С",
 		operation: "READ",
 		capability: "agent.procs",
-		role: "admin",
+		role: "any",
 		requiresBase: false,
 		schema: z.object({}).strict(),
 	},
@@ -294,7 +302,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		title: "Журнал агента",
 		operation: "READ",
 		capability: "agent.procs",
-		role: "admin",
+		role: "any",
 		requiresBase: false,
 		schema: z.object({
 			lines: z.number().int().min(1).max(1000).optional(),
@@ -612,11 +620,85 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		},
 	},
 	{
+		/*
+		 * НАСТРОЙКИ САМОЙ СЛУЖБЫ (задача агенту §3, выпуск агента 2026-09-20). Читаются без секретов: пароли и
+		 * токены приходят только признаком `{set: true}` — их правят в окне агента на его компьютере.
+		 */
+		type: "AGENT_CONFIG_GET",
+		title: "Настройки агента",
+		operation: "READ",
+		capability: "agent.config",
+		role: "any",
+		requiresBase: false,
+		schema: z.object({}).strict(),
+	},
+	{
+		/*
+		 * ПРАВКА НАСТРОЕК — только белый список агента (`editable`): порядок и включение баз, параллельность,
+		 * пределы времени команд, уровень журнала. Базы здесь не заводятся и секреты не принимаются; чужое поле
+		 * агент отвергает сам (VALIDATION_ERROR с перечнем). WRITE, а не CRITICAL: настройки меняются обратимо,
+		 * но требуют полного доступа — они решают, как служба работает.
+		 */
+		type: "AGENT_CONFIG_SET",
+		title: "Изменить настройки агента",
+		operation: "WRITE",
+		capability: "agent.config",
+		role: "any",
+		requiresBase: false,
+		schema: z.object({
+			patch: z.object({
+				bases: z.array(z.object({
+					key: z.string().min(1).max(200),
+					order: z.number().int().min(0).max(1000).optional(),
+					enabled: z.boolean().optional(),
+				}).strict()).max(500).optional(),
+				ibParallel: z.number().int().min(1).max(32).optional(),
+				commandTimeoutSecs: z.number().int().min(10).max(3600).optional(),
+				longCommandTimeoutSecs: z.number().int().min(60).max(86_400).optional(),
+				logLevel: z.enum(["debug", "info", "warn", "error"]).optional(),
+			}).strict(),
+		}).strict(),
+	},
+	{
+		/*
+		 * ПЕРЕЗАПУСК СЛУЖБЫ (задача агенту §2). Агент отвечает сразу и перезапускается сам; начатые изменяющие
+		 * команды откладывают перезапуск — тогда он отвечает AGENT_BUSY с их перечнем. Способность объявляется,
+		 * только когда агент запущен службой Windows.
+		 */
+		type: "AGENT_RESTART",
+		title: "Перезапустить службу агента",
+		operation: "CRITICAL",
+		capability: "agent.restart",
+		role: "any",
+		requiresBase: false,
+		schema: z.object({ reason: z.string().trim().max(500).optional() }).strict(),
+	},
+	{
+		/*
+		 * ОБНОВЛЕНИЕ СЛУЖБЫ (задача агенту §2). Агент скачивает сборку по `url`, сверяет `sha256`, ставит и
+		 * перезапускается; ход обновления приходит в heartbeat (`update`). Адрес — только https и только
+		 * разрешённый агентом хост; не сошёлся хэш или новая сборка не зарегистрировалась за пять минут —
+		 * агент возвращает прежнюю сам.
+		 */
+		type: "AGENT_UPDATE",
+		title: "Обновить агента",
+		operation: "CRITICAL",
+		capability: "agent.update",
+		role: "any",
+		requiresBase: false,
+		schema: z.object({
+			build: z.string().trim().min(1).max(100),
+			url: z.string().trim().url().max(1000).refine((u) => u.startsWith("https://"), "url: только https"),
+			sha256: z.string().trim().regex(/^[0-9a-f]{64}$/i, "sha256: 64 шестнадцатеричных знака"),
+			restart: z.boolean().optional(),
+		}).strict(),
+	},
+	{
 		type: "AGENT_CANCEL_COMMAND",
 		title: "Прервать выполняемую команду",
 		operation: "CRITICAL",
 		capability: "agent.cancel",
-		role: "admin",
+		role: "any",
 		requiresBase: false,
 		/*
 		 * НАСТОЯЩАЯ ОТМЕНА ВМЕСТО «ПЕРЕСТАЛИ ЖДАТЬ» (S4). Зависшая команда держит место
@@ -684,7 +766,7 @@ export function isAdminCommand(type: string): boolean {
  * права учётной записи ОС, под которой служба работает.
  */
 export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spec: AdminCommandSpec): boolean {
-	if (agent.role !== spec.role || !agent.capabilities.includes(spec.capability)) return false;
+	if ((spec.role !== "any" && agent.role !== spec.role) || !agent.capabilities.includes(spec.capability)) return false;
 
 	// Агент перечисляет не только способности (`cluster.admin`), но и КОНКРЕТНЫЕ типы
 	// команд, которые умеет. Если такой перечень есть — проверяем по нему: иначе команда,

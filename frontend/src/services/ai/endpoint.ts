@@ -7,6 +7,7 @@
 // разошлись бы при первом же переезде сервиса.
 
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY, getToken } from "src/services/auth";
+import { getOnecServer } from "src/services/onec/serverScope";
 
 const LOCAL_AI_URL = (import.meta.env.VITE_LOCAL_AI_URL as string | undefined) || "http://192.168.1.112:3100";
 const REMOTE_AI_URL = (import.meta.env.VITE_AI_URL as string | undefined) || "https://ai.buhprof.kz";
@@ -54,11 +55,14 @@ export class AiServiceError extends Error {
  * «Ошибка сервера» стоило бы часа разбирательств.
  */
 export async function aiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+	// Выбранный сервер 1С (C9) — всем запросам панели 1С: база адресуется парой «сервер + ключ».
+	const server = path.startsWith("/v1/onec/") ? getOnecServer() : null;
 	const res = await fetch(`${getAiUrl()}${path}`, {
 		...init,
 		headers: {
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${getToken() ?? ""}`,
+			...(server ? { "X-Onec-Server": server } : {}),
 			...(init?.headers ?? {}),
 		},
 	});

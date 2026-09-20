@@ -756,9 +756,10 @@ export type KillProcessResult = {
 	state?: { processes?: { items: AgentProcess[]; stillRunning?: boolean } };
 };
 
-export const killAgentProcess = (pid: number, force?: boolean) =>
+/** `agentId` — агент, на чьей машине процесс (п. 7): без него снятие ушло бы первому агенту кластера. */
+export const killAgentProcess = (pid: number, force?: boolean, agentId?: string) =>
 	aiFetch<KillProcessResult | Pending>(`/v1/onec/agent-processes/${pid}/kill`, {
-		method: "POST", body: JSON.stringify({ force: !!force }),
+		method: "POST", body: JSON.stringify({ force: !!force, ...(agentId ? { agentId } : {}) }),
 	}).then((d) => awaitCommand<KillProcessResult>(d));
 
 // ── Агенты, которых видит панель ────────────────────────────────────────────
@@ -768,6 +769,13 @@ export const killAgentProcess = (pid: number, force?: boolean) =>
 export type OnecAgent = {
 	id: string; name: string; role: "business" | "admin";
 	online: boolean; capabilities: string[]; lastSeenAt: string | null; disabled: boolean;
+	/** Что сервис знает об агенте (п. 6): ОС, состояние, доступность 1С, регистрация, организация, счётчики. */
+	os?: string | null; status?: string | null; onecReachable?: boolean; registeredAt?: string | null;
+	organizationUuid?: string; commandsDone?: number | null; commandsFailed?: number | null;
+	/** Бизнес-агент: сколько баз в его срезе. */
+	basesCount?: number;
+	/** Ход обновления службы (heartbeat агента): downloading | installing | restarting | failed | done. */
+	update?: { state?: string; build?: string; error?: string | null; at?: string } | null;
 	/** Сервер, за который отвечает агент: по нему база находит свою платформу. */
 	serverId: string | null;
 	/** Версия платформы 1С на сервере агента; null — агент её не сообщает. */
@@ -804,6 +812,8 @@ export type OnecAgent = {
 	 * получают отказ и не выполняют ни одной команды.
 	 */
 	owner: { instanceId: string | null; seenAt: string | null };
+	/** Лимит тарифа бизнес-агента (СВ3): null в поле — без ограничения; у админ-агента поля нет. */
+	limits?: AgentLimits;
 	/**
 	 * Отказы по кодам и время команд с последнего запуска службы агента (S5). null — агент
 	 * снимка не присылал (сборка старше 13.09 15:21); поля нет — сервис старее панели.
@@ -894,6 +904,19 @@ export type AgentHealth = {
 };
 
 /** Состояние сервера 1С — командой ЭТОМУ агенту (R1). */
+/**
+ * Сводка бизнес-агента (п. 1) — ответ его команды HEALTH: состояние баз, лимиты, версия. Форма ответа — агента,
+ * поэтому тип открытый: панель показывает известные поля и перечисляет остальные.
+ */
+export type BusinessHealth = Record<string, unknown> & {
+	bases?: { key?: string; status?: string; transport?: string; extVersion?: string; overLimit?: boolean; error?: string }[];
+	limits?: { maxBases?: number | null; maxBins?: number | null; activeBins?: string[] };
+};
+
+export const fetchBusinessHealth = (agentId: string) =>
+	aiFetch<BusinessHealth | Pending>(`/v1/onec/agents/${encodeURIComponent(agentId)}/health`)
+		.then((d) => (isPending(d) ? awaitCommand<BusinessHealth>(d, 2 * 60_000) : d));
+
 export const fetchAgentHealth = (agentId: string) =>
 	aiFetch<AgentHealth | Pending>(`/v1/onec/agents/${encodeURIComponent(agentId)}/health`)
 		.then((d) => (isPending(d) ? awaitCommand<AgentHealth>(d, 2 * 60_000) : d));
@@ -918,6 +941,8 @@ export const fetchAgents = () =>
 			checkParallel: number; clusterPerMin?: number; clusterRemaining?: number;
 			/** Сроки команд сервиса — для сравнения с пределами агента (С24). */
 			commandTtlSecs?: number; longCommandTtlSecs?: number;
+			/** Эталон сборки и откуда её брать при обновлении из панели; нет — адрес и хэш вводят руками. */
+			latestBuild?: string | null; updateUrl?: string | null; updateSha256?: string | null;
 		};
 	}>("/v1/onec/agents");
 
@@ -931,6 +956,250 @@ export const setAgentOwner = (id: string, instanceId: string) =>
 export const renameAgent = (id: string, name: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}`, {
 		method: "PATCH", body: JSON.stringify({ name }),
+	});
+
+/** Лимит тарифа бизнес-агента: сколько баз и разных БИНов он обслуживает; null — без ограничения. */
+export type AgentLimits = {
+	maxBases: number | null; maxBins: number | null;
+	/** Активные БИНы (СВ4): есть — обслуживаются ровно они; null — правило «первые maxBins по порядку». */
+	activeBins?: string[] | null;
+};
+
+/** Организация базы бизнес-агента с пометками лимита. */
+export type AgentBaseOrg = {
+	id: string | null; name: string | null; bin: string | null;
+	/** Сверх лимита: база сверх лимита баз или БИН сверх лимита БИНов. */
+	overLimit: boolean;
+	/** Другие базы агента с тем же БИН. */
+	alsoIn: string[];
+	/** База, в которую уходят команды по этому БИН (первая обслуживаемая по порядку); null — ни в какую. */
+	usedBase: string | null;
+	/** Активирован ли БИН; null — списка активных нет. */
+	active?: boolean | null;
+};
+
+/** База в срезе бизнес-агента — как её прислал агент, плюс решение сервиса по лимиту. */
+export type AgentBaseRow = {
+	key: string; pos: number; status: string | null; transport: "http" | "com" | null;
+	extVersion: string | null;
+	/** Сверх лимита по мнению самого агента; null — агент лимитов не применял. */
+	overLimit: boolean | null;
+	/** Сверх лимита по правилу сервиса: команды в неё сервис отвергает, не ставя в очередь. */
+	overLimitService: boolean;
+	/** Агент и сервис считают лимит по-разному (после смены лимита — до следующего heartbeat это нормально). */
+	limitMismatch?: boolean;
+	/** null — агент организаций не сообщил (сборка старше 19.09). */
+	organizations: AgentBaseOrg[] | null;
+	seenAt: string | null;
+};
+
+export type AgentBasesView = {
+	limits: AgentLimits;
+	/** Подключено: баз и разных БИНов во всём срезе. */
+	usage: { bases: number; bins: number };
+	bases: AgentBaseRow[];
+	role?: "business" | "admin";
+	/** Менять лимит может только администратор BuhProf. */
+	canEditLimits?: boolean;
+};
+
+/** Базы бизнес-агента и лимит тарифа — из среза, который агент прислал сам (без команды агенту). */
+export const fetchAgentBases = (id: string) =>
+	aiFetch<AgentBasesView>(`/v1/onec/agents/${encodeURIComponent(id)}/bases`);
+
+/** Лимит тарифа агента (только администратор BuhProf). Действует со следующего heartbeat агента. */
+export const setAgentLimits = (id: string, limits: AgentLimits) =>
+	aiFetch<AgentBasesView>(`/v1/onec/agents/${encodeURIComponent(id)}/limits`, {
+		method: "PUT", body: JSON.stringify(limits),
+	});
+
+/**
+ * Активные БИНы агента целиком: список, `null` — вернуться к правилу «первые N», `fixCurrent` — записать то, что
+ * агент обслуживает сейчас. Только администратор BuhProf.
+ */
+export const setAgentActiveBins = (id: string, body: { bins: string[] | null } | { fixCurrent: true }) =>
+	aiFetch<AgentBasesView>(`/v1/onec/agents/${encodeURIComponent(id)}/active-bins`, {
+		method: "PUT", body: JSON.stringify(body),
+	});
+
+/** Всем бизнес-агентам без списка — записать активными то, что они обслуживают сейчас (C15). */
+export const fixAllActiveBins = () =>
+	aiFetch<{ fixed: { agentId: string; name: string; bins: number }[]; skipped: number }>("/v1/onec/active-bins/fix-all", { method: "POST", body: "{}" });
+
+// ── Управление самой службой агента (задача агенту, выпуск 2026-09-20) ───────────────────────────────
+
+/** Настройки службы, как их отдаёт агент. Секретов здесь нет — только признак «задан». */
+export type AgentConfig = {
+	configPath?: string; role?: string; serviceName?: string; serverName?: string;
+	bases?: {
+		key: string; transport?: string; address?: string; user?: string; enabled?: boolean; order?: number; main?: boolean;
+		password?: { set?: boolean }; token?: { set?: boolean };
+	}[];
+	ibParallel?: number; commandTimeoutSecs?: number; longCommandTimeoutSecs?: number;
+	orphanSweepSecs?: number; persistentBridge?: boolean; idleCloseSecs?: number;
+	logLevel?: string; heartbeatSecs?: number; pollWaitSecs?: number;
+	cloudUrl?: string; updateHosts?: string[];
+	secrets?: Record<string, { set?: boolean }>;
+	/** Какие поля агент разрешает менять из панели. */
+	editable?: string[];
+	changed?: string[];
+	restartRequired?: boolean;
+};
+
+/** Что панель вправе менять: порядок и включение баз, параллельность, пределы времени, уровень журнала. */
+export type AgentConfigPatch = {
+	bases?: { key: string; order?: number; enabled?: boolean }[];
+	ibParallel?: number;
+	commandTimeoutSecs?: number;
+	longCommandTimeoutSecs?: number;
+	logLevel?: string;
+};
+
+export const fetchAgentConfig = (id: string) =>
+	aiFetch<AgentConfig | Pending>(`/v1/onec/agents/${encodeURIComponent(id)}/config`)
+		.then((d) => (isPending(d) ? awaitCommand<AgentConfig>(d, 2 * 60_000) : d));
+
+export const setAgentConfig = (id: string, patch: AgentConfigPatch) =>
+	aiFetch<AgentConfig | Pending>(`/v1/onec/agents/${encodeURIComponent(id)}/config`, { method: "PUT", body: JSON.stringify({ patch }) })
+		.then((d) => (isPending(d) ? awaitCommand<AgentConfig>(d, 2 * 60_000) : d));
+
+/** Перезапуск службы: агент отвечает сразу и перезапускается сам; занятый изменяющей командой — AGENT_BUSY. */
+export const restartAgent = (id: string, reason?: string) =>
+	aiFetch<{ ok: boolean; restartingAt?: string; service?: string } | Pending>(`/v1/onec/agents/${encodeURIComponent(id)}/restart`, {
+		method: "POST", body: JSON.stringify(reason ? { reason } : {}),
+	}).then((d) => (isPending(d) ? awaitCommand<{ ok: boolean }>(d, 2 * 60_000) : d));
+
+/** Обновление службы: сборка, адрес и хэш — из настроек сервиса, если не переданы. Ход виден в карточке агента. */
+export const updateAgent = (id: string, body: { build?: string; url?: string; sha256?: string } = {}) =>
+	aiFetch<{ ok: boolean; accepted?: boolean; build?: string } | Pending>(`/v1/onec/agents/${encodeURIComponent(id)}/update`, {
+		method: "POST", body: JSON.stringify(body),
+	}).then((d) => (isPending(d) ? awaitCommand<{ ok: boolean }>(d, 2 * 60_000) : d));
+
+// ── Команды и журнал агента (карточка агента) ────────────────────────────────────────────────────────
+
+export type AgentCommand = {
+	id: string; type: string; baseKey: string | null; state: string; requestId: string | null;
+	error: { code: string | null; message: string | null } | null;
+	createdAt: string; dispatchedAt: string | null; finishedAt: string | null;
+};
+
+export const fetchAgentCommands = (id: string, limit = 50) =>
+	aiFetch<{ items: AgentCommand[] }>(`/v1/onec/agents/${encodeURIComponent(id)}/commands?limit=${limit}`);
+
+export type AgentAuditItem = { at: string; event: string; userUuid: string | null; userName: string | null; details: Record<string, unknown> };
+
+export const fetchAgentAudit = (id: string) =>
+	aiFetch<{ items: AgentAuditItem[] }>(`/v1/onec/agents/${encodeURIComponent(id)}/audit`);
+
+// ── Подключение агентов по коду (СВ5) ────────────────────────────────────────────────────────────────
+
+export type EnrollmentState = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+
+export type AgentEnrollment = {
+	id: string; code: string; computer: string; serviceName: string; name: string; role: "business" | "admin";
+	serverName: string | null; version: string | null; ip: string | null; repeats: number; state: EnrollmentState;
+	note: string | null; decidedBy: string | null; decidedAt: string | null; organizationUuid: string | null;
+	agentId: string | null; tokenDeliveredAt: string | null; createdAt: string; expiresAt: string;
+	/** Та же служба уже подключалась — одобрение отдаст ей того же агента с новым токеном. */
+	previousAgentId: string | null;
+};
+
+export const fetchEnrollments = (params: { state?: EnrollmentState | ""; q?: string } = {}) => {
+	const qs = new URLSearchParams();
+	if (params.state) qs.set("state", params.state);
+	if (params.q) qs.set("q", params.q);
+	return aiFetch<{ items: AgentEnrollment[]; canDecide: boolean }>(`/v1/onec/enrollments${qs.toString() ? `?${qs.toString()}` : ""}`);
+};
+
+export const approveEnrollment = (id: string, body: { organizationUuid: string; name?: string; agentId?: string | null; note?: string }) =>
+	aiFetch<{ ok: boolean; agentId: string; created: boolean }>(`/v1/onec/enrollments/${encodeURIComponent(id)}/approve`, {
+		method: "POST", body: JSON.stringify(body),
+	});
+
+export const rejectEnrollment = (id: string, note: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/enrollments/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ note }) });
+
+// ── Заявки на подключение баз (СВ4, часть 1) ────────────────────────────────────────────────────────────
+
+export type RegistrationState = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+
+export type ErpOrganization = { uuid: string; name: string; bin: string | null };
+
+export type BaseRegistration = {
+	id: string; code: string; state: RegistrationState; note: string | null;
+	base: {
+		id: string; name: string; kind?: "server" | "file"; server?: string | null;
+		configuration?: { name?: string; synonym?: string; version?: string } | null;
+		platform?: string | null; extensionVersion?: string | null; computer?: string | null;
+	};
+	user: { id?: string | null; name?: string | null } | null;
+	contact: string | null; comment: string | null;
+	/** Организации базы; `erp` — организация ERP с тем же БИН, если есть. */
+	organizations: { id?: string | null; name?: string | null; bin?: string | null; erp: ErpOrganization | null }[];
+	ip: string | null; repeats: number; createdAt: string; expiresAt: string;
+	decidedBy: string | null; decidedAt: string | null; organizationUuid: string | null; baseKey: string | null;
+	tokenDelivered: boolean;
+	/** Что предложить при одобрении: организация по БИН, ключ базы, базы реестра с тем же ключом. */
+	suggestion: { organizationUuid: string | null; baseKey: string; candidates: { baseId: string; key: string; server: string }[] };
+};
+
+export const fetchRegistrations = (params: { state?: RegistrationState | ""; q?: string } = {}) => {
+	const qs = new URLSearchParams();
+	if (params.state) qs.set("state", params.state);
+	if (params.q) qs.set("q", params.q);
+	return aiFetch<{ items: BaseRegistration[]; canDecide: boolean }>(`/v1/onec/registrations${qs.toString() ? `?${qs.toString()}` : ""}`);
+};
+
+export const fetchErpOrganizations = () => aiFetch<{ items: ErpOrganization[] }>("/v1/onec/erp-organizations");
+
+export const approveRegistration = (id: string, body: { organizationUuid: string; baseKey: string; baseId?: string | null; note?: string }) =>
+	aiFetch<{ ok: boolean; baseKey: string; server: string }>(`/v1/onec/registrations/${encodeURIComponent(id)}/approve`, {
+		method: "POST", body: JSON.stringify(body),
+	});
+
+export const rejectRegistration = (id: string, note: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/registrations/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ note }) });
+
+/** Токен базы для чата внутри 1С: сам токен не хранится — только кем и когда выпущен, отозван ли. */
+export type BaseToken = {
+	id: string; baseId: string; baseKey: string; organizationUuid: string;
+	createdAt: string; createdBy: string; revokedAt: string | null; revokedBy: string | null;
+};
+
+export const fetchBaseTokens = (baseId: string) =>
+	aiFetch<{ items: BaseToken[]; canRevoke: boolean }>(`/v1/onec/base-tokens?baseId=${encodeURIComponent(baseId)}`);
+
+export const revokeBaseToken = (id: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/base-tokens/${encodeURIComponent(id)}/revoke`, { method: "POST", body: "{}" });
+
+// ── Активация БИНов (СВ4, часть 2) ──────────────────────────────────────────────────────────────────────
+
+export type ActivationState = "PENDING" | "APPROVED" | "REJECTED";
+
+export type ActivationRequest = {
+	agentId: string; agentName: string | null; agentOnline: boolean;
+	bin: string; name: string | null; baseKey: string | null; comment: string | null; requestedAt: string | null;
+	state: ActivationState; note: string | null; decidedBy: string | null; decidedAt: string | null;
+	createdAt: string; updatedAt: string;
+	/** Активен ли БИН сейчас; null — у агента нет списка активных. */
+	active: boolean | null;
+	limits: AgentLimits | null;
+};
+
+export const fetchActivationRequests = (params: { state?: ActivationState | ""; agentId?: string } = {}) => {
+	const qs = new URLSearchParams();
+	if (params.state) qs.set("state", params.state);
+	if (params.agentId) qs.set("agentId", params.agentId);
+	return aiFetch<{ items: ActivationRequest[]; canDecide: boolean }>(`/v1/onec/activation-requests${qs.toString() ? `?${qs.toString()}` : ""}`);
+};
+
+export const approveActivation = (agentId: string, bin: string) =>
+	aiFetch<{ ok: boolean; activeBins: string[]; warning?: string }>(
+		`/v1/onec/activation-requests/${encodeURIComponent(agentId)}/${encodeURIComponent(bin)}/approve`, { method: "POST", body: "{}" });
+
+export const rejectActivation = (agentId: string, bin: string, note: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/activation-requests/${encodeURIComponent(agentId)}/${encodeURIComponent(bin)}/reject`, {
+		method: "POST", body: JSON.stringify({ note }),
 	});
 
 /** Удалить агента вместе с историей его команд. Работающего сервис удалить не даст. */
@@ -1024,6 +1293,8 @@ export type OnecSchedule = {
 	/** Тип команды 1С: IB_BACKUP (выгрузка) или IB_CHECK (проверка). */
 	type: string;
 	baseKeys: string[];
+	/** Сервер 1С этих баз (C10); null — сервер не назван (одна установка, один сервер). */
+	serverId: string | null;
 	payload: Record<string, unknown>;
 	/** Время запуска «ЧЧ:ММ» в зоне сервера 1С. */
 	atTime: string;
@@ -1040,6 +1311,8 @@ export type ScheduleInput = {
 	name: string;
 	type: string;
 	baseKeys: string[];
+	/** Сервер 1С; не задан — берётся выбранный в панели. */
+	serverId?: string | null;
 	atTime: string;
 	weekdays?: number[];
 	payload?: Record<string, unknown>;

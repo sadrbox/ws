@@ -53,6 +53,12 @@ Node ≥ 22.6 (TypeScript исполняется без сборки, синта
 Состояния диалога (§16): `UNDERSTANDING → EXECUTING → WAITING_CLARIFICATION | WAITING_CONFIRMATION → COMPLETED | FAILED`.
 На `WAITING_CONFIRMATION` клиент показывает карточку и отправляет «да»/«нет» тем же `POST /v1/chat`.
 
+**Чат внутри 1С** (`X-Base-Token` + `X-1C-User-Id`, контракт — `docs/CONTRACT_1C_CHAT_2026-09-19.md`):
+`GET /v1/onec-chat/ping`, `POST /v1/onec-chat/turn`, `GET /v1/onec-chat/conversations[/:id]`. Инструменты выполняет
+форма 1С: ход отвечает `TOOL_CALLS` с `calls` (те же `commandType`/`payload`, что ушли бы агенту; `requestId` —
+только у изменяющих), форма присылает `toolResults`. Подтверждение — `decision: {accepted}`. Токены баз —
+`npm run base-token -- issue --base <ключ базы>` (показывается один раз), `revoke --id …`, `list`.
+
 **Агенты** (`Authorization: Bearer <agent token>` + `X-Agent-Id`): `POST /agent/v1/register`,
 `POST /agent/v1/heartbeat`, `GET /agent/v1/commands?wait=N`, `POST /agent/v1/commands/:id/result`.
 
@@ -73,6 +79,7 @@ Node ≥ 22.6 (TypeScript исполняется без сборки, синта
     npm test                                     # unit
     npm run e2e -- --customer … --product …      # сервис → агент → 1С (без LLM), 20 шагов
     npm run chat-e2e -- --customer … --product … # диалог с Claude → 1С (ТЕСТ №2 ТЗ), ~$0.1
+    npm run onec-chat-e2e -- [--executor stub] [--pdf …] # чат внутри 1С от имени формы, ~$0.1
 
 Оба e2e поднимают сервис локально против серверной базы (`.env.local`), создают временного
 агента и запускают `bpapi-agent.exe` с временным конфигом; в конце убирают за собой.

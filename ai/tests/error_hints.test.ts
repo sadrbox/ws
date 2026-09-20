@@ -183,3 +183,37 @@ test("IB_CONNECTION_LOST: без «рабочего процесса» в утв
 	assert.ok(!/оборвалась связь с рабочим процессом/.test(out.message));
 	assert.equal(ibFailureReason(e), null);
 });
+
+// ── Коды расширения buhprof_api 1.3.0 (СВ0) ──────────────────────────────
+
+test("REQUEST_IN_PROGRESS: подсказка «уже выполняется», сервис команду не пересоздаёт", () => {
+	const out = humanizeAgentError({ code: "REQUEST_IN_PROGRESS", message: "Операция с этим requestId уже выполняется" })!;
+	assert.match(out.message, /не создавайте/);
+	// Повторяет агент, а не сервис: новый requestId сделал бы из повтора вторую операцию.
+	assert.equal(RETRY_LATER_CODES.has("REQUEST_IN_PROGRESS"), false);
+	assert.equal(ibFailureReason({ code: "REQUEST_IN_PROGRESS", message: "" }), null);
+});
+
+test("SETUP_DISABLED: стендовая операция выключена, база исправна", () => {
+	const out = humanizeAgentError({ code: "SETUP_DISABLED", message: "Операция выключена" })!;
+	assert.match(out.message, /Стендовая операция выключена/);
+	assert.equal(ibFailureReason({ code: "SETUP_DISABLED", message: "Операция выключена" }), null);
+});
+
+test("INTERNAL_ERROR с errorId: код для поиска в журнале 1С, один раз", () => {
+	const e = { code: "INTERNAL_ERROR", message: "Внутренняя ошибка", details: { errorId: "a1b2c3" } };
+	const once = humanizeAgentError(e)!;
+	assert.match(once.message, /Код для поиска в журнале 1С: a1b2c3/);
+	assert.equal(humanizeAgentError(once)!.message, once.message);
+	assert.equal(humanizeAgentError({ code: "INTERNAL_ERROR", message: "Внутренняя ошибка" })!.message, "Внутренняя ошибка");
+});
+
+test("многобазовый агент: подсказки для BASE_REQUIRED, BASE_NOT_FOUND, LICENSE_LIMIT, EXTENSION_MISSING", () => {
+	for (const code of ["BASE_REQUIRED", "BASE_NOT_FOUND", "LICENSE_LIMIT", "EXTENSION_MISSING"]) {
+		const out = humanizeAgentError({ code, message: "отказ агента" });
+		assert.ok(out && out.message.startsWith("отказ агента") && out.message.length > "отказ агента".length, code);
+	}
+	// Отказ сервиса по лимиту уже называет выход — совет не дублируется.
+	const own = { code: "LICENSE_LIMIT", message: "База «Б3» сверх лимита (тариф: 2 базы, подключено 3). Увеличьте тариф или уберите лишнее из настроек агента." };
+	assert.equal(humanizeAgentError(own)?.message, own.message);
+});

@@ -192,6 +192,14 @@ export type AuthContext = { baseAuthUser?: string | null; agentSupportsBaseAuth?
 /** Ошибка агента с приписанной подсказкой; исходный текст сохраняется целиком. */
 /** Подсказки по коду отказа агента или очереди. */
 const CODE_HINTS: Record<string, string> = {
+	// Многобазовый бизнес-агент (БА2 → СВ3, 19.09): база выбирается по baseKey или БИН организации.
+	BASE_REQUIRED: "У агента несколько баз, а команда не назвала, в какую идти: укажите базу или организацию (БИН), "
+		+ "которая есть только в одной из баз агента.",
+	BASE_NOT_FOUND: "Такой базы нет в настройках агента: проверьте ключ базы в карточке агента (вкладка «Базы агента») "
+		+ "или добавьте базу в настройки агента на компьютере с 1С.",
+	LICENSE_LIMIT: "База или организация сверх лимита тарифа агента: увеличьте тариф или уберите базу из настроек агента.",
+	EXTENSION_MISSING: "В базе нет шлюза buhprof_api нужной версии (1.4.0 и новее): установите или обновите расширение "
+		+ "в этой базе, затем повторите команду.",
 	// Агент перестал ЖДАТЬ, а не прервал работу (С18, агент 01:06): конфигуратор может продолжать.
 	TIMEOUT: "Агент перестал ждать команду по своему пределу времени, но сама операция могла не закончиться: "
 		+ "если текст агента называет живые процессы, конфигуратор продолжает работу — пока он жив, база занята для "
@@ -266,6 +274,15 @@ const CODE_HINTS: Record<string, string> = {
 		+ "Корректировка данных → «Поиск и удаление дублей» по справочнику «Пользователи» (она объединяет элементы "
 		+ "и переносит ссылки). Снимать у лишнего элемента «Вход в программу разрешён» опасно: в типовой это "
 		+ "действие над ОБЩИМ пользователем ИБ.",
+	/*
+	 * КОДЫ РАСШИРЕНИЯ buhprof_api 1.3.0 (СВ0). REQUEST_IN_PROGRESS — операция с тем же requestId ещё идёт в базе:
+	 * агент сам повторяет её до своего max_attempts, а сервису пересоздавать команду нельзя — новый requestId
+	 * превратил бы повтор в вторую операцию. Поэтому код не входит в RETRY_LATER_CODES.
+	 */
+	REQUEST_IN_PROGRESS: "Операция с этим requestId уже выполняется в базе: предыдущая попытка ещё не закончилась. "
+		+ "Агент повторяет такой запрос сам; новую команду взамен не создавайте — дождитесь итога этой.",
+	SETUP_DISABLED: "Стендовая операция выключена в этой базе (настройка расширения buhprof_api). Это не сбой: "
+		+ "включите её в настройках расширения, если операция действительно нужна на этой базе.",
 	COMMAND_QUEUE_TIMEOUT: "Агент выполняет команды внутрь баз по одной (AGENT_IB_PARALLEL), и эта "
 		+ "ждала своей очереди дольше отведённого. Служба агента на связи — дело в загрузке очереди.",
 };
@@ -302,6 +319,15 @@ export function duplicatesText(details: unknown): string {
 	return lines.length ? `Элементы справочника (${lines.length}):\n${lines.join("\n")}` : "";
 }
 
+/**
+ * КОД ДЛЯ ЖУРНАЛА 1С (СВ0). Расширение 1.3.0 на 500 INTERNAL_ERROR не раскрывает подробностей наружу, а кладёт
+ * в журнал регистрации запись и отдаёт её ключ `details.errorId`: по нему администратор базы находит полный текст.
+ */
+export function errorIdText(details: unknown): string {
+	const id = (details as { errorId?: unknown } | null | undefined)?.errorId;
+	return typeof id === "string" && id.trim() ? `Код для поиска в журнале 1С: ${id.trim()}` : "";
+}
+
 export function humanizeAgentError(
 	e: { code: string; message: string; details?: unknown } | null,
 	ctx: AuthContext = {},
@@ -324,11 +350,15 @@ export function humanizeAgentError(
 	const byCode = e.code === "IB_CONNECTION_LOST" && LIMITS_NOT_SET.test(e.message)
 		? CONNECTION_LOST_CRASH_HINT
 		: CODE_HINTS[e.code];
-	if (byCode && !e.message.includes(byCode)) parts.push(byCode);
+	// Отказ по лимиту от самого сервиса уже говорит, что делать (agents/agentBases) — второй совет не нужен.
+	const saysRemedy = e.code === "LICENSE_LIMIT" && /увеличьте тариф/i.test(e.message);
+	if (byCode && !saysRemedy && !e.message.includes(byCode)) parts.push(byCode);
 	const found = HINTS.find((h) => h.match.test(e.message)) ?? (e.code === "IB_AUTH_FAILED" ? AUTH_HINT : undefined);
 	// Подсказка приписывается один раз: повторный проход по уже дополненному тексту
 	// (список задания читают многократно) не должен наращивать его бесконечно.
 	if (found && !e.message.includes(found.hint)) parts.push(found.hint);
+	const ref = errorIdText(e.details);
+	if (ref && !e.message.includes(ref)) parts.push(ref);
 	const dup = duplicatesText(e.details);
 	if (dup && !e.message.includes(dup)) parts.push(dup);
 	const who = describeResponder(e.details);

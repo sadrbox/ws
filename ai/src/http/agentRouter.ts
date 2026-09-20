@@ -34,6 +34,8 @@ import {
 	ibFailureReason, needsFullBases, publicationReport,
 	type BaseService, type BaseState, type PublicationItem,
 } from "../bases/service.ts";
+import { AgentBasesStore, limitMismatches, limitsForAgent, type AgentBaseInput } from "../agents/agentBases.ts";
+import { ActivationStore, type ActivationInput } from "../agents/activation.ts";
 
 // Состояние одной базы в register/heartbeat (E15/A2). Незаполненное поле значит «не знаю»:
 // список баз и версию платформы даёт админ-агент, версию расширения — бизнес-агент, и
@@ -56,7 +58,24 @@ const baseStateSchema = z.object({
 	dbMissing: z.boolean().nullable().optional(),
 	/** Блокировка сеансов в строке среза (E1); разбирает onec/writeState.parseLock. */
 	lock: z.unknown().optional(),
+	/*
+	 * МНОГОБАЗОВЫЙ БИЗНЕС-АГЕНТ (СВ3, агент 2026-09-19 16:22): как служба ходит в базу, организации базы с БИН и
+	 * признак «сверх лимита». Поля мягкие: кривая строка организаций не должна ронять весь heartbeat —
+	 * разбирает их agentBases.applySlice, отбрасывая непонятное.
+	 */
+	transport: z.string().max(10).optional(),
+	organizations: z.array(z.unknown()).max(500).optional(),
+	overLimit: z.boolean().optional(),
 });
+
+/**
+ * Строки среза для реестра баз (servers/bases). OVER_LIMIT — вердикт тарифа бизнес-агента, а не состояние базы
+ * в кластере: в реестре он подменил бы «В работе» админ-агента на непонятное слово в списке «Базы». Лимит живёт
+ * в agent_bases (overLimit), а реестру такая строка отдаётся без статуса — «не знаю».
+ */
+function forRegistry(states: readonly z.infer<typeof baseStateSchema>[]): BaseState[] {
+	return states.map((s) => (s.status === "OVER_LIMIT" ? { ...s, status: undefined } : s)) as BaseState[];
+}
 
 const registerSchema = z.object({
 	agentId: z.string().uuid(),
@@ -94,6 +113,15 @@ const heartbeatSchema = z.object({
 	// v2: состояния баз. basesComplete=true — это полный срез, иначе только изменившиеся.
 	bases: z.array(baseStateSchema).max(500).optional(),
 	basesComplete: z.boolean().optional(),
+	/** Запросы активации БИНов (СВ4): приходят, пока сервис их не принял. Кривая строка отбрасывается поштучно. */
+	activationRequests: z.array(z.unknown()).max(500).optional(),
+	/** Ход обновления службы (задача агенту §2): downloading | installing | restarting | failed | done. */
+	update: z.object({
+		state: z.string().max(30),
+		build: z.string().max(100).nullable().optional(),
+		error: z.string().max(2000).nullable().optional(),
+		at: z.string().max(40).nullable().optional(),
+	}).optional(),
 	/**
 	 * Процессы, которые агент запустил сам: rac, ibcmd, конфигуратор, webinst, мост.
 	 * Приходят снимком в каждом heartbeat — это состояние, а не журнал. `orphan` значит
@@ -149,6 +177,72 @@ function logLockCoverage(log: Logger, agentId: string, rows: readonly unknown[])
 }
 export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: AgentService; bases: BaseService; queue: CommandQueue; audit: Audit; registry: OnecRegistry }) {
 	const { db, cfg, log, agents, bases, queue, audit, registry } = deps;
+	// Срез баз бизнес-агента в его порядке — по нему считается лимит тарифа и выбирается база команды (СВ3).
+	const agentBases = new AgentBasesStore(db);
+	const activation = new ActivationStore(db);
+
+	/** База результата — на сервере агента, который его прислал (C10): одноимённая база другого сервера — другая база. */
+	const baseOfAgent = async (agentId: string, key: string) =>
+		bases.findByKeyGlobal(key, (await agents.findById(agentId))?.serverId ?? null);
+
+	/**
+	 * Срез бизнес-агента — не повод отказать в heartbeat (C17): сбой записи среза оставляет прежний срез, а агент
+	 * остаётся «на связи». Иначе одна кривая строка делала службу невидимой для панели и чата.
+	 */
+	const saveSlice = async (agentId: string, states: AgentBaseInput[], complete: boolean): Promise<void> => {
+		try {
+			await agentBases.applySlice(agentId, states, complete);
+		} catch (e) {
+			log.warn({ agentId, err: e instanceof Error ? e.message : String(e), bases: states.length, complete }, "срез баз бизнес-агента не записан — действует прежний");
+			return;
+		}
+		if (complete) await checkLimitAgreement(agentId);
+	};
+
+	/**
+	 * СВЕРКА ПРАВИЛА ЛИМИТА С АГЕНТОМ (C15, C16). Исходников агента у сервиса нет, и совпадение правил не проверить
+	 * заранее — зато агент присылает свою отметку «сверх лимита» по каждой базе. Расхождение записывается в журнал
+	 * и аудит, но только если повторилось на двух полных срезах подряд: после смены лимита первый срез агента ещё
+	 * посчитан по старому лимиту (новый он получает в ответе на этот же heartbeat). Отказы остаются за сервисом.
+	 */
+	const lastMismatch = new Map<string, string>();
+	const reportedMismatch = new Map<string, string>();
+	const checkLimitAgreement = async (agentId: string): Promise<void> => {
+		try {
+			const me = await agents.get(agentId);
+			if (!me) return;
+			const keys = limitMismatches(await agentBases.list(agentId), me.limits);
+			const sig = keys.join("\u0001");
+			const prev = lastMismatch.get(agentId);
+			lastMismatch.set(agentId, sig);
+			// Сообщаем о расхождении один раз, пока оно то же самое; ушло — забываем, вернулось — сообщим снова.
+			if (!keys.length) { reportedMismatch.delete(agentId); return; }
+			if (sig !== prev || reportedMismatch.get(agentId) === sig) return;
+			reportedMismatch.set(agentId, sig);
+			log.warn({ agentId, bases: keys, limits: me.limits }, "агент и сервис по-разному считают лимит тарифа — проверьте правило");
+			await audit.write({ event: "agent.limit_mismatch", agentId, details: { bases: keys, limits: me.limits } });
+		} catch (e) {
+			log.warn({ agentId, err: e instanceof Error ? e.message : String(e) }, "сверка лимита с агентом не выполнена");
+		}
+	};
+
+	/** Строка запроса активации: БИН обязателен (до 20 знаков), остальное — по возможности. */
+	const activationRow = z.object({
+		bin: z.string().trim().min(1).max(20),
+		name: z.string().max(300).nullable().optional(),
+		baseKey: z.string().max(200).nullable().optional(),
+		comment: z.string().max(2000).nullable().optional(),
+		requestedAt: z.string().max(40).nullable().optional(),
+	});
+	const parseActivation = (raw: unknown[] | undefined): ActivationInput[] =>
+		(raw ?? []).flatMap((x) => { const p = activationRow.safeParse(x); return p.success ? [p.data] : []; });
+
+	/** Лимиты и решения по активации — бизнес-агенту в ответах register/heartbeat (СВ3, СВ4). */
+	const businessExtras = async (agentId: string): Promise<Record<string, unknown>> => {
+		const me = await agents.get(agentId);
+		const limits = me?.limits ?? { maxBases: null, maxBins: null };
+		return { limits: limitsForAgent(limits), activation: await activation.decisions(agentId) };
+	};
 	const r = Router();
 	r.use(requireAgent(db));
 	// Любой запрос агента = он на связи. Запись лёгкая (одно UPDATE по первичному ключу),
@@ -286,9 +380,13 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				"агент перезапустился — команды прежнего процесса закрыты, очередь освобождена");
 		}
 		if (p.data.bases?.length) {
-			await bases.sync(server.id, p.data.bases as BaseState[], { complete: true, authoritative: role === "admin" });
+			await bases.sync(server.id, forRegistry(p.data.bases), { complete: true, authoritative: role === "admin" });
 			await agents.markBasesSynced(req.agent!.agentId);
 			logLockCoverage(log, req.agent!.agentId, p.data.bases);
+		}
+		// Базы бизнес-агента в ЕГО порядке (СВ3): регистрация несёт полный срез — список заменяется целиком.
+		if (role === "business" && p.data.bases) {
+			await saveSlice(req.agent!.agentId, p.data.bases as AgentBaseInput[], true);
 		}
 		/**
 		 * Потеря способностей при обновлении агента — авария, которую иначе не заметить.
@@ -323,6 +421,8 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			// Сервис продлевает срок выполняемых команд по `running` (С33): агент оставляет до срока запас
 			// только до первого heartbeat, а не весь свой предел.
 			runningLease: true,
+			// Лимит тарифа (СВ3) — только бизнес-агенту: null в поле — без ограничения.
+			...(role === "business" ? await businessExtras(req.agent!.agentId) : {}),
 		} });
 	});
 
@@ -340,6 +440,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			version: p.data.version,
 			onecReachable: p.data.onec?.reachable ?? false,
 			onecVersion: p.data.onec?.version ?? null,
+			commandsDone: p.data.commandsDone, commandsFailed: p.data.commandsFailed,
 		});
 		/*
 		 * УХОДЯЩИЙ ВЛАДЕЛЕЦ ГОВОРИТ «Я ВСЁ» (S1) — аренду до срока не держим, иначе заменивший
@@ -374,10 +475,32 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				"статистика команд в heartbeat не разобрана — пропущена");
 		}
 		if (commandStats.stats) await agents.setCommandStats(req.agent!.agentId, commandStats.stats);
+		if (p.data.update) {
+			await agents.setUpdateState(req.agent!.agentId, p.data.update);
+			// Сбой обновления виден в панели, но в журнале сервиса он нужен отдельно: агент мог откатиться сам.
+			if (p.data.update.state === "failed") {
+				log.warn({ agentId: req.agent!.agentId, build: p.data.update.build, error: p.data.update.error }, "обновление агента не удалось — действует прежняя сборка");
+			}
+		}
 
 		const me = await agents.get(req.agent!.agentId);
+		if (me?.role === "business" && p.data.bases) {
+			// Срез бизнес-агента (СВ3): полный заменяет список, частичный правит названные базы.
+			await saveSlice(req.agent!.agentId, p.data.bases as AgentBaseInput[], p.data.basesComplete === true);
+		}
+		if (me?.role === "business" && p.data.activationRequests?.length) {
+			const reqs = parseActivation(p.data.activationRequests);
+			const n = await activation.upsert(req.agent!.agentId, reqs, me.limits.activeBins ?? null);
+			if (n) {
+				await audit.write({ event: "agent.bin_activation.requested", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
+					details: { bins: reqs.map((q) => q.bin) } });
+			}
+			if (reqs.length < p.data.activationRequests.length) {
+				log.warn({ agentId: req.agent!.agentId, dropped: p.data.activationRequests.length - reqs.length }, "запросы активации БИН: часть строк не разобрана");
+			}
+		}
 		if (p.data.bases?.length && me?.serverId) {
-			await bases.sync(me.serverId, p.data.bases as BaseState[],
+			await bases.sync(me.serverId, forRegistry(p.data.bases),
 				{ complete: p.data.basesComplete === true, authoritative: me.role === "admin" });
 			if (p.data.basesComplete) {
 				await agents.markBasesSynced(req.agent!.agentId);
@@ -393,6 +516,8 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			ok: true,
 			wantFullBases,
 			basesFullEverySecs: cfg.AGENT_BASES_FULL_EVERY_SECS,
+			// Лимит тарифа (СВ3): смена действует со следующего heartbeat. null в поле — без ограничения.
+			...(me?.role === "business" ? await businessExtras(req.agent!.agentId) : {}),
 		} });
 	});
 
@@ -409,7 +534,10 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		agents.notePollOpen(req.agent!.agentId);
 		let handedBusyMs = 0;
 		try {
-			const commands = await queue.take(req.agent!.agentId, wait, agentInstance(req));
+			// Предел одновременных внутрибазовых команд — по роли (19.09): у бизнес-агента свой, у админ-агента общий.
+			const role = (await agents.findById(req.agent!.agentId))?.role;
+			const commands = await queue.take(req.agent!.agentId, wait, agentInstance(req),
+				role === "business" ? cfg.BUSINESS_IB_PARALLEL : undefined);
 			if (closed && commands.length) {
 				await db.query(`UPDATE commands SET state = 'queued', dispatched_at = NULL WHERE id = ANY($1) AND state = 'dispatched'`,
 					[commands.map((c) => c.id)]);
@@ -534,7 +662,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// Без эха пользователей (старая сборка) — сразу, до «выполнено». С эхом — ниже, ПОСЛЕ
 		// его применения (S2): строка пользователя уже есть, а прочитанное у 1С важнее памяти.
 		if (remember && pending?.base_key && !echo?.state.users) {
-			const base = await bases.findByKeyGlobal(pending.base_key);
+			const base = await baseOfAgent(req.agent!.agentId, pending.base_key);
 			if (base) await rememberShow(base.id);
 		}
 
@@ -641,7 +769,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			 * (`/bases/:key/users/cached`), и спрашивать ей после команды нечего.
 			 */
 			if (echo && cmd.base_key) {
-				const base = await bases.findByKeyGlobal(cmd.base_key);
+				const base = await baseOfAgent(req.agent!.agentId, cmd.base_key);
 				// Базы нет в реестре — применять некуда; тогда ниже отработает обычное чтение.
 				if (base) {
 					if (echo.state.users) {
@@ -707,7 +835,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 						commandId: cmd.id, type: cmd.type, baseKey: cmd.base_key,
 					}, "список в ответе агента неузнанной формы — кэш базы не трогаем");
 				} else {
-					const base = await bases.findByKeyGlobal(cmd.base_key);
+					const base = await baseOfAgent(req.agent!.agentId, cmd.base_key);
 					if (base) {
 						if (cmd.type === "IB_LIST_USERS") await registry.syncUsers(base.id, list.items as IbUser[]);
 						else await registry.syncExtensions(base.id, list.items as IbExtension[]);

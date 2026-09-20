@@ -35,7 +35,7 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	createSchedule, deleteSchedule, fetchBases, fetchSchedules, runSchedule, updateSchedule,
+	createSchedule, deleteSchedule, fetchBases, fetchSchedules, fetchServers, runSchedule, updateSchedule,
 	type OnecSchedule,
 } from "src/services/onec/api";
 import { CapabilityGuard, QueryError, reportBatchStart, useOnecWrite } from "./shared";
@@ -64,6 +64,8 @@ const columns = (): TColumn[] => ([
 	{ identifier: "atTime", type: "string", width: "90px", minWidth: "70px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "weekdaysLabel", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "basesLabel", type: "string", width: "110px", minWidth: "80px", alignment: "right", visible: true, inlist: true },
+	// Сервер 1С расписания (C10): при одном сервере колонка пустая и её скрывают, при нескольких — это адрес баз.
+	{ identifier: "onecServer", type: "string", width: "170px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "enabledLabel", type: "string", width: "120px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "lastRunLabel", type: "string", width: "180px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
@@ -71,7 +73,7 @@ const columns = (): TColumn[] => ([
 /** Пустая заготовка формы: ночь, каждый день, выгрузка — то, ради чего расписание и заводят. */
 const blank = () => ({
 	name: "", type: "IB_BACKUP" as string, atTime: "02:00",
-	weekdays: [] as number[], dir: "", enabled: true, baseKeys: [] as string[],
+	weekdays: [] as number[], dir: "", enabled: true, baseKeys: [] as string[], serverId: "",
 });
 
 export const SchedulesTab: FC = () => {
@@ -83,6 +85,10 @@ export const SchedulesTab: FC = () => {
 	const [form, setForm] = useState(blank);
 
 	const list = useQuery({ queryKey: ["onec", "schedules"], queryFn: fetchSchedules });
+	// Серверы 1С: выбор в форме нужен только там, где их больше одного (C10).
+	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers, staleTime: 60_000 });
+	const serverItems = servers.data?.items ?? [];
+	const serverName = (id: string | null) => (id ? serverItems.find((x) => x.id === id)?.name ?? id.slice(0, 8) : "—");
 	// Базы нужны для выбора целей. Реестр читается из БД сервиса и в 1С не ходит.
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases, enabled: dialog === "create" || dialog === "edit" });
 
@@ -96,6 +102,7 @@ export const SchedulesTab: FC = () => {
 		atTime: s.atTime,
 		weekdaysLabel: weekdaysLabel(s.weekdays),
 		basesLabel: String(s.baseKeys.length),
+		onecServer: serverName(s.serverId),
 		// «Выключено» важнее, чем «пора»: выключенное расписание не запустится никогда.
 		enabledLabel: s.enabled
 			? (s.due ? translate("onecSchedDueNow") : translate("onecSchedOn"))
@@ -139,7 +146,7 @@ export const SchedulesTab: FC = () => {
 	const save = useMutation({
 		mutationFn: async () => {
 			const input = {
-				name: form.name.trim(), type: form.type, baseKeys: form.baseKeys,
+				name: form.name.trim(), type: form.type, baseKeys: form.baseKeys, serverId: form.serverId || null,
 				atTime: form.atTime, weekdays: form.weekdays, payload: payloadOf(), enabled: form.enabled,
 			};
 			return dialog === "edit" && current
@@ -188,7 +195,7 @@ export const SchedulesTab: FC = () => {
 
 	const openEdit = (s: OnecSchedule) => {
 		setForm({
-			name: s.name, type: s.type, atTime: s.atTime, weekdays: s.weekdays,
+			name: s.name, type: s.type, atTime: s.atTime, weekdays: s.weekdays, serverId: s.serverId ?? "",
 			dir: asText((s.payload ?? {}).dir), enabled: s.enabled, baseKeys: s.baseKeys,
 		});
 		setActive(s.id);
@@ -286,6 +293,13 @@ export const SchedulesTab: FC = () => {
 									<span className={styles.Hint}>{weekdaysLabel(form.weekdays)}</span>
 								</GroupRow>
 								<GroupRow>
+									{/* Сервер спрашиваем, только когда их несколько: иначе поле с единственным вариантом. */}
+									{serverItems.length > 1 && (
+										<FieldSelect name="sch_server" label={translate("onecServer")} value={form.serverId}
+											options={[{ value: "", label: translate("onecServerNotSet") }, ...serverItems.map((x) => ({ value: x.id, label: x.name }))]}
+											onChange={(e) => setForm((f) => ({ ...f, serverId: e.target.value }))}
+											hint={translate("onecSchedServerHint")} />
+									)}
 									<FieldToggle name="sch_enabled" label={translate("onecSchedEnabled")} value={form.enabled}
 										onChange={(v) => setForm((f) => ({ ...f, enabled: v }))} />
 									{form.type === "IB_BACKUP" && (

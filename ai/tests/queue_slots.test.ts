@@ -143,3 +143,16 @@ describe("С33: продление срока выполняемых коман�
 		assert.equal(RETRY_LATER_CODES.has("IB_TIMEOUT"), true);
 	});
 });
+
+describe("предел внутрибазовых команд по роли агента (19.09)", () => {
+	it("переданный предел заменяет общий: бизнес-агент берёт столько баз сразу, сколько ему задано", async () => {
+		const slotsOf = async (parallel?: number) => {
+			const calls: Call[] = [];
+			await new CommandQueue(fakeDb(calls, [{ n: "1" }]), 1, 600).take("a", 0, null, parallel);
+			const upd = calls.find((c) => c.sql.includes("ib_rank <= $2"))!;
+			return upd.params[1];
+		};
+		assert.equal(await slotsOf(), 0, "общий предел 1, одна уже выполняется — мест нет");
+		assert.equal(await slotsOf(4), 3, "у бизнес-агента 4 — осталось 3");
+	});
+});

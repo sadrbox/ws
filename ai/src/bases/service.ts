@@ -210,6 +210,8 @@ export type ServerParams = {
 	rasHost: string | null;
 	rasPort: number | null;
 	bases: number;
+	/** Организация ERP сервера (C11): по ней — видимость сервера при ONEC_SERVER_SCOPE=organizations. */
+	organizationUuid?: string;
 };
 
 /** Одна строка среза публикаций, как её присылает агент (CLUSTER_LIST_PUBLICATIONS). */
@@ -248,6 +250,8 @@ export function ibFailureReason(
 	if (code === "IB_CONNECTION_LOST") return null;
 	// Занятость и остановка — тоже не про базу (С31, С25): команда не выполнялась или прервана службой.
 	if (["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPING", "AGENT_STOPPED", "TIMEOUT", "IB_TIMEOUT"].includes(code)) return null;
+	// Коды расширения 1.3.0 (СВ0): в базу вошли — операция ещё идёт или выключена настройкой.
+	if (["REQUEST_IN_PROGRESS", "SETUP_DISABLED"].includes(code)) return null;
 	// Занятость базы чужим сеансом (С37, 16.09): «разделённый доступ», «база данных заблокирована» — вход в базу
 	// ни при чём, база исправна и освободится сама.
 	if (/разделен\w* доступ|разделённ\w* доступ|база данных заблокирована|монопольн/i.test(text)) return null;
@@ -403,15 +407,15 @@ export class BaseService {
 	/** Серверы 1С и их настраиваемые параметры — для экрана настроек и карточки агента. */
 	async listServers(): Promise<ServerParams[]> {
 		const r = await this.db.query<{
-			id: string; name: string; public_host: string | null;
+			id: string; name: string; public_host: string | null; organization_uuid: string;
 			ras_host: string | null; ras_port: number | null; bases: string;
 		}>(
-			`SELECT s.id, s.name, s.public_host, s.ras_host, s.ras_port, count(b.id) AS bases
+			`SELECT s.id, s.name, s.public_host, s.organization_uuid, s.ras_host, s.ras_port, count(b.id) AS bases
 			   FROM servers s LEFT JOIN bases b ON b.server_id = s.id
 			  GROUP BY s.id ORDER BY s.name`,
 		);
 		return r.rows.map((x) => ({
-			id: x.id, name: x.name, publicHost: x.public_host,
+			id: x.id, name: x.name, publicHost: x.public_host, organizationUuid: x.organization_uuid,
 			rasHost: x.ras_host, rasPort: x.ras_port, bases: Number(x.bases),
 		}));
 	}
@@ -685,15 +689,29 @@ export class BaseService {
 	 * решает правило команды (`hiddenBaseRefusal`), а не поиск. При одинаковом ключе на разных серверах
 	 * нескрытая идёт первой.
 	 */
-	async findByKeyGlobal(key: string): Promise<BaseView | null> {
+	/**
+	 * База по ключу. `serverId` (C10) — на этом сервере: имя базы уникально только в пределах сервера. Без него —
+	 * первая по имени сервера (как раньше); неоднозначность ловят вызывающие через `serversWithKey`.
+	 */
+	async findByKeyGlobal(key: string, serverId?: string | null): Promise<BaseView | null> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
 			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
 			   FROM bases b JOIN servers s ON s.id = b.server_id ${EXT_JOIN}
-			  WHERE b.key = $1
+			  WHERE b.key = $1 AND ($2::uuid IS NULL OR b.server_id = $2::uuid)
 			  ORDER BY (b.disabled_at IS NOT NULL), s.name LIMIT 1`,
-			[key],
+			[key, serverId ?? null],
 		);
 		return r.rows[0] ? this.view(r.rows[0]) : null;
+	}
+
+	/** Серверы, где есть база с этим ключом (C10): больше одного — без сервера базу не адресовать. */
+	async serversWithKey(key: string): Promise<{ id: string; name: string; organizationUuid: string }[]> {
+		const r = await this.db.query<{ id: string; name: string; organization_uuid: string }>(
+			`SELECT DISTINCT s.id, s.name, s.organization_uuid FROM bases b JOIN servers s ON s.id = b.server_id
+			  WHERE b.key = $1 ORDER BY s.name`,
+			[key],
+		);
+		return r.rows.map((x) => ({ id: x.id, name: x.name, organizationUuid: x.organization_uuid }));
 	}
 
 	/** База организации по ключу — точка входа маршрутизации «база → сервер → агент». */

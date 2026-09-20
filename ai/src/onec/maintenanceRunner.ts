@@ -41,6 +41,8 @@ export async function runDueSchedules(
 			baseKeys: s.baseKeys,
 			payload: s.payload,
 			organizationUuid: s.organizationUuid,
+			// Сервер расписания (C10): при нескольких серверах имя базы само по себе адреса не даёт.
+			serverId: s.serverId,
 			// Работа сервиса, а не человека: подставлять здесь автора расписания значило бы
 			// приписывать ему ночные действия, которых он не делал.
 			userUuid: null,

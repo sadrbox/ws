@@ -7,8 +7,15 @@
 //   GET  /health              открытый, для мониторинга и cloudflared
 //   /agent/v1/*               агенты (Bearer agent token + X-Agent-Id)
 //   /admin/v1/*               администратор (X-Admin-Key)
+//   /v1/onec-chat/*           чат внутри 1С (X-Base-Token + X-1C-User-Id)
 //   /v1/*                     пользователи ERP (JWT бэкенда)
 
+import { EnrollmentStore } from "./agents/enrollments.ts";
+import { agentEnrollRouter } from "./http/agentEnrollRouter.ts";
+import { ActivationStore } from "./agents/activation.ts";
+import { RegistrationStore } from "./bases/registrations.ts";
+import { baseRegistrationRouter } from "./http/baseRegistrationRouter.ts";
+import { AgentBasesStore } from "./agents/agentBases.ts";
 import express from "express";
 import helmet from "helmet";
 import type { Express, Request, Response, NextFunction } from "express";
@@ -27,6 +34,8 @@ import { Audit } from "./audit/index.ts";
 import { agentRouter } from "./http/agentRouter.ts";
 import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
+import { onecChatRouter } from "./http/onecChatRouter.ts";
+import { BaseTokenStore } from "./bases/tokens.ts";
 import { purgeOldData } from "./retention.ts";
 import { ScheduleStore } from "./onec/schedules.ts";
 import { runDueSchedules } from "./onec/maintenanceRunner.ts";
@@ -40,7 +49,7 @@ import { BankExtractor } from "./bank/extract.ts";
 import { StatementStore } from "./bank/store.ts";
 import { FileStore } from "./files/store.ts";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 
 export type AppDeps = { cfg: Config; log: Logger; db: Db; erp: Db; llm?: LLMProvider | null; bank?: { extractor: BankExtractor; store: StatementStore } | null };
 
@@ -90,6 +99,10 @@ function createExtractor(cfg: Config, log: Logger): StatementExtractor | null {
 export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; agents: AgentService; workflow: ChatWorkflow | null } {
 	const { cfg, log, db, erp } = deps;
 	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS, cfg.AGENT_ORG_BINDING);
+	// Режим `any` (C14) — для стенда разработки: команды и чат уходят агентам ЧУЖИХ организаций, если у своей агента нет.
+	if (cfg.AGENT_ORG_BINDING === "any" && cfg.NODE_ENV === "production") {
+		log.warn("AGENT_ORG_BINDING=any в production: команды организаций без своего агента уйдут агентам других организаций — нужен strict");
+	}
 	// Один реестр на оба роутера: списки из базы кладёт агентский путь, читает панель.
 	const onecRegistry = new OnecRegistry(db);
 	const baseRegistry = new BaseService(db);
@@ -102,10 +115,16 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Пароль базы подставляется в команду ровно в момент выдачи агенту (см. queue.setAuthResolver).
 	queue.setAuthResolver(async (agentId, baseKeys) => {
 		const agent = await agents.findById(agentId);
-		if (!agent?.serverId) return new Map();
+		// Учётная запись администратора базы — только админ-агенту (C1): бизнес-команды теперь тоже несут базу в
+		// очереди, и без этой проверки пароль администратора уходил бы службе, которой он не нужен.
+		if (!agent?.serverId || agent.role !== "admin") return new Map();
 		return credentials.forDispatch([agent.serverId], baseKeys);
 	});
 	const audit = new Audit(db, log);
+	// Токены баз и заявки на подключение (СВ4): одни хранилища на канал 1С, регистрацию и панель.
+	const baseTokens = new BaseTokenStore(db);
+	const registrations = new RegistrationStore(db);
+	const enrollments = new EnrollmentStore(db);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;
 	// Чтение PDF выписок — прямой вызов модели с документом на входе (Claude или OpenAI по
 	// провайдеру); без ключа вложения в чате отключены, остальной чат работает.
@@ -114,7 +133,12 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const files = new FileStore(db, cfg.FILE_TTL_DAYS);
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,
-			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, files })
+			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, files,
+			orgBin: async (uuid) => {
+				const r = await erp.query<{ bin: string | null }>(`SELECT bin FROM organizations WHERE uuid = $1`, [uuid]);
+				const bin = r.rows[0]?.bin?.trim() ?? "";
+				return /^\d{12}$/.test(bin) ? bin : null;
+			} })
 		: null;
 	// Просроченные файлы диалогов — при старте и раз в час.
 	const purge = () => files.purgeExpired().then((n) => { if (n) log.info({ n }, "удалены просроченные файлы диалогов"); }).catch((e) => log.warn({ err: e }, "очистка файлов"));
@@ -157,7 +181,8 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		if (origin && cfg.ALLOWED_ORIGINS.includes(origin)) {
 			res.setHeader("Access-Control-Allow-Origin", origin);
 			res.setHeader("Vary", "Origin");
-			res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+			// X-Onec-Server — выбранный в панели сервер 1С (C9): без него в списке браузер отменит запрос на preflight.
+			res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Onec-Server");
 			// Методы перечисляем ВСЕ, которые есть у браузерного API. Пропущенный метод
 			// браузер не показывает как ошибку метода: предварительный запрос отвечает 204,
 			// но без нужного метода в списке — и запрос отменяется с «CORS error», без
@@ -180,11 +205,20 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
-		batches, registry: onecRegistry, credentials, schedules,
+		batches, registry: onecRegistry, credentials, schedules, agentBases: new AgentBasesStore(db), registrations, baseTokens, activation: new ActivationStore(db), enrollments,
 	}));
+	// Подключение агента по коду (СВ5) — до agentRouter: у агента, который просит подключение, токена ещё нет.
+	app.use("/agent/v1", agentEnrollRouter({ enrollments, agents, erp, audit, log }));
 	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit, registry: onecRegistry }));
-	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit }));
-	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION }));
+	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit, agentBases: new AgentBasesStore(db) }));
+	// Регистрация базы (СВ4) — до канала чата: у базы, подающей заявку, токена ещё нет.
+	app.use("/v1/onec-chat", baseRegistrationRouter({ registrations, tokens: baseTokens, erp, audit, log }));
+	// Раньше /v1: у формы 1С нет JWT ERP, её субъект — токен базы.
+	app.use("/v1/onec-chat", onecChatRouter({
+		workflow, tokens: baseTokens, erp, log, version: VERSION,
+		maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN,
+	}));
+	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db) }));
 
 	app.use((_req, res) => {
 		res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ресурс не найден" } });

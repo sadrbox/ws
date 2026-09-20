@@ -564,8 +564,34 @@ export const TOOLS: ToolSpec[] = [
 
 export const TOOLS_BY_NAME: ReadonlyMap<string, ToolSpec> = new Map(TOOLS.map((t) => [t.name, t]));
 
+/**
+ * АДРЕС ВЫЗОВА ДЛЯ СЕРВИСА (C0). У многобазового агента поиск, чтение и печать выполняются в базе конкретной
+ * организации, но у этих инструментов организации в 1С нет — её некуда передать. Модели даётся необязательное
+ * `organizationId`: сервис по нему выбирает базу (ответ get_organizations) и в 1С его не отправляет — buildPayload
+ * таких инструментов берёт только свои поля.
+ */
+export const ROUTING_ORGANIZATION = "organizationId";
+
+/** Есть ли у инструмента своя организация в 1С (тогда она и адрес, и параметр команды). */
+export const hasOwnOrganization = (t: ToolSpec): boolean => {
+	const props = (t.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+	return "organizationId" in props || "organizationBin" in props;
+};
+
+const ROUTING_PROPERTY = {
+	type: "string",
+	description: "id организации из get_organizations — в базе какой организации выполнить (только если организаций несколько)",
+};
+
 export function toolDefinitions(): ToolDefinition[] {
-	return TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+	return TOOLS.map((t) => {
+		if (hasOwnOrganization(t) || t.commandType === "GET_ORGANIZATIONS") return { name: t.name, description: t.description, inputSchema: t.inputSchema };
+		const schema = t.inputSchema as { properties?: Record<string, unknown> };
+		return {
+			name: t.name, description: t.description,
+			inputSchema: { ...t.inputSchema, properties: { ...(schema.properties ?? {}), [ROUTING_ORGANIZATION]: ROUTING_PROPERTY } },
+		};
+	});
 }
 
 /** Собирает все id из результата 1С — чтобы модель могла ссылаться на них дальше. */

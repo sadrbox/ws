@@ -6,6 +6,7 @@
 //   GET /v1/status        сводка для панели: сервис, модель (последняя ошибка), агент и база 1С
 //   POST /v1/chat, GET /v1/conversations/:id — см. chatRouter (если LLM настроена)
 
+import { describeAgentBases, type AgentBasesStore } from "../agents/agentBases.ts";
 import { Router } from "express";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
@@ -17,8 +18,12 @@ import type { FileStore } from "../files/store.ts";
 import { chatRouter } from "./chatRouter.ts";
 import { llmHealth } from "../llm/health.ts";
 
-export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore; version: string }) {
-	const { erp, cfg, agents, workflow, log, files, version } = deps;
+export function userRouter(deps: {
+	erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore; version: string;
+	/** Срез баз бизнес-агентов (C12): список агентов показывает их базы и лимит. Нет — без баз. */
+	agentBases?: Pick<AgentBasesStore, "listMany">;
+}) {
+	const { erp, cfg, agents, workflow, log, files, version, agentBases } = deps;
 	const r = Router();
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
 	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN }));
@@ -51,9 +56,19 @@ export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; w
 			res.status(409).json({ success: false, error: { code: "ORGANIZATION_REQUIRED", message: "У пользователя не выбрана активная организация" } });
 			return;
 		}
-		const items = (await agents.visibleTo(org)).map((a) => ({
-			id: a.id, name: a.name, status: a.status, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt,
-		}));
+		const list = await agents.visibleTo(org);
+		// Роль и базы (C12): у многобазового бизнес-агента «на связи» ещё не значит, что нужная база доступна.
+		const slices = agentBases ? await agentBases.listMany(list.filter((a) => a.role === "business").map((a) => a.id)) : new Map();
+		const items = list.map((a) => {
+			const view = a.role === "business" && slices.has(a.id) ? describeAgentBases(slices.get(a.id) ?? [], a.limits) : null;
+			return {
+				id: a.id, name: a.name, role: a.role, status: a.status, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt,
+				...(view ? {
+					limits: view.limits, usage: view.usage,
+					bases: view.bases.map((b) => ({ key: b.key, status: b.status, transport: b.transport, overLimit: b.overLimitService || b.overLimit === true })),
+				} : {}),
+			};
+		});
 		res.json({ success: true, data: { items } });
 	});
 
@@ -61,7 +76,8 @@ export function userRouter(deps: { erp: Db; cfg: Config; agents: AgentService; w
 	// организации; модель — по последнему обращению к провайдеру (см. llm/health.ts).
 	r.get("/status", async (req, res) => {
 		const org = req.erpUser!.organizationUuid;
-		const list = org ? await agents.visibleTo(org) : [];
+		// Статус чата — про бизнес-агентов (C12, C13): документы проводят они; админ-агент на связи чату не помогает.
+		const list = org ? (await agents.visibleTo(org)).filter((a) => a.role === "business") : [];
 		const items = list.map((a) => ({ id: a.id, name: a.name, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt }));
 		const a = items.find((x) => x.online && x.onec.reachable) ?? items.find((x) => x.online) ?? items[0] ?? null;
 		res.json({

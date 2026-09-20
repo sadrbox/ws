@@ -49,7 +49,7 @@
  * запись в реестре операций (progress.ts) — и те, что идут секунды, и те, что идут часами.
  * Иначе панель отвечала «команда отправлена» и замолкала.
  */
-import { FC, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
 import { translate } from "src/i18";
 import Tabs from "src/components/Tabs";
 import { OneCBasesList } from "src/models/OneCBases";
@@ -61,16 +61,79 @@ import UsersTab from "./UsersTab";
 import BatchesTab from "./BatchesTab";
 import AgentsTab from "./AgentsTab";
 import SchedulesTab from "./SchedulesTab";
+import RegistrationsTab from "./RegistrationsTab";
+import ActivationRequestsTab from "./ActivationRequestsTab";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchActivationRequests, fetchEnrollments, fetchRegistrations, fetchServers } from "src/services/onec/api";
+import EnrollmentsTab from "./EnrollmentsTab";
+import { getOnecServer, setOnecServer, subscribeOnecServer } from "src/services/onec/serverScope";
+import { FieldSelect } from "src/components/Field";
 import ProcessesTab from "./ProcessesTab";
 import ProgressTab from "./ProgressTab";
 import { useBatchWatch } from "./progress";
 import main from "src/styles/main.module.scss";
+import styles from "./OneCAdmin.module.scss";
 import {
-	ReadonlyNotice, useOnecPermissions,
+	ReadonlyNotice, useAgents, useOnecPermissions,
 } from "./shared";
 import { agentsAllow } from "./onecPermissions";
 
-type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "schedules" | "progress";
+type Tab = "bases" | "cluster" | "extensions" | "users" | "agents" | "requests" | "schedules" | "progress";
+
+/**
+ * «Заявки» (СВ4) — то, что приходит в панель снаружи и ждёт решения администратора BuhProf: подключение базы
+ * из 1С и активация организации из окна агента. Решать могут только администраторы BuhProf; остальные видят.
+ */
+const RequestsSection: FC = () => {
+	const [inner, setInner] = useState<"registrations" | "activation" | "enrollments">("registrations");
+	return (
+		<Tabs
+			activeTab={inner}
+			onTabChange={(id) => setInner(id as typeof inner)}
+			tabs={[
+				{ id: "registrations", label: translate("onecReqRegistrations"), component: inner === "registrations" ? <RegistrationsTab /> : null },
+				{ id: "activation", label: translate("onecReqActivation"), component: inner === "activation" ? <ActivationRequestsTab /> : null },
+				{ id: "enrollments", label: translate("onecEnrollments"), component: inner === "enrollments" ? <EnrollmentsTab /> : null },
+			]}
+		/>
+	);
+};
+
+/**
+ * ВЫБОР СЕРВЕРА 1С (C9). Показывается, только когда серверов больше одного: с одним сервером панель выглядит как
+ * раньше. Выбор уходит в каждый запрос панели (serverScope → aiFetch), а данные панели перечитываются — списки
+ * прежнего сервера на экране остаться не должны.
+ */
+const ServerPicker: FC = () => {
+	const qc = useQueryClient();
+	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers, staleTime: 60_000 });
+	const [server, setServer] = useState<string | null>(getOnecServer());
+	useEffect(() => subscribeOnecServer(setServer), []);
+	const items = servers.data?.items ?? [];
+	// Выбранного сервера больше нет (удалён, закрыт) — назад к «все серверы».
+	useEffect(() => {
+		if (server && servers.data && !items.some((x) => x.id === server)) setOnecServer(null);
+	}, [server, servers.data, items]);
+	if (items.length < 2) return null;
+	return (
+		<div className={styles.ServerPicker}>
+			<FieldSelect name="onec_server" label={translate("onecServer")} size="sm" value={server ?? ""}
+				onChange={(e) => {
+					setOnecServer(e.target.value || null);
+					void qc.invalidateQueries({ queryKey: ["onec"] });
+				}}
+				options={[{ value: "", label: translate("onecServerAll") }, ...items.map((x) => ({ value: x.id, label: `${x.name} (${x.bases})` }))]} />
+		</div>
+	);
+};
+
+/** Сколько заявок ждёт решения — число у вкладки: заявку ждут у телефона, открывать раздел наугад не придётся. */
+function usePendingRequests(): number {
+	const reg = useQuery({ queryKey: ["onec", "registrations", "PENDING", ""], queryFn: () => fetchRegistrations({ state: "PENDING" }), refetchInterval: 60_000, retry: false });
+	const act = useQuery({ queryKey: ["onec", "activation-requests", "PENDING", ""], queryFn: () => fetchActivationRequests({ state: "PENDING" }), refetchInterval: 60_000, retry: false });
+	const enr = useQuery({ queryKey: ["onec", "enrollments", "PENDING", ""], queryFn: () => fetchEnrollments({ state: "PENDING" }), refetchInterval: 60_000, retry: false });
+	return (reg.data?.items.length ?? 0) + (act.data?.items.length ?? 0) + (enr.data?.items.length ?? 0);
+}
 
 /**
  * «Кластер» — живое состояние сервера 1С одним разделом.
@@ -142,6 +205,9 @@ export const OneCAdminList: FC = () => {
 	const running = watch.running;
 
 	const perms = useOnecPermissions();
+	const pending = usePendingRequests();
+	const agentsList = useAgents();
+	const offlineAgents = (agentsList.data?.items ?? []).filter((a) => !a.disabled && !a.online).length;
 	const tabs = useMemo(() => [
 		{
 			id: "bases",
@@ -169,9 +235,15 @@ export const OneCAdminList: FC = () => {
 		// Без просмотра агентов (вложенное разрешение) вкладки нет.
 		...(agentsAllow(perms, "view") ? [{
 			id: "agents",
-			label: translate("onecTabAgents"),
+			// Сколько агентов пропало со связи (п. 4) — числом у вкладки: заходить проверять наугад не придётся.
+			label: offlineAgents ? `${translate("onecTabAgents")} (${translate("onecAgentsOfflineShort")}: ${offlineAgents})` : translate("onecTabAgents"),
 			component: tab === "agents" ? <AgentsTab /> : null,
 		}] : []),
+		{
+			id: "requests",
+			label: pending ? `${translate("onecTabRequests")} (${pending})` : translate("onecTabRequests"),
+			component: tab === "requests" ? <RequestsSection /> : null,
+		},
 		{
 			// Обслуживание по расписанию — рядом с агентами: и то и другое про то, как
 			// панель работает САМА, без человека за экраном. Прогоны при этом видны в
@@ -188,13 +260,14 @@ export const OneCAdminList: FC = () => {
 			label: running ? `${translate("onecTabProgress")} (${running})` : translate("onecTabProgress"),
 			component: tab === "progress" ? <ProgressSection watch={watch} /> : null,
 		},
-	], [tab, running, watch, perms]);
+	], [tab, running, watch, perms, pending, offlineAgents]);
 
 	return (
 		<div className={main.PaneFill}>
 			{/* «Доступ только на просмотр» — один раз на панель, а не на каждой вкладке:
 			    иначе одно и то же сообщение приходило бы на доску от пяти экранов. */}
 			<ReadonlyNotice />
+			<ServerPicker />
 			<Tabs tabs={tabs} activeTab={tab} onTabChange={(id) => setTab(id as Tab)} />
 		</div>
 	);

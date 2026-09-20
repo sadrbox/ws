@@ -36,4 +36,18 @@ export class Audit {
 			this.log.error({ err, event: e.event }, "аудит не записан");
 		}
 	}
+
+	/**
+	 * Журнал действий над агентом для его карточки (п. 3): кто переименовал, отключал, перевыпускал токен, менял
+	 * лимиты, подключал по коду; регистрации службы и расхождения лимита. Команды сюда не входят — у них своя вкладка.
+	 */
+	async listForAgent(agentId: string, limit = 200): Promise<{ at: string; event: string; userUuid: string | null; details: Record<string, unknown> }[]> {
+		const r = await this.db.query<{ at: Date; event: string; user_uuid: string | null; details: Record<string, unknown> }>(
+			`SELECT at, event, user_uuid, details FROM audit_log
+			  WHERE agent_id = $1 AND (event LIKE 'agent.%' OR event = 'command.limit_bypass')
+			  ORDER BY at DESC LIMIT $2`,
+			[agentId, Math.min(Math.max(limit, 1), 500)],
+		);
+		return r.rows.map((x) => ({ at: x.at.toISOString(), event: x.event, userUuid: x.user_uuid, details: x.details ?? {} }));
+	}
 }

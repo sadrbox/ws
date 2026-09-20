@@ -25,6 +25,9 @@ import { durationRows, failureRows } from "./agentStats";
 import { agentBuildLabel, featureLabels } from "./agentHealth";
 import AgentHealthTab from "./AgentHealthTab";
 import AgentLogTab from "./AgentLogTab";
+import AgentBasesTab from "./AgentBasesTab";
+import { AgentAuditTab, AgentCommandsTab, BusinessHealthTab } from "./AgentActivityTabs";
+import AgentConfigTab from "./AgentConfigTab";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { useScopeObject } from "src/components/TechMessages/store";
@@ -35,8 +38,8 @@ import { getFormatDate } from "src/utils/datetime";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import {
-	deleteAgent, fetchServers, releaseAgentInstance, renameAgent, rotateAgentToken,
-	setAgentDisabled, setAgentOwner,
+	deleteAgent, fetchServers, releaseAgentInstance, renameAgent, restartAgent, rotateAgentToken,
+	setAgentDisabled, setAgentOwner, updateAgent,
 } from "src/services/onec/api";
 import {
 	QueryError, useAgents, useOnecPermissions,
@@ -67,7 +70,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const agentId = asText(row.agentId) || asText(row.uuid);
 	const qc = useQueryClient();
-	const [confirm, setConfirm] = useState<null | "rotate" | "release" | "delete">(null);
+	const [confirm, setConfirm] = useState<null | "rotate" | "release" | "delete" | "restart" | "update">(null);
 	// Имя правится прямо здесь: агент присылает своё при регистрации, но подпись для
 	// человека — дело панели.
 	const [name, setName] = useState("");
@@ -135,6 +138,23 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 		onError: fail,
 	});
 
+	/*
+	 * ПЕРЕЗАПУСК И ОБНОВЛЕНИЕ. Агент отвечает сразу, а работу делает сам: панель показывает ход обновления по
+	 * heartbeat (поле `update` в списке агентов), а не ждёт ответа команды.
+	 */
+	const restart = useMutation({
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRestart"), target: agentName, ref: agentRef },
+			() => restartAgent(agentId, translate("onecAgentRestartReason"))),
+		onSuccess: () => { setConfirm(null); showToast(translate("onecAgentRestartSent"), "success"); void refresh(); },
+		onError: fail,
+	});
+	const update = useMutation({
+		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentUpdate"), target: agentName, ref: agentRef },
+			() => updateAgent(agentId)),
+		onSuccess: () => { setConfirm(null); showToast(translate("onecAgentUpdateSent"), "success"); void refresh(); },
+		onError: fail,
+	});
+
 	const assign = useMutation({
 		mutationFn: (instanceId: string) => setAgentOwner(agentId, instanceId),
 		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
@@ -197,6 +217,12 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 													<Field name="ag_seen" label={translate("lastSeenAt")}
 														value={agent?.lastSeenAt ? getFormatDate(agent.lastSeenAt) : "—"}
 														disabled onChange={() => {}} width={FIELD_WIDTH.date} />
+													{/* Что сервис знает об агенте и раньше не показывал (п. 6). */}
+													<Field name="ag_os" label={translate("agentOs")} value={agent?.os || "—"}
+														disabled onChange={() => {}} width={FIELD_WIDTH.md} />
+													<Field name="ag_onec" label={translate("agentOnecLabel")}
+														value={agent?.onecReachable === undefined ? "—" : agent.onecReachable ? translate("yes") : translate("no")}
+														disabled onChange={() => {}} width={FIELD_WIDTH.sm} />
 													{/* Переименование агента — изменение: правом «просмотр» карточка читается. */}
 													{canEditAgent && (
 														<Button icon="editInline" disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
@@ -212,6 +238,13 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											<GroupRow>
 												<Field name="ag_id" label={translate("id")} value={agentId} disabled
 													onChange={() => {}} width={FIELD_WIDTH.lg} />
+												<Field name="ag_registered" label={translate("onecAgentRegistered")}
+													value={agent?.registeredAt ? getFormatDate(agent.registeredAt) : "—"}
+													disabled onChange={() => {}} width={FIELD_WIDTH.date} />
+												<Field name="ag_cmds" label={translate("agentCommandsLabel")}
+													value={agent?.commandsDone == null ? "—"
+														: `${agent.commandsDone}${agent.commandsFailed ? ` / ${translate("onecAgentFailedShort")} ${agent.commandsFailed}` : ""}`}
+													disabled onChange={() => {}} width={FIELD_WIDTH.md} />
 												<Field name="ag_owner" label={translate("ownerInstance")}
 													value={agent?.owner?.instanceId || "—"} disabled
 													onChange={() => {}} width={FIELD_WIDTH.lg} />
@@ -238,6 +271,24 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 													onClick={() => setConfirm("delete")}>
 													{translate("onecAgentDelete")}
 												</Button>
+												{/*
+												  * ПЕРЕЗАПУСК И ОБНОВЛЕНИЕ СЛУЖБЫ (задача агенту §2) — только у агентов, которые это
+												  * объявили: способность агент обещает лишь запущенный службой Windows. Занятый
+												  * изменяющей командой агент откажет сам (AGENT_BUSY) — ждать конца выгрузки решает он.
+												  */}
+												{agent?.capabilities.includes("agent.restart") && (
+													<Button icon="recalc" variant="danger" disabled={restart.isPending}
+														onClick={() => setConfirm("restart")}>
+														{translate("onecAgentRestart")}
+													</Button>
+												)}
+												{agent?.capabilities.includes("agent.update") && (
+													<Button icon="download" variant="danger" disabled={update.isPending}
+														title={agents.data?.limits.latestBuild ? `${translate("onecAgentUpdateTo")}: ${agents.data.limits.latestBuild}` : undefined}
+														onClick={() => setConfirm("update")}>
+														{translate("onecAgentUpdate")}
+													</Button>
+												)}
 												<Button icon="clear"
 													disabled={release.isPending || !agent?.owner?.instanceId}
 													title={agent?.owner?.instanceId
@@ -269,6 +320,13 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											// Сборка и чего в ней нет (R3): «Устарел» — по эталону сервиса, недостающее — по
 											// способностям. Иначе «кнопка не работает» читается как поломка, а не как старая сборка.
 											...(agent?.build ? [{ type: "info" as const, text: `${translate("buildLabel")}: ${agentBuildLabel(agent)}` }] : []),
+											// Ход обновления службы: он идёт минутами и виден только по heartbeat.
+											...(agent?.update?.state ? [{
+												type: agent.update.state === "failed" ? "attention" as const : agent.update.state === "done" ? "info" as const : "warning" as const,
+												text: `${translate("onecAgentUpdateState")}: ${translate(`onecUpd_${agent.update.state}`)}`
+													+ (agent.update.build ? ` · ${agent.update.build}` : "")
+													+ (agent.update.error ? ` · ${agent.update.error}` : ""),
+											}] : []),
 											...(agent?.missingFeatures?.length ? [{
 												type: "warning" as const,
 												text: `${translate("onecAgentMissing")}: ${featureLabels(agent.missingFeatures).join(", ")}. ${translate("onecAgentUpdateHint")}`,
@@ -340,6 +398,8 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 											className={[styles.InstanceRow, isOwner ? styles.InstanceOwner : ""].filter(Boolean).join(" ")}>
 											<span className={styles.InstanceName}>{inst.instanceId}</span>
 											<span>{inst.remoteAddr ?? "—"}</span>
+											{/* Версия экземпляра (п. 6): два процесса разных сборок под одним токеном — частая причина «через раз». */}
+											<span>{inst.version ?? "—"}</span>
 											<span>{getFormatDate(inst.lastSeenAt)}</span>
 											<span>{inst.live ? translate("onecAgentOnline") : translate("onecAgentOffline")}</span>
 											{isOwner
@@ -417,15 +477,40 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 							</div>
 						),
 					},
+					// Базы и лимит тарифа — у бизнес-агента: одна служба обслуживает много баз своего компьютера (ПН, 19.09).
+					...(agent?.role === "business" ? [{
+						id: "bases", label: translate("onecAgentBases"),
+						component: <AgentBasesTab agentId={agentId} agentName={agentName} />,
+					}] : []),
 					{
 						// Состояние сервера (R1) и журнал агента (R2) — по кнопке: вкладки формы отрисованы
 						// все сразу, и запрос при открытии карточки слал бы команду агенту на каждый взгляд.
+						// У бизнес-агента своя сводка — его команда HEALTH (п. 1).
 						id: "health", label: translate("onecAgentHealth"),
-						component: <AgentHealthTab agentId={agentId} agentName={agentName} />,
+						component: agent?.role === "business"
+							? <BusinessHealthTab agentId={agentId} agentName={agentName} />
+							: <AgentHealthTab agentId={agentId} agentName={agentName} />,
 					},
-					{
+					// Журнал службы читают обе роли с выпуска агента 2026-09-20; старая сборка способности не объявит —
+					// тогда вкладки нет, а не вкладка с отказом.
+					...(agent && !agent.capabilities.includes("agent.procs") ? [] : [{
 						id: "log", label: translate("onecAgentLog"),
 						component: <AgentLogTab agentId={agentId} agentName={agentName} />,
+					}]),
+					// Настройки самой службы (задача агенту §3) — только у агентов, которые это умеют.
+					...(agent?.capabilities.includes("agent.config") ? [{
+						id: "config", label: translate("onecAgentConfig"),
+						component: <AgentConfigTab agentId={agentId} agentName={agentName} canManage={canManageAgent} />,
+					}] : []),
+					{
+						// Очередь и итоги команд агента (п. 2): что ждёт, что выполняется, чем кончилось.
+						id: "commands", label: translate("onecAgentCommands"),
+						component: <AgentCommandsTab agentId={agentId} canManage={canManageAgent} />,
+					},
+					{
+						// Кто и что делал с агентом (п. 3): переименование, отключение, токен, лимиты, подключение по коду.
+						id: "audit", label: translate("onecAgentAudit"),
+						component: <AgentAuditTab agentId={agentId} />,
 					},
 				]}
 			/>
@@ -444,6 +529,25 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 					<div className={styles.ModalForm}>
 						<div>{translate("ownerInstance")}: {agent?.owner?.instanceId || "—"}</div>
 						<div className={styles.ConfirmWarning}>{translate("onecAgentReleaseWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
+			{confirm === "restart" && (
+				<Modal title={translate("onecAgentRestart")} onClose={() => setConfirm(null)} onApply={() => restart.mutate()}>
+					<div className={styles.ModalForm}>
+						<div>{agentName}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecAgentRestartWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
+			{confirm === "update" && (
+				<Modal title={translate("onecAgentUpdate")} onClose={() => setConfirm(null)} onApply={() => update.mutate()}>
+					<div className={styles.ModalForm}>
+						<div>{agentName}: {agent ? agentBuildLabel(agent) : "—"} → {agents.data?.limits.latestBuild || "—"}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecAgentUpdateWarning")}</div>
+						{!agents.data?.limits.updateUrl && <div className={styles.ConfirmWarning}>{translate("onecAgentUpdateNoSource")}</div>}
 					</div>
 				</Modal>
 			)}

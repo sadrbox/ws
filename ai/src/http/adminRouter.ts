@@ -18,6 +18,7 @@ import { requireAdmin } from "../auth/index.ts";
 import type { AgentService } from "../agents/service.ts";
 import { CommandQueue } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
+import { resolveTarget, type AgentBasesStore } from "../agents/agentBases.ts";
 
 const createAgentSchema = z.object({
 	organizationUuid: z.string().min(1).max(64),
@@ -30,10 +31,16 @@ const commandSchema = z.object({
 	payload: z.record(z.string(), z.unknown()).optional().default({}),
 	requestId: z.string().uuid().optional(),
 	ttlSeconds: z.number().int().min(30).max(86_400).optional(),
+	/** Поставить бизнес-команду в обход лимита тарифа (C8) — явно и с записью в аудит. */
+	force: z.boolean().optional(),
 });
 
-export function adminRouter(deps: { cfg: Config; log: Logger; agents: AgentService; queue: CommandQueue; audit: Audit }) {
-	const { cfg, log, agents, queue, audit } = deps;
+export function adminRouter(deps: {
+	cfg: Config; log: Logger; agents: AgentService; queue: CommandQueue; audit: Audit;
+	/** Срез баз бизнес-агентов — для проверки лимита тарифа (C8). Нет — без проверки. */
+	agentBases?: Pick<AgentBasesStore, "list">;
+}) {
+	const { cfg, log, agents, queue, audit, agentBases } = deps;
 	const r = Router();
 	r.use(requireAdmin(cfg.AGENT_ADMIN_KEY));
 
@@ -85,6 +92,25 @@ export function adminRouter(deps: { cfg: Config; log: Logger; agents: AgentServi
 		if (!agent) {
 			res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Агент не найден" } });
 			return;
+		}
+		/*
+		 * ЛИМИТ ТАРИФА И ДЛЯ СЛУЖЕБНОГО ВХОДА (C8). Бизнес-команда с адресом (baseKey или БИН) проверяется тем же
+		 * правилом, что в чате; обход — только флагом `force`, и он пишется в аудит отдельным событием. Без адреса
+		 * решает агент, как и раньше.
+		 */
+		const baseKey = typeof p.data.payload.baseKey === "string" ? p.data.payload.baseKey : null;
+		const bin = typeof p.data.payload.organizationBin === "string" ? p.data.payload.organizationBin : null;
+		if (agent.role === "business" && agentBases && (baseKey || bin)) {
+			const d = resolveTarget([{ agentId: agent.id, online: agent.online, bases: await agentBases.list(agent.id), limits: agent.limits }], { baseKey, bin });
+			if (d.kind === "refused") {
+				if (!p.data.force) {
+					res.status(403).json({ success: false, error: { code: d.code, message: d.message, details: d.details } });
+					return;
+				}
+				await audit.write({ event: "command.limit_bypass", agentId: agent.id, organizationUuid: agent.organizationUuid,
+					details: { type: p.data.type, baseKey, bin, reason: d.message } });
+				log.warn({ agentId: agent.id, type: p.data.type, baseKey, bin }, "служебная команда поставлена в обход лимита тарифа (force)");
+			}
 		}
 		const cmd = await queue.enqueue({
 			agentId: agent.id, organizationUuid: agent.organizationUuid, type: p.data.type,

@@ -205,9 +205,9 @@ tr[data-loading] {
 	.TableBodyCell {
 		height: stretch;
 		max-height: 150px;
-		align-items: flex-start;
+		// align-items: flex-start;
 		white-space: normal;
-		padding: 3px 0;
+		// padding: 3px 0;
 
 		span {
 			display: -webkit-box;
@@ -216,7 +216,7 @@ tr[data-loading] {
 			line-clamp: 8;
 			overflow: hidden;
 			max-height: 137px;
-			line-height: 17px;
+			// line-height: 17px;
 			white-space: pre-wrap;
 			word-break: break-word;
 			overflow-wrap: anywhere;

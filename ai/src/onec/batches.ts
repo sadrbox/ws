@@ -359,10 +359,11 @@ export class BatchService {
 	 */
 	async failedCommands(
 		batchId: string, baseKeys?: string[],
-	): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown> }[]> {
+	): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown>; server_id: string | null }[]> {
 		const narrow = baseKeys?.length ? baseKeys : null;
-		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown> }>(
-			`SELECT base_key, type, payload FROM commands
+		// Сервер исходной команды (C10): повтор уходит туда же, а не в одноимённую базу другого сервера.
+		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown>; server_id: string | null }>(
+			`SELECT base_key, type, payload, (SELECT a.server_id FROM agents a WHERE a.id = commands.agent_id) AS server_id FROM commands
 			  WHERE batch_id = $1 AND state IN ('failed', 'expired') AND retried_by IS NULL
 			    AND ($2::text[] IS NULL OR base_key = ANY($2::text[]))
 			    -- Истёкшая, но, возможно, ещё работающая у агента — не повторять поверх неё (С21).

@@ -1,8 +1,9 @@
-// Три вида субъектов и три способа их проверить.
+// Четыре вида субъектов и четыре способа их проверить.
 //
 //   администратор — заголовок X-Admin-Key: регистрация агентов, служебные вызовы;
 //   агент         — Authorization: Bearer <agent token> + X-Agent-Id;
-//   пользователь  — Authorization: Bearer <JWT ERP>: тот же JWT_SECRET, что у бэкенда.
+//   пользователь  — Authorization: Bearer <JWT ERP>: тот же JWT_SECRET, что у бэкенда;
+//   пользователь 1С — X-Base-Token (токен базы) + X-1C-User-Id (UUID пользователя ИБ): чат внутри 1С.
 //
 // Пользователь ERP проверяется в два шага: подпись JWT даёт uuid, а активная организация и
 // список доступных читаются из базы ERP при КАЖДОМ запросе — как это делает tenantMiddleware
@@ -44,11 +45,18 @@ export type ErpUser = {
 
 export type AgentIdentity = { agentId: string; organizationUuid: string };
 
+/**
+ * Пользователь 1С (канал «чат внутри 1С»). Имени здесь нет: заголовки — только ASCII, а имя пользователя
+ * 1С кириллическое, поэтому оно приходит в теле хода (`user.name`).
+ */
+export type OnecChatUser = { tokenId: string; baseId: string; baseKey: string; baseName: string; organizationUuid: string; userId: string };
+
 // Расширяем Request типами субъектов — без any.
 declare module "express-serve-static-core" {
 	interface Request {
 		erpUser?: ErpUser;
 		agent?: AgentIdentity;
+		onecUser?: OnecChatUser;
 	}
 }
 
@@ -122,6 +130,39 @@ export function requireAgent(db: Db) {
 			return;
 		}
 		req.agent = { agentId: agentId.toLowerCase(), organizationUuid: agent.organization_uuid };
+		next();
+	};
+}
+
+// ── Пользователь 1С ──────────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type BaseTokenResolver = { resolve: (token: string) => Promise<{ tokenId: string; baseId: string; baseKey: string; baseName: string; organizationUuid: string; revoked: boolean; baseDisabled: boolean } | null> };
+
+/**
+ * Токен базы + пользователь ИБ. Порядок отказов — по контракту: сначала токен (401 BASE_TOKEN_INVALID —
+ * нет, неверный или отозван), потом база (403 BASE_DISABLED), потом пользователь (400 VALIDATION_ERROR).
+ * Значение токена в журнал не пишется — только признак отказа.
+ */
+export function requireOnecUser(tokens: BaseTokenResolver) {
+	return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+		const token = String(req.headers["x-base-token"] ?? "").trim();
+		const owner = token ? await tokens.resolve(token) : null;
+		if (!owner || owner.revoked) {
+			deny(res, 401, "BASE_TOKEN_INVALID", owner ? "Токен базы отозван — выпустите новый в панели администрирования" : "Нет или неверный токен базы (X-Base-Token)");
+			return;
+		}
+		if (owner.baseDisabled) {
+			deny(res, 403, "BASE_DISABLED", "База отключена в сервисе");
+			return;
+		}
+		const userId = String(req.headers["x-1c-user-id"] ?? "").trim();
+		if (!UUID_RE.test(userId)) {
+			deny(res, 400, "VALIDATION_ERROR", "X-1C-User-Id: ожидается UUID пользователя информационной базы");
+			return;
+		}
+		req.onecUser = { tokenId: owner.tokenId, baseId: owner.baseId, baseKey: owner.baseKey, baseName: owner.baseName, organizationUuid: owner.organizationUuid, userId: userId.toLowerCase() };
 		next();
 	};
 }

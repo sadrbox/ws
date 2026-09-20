@@ -10,6 +10,7 @@
  * СОЗДАНИЕ И УДАЛЕНИЕ НЕПРИМЕНИМЫ: базы заводят и удаляют в кластере 1С, а не в панели.
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
+import BaseChatTokens from "./BaseChatTokens";
 import { useRunningCommand } from "src/components/TechMessages/operations";
 import { finishOp } from "src/models/OneCAdmin/progress";
 import { startOp } from "src/models/OneCAdmin/progress";
@@ -388,6 +389,11 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 				</>
 			),
 		},
+		{
+			// Доступ базы к чату внутри 1С (СВ4): токены выпускаются при одобрении заявки, здесь их видно и отзывают.
+			id: "chat", label: translate("onecTabChat"),
+			component: <BaseChatTokens baseId={asText(row.registryId)} baseKey={baseKey} />,
+		},
 	];
 };
 
@@ -402,6 +408,8 @@ const baseToRow = (b: OnecBase): TDataItem => ({
 	dbCheckedAt: b.dbCheckedAt ?? null,
 	disabled: b.disabled,
 	lastSeenAt: b.lastSeenAt, infobaseId: b.infobaseId,
+	// Id записи реестра — для токенов чата в 1С (СВ4): они выпускаются записи, а не имени базы.
+	registryId: b.id,
 	sessionsDenied: b.sessionsDenied ?? null, sessionsDeniedMessage: b.sessionsDeniedMessage ?? null,
 	sessionsDeniedFrom: b.sessionsDeniedFrom ?? null, sessionsDeniedTo: b.sessionsDeniedTo ?? null,
 	sessionsDeniedSource: b.sessionsDeniedSource ?? null, sessionsDeniedActive: b.sessionsDeniedActive ?? null,

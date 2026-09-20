@@ -74,9 +74,11 @@ export type OnecRequirement =
 export function onecRequirement(method: string, path: string, body?: unknown): OnecRequirement | null {
 	const m = method.toUpperCase();
 	if (m === "GET") {
-		if (/^\/agents\/[^/]+\/(health|log)$/.test(path) || path === "/agent-processes") return { kind: "agents", level: "view" };
+		if (/^\/agents\/[^/]+\/(health|log|bases|config)$/.test(path) || path === "/agent-processes") return { kind: "agents", level: "view" };
 		return null;
 	}
+	// Лимит тарифа — сверх уровня «управление» проверяется ещё и администратор BuhProf (onecRouter).
+	if (m === "PUT" && /^\/agents\/[^/]+\/(limits|active-bins|config)$/.test(path)) return { kind: "agents", level: "manage" };
 	if (m === "PATCH" && (/^\/agents\/[^/]+$/.test(path) || /^\/servers\/[^/]+$/.test(path))) return { kind: "agents", level: "edit" };
 	if ((m === "POST" && path === "/agents") || (m === "DELETE" && /^\/agents\/[^/]+$/.test(path))
 		|| (m === "POST" && /^\/agents\/[^/]+\/[a-z-]+$/.test(path))

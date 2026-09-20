@@ -8,6 +8,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { isDue } from "../src/onec/schedules.ts";
+import { isBatchError, startBatch } from "../src/onec/batchRunner.ts";
 
 /** Момент местного времени — расписание живёт в зоне сервиса, а не в UTC. */
 const at = (iso: string) => new Date(iso);
@@ -65,5 +66,50 @@ describe("пора ли запускать обслуживание", () => {
 		const s = { ...base, atTime: "00:10" };
 		assert.equal(isDue(s, at("2026-09-14T23:50:00")), false);
 		assert.equal(isDue(s, at("2026-09-15T00:10:00")), true);
+	});
+});
+
+/**
+ * СЕРВЕР РАСПИСАНИЯ (C10, 20.09). Имя базы уникально только в пределах сервера: ночной прогон должен идти на
+ * сервер расписания, а расписание без сервера при одноимённых базах — пропускать их с причиной, а не гадать.
+ */
+describe("расписание при нескольких серверах 1С", () => {
+	const deps = (asked: { serverId?: string | null }[]) => ({
+		agents: {
+			pickAdminAgent: async (_key: string, opts: { serverId?: string | null } = {}) => {
+				asked.push({ serverId: opts.serverId ?? null });
+				return { id: "adm", organizationUuid: "org", role: "admin", disabled: false, online: true, serverId: opts.serverId ?? "srv-1", capabilities: ["cluster.admin", "ib.admin"], version: "2026-09-19" };
+			},
+		},
+		queue: { enqueue: async () => ({ id: "cmd_1" }) },
+		batches: { create: async () => "batch-1", attach: async () => {}, noteSkipped: async () => {} },
+		bases: {
+			findByKeyGlobal: async (key: string) => ({ key, disabled: false, clusterStatus: "ONLINE", status: "ONLINE" }),
+			serversWithKey: async () => [{ id: "srv-1", name: "SRV-A", organizationUuid: "org" }, { id: "srv-2", name: "SRV-B", organizationUuid: "org" }],
+		},
+	});
+
+	it("сервер расписания уходит в выбор агента", async () => {
+		const asked: { serverId?: string | null }[] = [];
+		const r = await startBatch(deps(asked) as never, {
+			type: "IB_BACKUP", baseKeys: ["Бух"], payload: { dir: "D:\\\\dump" },
+			organizationUuid: "org", userUuid: null, serverId: "srv-2",
+		});
+		assert.equal(isBatchError(r), false);
+		assert.deepEqual(asked, [{ serverId: "srv-2" }]);
+	});
+
+	it("без сервера одноимённая база на двух серверах пропускается с причиной, а не уходит наугад", async () => {
+		const asked: { serverId?: string | null }[] = [];
+		const r = await startBatch(deps(asked) as never, {
+			type: "IB_BACKUP", baseKeys: ["Бух"], payload: { dir: "D:\\\\dump" },
+			organizationUuid: "org", userUuid: null,
+		});
+		assert.equal(isBatchError(r), false);
+		assert.equal(asked.length, 0, "агент не выбирался");
+		if (!isBatchError(r)) {
+			assert.equal(r.queued, 0);
+			assert.match(r.skipped[0]?.reason ?? "", /нескольких серверах/);
+		}
 	});
 });

@@ -288,11 +288,12 @@ export class CommandQueue {
 	 * Выдача атомарна: UPDATE ... WHERE state='queued' — два инстанса не отдадут одну команду дважды.
 	 */
 	/** `instanceId` — процесс агента, забирающий команды: по нему потом видно, чей ответ пропал. */
-	async take(agentId: string, waitSecs: number, instanceId?: string | null): Promise<WireCommand[]> {
+	/** `parallel` — предел внутрибазовых команд этого агента (по роли); не задан — общий `ibParallel`. */
+	async take(agentId: string, waitSecs: number, instanceId?: string | null, parallel?: number): Promise<WireCommand[]> {
 		const deadline = Date.now() + waitSecs * 1000;
 		for (;;) {
 			if (this.closed) return [];
-			const batch = await this.dispatchQueued(agentId, instanceId ?? null);
+			const batch = await this.dispatchQueued(agentId, instanceId ?? null, parallel);
 			if (batch.length) return batch;
 			const remaining = deadline - Date.now();
 			if (remaining <= 0 || this.closed) return [];
@@ -465,7 +466,7 @@ export class CommandQueue {
 		return true;
 	}
 
-	private async dispatchQueued(agentId: string, instanceId: string | null = null): Promise<WireCommand[]> {
+	private async dispatchQueued(agentId: string, instanceId: string | null = null, parallel?: number): Promise<WireCommand[]> {
 		// Просроченные — в expired, чтобы агент не выполнял то, чего уже никто не ждёт.
 		// Причина пишется тут же (см. expireOverdue): здесь это всегда «не забрал».
 		await this.db.query(
@@ -507,7 +508,8 @@ export class CommandQueue {
 			  WHERE d.agent_id = $1 AND ${IN_BASE("d")} AND ${OCCUPIES("d", "$2")}`,
 			[agentId, this.lateGraceSecs],
 		);
-		const slots = Math.max(0, this.ibParallel - Number(busy.rows[0]?.n ?? 0));
+		const limit = parallel && parallel > 0 ? parallel : this.ibParallel;
+		const slots = Math.max(0, limit - Number(busy.rows[0]?.n ?? 0));
 
 		const r = await this.db.query<CommandRow>(
 			`WITH candidates AS (
@@ -706,6 +708,21 @@ export class CommandQueue {
 			    AND created_at > now() - interval '1 day'
 			  ORDER BY created_at LIMIT 50`,
 			[userUuid],
+		);
+		return r.rows;
+	}
+
+	/**
+	 * Команды агента для его карточки (п. 2): всё незавершённое и последние завершённые — что стоит в очереди, что
+	 * выполняется и чем кончилось. Без тела payload: в нём бывают выписки и пароли (auth подставляется при выдаче,
+	 * но и прочее — не для списка).
+	 */
+	async listForAgent(agentId: string, limit = 50): Promise<CommandRow[]> {
+		const r = await this.db.query<CommandRow>(
+			`(SELECT * FROM commands WHERE agent_id = $1 AND state IN ('queued', 'dispatched') ORDER BY created_at LIMIT 200)
+			 UNION ALL
+			 (SELECT * FROM commands WHERE agent_id = $1 AND state NOT IN ('queued', 'dispatched') ORDER BY created_at DESC LIMIT $2)`,
+			[agentId, Math.min(Math.max(limit, 1), 200)],
 		);
 		return r.rows;
 	}

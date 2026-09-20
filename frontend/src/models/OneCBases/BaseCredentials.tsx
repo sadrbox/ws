@@ -91,7 +91,7 @@ export const BaseCredentialsTab: FC<{
 	// Поля и команды — одни на оба вида: встроенный (вкладка «Основное») и полный.
 	const fields = (
 		<GroupCol>
-			<GroupRow>
+			<GroupCol>
 				<Field name="bc_user" label={translate("onecUserName")} value={user} width={FIELD_WIDTH.wide}
 					noAutofill disabled={busy}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUser(e.target.value)} />
@@ -101,8 +101,8 @@ export const BaseCredentialsTab: FC<{
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
 				<Field name="bc_changed" label={translate("onecCredsUpdatedAt")}
 					value={stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}
-					disabled width={FIELD_WIDTH.date} onChange={() => {}} />
-			</GroupRow>
+					disabled width={FIELD_WIDTH.date} onChange={() => { }} />
+			</GroupCol>
 			{/* Пара «имя + пароль» — это вход агента в базу: правом «только просмотр»
 			    видно, задана ли она и когда менялась, но не переписывают (F5). */}
 			{canWrite && (

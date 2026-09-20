@@ -91,7 +91,7 @@ body {
 }
 
 .NavbarLogo {
-	display: flex;
+	display: none;
 	align-items: center;
 	gap: 6px;
 	padding: 0 6px 0 6px;
@@ -598,11 +598,19 @@ body {
 	// padding-bottom: 3px;
 }
 
+
+
 .PaneItem {
+	// background: ghostwhite;
+	margin: 0px 6px 0 6px;
+	padding: 6px;
+	border: 0px solid $color10;
+	border-radius: 3px;
+	//===================
 	height: inherit;
 	flex: 1;
 	overflow: auto;
-	padding: 0 6px;
+	// padding: 0 6px;
 	display: none;
 	gap: 12px;
 }
@@ -626,7 +634,7 @@ body {
 	gap: 6px;
 	align-items: center;
 	justify-content: flex-start;
-	height: $heightFieldInput + 4px;
+	// height: $heightFieldInput + 4px;
 
 	flex-shrink: 0;
 	// margin: 0px -6px 0px -6px;

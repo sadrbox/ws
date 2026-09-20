@@ -44,6 +44,8 @@ import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
 	{ identifier: "pid", type: "string", width: "90px", minWidth: "70px", alignment: "right", visible: true, inlist: true },
+	// Чей процесс (п. 7): при нескольких серверах один номер процесса есть на разных машинах.
+	{ identifier: "agentName", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "tool", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "what", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "baseKey", type: "string", width: "180px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
@@ -65,8 +67,8 @@ export const ProcessesTab: FC = () => {
 	// Снятие процесса — «управление» агентами (вложенное разрешение).
 	const canWrite = agentsAllow(useOnecPermissions(), "manage");
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_procs"));
-	const [active, setActive] = useState<number | null>(null);
-	const [confirm, setConfirm] = useState<null | { pid: number; force: boolean; note?: string }>(null);
+	const [active, setActive] = useState<{ pid: number; agentId?: string } | null>(null);
+	const [confirm, setConfirm] = useState<null | { pid: number; agentId?: string; force: boolean; note?: string }>(null);
 
 	// Снимок из heartbeat: дешёвое чтение своей базы, поэтому обновляем сами раз в 30 с.
 	const procs = useQuery({
@@ -82,7 +84,7 @@ export const ProcessesTab: FC = () => {
 	});
 
 	const kill = useMutation({
-		mutationFn: (p: { pid: number; force: boolean }) => killAgentProcess(p.pid, p.force),
+		mutationFn: (p: { pid: number; agentId?: string; force: boolean }) => killAgentProcess(p.pid, p.force, p.agentId),
 		onSuccess: (d) => {
 			/*
 			 * СПИСОК ПОСЛЕ СНЯТИЯ — НЕ СНИМОК ИЗ HEARTBEAT. Снимок отстаёт до следующего heartbeat,
@@ -114,7 +116,7 @@ export const ProcessesTab: FC = () => {
 			const gone = vars.force && /уже заверш/i.test(text);
 			if (gone) { showToast(text, "warning"); live.mutate(); return; }
 			if (needsConsent && !vars.force) {
-				setConfirm({ pid: vars.pid, force: true, note: text });
+				setConfirm({ pid: vars.pid, agentId: vars.agentId, force: true, note: text });
 				return;
 			}
 			reportError(e, { source: translate("onecTabProcesses") });
@@ -123,8 +125,10 @@ export const ProcessesTab: FC = () => {
 
 	// Номер строки — из pid (utils/stableRowId): снятый процесс не сдвигает личность остальных строк.
 	const rows = useMemo(() => withStableIds((procs.data?.items ?? []).map((p) => ({
-		uuid: String(p.pid),
+		uuid: `${p.agentId ?? ""}:${p.pid}`,
 		pid: String(p.pid),
+		agentId: p.agentId ?? "",
+		agentName: p.agentName || "—",
 		tool: p.tool,
 		what: p.what || "—",
 		baseKey: p.base || "—",
@@ -183,7 +187,7 @@ export const ProcessesTab: FC = () => {
 				// «Обновить» спрашивает агента живьём — снимок heartbeat приходит и сам.
 				onReload: () => live.mutate(),
 				reloadTitle: translate("onecProcRefreshLive"),
-				onActiveRowChange: (r) => setActive(r ? Number(asText(r.pid)) : null),
+				onActiveRowChange: (r) => setActive(r ? { pid: Number(asText(r.pid)), agentId: asText(r.agentId) || undefined } : null),
 				// Снятие процесса на сервере 1С — разрушающее действие: правом «только
 				// просмотр» список процессов видно, а снимать их нельзя.
 				extraButtons: !canWrite ? undefined : (
@@ -192,8 +196,8 @@ export const ProcessesTab: FC = () => {
 					<Button icon="close" variant="danger" disabled={!active || kill.isPending || offline}
 						title={offline
 							? translate("onecProcAgentOffline")
-							: active ? `${translate("onecProcKill")}: ${active}` : translate("onecProcPickFirst")}
-						onClick={() => active && setConfirm({ pid: active, force: false })}>
+							: active ? `${translate("onecProcKill")}: ${active.pid}` : translate("onecProcPickFirst")}
+						onClick={() => active && setConfirm({ pid: active.pid, agentId: active.agentId, force: false })}>
 						{translate("onecProcKill")}
 					</Button>
 				),
@@ -206,7 +210,7 @@ export const ProcessesTab: FC = () => {
 
 			{confirm && (
 				<Modal title={translate("onecProcKill")} onClose={() => setConfirm(null)}
-					onApply={() => kill.mutate({ pid: confirm.pid, force: confirm.force })}>
+					onApply={() => kill.mutate({ pid: confirm.pid, agentId: confirm.agentId, force: confirm.force })}>
 					<div className={styles.ConfirmText}>
 						<div>{translate("onecProcKillQuestion")}: {confirm.pid}</div>
 						<Notice inline items={[{

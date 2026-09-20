@@ -24,6 +24,8 @@ export type MaintenanceSchedule = {
 	name: string;
 	type: string;
 	baseKeys: string[];
+	/** Сервер 1С этих баз (C10); null — сервер не назван (одна установка, один сервер). */
+	serverId: string | null;
 	payload: Record<string, unknown>;
 	/** Время запуска «ЧЧ:ММ» в зоне сервиса. */
 	atTime: string;
@@ -36,7 +38,7 @@ export type MaintenanceSchedule = {
 
 type Row = {
 	id: string; organization_uuid: string; user_uuid: string | null; name: string; type: string;
-	base_keys: string[]; payload: Record<string, unknown> | null; at_time: string;
+	base_keys: string[]; server_id: string | null; payload: Record<string, unknown> | null; at_time: string;
 	weekdays: number[] | null; enabled: boolean;
 	last_run_at: Date | null; last_batch_id: string | null;
 };
@@ -51,6 +53,7 @@ const toView = (r: Row): MaintenanceSchedule => ({
 	name: r.name,
 	type: r.type,
 	baseKeys: r.base_keys ?? [],
+	serverId: r.server_id,
 	payload: r.payload ?? {},
 	atTime: hhmm(r.at_time),
 	weekdays: r.weekdays ?? [],
@@ -131,9 +134,9 @@ export class ScheduleStore {
 		const id = randomUUID();
 		await this.db.query(
 			`INSERT INTO maintenance_schedules
-			   (id, organization_uuid, user_uuid, name, type, base_keys, payload, at_time, weekdays, enabled)
-			 VALUES ($1, $2, $3, $4, $5, $6::text[], $7::jsonb, $8::time, $9::smallint[], $10)`,
-			[id, input.organizationUuid, input.userUuid, input.name, input.type, input.baseKeys,
+			   (id, organization_uuid, user_uuid, name, type, base_keys, server_id, payload, at_time, weekdays, enabled)
+			 VALUES ($1, $2, $3, $4, $5, $6::text[], $7::uuid, $8::jsonb, $9::time, $10::smallint[], $11)`,
+			[id, input.organizationUuid, input.userUuid, input.name, input.type, input.baseKeys, input.serverId ?? null,
 				JSON.stringify(input.payload ?? {}), input.atTime, input.weekdays, input.enabled],
 		);
 		return (await this.get(id))!;
@@ -151,6 +154,7 @@ export class ScheduleStore {
 		if (patch.name !== undefined) put("name = $?", patch.name);
 		if (patch.type !== undefined) put("type = $?", patch.type);
 		if (patch.baseKeys !== undefined) put("base_keys = $?::text[]", patch.baseKeys);
+		if (patch.serverId !== undefined) put("server_id = $?::uuid", patch.serverId);
 		if (patch.payload !== undefined) put("payload = $?::jsonb", JSON.stringify(patch.payload));
 		if (patch.atTime !== undefined) put("at_time = $?::time", patch.atTime);
 		if (patch.weekdays !== undefined) put("weekdays = $?::smallint[]", patch.weekdays);

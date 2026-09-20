@@ -1,6 +1,8 @@
 node_modules
 # Keep environment variables out of version control
-.env
+# Все варианты env-файлов (включая бэкапы .env.bak-* и .env.local) — в них живые секреты.
+.env*
+!.env.example
 
 /prisma/prisma
 backups/

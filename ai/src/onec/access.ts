@@ -41,7 +41,7 @@ const DESTRUCTIVE: RegExp[] = [
 	// ротация токена — доступ к серверу 1С как таковой.
 	/^\/agents$/,
 	/^\/agents\/[^/]+$/,
-	/^\/agents\/[^/]+\/(owner|release-instance|rotate-token)$/,
+	/^\/agents\/[^/]+\/(owner|release-instance|rotate-token|limits|active-bins|config|restart|update)$/,
 	/^\/agent-processes\/[^/]+\/kill$/,
 	// Служебный администратор базы: пара «имя + пароль», которой агент входит в базу.
 	/^\/bases\/[^/]+\/credentials$/,
@@ -53,6 +53,14 @@ const DESTRUCTIVE: RegExp[] = [
 	/^\/schedules$/,
 	/^\/schedules\/[^/]+$/,
 	/^\/schedules\/[^/]+\/run$/,
+	// Заявки на подключение баз и токены баз (СВ4): одобрение выдаёт базе доступ, отзыв его отнимает.
+	/^\/registrations\/[^/]+\/(approve|reject)$/,
+	/^\/base-tokens\/[^/]+\/revoke$/,
+	// Активация БИНов (СВ4, часть 2): одобрение меняет, какие организации обслуживает агент.
+	/^\/activation-requests\/[^/]+\/[^/]+\/(approve|reject)$/,
+	/^\/active-bins\/fix-all$/,
+	// Подключение агента по коду (СВ5): одобрение выдаёт службе токен доступа.
+	/^\/enrollments\/[^/]+\/(approve|reject)$/,
 ];
 
 /**

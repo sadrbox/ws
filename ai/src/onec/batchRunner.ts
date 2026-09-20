@@ -64,12 +64,16 @@ export type BatchStartInput = {
 	organizationUuid: string;
 	/** Кто запустил; у расписания человека нет — `null`. */
 	userUuid: string | null;
+	/** Сервер 1С (C9, C10): базы — на нём. Нет — база ищется по ключу; одноимённая на двух серверах пропускается. */
+	serverId?: string | null;
+	/** Видимые пользователю серверы (C11); null — все. */
+	allowedServers?: ReadonlySet<string> | null;
 };
 
 export type BatchDeps = {
 	agents: AgentService; queue: CommandQueue; batches: BatchService;
 	/** Состояние базы в реестре: скрытая и удалённая из кластера отсеиваются со своей причиной (С44). */
-	bases: Pick<BaseService, "findByKeyGlobal">;
+	bases: Pick<BaseService, "findByKeyGlobal"> & Partial<Pick<BaseService, "serversWithKey">>;
 };
 
 /** Почему запуск невозможен — текстом для человека (в HTTP уходит как VALIDATION_ERROR). */
@@ -116,10 +120,19 @@ export async function startBatch(
 		const built = buildAdminPayload(spec, { ...(input.payload ?? {}), baseKey: key });
 		if (!built.ok) { skipped.push({ baseKey: key, reason: built.message }); continue; }
 		// Скрытая база и база, которой нет в кластере, — с причиной, а не «нет агента на связи» (С44).
-		const base = await deps.bases.findByKeyGlobal(key);
+		// Одноимённая база на нескольких серверах без выбранного сервера — пропуск с причиной (C10): угадывать сервер
+		// значит выполнить операцию не там.
+		if (!input.serverId && deps.bases.serversWithKey) {
+			const servers = (await deps.bases.serversWithKey(key)).filter((x) => !input.allowedServers || input.allowedServers.has(x.id));
+			if (servers.length > 1) {
+				skipped.push({ baseKey: key, reason: `база есть на нескольких серверах (${servers.map((x) => x.name).join(", ")}) — выберите сервер` });
+				continue;
+			}
+		}
+		const base = await deps.bases.findByKeyGlobal(key, input.serverId ?? null);
 		const refused = base ? baseRefusal(spec, base) : null;
 		if (refused) { skipped.push({ baseKey: key, reason: refused.message }); continue; }
-		const agent = await deps.agents.pickAdminAgent(key);
+		const agent = await deps.agents.pickAdminAgent(key, { serverId: input.serverId ?? null, allowedServers: input.allowedServers ?? null });
 		if (!agent || !agentCanRun(agent, spec)) {
 			skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });
 			continue;

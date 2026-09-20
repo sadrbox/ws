@@ -208,7 +208,7 @@
 	font-size: 13px;
 	font-variant-numeric: tabular-nums;
 
-	> span:not(.ViewName) {
+	>span:not(.ViewName) {
 		text-align: right;
 	}
 }
@@ -269,7 +269,9 @@
 	font-size: 12px;
 	cursor: pointer;
 
-	&:hover { border-color: $gray300; }
+	&:hover {
+		border-color: $gray300;
+	}
 }
 
 .ReqBarText {
@@ -321,10 +323,20 @@
 	cursor: pointer;
 	transition: background 0.12s, color 0.12s;
 
-	&:last-child { border-right: none; }
-	&:hover { background: var(--t-primary-soft); color: var(--t-ink); }
+	&:last-child {
+		border-right: none;
+	}
+
+	&:hover {
+		background: var(--t-primary-soft);
+		color: var(--t-ink);
+	}
+
 	// Клавиатура: кольцо внутрь, иначе его срезает overflow сегментированного контрола.
-	&:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--t-primary); }
+	&:focus-visible {
+		outline: none;
+		box-shadow: inset 0 0 0 2px var(--t-primary);
+	}
 }
 
 .SegOn {
@@ -399,8 +411,15 @@
 	cursor: pointer;
 	transition: background 0.12s, border-color 0.12s;
 
-	&:hover { background: var(--t-primary-soft); border-color: var(--t-primary); }
-	&:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 1px; }
+	&:hover {
+		background: var(--t-primary-soft);
+		border-color: var(--t-primary);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--t-primary);
+		outline-offset: 1px;
+	}
 }
 
 .RecentItemOn {
@@ -408,9 +427,21 @@
 	background: $accentBlueSoft;
 }
 
-.RecentNum { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.RecentDate { color: $gray500; }
-.RecentAmt { font-variant-numeric: tabular-nums; font-weight: 600; }
+.RecentNum {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.RecentDate {
+	color: $gray500;
+}
+
+.RecentAmt {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
 
 // ── Итог (в чекаут-вкладке прижимается к низу) ──
 .Summary {
@@ -495,10 +526,15 @@
 	font-size: 13px;
 	flex-shrink: 0;
 
-	.BannerReturn & { background: $warnAccent; }
+	.BannerReturn & {
+		background: $warnAccent;
+	}
 }
 
-.BannerText { flex: 1 1 auto; font-variant-numeric: tabular-nums; }
+.BannerText {
+	flex: 1 1 auto;
+	font-variant-numeric: tabular-nums;
+}
 
 .BannerLink {
 	border: none;
@@ -510,7 +546,9 @@
 	font-size: 13px;
 	flex-shrink: 0;
 
-	&:hover { opacity: 0.85; }
+	&:hover {
+		opacity: 0.85;
+	}
 }
 
 .BannerClose {
@@ -521,12 +559,21 @@
 	cursor: pointer;
 	font-size: 13px;
 
-	&:hover { opacity: 1; }
+	&:hover {
+		opacity: 1;
+	}
 }
 
 @keyframes terminalBannerIn {
-	from { opacity: 0; transform: translateY(-4px); }
-	to { opacity: 1; transform: translateY(0); }
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 // ── Действия ──
@@ -564,11 +611,26 @@
 	box-shadow: 0 6px 16px rgba(22, 163, 74, 0.25);
 	transition: filter 0.12s, transform 0.05s, box-shadow 0.12s;
 
-	&:hover:not(:disabled) { filter: brightness(1.06); }
-	&:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 3px 8px rgba(22, 163, 74, 0.25); }
-	&:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 2px; }
+	&:hover:not(:disabled) {
+		filter: brightness(1.06);
+	}
+
+	&:active:not(:disabled) {
+		transform: translateY(1px);
+		box-shadow: 0 3px 8px rgba(22, 163, 74, 0.25);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--t-primary);
+		outline-offset: 2px;
+	}
+
 	// Пустая корзина: кнопка не должна выглядеть нажимаемой.
-	&:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+	&:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+		box-shadow: none;
+	}
 }
 
 .PayBtnReturn {
@@ -709,7 +771,7 @@
 .FieldLabel {
 	font-size: 12px;
 	font-weight: 600;
-	color: var(--t-ink-2);
+	// color: var(--t-ink-2);
 	margin-bottom: -8px;
 }
 
@@ -724,6 +786,13 @@
 	border-radius: 6px;
 	cursor: pointer;
 
-	&:hover { background: var(--t-primary-soft); color: var(--t-ink); }
-	&:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 1px; }
+	&:hover {
+		background: var(--t-primary-soft);
+		color: var(--t-ink);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--t-primary);
+		outline-offset: 1px;
+	}
 }
