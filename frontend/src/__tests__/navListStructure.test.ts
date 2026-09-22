@@ -25,7 +25,7 @@ const groupsOf = (section: string) => {
 describe("NavList structure", () => {
 	it("«Все разделы» переиспользует группы ВСЕХ разделов — меню не разойдётся", () => {
 		const all = SRC.slice(SRC.indexOf('"All".toLocaleLowerCase()'));
-		for (const s of ["Trade", "Accounting", "HR", "CRM", "Settings"]) {
+		for (const s of ["Trade", "Accounting", "HR", "CRM", "Administration", "Settings"]) {
 			expect(all, `в «Все разделы» нет группы ${s}`).toContain(`<${s}Groups />`);
 		}
 	});
@@ -65,4 +65,25 @@ describe("NavList structure", () => {
 		expect(trade).toContain("SalesTerminal");
 		expect(trade.indexOf("SalesTerminal")).toBeGreaterThan(trade.indexOf('translate("processings")'));
 	});
+});
+
+it("Администрирование: кластеры и агенты — разные пункты, оба под правом OneCAdmin", () => {
+	const admin = groupsOf("Administration");
+	// Разделение по предмету: сервер 1С с его базами — одно, службы-агенты — другое.
+	expect(admin).toContain('translate("OneCClusters")');
+	expect(admin).toContain('translate("OneCAgents")');
+	expect(admin).toContain('component: OneCClustersList');
+	expect(admin).toContain('component: OneCAgentsList');
+	// Прежний объединённый пункт из меню убран: он остался только для восстановления панелей.
+	expect(admin).not.toContain('component: OneCAdminList');
+	expect(SRC).not.toContain('component: OneCAdminList');
+	// Право одно на оба пункта; внутри действуют вложенные разрешения.
+	expect(admin.match(/can\("OneCAdmin"\)/g)?.length).toBe(2);
+});
+
+it("раздел «Администрирование» есть в навбаре и отвечает на свой label", () => {
+	expect(SRC).toContain('"Administration".toLocaleLowerCase()');
+	const app = readFileSync(resolve(__dirname, "../app/index.tsx"), "utf-8");
+	expect(app).toContain('<NavList label="Administration" />');
+	expect(app).toContain('translate("administration")');
 });

@@ -77,15 +77,16 @@ export const ProcessesTab: FC = () => {
 		refetchInterval: 30_000,
 		staleTime: 0,
 	});
+	// Живой опрос — у выбранного агента, если строка выбрана: иначе сервис спросит всех, кто умеет (СП1).
 	const live = useMutation({
-		mutationFn: () => fetchAgentProcesses(true),
+		mutationFn: (agentId?: string) => fetchAgentProcesses(true, agentId),
 		onSuccess: () => void procs.refetch(),
 		onError: (e) => reportError(e, { source: translate("onecTabProcesses") }),
 	});
 
 	const kill = useMutation({
 		mutationFn: (p: { pid: number; agentId?: string; force: boolean }) => killAgentProcess(p.pid, p.force, p.agentId),
-		onSuccess: (d) => {
+		onSuccess: (d, vars) => {
 			/*
 			 * СПИСОК ПОСЛЕ СНЯТИЯ — НЕ СНИМОК ИЗ HEARTBEAT. Снимок отстаёт до следующего heartbeat,
 			 * и снятый процесс оставался в таблице. Агент с эхом (E5) приносит список сам — сервис
@@ -96,7 +97,8 @@ export const ProcessesTab: FC = () => {
 				echo?.stillRunning ? "warning" : "success");
 			setConfirm(null);
 			if (echo) void procs.refetch();
-			else live.mutate();
+			// Сборка без эха: спрашиваем ТОГО агента, у которого снимали, — иначе снятый процесс висит до heartbeat.
+			else live.mutate(vars.agentId);
 		},
 		onError: (e, vars) => {
 			const text = e instanceof Error ? e.message : String(e);
@@ -114,7 +116,7 @@ export const ProcessesTab: FC = () => {
 			// Процесс уже завершился — снимать нечего (П21). Судим только после `force`: без него агент до 17:30
 			// писал «уже завершился» и в обычном отказе, и повтор с согласием не предлагался вовсе.
 			const gone = vars.force && /уже заверш/i.test(text);
-			if (gone) { showToast(text, "warning"); live.mutate(); return; }
+			if (gone) { showToast(text, "warning"); live.mutate(vars.agentId); return; }
 			if (needsConsent && !vars.force) {
 				setConfirm({ pid: vars.pid, agentId: vars.agentId, force: true, note: text });
 				return;
@@ -152,9 +154,16 @@ export const ProcessesTab: FC = () => {
 	 * Теперь видно и возраст снимка, и то, что агента нет на связи: в обоих случаях
 	 * действовать по этому списку бессмысленно, и кнопка «Снять процесс» гаснет.
 	 */
+	/*
+	 * НА СВЯЗИ ЛИ ТОТ, ЧЕЙ ПРОЦЕСС ВЫБРАН. Раньше смотрели на первого админ-агента: с тех пор как в таблице есть
+	 * процессы бизнес-агентов, это врало в обе стороны — кнопка гасла у живого агента и светилась у молчащего.
+	 */
 	const agents = useAgents();
-	const admin = (agents.data?.items ?? []).find((a) => a.role === "admin" && !a.disabled);
-	const offline = !!admin && !admin.online;
+	const agentOf = (id?: string) => (agents.data?.items ?? []).find((a) => a.id === id) ?? null;
+	const withProcs = (procs.data?.items ?? []).map((p) => agentOf(p.agentId)).filter((a): a is NonNullable<typeof a> => !!a);
+	const offlineAgents = [...new Map(withProcs.filter((a) => !a.online || a.disabled).map((a) => [a.id, a])).values()];
+	const activeAgent = agentOf(active?.agentId);
+	const offline = activeAgent ? !activeAgent.online || activeAgent.disabled : offlineAgents.length > 0;
 	const snapshotAt = (procs.data?.items ?? []).map((p) => p.seenAt).find(Boolean) ?? null;
 	const snapshotAgeSecs = snapshotAt ? Math.max(0, Math.round((Date.now() - new Date(snapshotAt).getTime()) / 1000)) : 0;
 	// Полторы минуты — тот же срок, после которого сервис объявляет агента офлайн: снимок
@@ -167,8 +176,11 @@ export const ProcessesTab: FC = () => {
 		<>
 			<CapabilityGuard capability="agent.procs" />
 
-			{offline && (
-				<Notice items={[{ type: "attention", text: translate("onecProcAgentOffline") }]} />
+			{offlineAgents.length > 0 && (
+				<Notice items={[{
+					type: "attention",
+					text: `${translate("onecProcAgentOffline")}: ${offlineAgents.map((a) => a.name || a.id.slice(0, 8)).join(", ")}`,
+				}]} />
 			)}
 			{!offline && stale && (
 				<Notice items={[{
@@ -185,7 +197,7 @@ export const ProcessesTab: FC = () => {
 				// Опрос heartbeat идёт по таймеру — вращаем от живого чтения, в том числе начатого до перезагрузки.
 				reloading: live.isPending || liveRunning,
 				// «Обновить» спрашивает агента живьём — снимок heartbeat приходит и сам.
-				onReload: () => live.mutate(),
+				onReload: () => live.mutate(active?.agentId),
 				reloadTitle: translate("onecProcRefreshLive"),
 				onActiveRowChange: (r) => setActive(r ? { pid: Number(asText(r.pid)), agentId: asText(r.agentId) || undefined } : null),
 				// Снятие процесса на сервере 1С — разрушающее действие: правом «только

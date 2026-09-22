@@ -1,32 +1,50 @@
 // Канал «чат внутри 1С» (СВ1, СВ2; контракт — docs/CONTRACT_1C_CHAT_2026-09-19.md).
 //
-//   GET  /v1/onec-chat/ping                 проверка связи и токена: база, организация ERP, версия сервиса
+//   GET  /v1/onec-chat/ping                 проверка связи и токена: база, организация ERP, версия сервиса, features
+//   POST /v1/onec-chat/uploads              вложение отдельным запросом: сырые байты → fileId
 //   POST /v1/onec-chat/turn                 ход диалога: текст | вложения | decision | toolResults
 //   GET  /v1/onec-chat/conversations        диалоги пользователя 1С в этой базе
 //   GET  /v1/onec-chat/conversations/:id    диалог: сообщения, состояние, карточка, ожидающие calls
+//   POST /v1/onec-chat/organizations        организации базы (БИНы, которые она вправе называть)
+//   GET/POST/PATCH  …/tasks, …/notes        задачи и заметки организации из ERP
 //
 // Субъект — пара «база + пользователь ИБ» (X-Base-Token + X-1C-User-Id, requireOnecUser). Имя пользователя и
 // организация 1С — в теле хода: заголовки только ASCII. Инструменты выполняет форма (state TOOL_CALLS) —
 // агент для этого канала не нужен.
 
-import { Router, type Request } from "express";
+import express, { Router, type Request, type Response } from "express";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { ChatWorkflow, ChatReply, ChatUser, OnecOrganization, WorkflowState } from "../chat/workflow.ts";
 import { WorkflowError } from "../chat/workflow.ts";
-import { requireOnecUser } from "../auth/index.ts";
+import { requireOnecUser, type BaseTokenResolver } from "../auth/index.ts";
 import type { BaseTokenStore } from "../bases/tokens.ts";
+import type { FileStore } from "../files/store.ts";
+import type { TurnKeyStore } from "../chat/turnKeys.ts";
 import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
 import { rateLimit } from "./rateLimit.ts";
+import { ErpRefused, ErpUnavailable, type ErpTasks } from "../erp/tasks.ts";
+import { isBin, type BaseOrganizationsStore } from "../bases/organizations.ts";
 
 /** Версия протокола канала: форма показывает её в «Проверить связь». */
 export const ONEC_CHAT_PROTOCOL = "onec-chat/1";
 
+/** Владелец в канале 1С — пара «база + пользователь ИБ»: одна подпись у диалогов, файлов и ключей ходов. */
+export const onecOwnerUuid = (baseId: string, userId: string): string => `1c:${baseId}:${userId}`;
+
+/*
+ * ВЛОЖЕНИЕ — ДВУМЯ ПУТЯМИ (§1). `content` (base64 внутри хода) остаётся и не устаревает: расширения
+ * обновляются не в один день, а старое шлёт именно его. `fileId` — файл, загруженный заранее отдельным
+ * запросом: 20 МБ не раздуваются до 27 и не держатся в памяти дважды. Ровно одно из двух: ход, где есть
+ * и то и другое, — это ошибка сборки расширения, и молчать о ней значит разбираться потом.
+ */
 const attachmentSchema = z.object({
 	fileName: z.string().trim().min(1).max(200),
 	mimeType: z.string().trim().max(100).default("application/pdf"),
-	content: z.string().min(1),
-});
+	content: z.string().min(1).optional(),
+	fileId: z.string().uuid().optional(),
+}).refine((a) => !!a.content !== !!a.fileId, { message: "нужно либо content (base64), либо fileId загруженного файла" });
 
 const toolResultSchema = z.object({
 	callId: z.string().min(1).max(200),
@@ -74,12 +92,48 @@ function toClient(r: ChatReply): Record<string, unknown> {
 	};
 }
 
+/** Что сервис умеет сверх базового контракта: список уходит в `GET /ping` (§4). */
+export type OnecChatFeature = "uploads" | "idempotency" | "token-rotation";
+
+/** Сравнение версий расширения «1.5.0» — по числам, а не по алфавиту: «1.10.0» старше «1.9.0». */
+export function versionAtLeast(version: string, min: string): boolean {
+	if (!min) return true;
+	const parse = (v: string) => v.split(".").map((x) => Number.parseInt(x, 10) || 0);
+	const a = parse(version);
+	const b = parse(min);
+	for (let i = 0; i < Math.max(a.length, b.length); i++) {
+		const d = (a[i] ?? 0) - (b[i] ?? 0);
+		if (d !== 0) return d > 0;
+	}
+	return true;
+}
+
 export function onecChatRouter(deps: {
 	workflow: ChatWorkflow | null;
-	tokens: Pick<BaseTokenStore, "resolve">;
+	tokens: BaseTokenResolver;
 	erp: Db;
 	log: Logger;
 	version: string;
+	/** Хранилище файлов: без него загрузка вложений отдельным запросом не объявляется и отвечает 404 (§1). */
+	files?: Pick<FileStore, "save" | "getForOwner"> | null;
+	/** Ключи ходов: без них `Idempotency-Key` просто не действует, ход выполняется как раньше (§2). */
+	turnKeys?: Pick<TurnKeyStore, "claim" | "note" | "finish" | "release"> | null;
+	/** Смена токена базы (§3). Без него токены живут как жили. */
+	rotation?: Pick<BaseTokenStore, "markUsed" | "rotate" | "redeliver"> | null;
+	/**
+	 * Версия расширения, с которой оно умеет сохранять присланный токен. Смену получает только такое:
+	 * старое расширение новый токен проигнорирует, и через перекрытие база осталась бы без связи.
+	 */
+	rotationMinExtVersion?: string;
+	/** Версия расширения, ниже которой работать отказываемся (§4). Пусто — не проверяем. */
+	minExtVersion?: string;
+	/** Адрес панели для ссылок на задачи (СВ1). Пусто — поле `url` не приходит вовсе. */
+	panelUrl?: string;
+	/** Предел изменяющих вызовов задач и заметок в минуту на пару «база + пользователь» (СВ5). */
+	tasksWritePerMin?: number;
+	/** Задачи и заметки организации в ERP (план PLAN_1C_TASKS_NOTES_2026-09-22). */
+	tasks?: ErpTasks | null;
+	baseOrgs?: BaseOrganizationsStore | null;
 	maxAttachmentBytes?: number;
 	chatPerMin?: number;
 	attachmentsPerMin?: number;
@@ -87,10 +141,54 @@ export function onecChatRouter(deps: {
 	turnTimeoutMs?: number;
 }) {
 	const { workflow, tokens, erp, log, version } = deps;
+	const files = deps.files ?? null;
+	const panelUrl = (deps.panelUrl ?? "").replace(/\/+$/, "");
+	const turnKeys = deps.turnKeys ?? null;
+	const rotation = deps.rotation ?? null;
+	const rotationMinExtVersion = deps.rotationMinExtVersion ?? "";
+	const minExtVersion = deps.minExtVersion ?? "";
 	const maxAttachmentBytes = deps.maxAttachmentBytes ?? 20 * 1048576;
 	const turnTimeoutMs = deps.turnTimeoutMs ?? 90_000;
 	const r = Router();
 	r.use(requireOnecUser(tokens));
+
+	// ── Кто спрашивает: версия расширения и номер запроса (§4) ────────────────────
+	//
+	// Оба заголовка расширение шлёт в КАЖДОМ запросе. Номер возвращаем в ответе, а оба пишем в журнал
+	// рядом с базой и пользователем: разбор «у клиента что-то не сработало» сводится к поиску одного
+	// значения в двух журналах — нашем и журнале регистрации 1С.
+	const extOf = (req: Request) => String(req.headers["x-ext-version"] ?? "").trim().slice(0, 40);
+	const requestIdOf = (req: Request) => String(req.headers["x-request-id"] ?? "").trim().slice(0, 100);
+	const who = (req: Request) => ({
+		baseKey: req.onecUser!.baseKey, userId: req.onecUser!.userId,
+		ext: extOf(req) || null, requestId: requestIdOf(req) || null,
+	});
+
+	r.use((req, res, next) => {
+		const requestId = requestIdOf(req);
+		if (requestId) res.setHeader("X-Request-Id", requestId);
+		const ext = extOf(req);
+		if (minExtVersion && ext && !versionAtLeast(ext, minExtVersion)) {
+			res.status(426).json({ success: false, error: { code: "EXT_TOO_OLD", message: `Расширение ${ext} устарело: нужна версия ${minExtVersion} или новее — обновите BPAPI в базе` } });
+			return;
+		}
+		/*
+		 * ПЕРВЫЙ ЗАПРОС НОВЫМ ТОКЕНОМ — подтверждение доставки (§3): с него прежний токен больше не нужен.
+		 * Не ждём: ответ человеку не должен зависеть от закрытия перекрытия, а опоздание на один запрос
+		 * не меняет ничего — перекрытие и так измеряется часами.
+		 */
+		if (rotation && req.onecUser!.firstUse) {
+			void rotation.markUsed(req.onecUser!.tokenId).catch((e) => log.warn({ err: e, ...who(req) }, "не закрыто перекрытие токена базы"));
+		}
+		/*
+		 * Ход и загрузку пишем в журнал всегда, прочее — только в подробном режиме: форма опрашивает
+		 * `GET /conversations/:id` раз в секунду, пока идёт распознавание, и строка на каждый опрос
+		 * утопила бы в шуме то, ради чего журнал и ведётся.
+		 */
+		const loud = req.method === "POST" && (req.path === "/turn" || req.path === "/uploads");
+		(loud ? log.info : log.debug)({ ...who(req), method: req.method, path: req.path }, "запрос из 1С");
+		next();
+	});
 
 	// Лимиты — на пару «база + пользователь 1С». Сообщения человека (текст, вложения, решение по карточке) —
 	// обычным лимитом чата; ходы с результатами вызовов идут без участия человека и каждый зовёт модель,
@@ -121,16 +219,147 @@ export function onecChatRouter(deps: {
 			serviceVersion: version,
 			protocol: ONEC_CHAT_PROTOCOL,
 			chat: !!workflow,
+			// Что эта установка умеет сверх базового контракта (§4): форма показывает список администратору,
+			// поддержка по нему сразу видит, чего ждать, а расширение — каким путём слать вложения.
+			features,
 		} });
 	});
 
-	const noChat = (res: import("express").Response) => res.status(503).json({ success: false, error: { code: "CHAT_DISABLED", message: "Чат в сервисе не настроен (нет модели)" } });
+	const noChat = (res: Response) => res.status(503).json({ success: false, error: { code: "CHAT_DISABLED", message: "Чат в сервисе не настроен (нет модели)" } });
+
+	const features: OnecChatFeature[] = [
+		...(files ? ["uploads" as const] : []),
+		...(turnKeys ? ["idempotency" as const] : []),
+		...(rotation ? ["token-rotation" as const] : []),
+	];
+
+	// ── §1. Вложение отдельным запросом ──────────────────────────────────────────
+	//
+	// ЗАЧЕМ. PDF внутри хода едет в base64: 20 МБ превращаются в 27, и ход целиком держится в памяти и в
+	// 1С, и здесь. Обрыв на девяностом проценте означает отправку файла заново — вместе со всем ходом.
+	//
+	// ТЕЛО — СЫРЫЕ БАЙТЫ, поэтому у маршрута свой разборщик (express.raw), а не общий express.json.
+	// Имя файла кириллическое и потому едет в строке запроса закодированным: в заголовке HTTP ему нельзя.
+	const uploadLimiter = rateLimit({
+		max: deps.attachmentsPerMin ?? 6, windowMs: 60_000, key: pairKey,
+		message: "Слишком много вложений подряд — подождите минуту",
+	});
+	const rawUpload = express.raw({ type: ["application/pdf", "application/octet-stream"], limit: `${Math.ceil(maxAttachmentBytes / 1048576)}mb` });
+	const tooLarge = (res: Response) =>
+		res.status(413).json({ success: false, error: { code: "FILE_TOO_LARGE", message: `Файл больше ${Math.round(maxAttachmentBytes / 1048576)} МБ` } });
+
+	r.post("/uploads", uploadLimiter, rawUpload,
+		// Предел разборщика — это отказ 413, а не «необработанная ошибка»: обработчик ошибок в цепочке
+		// маршрута ловит его там же, где он возник, иначе наружу ушло бы обезличенное 500.
+		(err: unknown, _req: Request, res: Response, next: import("express").NextFunction) => {
+			if ((err as { type?: string } | null)?.type === "entity.too.large") return void tooLarge(res);
+			next(err);
+		},
+		async (req: Request, res: Response) => {
+			// Хранилища нет — маршрута для расширения тоже нет: оно вернётся к base64 в том же ходе.
+			if (!files) {
+				res.status(404).json({ success: false, error: { code: "UNKNOWN_ROUTE", message: "Загрузка вложений отдельным запросом в этой установке не включена" } });
+				return;
+			}
+			const u = req.onecUser!;
+			const body: unknown = req.body;
+			if (!Buffer.isBuffer(body) || body.length === 0) {
+				res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Тело запроса — сами байты файла (Content-Type: application/pdf)" } });
+				return;
+			}
+			if (body.length > maxAttachmentBytes) return void tooLarge(res);
+			let fileName = "Вложение.pdf";
+			try {
+				const raw = String(req.query.fileName ?? "").trim();
+				if (raw) fileName = decodeURIComponent(raw).slice(0, 200);
+			} catch {
+				// Неверная процентная кодировка — не повод терять файл: имя подставим своё, содержимое важнее.
+				log.warn(who(req), "имя загружаемого файла не разобрано");
+			}
+			const mimeType = String(req.headers["content-type"] ?? "application/pdf").split(";")[0]!.trim() || "application/pdf";
+			const sha256 = createHash("sha256").update(body).digest("hex");
+			try {
+				const saved = await files.save({
+					conversationId: null, organizationUuid: u.organizationUuid, userUuid: onecOwnerUuid(u.baseId, u.userId),
+					fileName, mimeType, content: body,
+					source: { kind: "onec-upload", baseKey: u.baseKey, userId: u.userId, sha256, ext: extOf(req) || null },
+				});
+				log.info({ ...who(req), fileId: saved.fileId, bytes: body.length }, "вложение загружено отдельным запросом");
+				res.json({ success: true, data: { fileId: saved.fileId, bytes: body.length, sha256 } });
+			} catch (e) {
+				log.error({ err: e, ...who(req) }, "не сохранено вложение 1С");
+				res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера" } });
+			}
+		});
 
 	r.post("/turn", messageLimiter, resultsLimiter, attachmentLimiter, async (req, res) => {
 		if (!workflow) {
 			noChat(res);
 			return;
 		}
+		const who1c = req.onecUser!;
+		/*
+		 * §2. КЛЮЧ ХОДА. Занимаем его ДО всякой работы: вставка — это и есть замок. Повтор с тем же ключом
+		 * не начинает второй ход, а узнаёт судьбу первого: готов — получает тот же ответ дословно, ещё идёт —
+		 * получает 202 и тот же диалог. Ключ рождается в 1С один раз на круг, поэтому тела не сверяем.
+		 */
+		const key = String(req.headers["idempotency-key"] ?? "").trim().slice(0, 200);
+		const keyPair = key && turnKeys ? { baseId: who1c.baseId, userId: who1c.userId, key } : null;
+		if (keyPair && turnKeys) {
+			const state = await turnKeys.claim(keyPair);
+			if (state.kind === "done") {
+				log.info({ ...who(req), key }, "повтор хода: отдан сохранённый ответ");
+				res.status(state.status).json(state.response);
+				return;
+			}
+			if (state.kind === "running") {
+				log.info({ ...who(req), key }, "повтор хода: прежний ещё выполняется");
+				res.status(202).json({ success: true, data: { conversationId: state.conversationId, state: "PROCESSING", text: "Ход уже выполняется — ответ появится в этом же диалоге." } });
+				return;
+			}
+			/*
+			 * Записываем ЛЮБОЙ исход, кроме своей же поломки: 400 и 404 — это ответ, и повтор обязан получить
+			 * тот же; 500 — не ответ, а неудача, и ключ освобождается, чтобы повтор имел смысл.
+			 */
+			const send = res.json.bind(res);
+			res.json = ((body: unknown) => {
+				const status = res.statusCode || 200;
+				const done = status >= 500 ? turnKeys.release(keyPair) : turnKeys.finish(keyPair, status, body);
+				void done.catch((e) => log.warn({ err: e, ...who(req), key }, "не записан итог хода по ключу"));
+				return send(body as never);
+			}) as typeof res.json;
+		}
+		/*
+		 * §3. ТИХАЯ СМЕНА ТОКЕНА. Решение принимаем ДО работы, а отдаём — вместе с успешным ответом: новый
+		 * токен едет полем `baseToken`, расширение сохраняет его само. Смену получает только расширение,
+		 * которое умеет её принять: старое новый токен проигнорирует и через перекрытие осталось бы без связи.
+		 * Ход, сорвавшийся после смены, ничего не теряет: неподтверждённый токен отдаётся снова на следующем.
+		 */
+		let nextToken: string | null = null;
+		if (rotation && (who1c.pending || who1c.rotateDue) && versionAtLeast(extOf(req), rotationMinExtVersion)) {
+			try {
+				nextToken = who1c.pending ? await rotation.redeliver(who1c.tokenId) : await rotation.rotate(who1c.tokenId, "rotation");
+				if (nextToken) log.info({ ...who(req), again: who1c.pending }, "базе отправлен новый токен");
+			} catch (e) {
+				log.warn({ err: e, ...who(req) }, "не удалась смена токена базы");
+			}
+		}
+		if (nextToken) {
+			const token = nextToken;
+			const send = res.json.bind(res);
+			res.json = ((body: unknown) => {
+				const b = body as { success?: boolean; data?: Record<string, unknown> } | null;
+				if (b?.success && b.data && typeof b.data === "object") b.data.baseToken = token;
+				return send(body as never);
+			}) as typeof res.json;
+		}
+		/*
+		 * Диалог запоминается в ключе, как только стал известен: повтор, пришедший ПОКА ход идёт, назовёт в
+		 * ответе тот же диалог — форма 1С откроет его и дождётся итога там, а не заведёт второй.
+		 */
+		const noteKey = (conversationId: string) => {
+			if (keyPair && turnKeys) void turnKeys.note(keyPair, conversationId).catch((e) => log.warn({ err: e, ...who(req) }, "не записан диалог ключа хода"));
+		};
 		const p = turnSchema.safeParse(req.body);
 		if (!p.success) {
 			const issue = p.error.issues[0];
@@ -156,7 +385,22 @@ export function onecChatRouter(deps: {
 			bad("decision и toolResults относятся к существующему диалогу — нужен conversationId");
 			return;
 		}
-		const attachments = attachmentsIn.map((a) => ({ fileName: a.fileName, mimeType: a.mimeType, content: Buffer.from(a.content, "base64") }));
+		// Вложение приходит двумя путями (§1): байтами в base64 — как было, или идентификатором ранее
+		// загруженного файла. Чужой файл по угаданному идентификатору не открывается: владелец тот же,
+		// что и у диалогов, — пара «база + пользователь».
+		const attachments: { fileName: string; mimeType: string; content: Buffer }[] = [];
+		for (const a of attachmentsIn) {
+			if (a.fileId) {
+				const stored = files ? await files.getForOwner(a.fileId, u.organizationUuid, onecOwnerUuid(u.baseId, u.userId)) : null;
+				if (!stored) {
+					res.status(400).json({ success: false, error: { code: "UNKNOWN_FILE", message: "Загруженный файл не найден или устарел — отправьте его заново" } });
+					return;
+				}
+				attachments.push({ fileName: a.fileName || stored.fileName, mimeType: a.mimeType || stored.mimeType, content: stored.content });
+				continue;
+			}
+			attachments.push({ fileName: a.fileName, mimeType: a.mimeType, content: Buffer.from(a.content ?? "", "base64") });
+		}
 		const tooBig = attachments.find((a) => a.content.length > maxAttachmentBytes);
 		if (tooBig) {
 			res.status(413).json({ success: false, error: { code: "PAYLOAD_TOO_LARGE", message: `Файл «${tooBig.fileName}» больше ${Math.round(maxAttachmentBytes / 1048576)} МБ` } });
@@ -165,7 +409,7 @@ export function onecChatRouter(deps: {
 
 		const organization: OnecOrganization | null = b.organization ? { bin: b.organization.bin ?? null, name: b.organization.name ?? null, id: b.organization.id ?? null } : null;
 		const user: ChatUser = {
-			uuid: `1c:${u.baseId}:${u.userId}`, organizationUuid: u.organizationUuid, channel: "1c",
+			uuid: onecOwnerUuid(u.baseId, u.userId), organizationUuid: u.organizationUuid, channel: "1c",
 			onec: { baseId: u.baseId, userName: b.user.name, organization },
 		};
 		req.setTimeout(300_000);
@@ -173,6 +417,7 @@ export function onecChatRouter(deps: {
 			if (attachments.length) {
 				// Распознавание PDF — минуты: ответ сразу, итог форма заберёт опросом GET /conversations/:id.
 				const id = await workflow.prepare(user, b.conversationId ?? null);
+				noteKey(id);
 				void workflow.handleInBackground(user, id, b.text, attachments);
 				res.json({ success: true, data: { conversationId: id, state: "PROCESSING", text: `Читаю ${attachments.length === 1 ? "выписку" : "выписки"}… Это займёт до пары минут.` } });
 				return;
@@ -180,6 +425,7 @@ export function onecChatRouter(deps: {
 			let id = b.conversationId ?? null;
 			if (!id) id = await workflow.prepare(user, null);
 			const convId = id;
+			noteKey(convId);
 			const work: Promise<ChatReply> = b.decision
 				? workflow.decide(user, convId, b.decision.accepted)
 				: results.length
@@ -209,7 +455,7 @@ export function onecChatRouter(deps: {
 
 	const owner = (req: Request) => {
 		const u = req.onecUser!;
-		return { uuid: `1c:${u.baseId}:${u.userId}`, organizationUuid: u.organizationUuid, channel: "1c" as const };
+		return { uuid: onecOwnerUuid(u.baseId, u.userId), organizationUuid: u.organizationUuid, channel: "1c" as const };
 	};
 
 	r.get("/conversations", async (req, res) => {
@@ -239,6 +485,209 @@ export function onecChatRouter(deps: {
 			confirmation: s.confirmation,
 			...(s.calls ? { calls: s.calls } : {}),
 		} });
+	});
+
+	// ── Задачи и заметки организации (ERP) ───────────────────────────────────────
+	//
+	// Хранилище одно — ERP: список в 1С и список в панели должны быть одним списком. Сервис здесь
+	// посредник, и его единственная собственная обязанность — не дать базе назвать чужой БИН.
+	const { tasks, baseOrgs } = deps;
+
+	/*
+	 * СВ5. ИЗМЕНЯЮЩИЕ ВЫЗОВЫ — ОТДЕЛЬНЫМ, БОЛЕЕ УЗКИМ ЛИМИТОМ. Общий лимит канала считает ходы чата:
+	 * их тридцать в минуту, потому что за каждым стоит человек, пишущий текст. Создание задачи или
+	 * заметки идёт из формы списком и одним нажатием, а каждая запись доходит до ERP и до исполнителя
+	 * уведомлением — цикл в расширении, сорвавшийся в повтор, наплодил бы их сотнями.
+	 */
+	const tasksWriteLimiter = rateLimit({
+		max: deps.tasksWritePerMin ?? 20, windowMs: 60_000, key: pairKey,
+		message: "Слишком много изменений задач подряд — подождите минуту",
+	});
+
+	const noTasks = (res: import("express").Response) =>
+		res.status(503).json({ success: false, error: { code: "TASKS_DISABLED", message: "Задачи и заметки недоступны: служебный канал ERP не настроен" } });
+
+	/** БИН хода: он должен принадлежать этой базе — иначе по чужому БИН читались бы чужие задачи. */
+	async function binOf(req: Request, res: import("express").Response): Promise<string | null> {
+		const raw = String((req.method === "GET" ? req.query.bin : (req.body as { bin?: unknown } | undefined)?.bin) ?? "").trim();
+		if (!isBin(raw)) {
+			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "bin: ожидается БИН организации, 12 цифр" } });
+			return null;
+		}
+		if (baseOrgs && !(await baseOrgs.has(req.onecUser!.baseId, raw))) {
+			res.status(403).json({ success: false, error: { code: "ORG_NOT_IN_BASE", message: "Эта организация не зарегистрирована за базой — откройте «Подключение к BuhProf AI» и обновите список организаций" } });
+			return null;
+		}
+		return raw;
+	}
+
+	/** Имя пользователя 1С: по нему ERP находит автора, а нет такого — заводит (как у событий 1С). */
+	function actorOf(req: Request, bin: string): { bin: string; user: { name: string } } | null {
+		const name = String((req.body as { user?: { name?: unknown } } | undefined)?.user?.name ?? "").trim();
+		return name ? { bin, user: { name } } : null;
+	}
+
+	const needActor = (res: import("express").Response) =>
+		res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "user.name: нужно имя пользователя 1С" } });
+
+	/** Отказ ERP показываем её словами, сбой связи — своими: причины разные и лечатся по-разному. */
+	function erpFail(e: unknown, res: import("express").Response, where: string): void {
+		if (e instanceof ErpRefused) {
+			res.status(e.status === 404 ? 404 : e.status === 400 ? 400 : e.status === 503 ? 503 : 409).json({ success: false, error: { code: "ERP_REFUSED", message: e.message } });
+			return;
+		}
+		if (e instanceof ErpUnavailable) {
+			res.status(503).json({ success: false, error: { code: "ERP_UNAVAILABLE", message: e.message } });
+			return;
+		}
+		log.error({ err: e }, `ошибка ${where}`);
+		res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера" } });
+	}
+
+	// Список организаций базы: форма шлёт его при открытии — организацию могли завести уже после
+	// регистрации базы. Объединение, а не замена: список пользователя сужен его правами.
+	r.post("/organizations", async (req, res) => {
+		const parsed = z.object({
+			organizations: z.array(z.object({
+				bin: z.string().trim().max(20).nullable().optional(),
+				name: z.string().trim().max(300).nullable().optional(),
+				id: z.string().trim().max(100).nullable().optional(),
+			})).max(500),
+		}).safeParse(req.body);
+		if (!parsed.success) {
+			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "organizations: список организаций базы" } });
+			return;
+		}
+		if (!baseOrgs) {
+			res.json({ success: true, data: { remembered: 0 } });
+			return;
+		}
+		/*
+		 * СВ4. СПИСОК ПРИСЫЛАЮТ ПРИ КАЖДОМ ОТКРЫТИИ ЧАТА, а меняется он в год раз. Считаем отпечаток
+		 * присланного списка и возвращаем его заголовком `ETag`: расширение кладёт его в `If-None-Match`
+		 * следующего открытия, и совпавший отпечаток означает «то же самое» — в базу не пишем.
+		 *
+		 * Отпечаток — от БИНов, имён и ссылок, в устойчивом порядке: перестановка строк в выборке 1С
+		 * не должна выглядеть изменением. Сравнение дешёвое и ни от чего не зависит: старое расширение
+		 * заголовка не шлёт и работает как прежде.
+		 */
+		const list = parsed.data.organizations
+			.map((o) => `${String(o.bin ?? "").trim()}|${String(o.name ?? "").trim()}|${String(o.id ?? "").trim()}`)
+			.sort();
+		const etag = `"${createHash("sha256").update(list.join("\n")).digest("hex").slice(0, 32)}"`;
+		res.setHeader("ETag", etag);
+		if (String(req.headers["if-none-match"] ?? "").trim() === etag) {
+			res.json({ success: true, data: { remembered: 0, unchanged: true } });
+			return;
+		}
+		const remembered = await baseOrgs.remember(req.onecUser!.baseId, parsed.data.organizations);
+		res.json({ success: true, data: { remembered, unchanged: false } });
+	});
+
+	/*
+	 * ССЫЛКА НА ЗАДАЧУ (СВ1). Расширение открывает её в браузере, поэтому адрес должен быть тот, который
+	 * панель действительно понимает. Маршрутов вида `/todos/<uuid>` в панели нет: она открывает записи
+	 * коротким рецептом в строке запроса (`?open=f~<endpoint>~<uuid>`, frontend/src/utils/paneLink.ts).
+	 * Адрес панели не задан — поля `url` просто нет: неоткрывающаяся ссылка хуже её отсутствия.
+	 */
+	const taskUrl = (uuid: string): string | undefined =>
+		panelUrl ? `${panelUrl}/?open=f~todos~${encodeURIComponent(uuid)}` : undefined;
+	const withUrl = <T extends { uuid: string }>(t: T): T & { url?: string } => {
+		const url = taskUrl(t.uuid);
+		return url ? { ...t, url } : t;
+	};
+
+	/**
+	 * СТАТУСЫ ЗАДАЧ (СВ2). Справочник ведётся в ERP, и 1С показывала код («in_progress») вместо
+	 * человеческого названия. Здесь сервис — посредник: ни своего списка, ни перевода кодов у него нет
+	 * и быть не должно, иначе он разойдётся с панелью при первом же изменении справочника.
+	 */
+	r.get("/task-statuses", async (_req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		try {
+			res.json({ success: true, data: { items: await tasks.statuses() } });
+		} catch (e) {
+			erpFail(e, res, "чтения статусов задач");
+		}
+	});
+
+	r.get("/tasks", async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		try {
+			const state = req.query.state === "all" ? "all" : "open";
+			const items = await tasks.listTasks(bin, { state, limit: Number(req.query.limit) || 50 });
+			res.json({ success: true, data: { items: items.map(withUrl) } });
+		} catch (e) {
+			erpFail(e, res, "чтения задач");
+		}
+	});
+
+	r.post("/tasks", tasksWriteLimiter, async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		const actor = actorOf(req, bin);
+		if (!actor) return void needActor(res);
+		const b = req.body as { name?: string; description?: string; deadline?: string | null; executorName?: string | null };
+		try {
+			const item = await tasks.createTask(actor, {
+				name: b.name, description: b.description, deadline: b.deadline ?? null, executorName: b.executorName ?? null,
+				sourceLabel: `Чат в 1С — ${req.onecUser!.baseName}`,
+			});
+			res.status(201).json({ success: true, data: { item: withUrl(item) } });
+		} catch (e) {
+			erpFail(e, res, "создания задачи");
+		}
+	});
+
+	r.patch("/tasks/:uuid", tasksWriteLimiter, async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		const actor = actorOf(req, bin);
+		if (!actor) return void needActor(res);
+		const b = req.body as { name?: string; description?: string; deadline?: string | null; status?: string; close?: boolean };
+		try {
+			const item = await tasks.updateTask(actor, String(req.params.uuid), {
+				name: b.name, description: b.description, deadline: b.deadline, status: b.status, close: b.close,
+			});
+			res.json({ success: true, data: { item: withUrl(item) } });
+		} catch (e) {
+			erpFail(e, res, "изменения задачи");
+		}
+	});
+
+	r.get("/notes", async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		try {
+			const items = await tasks.listNotes(bin, { limit: Number(req.query.limit) || 50 });
+			res.json({ success: true, data: { items } });
+		} catch (e) {
+			erpFail(e, res, "чтения заметок");
+		}
+	});
+
+	r.post("/notes", tasksWriteLimiter, async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		const actor = actorOf(req, bin);
+		if (!actor) return void needActor(res);
+		const body = String((req.body as { body?: unknown } | undefined)?.body ?? "").trim();
+		if (!body) {
+			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "body: текст заметки" } });
+			return;
+		}
+		try {
+			const item = await tasks.addNote(actor, body);
+			res.status(201).json({ success: true, data: { item } });
+		} catch (e) {
+			erpFail(e, res, "создания заметки");
+		}
 	});
 
 	return r;

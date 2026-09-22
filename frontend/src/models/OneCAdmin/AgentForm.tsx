@@ -73,7 +73,11 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	const [confirm, setConfirm] = useState<null | "rotate" | "release" | "delete" | "restart" | "update">(null);
 	// Имя правится прямо здесь: агент присылает своё при регистрации, но подпись для
 	// человека — дело панели.
-	const [name, setName] = useState("");
+	/*
+	 * ИМЯ: ЧЕРНОВИК ОТДЕЛЬНО ОТ ЗНАЧЕНИЯ (А3, аудит 21.09). Раньше пустое поле подставляло прежнее имя — стереть
+	 * его было нельзя, и поле выглядело сломанным. `null` — «не трогали», строка (в том числе пустая) — правка.
+	 */
+	const [name, setName] = useState<string | null>(null);
 	const [showHistory, setShowHistory] = useState(false);
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<string>("");
@@ -121,8 +125,8 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 	});
 	const rename = useMutation({
 		mutationFn: () => withOp({ kind: "update", title: translate("onecAgentRename"), target: agentName, ref: agentRef },
-			() => renameAgent(agentId, name.trim())),
-		onSuccess: () => { showToast(translate("saved"), "success"); void refresh(); },
+			() => renameAgent(agentId, (name ?? "").trim())),
+		onSuccess: () => { setName(null); showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
 	const remove = useMutation({
@@ -206,7 +210,9 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 													{/* Имя — единственный правимый реквизит: остальное присылает агент. */}
 													<Field name="ag_name" label={translate("name")} noAutofill
 														width={FIELD_WIDTH.wide}
-														value={name || agent?.name || ""}
+														value={name ?? agent?.name ?? ""}
+														error={name !== null && !name.trim()}
+														hint={name !== null && !name.trim() ? translate("onecAgentNameEmpty") : undefined}
 														onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 													<Field name="ag_role" label={translate("role")} value={agent?.role ?? "—"}
 														disabled onChange={() => {}} width={FIELD_WIDTH.md} />
@@ -225,7 +231,8 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 														disabled onChange={() => {}} width={FIELD_WIDTH.sm} />
 													{/* Переименование агента — изменение: правом «просмотр» карточка читается. */}
 													{canEditAgent && (
-														<Button icon="editInline" disabled={rename.isPending || !name.trim() || name.trim() === agent?.name}
+														<Button icon="editInline"
+															disabled={rename.isPending || name === null || !name.trim() || name.trim() === agent?.name}
 															onClick={() => rename.mutate()}>
 															{translate("onecAgentRename")}
 														</Button>

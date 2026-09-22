@@ -47,6 +47,9 @@ export class AnthropicProvider implements LLMProvider {
 
 		const system: Anthropic.Beta.BetaTextBlockParam[] = [
 			{ type: "text", text: req.system, ...(req.cacheable ? { cache_control: { type: "ephemeral" as const } } : {}) },
+			// Контекст организации — ПОСЛЕ кэш-точки: он меняется от хода к ходу, и в кэшируемом
+			// блоке рушил бы весь префикс.
+			...(req.systemExtra ? [{ type: "text" as const, text: req.systemExtra }] : []),
 		];
 
 		let response: Anthropic.Beta.BetaMessage;

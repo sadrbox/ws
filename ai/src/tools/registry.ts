@@ -25,6 +25,12 @@ export type ToolSpec = {
 	buildPayload: (input: Record<string, unknown>, ctx: ToolContext) => Record<string, unknown>;
 	/** Нужен ли requestId (изменяющие операции). */
 	mutating: boolean;
+	/**
+	 * Инструмент исполняется САМИМ СЕРВИСОМ, а не 1С: задачи и заметки лежат в ERP, и ни агенту,
+	 * ни форме их не выполнить. `commandType` у таких — имя операции для журнала, в 1С он не уходит,
+	 * адрес базы им не нужен.
+	 */
+	runsOnServer?: true;
 };
 
 export type ToolContext = {
@@ -560,6 +566,130 @@ export const TOOLS: ToolSpec[] = [
 		mutating: false,
 		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId), form: str(i.form, "form") }),
 	},
+
+	// ── Задачи и заметки организации (ERP, план PLAN_1C_TASKS_NOTES_2026-09-22) ──────────────────
+	//
+	// Исполняет сервис: они лежат в ERP, а не в 1С. Организация — та, что выбрана в форме чата, её
+	// подставляет сервис; модель организацию не называет и назвать не может.
+	{
+		name: "list_tasks",
+		description:
+			"Задачи по организации из BuhProf AI (те же, что в панели). По умолчанию — только незакрытые. "
+			+ "Вызывай, когда спрашивают про задачи, поручения, что нужно сделать, какие сроки.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				state: { type: "string", enum: ["open", "all"], description: "open — незакрытые (по умолчанию), all — все" },
+				limit: { type: "integer", minimum: 1, maximum: 100 },
+			},
+			required: [],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "TASKS_LIST",
+		mutating: false,
+		runsOnServer: true,
+		buildPayload: (i) => ({ state: i.state === "all" ? "all" : "open", ...(i.limit ? { limit: Number(i.limit) } : {}) }),
+	},
+	{
+		name: "create_task",
+		description:
+			"Поставить задачу по организации в BuhProf AI. Автор — пользователь 1С. Исполнителя указывай, только "
+			+ "если человек назвал его по имени. Срок — ISO-дата (2026-10-01).",
+		inputSchema: {
+			type: "object",
+			properties: {
+				name: { type: "string", description: "Короткий заголовок задачи" },
+				description: { type: "string", description: "Подробности, если они есть" },
+				deadline: { type: "string", description: "Срок, ISO-дата" },
+				executorName: { type: "string", description: "Имя исполнителя, если он назван" },
+			},
+			required: ["name"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "TASKS_CREATE",
+		mutating: true,
+		runsOnServer: true,
+		buildPayload: (i) => ({
+			name: str(i.name, "name"),
+			...(typeof i.description === "string" && i.description.trim() ? { description: i.description.trim() } : {}),
+			...(typeof i.deadline === "string" && i.deadline.trim() ? { deadline: i.deadline.trim() } : {}),
+			...(typeof i.executorName === "string" && i.executorName.trim() ? { executorName: i.executorName.trim() } : {}),
+		}),
+	},
+	{
+		name: "update_task",
+		description: "Изменить задачу: заголовок, подробности, срок или статус. taskId — из list_tasks этого диалога.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				taskId: { type: "string", description: "uuid задачи из list_tasks" },
+				name: { type: "string" },
+				description: { type: "string" },
+				deadline: { type: "string", description: "Срок, ISO-дата; пустая строка — снять срок" },
+				status: { type: "string", description: "Код статуса из списка задач" },
+			},
+			required: ["taskId"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "TASKS_UPDATE",
+		mutating: true,
+		runsOnServer: true,
+		buildPayload: (i, ctx) => ({
+			taskId: known(ctx, "taskId", i.taskId),
+			...(typeof i.name === "string" ? { name: i.name.trim() } : {}),
+			...(typeof i.description === "string" ? { description: i.description.trim() } : {}),
+			...(typeof i.deadline === "string" ? { deadline: i.deadline.trim() } : {}),
+			...(typeof i.status === "string" && i.status.trim() ? { status: i.status.trim() } : {}),
+		}),
+	},
+	{
+		name: "complete_task",
+		description: "Закрыть задачу (перевести в завершающий статус). taskId — из list_tasks этого диалога.",
+		inputSchema: {
+			type: "object",
+			properties: { taskId: { type: "string", description: "uuid задачи из list_tasks" } },
+			required: ["taskId"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "TASKS_COMPLETE",
+		mutating: true,
+		runsOnServer: true,
+		buildPayload: (i, ctx) => ({ taskId: known(ctx, "taskId", i.taskId), close: true }),
+	},
+	{
+		name: "list_notes",
+		description: "Заметки по организации из BuhProf AI: чем занимались, о чём договорились, что важно помнить.",
+		inputSchema: {
+			type: "object",
+			properties: { limit: { type: "integer", minimum: 1, maximum: 100 } },
+			required: [],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "NOTES_LIST",
+		mutating: false,
+		runsOnServer: true,
+		buildPayload: (i) => (i.limit ? { limit: Number(i.limit) } : {}),
+	},
+	{
+		name: "add_note",
+		description: "Записать заметку по организации в BuhProf AI. Автор — пользователь 1С.",
+		inputSchema: {
+			type: "object",
+			properties: { body: { type: "string", description: "Текст заметки" } },
+			required: ["body"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "NOTES_ADD",
+		mutating: true,
+		runsOnServer: true,
+		buildPayload: (i) => ({ body: str(i.body, "body") }),
+	},
 ];
 
 export const TOOLS_BY_NAME: ReadonlyMap<string, ToolSpec> = new Map(TOOLS.map((t) => [t.name, t]));
@@ -583,9 +713,16 @@ const ROUTING_PROPERTY = {
 	description: "id организации из get_organizations — в базе какой организации выполнить (только если организаций несколько)",
 };
 
-export function toolDefinitions(): ToolDefinition[] {
-	return TOOLS.map((t) => {
-		if (hasOwnOrganization(t) || t.commandType === "GET_ORGANIZATIONS") return { name: t.name, description: t.description, inputSchema: t.inputSchema };
+/**
+ * Инструменты для модели. `serverTools: false` (канал ERP или ненастроенный канал задач) убирает
+ * задачи и заметки из списка совсем: инструмент, который в этом ходе всё равно откажет, модель
+ * только уводит в сторону.
+ */
+export function toolDefinitions(opts: { serverTools?: boolean } = {}): ToolDefinition[] {
+	const list = opts.serverTools === false ? TOOLS.filter((t) => !t.runsOnServer) : TOOLS;
+	return list.map((t) => {
+		// Серверным адрес базы не нужен: они не идут в 1С.
+		if (t.runsOnServer || hasOwnOrganization(t) || t.commandType === "GET_ORGANIZATIONS") return { name: t.name, description: t.description, inputSchema: t.inputSchema };
 		const schema = t.inputSchema as { properties?: Record<string, unknown> };
 		return {
 			name: t.name, description: t.description,

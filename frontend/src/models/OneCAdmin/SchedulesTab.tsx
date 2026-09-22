@@ -186,8 +186,9 @@ export const SchedulesTab: FC = () => {
 			reportBatchStart(r, translate("onecTabSchedules"));
 			return r;
 		},
-		onSuccess: () => {
-			showToast(translate("onecBatchQueued"), "success");
+		onSuccess: (r) => {
+			// Ничего не поставлено (все базы пропущены) — это не успех: причины уже ушли сообщением reportBatchStart.
+			if (r.queued > 0) showToast(`${translate("onecBatchQueued")}: ${r.queued}`, "success");
 			void qc.invalidateQueries({ queryKey: ["onec", "schedules"] });
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabSchedules") }),

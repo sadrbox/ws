@@ -553,22 +553,27 @@
 	display: flex;
 	flex: 1 1 auto;
 	min-height: 0;
-	gap: 6px;
+	// gap: 6px;
 	// Зазор между областями даёт САМ разделитель (см. SplitPane.module.scss): свой gap
 	// здесь удваивал бы его и разъезжался бы с остальными местами, где он стоит.
 }
 
 .VSplitMain {
 	flex: 1 1 50%;
-	min-width: 0;
+	// min-width: 0;
+	min-width: min-content;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	flex-shrink: 0;
+	// container-type: content;
+
 }
 
 .VSplitSide {
 	flex: 1 1 50%;
-	min-width: 0;
+	// min-width: 0;
+	min-width: min-content;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
@@ -589,6 +594,7 @@
 	max-height: 30%;
 	min-height: 84px;
 }
+
 /*
  * БАЗЫ БИЗНЕС-АГЕНТА И ЛИМИТ ТАРИФА (ПН, 19.09). «Сверх лимита» — отдельной пометкой цветом предупреждения:
  * база на связи, но команды в неё сервис не пропускает, и это должно читаться с первого взгляда.
@@ -661,6 +667,7 @@
  * Код заявки крупнее и моноширинным: его диктуют по телефону и сверяют посимвольно.
  */
 .ReqTable {
+
 	td,
 	th {
 		text-align: left;
@@ -737,4 +744,60 @@
 	flex-direction: column;
 	height: 420px;
 	min-height: 240px;
+}
+
+// ── Текущий кластер в тулбаре панели (вариант 1) ──────────────────────────────
+// Выбор кластера стоит в тулбаре, и рядом с ним — ответ на два вопроса сразу: над каким сервером идёт работа и
+// есть ли кому выполнять команды. Поэтому состояние агента здесь не украшение: кластер без агента на связи
+// выберется, но ни одной команды не выполнит.
+.ClusterPickLabel {
+	display: flex;
+	align-items: center;
+	color: $color6;
+	font-size: $fontsize;
+	white-space: nowrap;
+}
+
+// Состояние админ-агента выбранного кластера: точка + та же подпись, что в реестре («на связи», «отключён»…).
+// Цветом отличается ТОЛЬКО точка — подпись остаётся читаемой в обеих темах и без различения цветов.
+.ClusterState {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 22px;
+	padding: 0 8px;
+	border: 1px solid $color33;
+	border-radius: $radius3;
+	color: $color6;
+	font-size: $fontsize;
+	white-space: nowrap;
+
+	&[data-online="yes"] {
+		border-color: $successSoftBorder;
+		background: $successSoftBg;
+	}
+}
+
+.ClusterDot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: $indicatorMuted;
+	flex-shrink: 0;
+
+	.ClusterState[data-online="yes"] & {
+		background: $indicatorPosted;
+	}
+}
+
+// Адрес и число баз: приглушённая строка — она уточняет выбор, а не спорит с ним за внимание.
+.ClusterAddress {
+	display: flex;
+	align-items: center;
+	color: $color6;
+	font-size: $fontsize;
+	opacity: 0.75;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }

@@ -52,6 +52,17 @@ export function auditDetailsText(details: Record<string, unknown>): string {
 	return text.length > 300 ? `${text.slice(0, 299)}…` : text || "—";
 }
 
+/**
+ * Состояние базы в сводке бизнес-агента. Агент шлёт и новое `reachable`/`probed`, и прежнее `status` — читаем
+ * сначала новое: «не пробовали» и «не ответила» — разные ответы, а прежнее `UNKNOWN` их не различало (СП2).
+ */
+export function healthBaseState(b: { status?: string; reachable?: boolean; probed?: boolean }): string {
+	if (b.reachable === true) return translate("onecAgentOnline");
+	if (b.probed === false) return translate("onecHealthNotProbed");
+	if (b.reachable === false) return translate("onecHealthUnavailable");
+	return b.status ?? "—";
+}
+
 /** Простые поля сводки бизнес-агента (версия, состояние, …) — списки и лимиты показываются отдельно. */
 export function healthScalars(h: Record<string, unknown>): [string, string][] {
 	return Object.entries(h)

@@ -20,7 +20,7 @@ import { asText } from "src/utils/asText";
 import { fetchAgentConfig, setAgentConfig, type AgentConfig, type AgentConfigPatch } from "src/services/onec/api";
 import { withOp } from "./progress";
 import { QueryError } from "./shared";
-import { canEditField, configPatch, numberField } from "./agentConfigView";
+import { canEditField, configPatch, hasChanges, numberField } from "./agentConfigView";
 import styles from "./OneCAdmin.module.scss";
 
 export const AgentConfigTab: FC<{ agentId: string; agentName: string; canManage: boolean }> = ({ agentId, agentName, canManage }) => {
@@ -68,7 +68,9 @@ export const AgentConfigTab: FC<{ agentId: string; agentName: string; canManage:
 		return { ...d, bases: list };
 	});
 
-	const dirty = Object.keys(draft).length > 0;
+	// «Тронул поле» и «есть что отправить» — разное: негодное число уходить не должно, и «Сохранить» гаснет.
+	const dirty = hasChanges(draft);
+	const touched = Object.keys(draft).length > 0;
 
 	return (
 		<div className={styles.Instances}>
@@ -80,7 +82,7 @@ export const AgentConfigTab: FC<{ agentId: string; agentName: string; canManage:
 				{c && canManage && (
 					<Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>{translate("save")}</Button>
 				)}
-				{c && dirty && <Button onClick={() => setDraft({})}>{translate("cancel")}</Button>}
+				{c && touched && <Button onClick={() => setDraft({})}>{translate("cancel")}</Button>}
 			</div>
 			<QueryError error={cfg.error} noticeKey={`agent-config-${agentId}`} source={translate("onecAgentConfig")} />
 
@@ -88,13 +90,14 @@ export const AgentConfigTab: FC<{ agentId: string; agentName: string; canManage:
 				<>
 					<div className={styles.BasesLimits}>
 						<Field name="cfg_parallel" label={translate("onecCfgParallel")} width={FIELD_WIDTH.sm} {...num("ibParallel")} />
-						<Field name="cfg_timeout" label={translate("onecCfgTimeout")} width={FIELD_WIDTH.sm} {...num("commandTimeoutSecs")} />
-						<Field name="cfg_long_timeout" label={translate("onecCfgLongTimeout")} width={FIELD_WIDTH.sm} {...num("longCommandTimeoutSecs")} />
+						{/* Ноль в пределе — «без предела», так его понимает агент: у ночной выгрузки он стоит намеренно. */}
+						<Field name="cfg_timeout" label={translate("onecCfgTimeout")} width={FIELD_WIDTH.sm} hint={translate("onecCfgZeroHint")} {...num("commandTimeoutSecs")} />
+						<Field name="cfg_long_timeout" label={translate("onecCfgLongTimeout")} width={FIELD_WIDTH.sm} hint={translate("onecCfgZeroHint")} {...num("longCommandTimeoutSecs")} />
 						<FieldSelect name="cfg_log" label={translate("onecCfgLogLevel")}
 							value={asText(draft.logLevel ?? c.logLevel ?? "")}
 							disabled={!canManage || !canEditField(editable, "logLevel")}
 							onChange={(e) => setDraft((d) => ({ ...d, logLevel: e.target.value }))}
-							options={["debug", "info", "warn", "error"].map((l) => ({ value: l, label: l }))} />
+							options={["trace", "debug", "info", "warn", "error"].map((l) => ({ value: l, label: l }))} />
 					</div>
 					{/* Что менять нельзя — тоже ответ: эти поля правят в окне агента на его компьютере. */}
 					<div className={styles.Hint}>
@@ -150,7 +153,7 @@ export const AgentConfigTab: FC<{ agentId: string; agentName: string; canManage:
 							</tbody>
 						</table>
 					)}
-					{dirty && <div className={styles.Hint}>{translate("onecCfgWillSend")}: {Object.keys(configPatch(draft)).join(", ")}</div>}
+					{touched && <div className={styles.Hint}>{dirty ? `${translate("onecCfgWillSend")}: ${Object.keys(configPatch(draft)).join(", ")}` : translate("onecCfgNothingToSend")}</div>}
 				</>
 			)}
 		</div>

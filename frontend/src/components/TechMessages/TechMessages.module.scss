@@ -13,17 +13,35 @@
 // переменной. Нижняя граница в пикселях страхует узкое окно: при 15% на ноутбуке в
 // область не поместилась бы и кнопка.
 .Dock {
-	flex: 0 0 var(--tech-width, clamp(260px, 24%, 420px));
-	min-width: 380px;
+	/*
+	 * ДОЛЯ — ПОЖЕЛАНИЕ, А НЕ ПРАВО. Разделитель говорит, сколько области хотелось бы, но
+	 * занять она может только то, что осталось от пейнов: у них свой минимум
+	 * (main.module.scss, `.Panes { min-width: min-content }`). При `flex-shrink: 0`
+	 * запрошенная доля складывалась с этим минимумом, ряд перерастал рабочее
+	 * пространство — и область вместе со всем содержимым уезжала за правый край.
+	 *
+	 * Отсюда два разных ограничения, и нужны оба: `flex-shrink: 1` отдаёт лишнее соседу
+	 * (флекс замораживает пейны на их минимуме и вычитает переполнение из области), а
+	 * `max-width: 100%` не даёт превысить родителя там, где соседа нет вовсе.
+	 * Минимум в пикселях тоже уступает родителю: в узком окне 280px — это уже перебор.
+	 */
+	flex: 0 1 var(--tech-width, clamp(260px, 24%, 420px));
+	min-width: min(280px, 100%);
+	max-width: 100%;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
 	gap: 6px;
-	// background: ghostwhite;
-	margin: 0px 6px 0 6px;
-	padding: 6px;
+	// min-width: 0;
+	// overflow: hidden;
+	// overflow-wrap: anywhere;
+	padding: 6px 6px 0px 6px;
 	border: 0px solid $color10;
 	border-radius: 3px;
+
+	// border-top: 1px solid $color34;
+
+
 
 	// border-left: 1px solid $color34;
 	// background: var(--sv-color60);
@@ -36,12 +54,15 @@
 	 * ошибки в колонке справа превращается в лесенку из двух слов.
 	 */
 	&[data-place="bottom"] {
-		flex: 0 0 var(--tech-height, 30%);
+		flex: 0 1 var(--tech-height, 30%);
 		min-width: 0;
-		min-height: 120px;
+		max-width: 100%;
+		min-height: min(120px, 100%);
+		max-height: 100%;
 		// border-left: none;
-		padding: 6px 6px 6px 6px;
-		// border-top: 1px solid $color34;
+		padding: 0px 6px 0px 6px;
+
+
 	}
 }
 
@@ -64,9 +85,9 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 6px;
-	padding: 6px 6px 3px 0px;
+	padding: 6px 6px 0px 0px;
 	// border-left: 1px solid $color34;
-	// background: var(--sv-color60);
+	background: transparent;
 
 	// Стрелка раскрытия смотрит влево: область выезжает оттуда.
 	svg {
@@ -78,7 +99,7 @@
 	&[data-place="bottom"] {
 		flex-direction: row;
 		justify-content: flex-start;
-		padding: 6px 6px 0px 6px;
+		padding: 6px 6px 0 0;
 		border-left: none;
 		// border-top: 1px solid $color34;
 		flex-direction: row-reverse;

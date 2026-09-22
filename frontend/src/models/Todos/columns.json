@@ -88,6 +88,16 @@
 		"inlist": true
 	},
 	{
+		"identifier": "sourceLabel",
+		"type": "string",
+		"width": "180px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Источник",
+		"visible": true,
+		"inlist": true
+	},
+	{
 		"identifier": "description",
 		"type": "textarea",
 		"width": "300px",

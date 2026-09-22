@@ -24,8 +24,14 @@ const AI_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:3100";
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
+		// Выбранный в панели кластер (X-Onec-Server): без него список показывал базы ВСЕХ серверов, хотя на
+		// экране выбран один, и команда по такой базе отвечала «базы нет в реестре» (аудит 21.09).
+		const server = req.headers["x-onec-server"];
 		const r = await fetch(`${AI_URL}/v1/onec/bases`, {
-			headers: { authorization: req.headers.authorization ?? "" },
+			headers: {
+				authorization: req.headers.authorization ?? "",
+				...(typeof server === "string" && server ? { "X-Onec-Server": server } : {}),
+			},
 		});
 		const body = await r.json().catch(() => null);
 		if (!r.ok || !body?.success) {

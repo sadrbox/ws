@@ -69,7 +69,8 @@ export class OpenAIProvider implements LLMProvider {
 		try {
 			response = await this.client.chat.completions.create({
 				model: this.model,
-				messages: toMessages(req.system, req.messages),
+				// Контекст организации — частью системного сообщения: у Chat Completions нет блоков.
+				messages: toMessages(req.systemExtra ? `${req.system}\n\n${req.systemExtra}` : req.system, req.messages),
 				tools,
 				max_completion_tokens: req.maxTokens ?? 4096,
 				...(isReasoningModel(this.model) ? { reasoning_effort: reasoningEffort(this.effort) } : {}),

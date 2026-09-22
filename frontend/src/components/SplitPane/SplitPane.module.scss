@@ -37,6 +37,7 @@
 	// перехватывается прокруткой страницы.
 	touch-action: none;
 	transition: background 0.12s;
+	margin: 0;
 
 	&:hover,
 	&:focus-visible {

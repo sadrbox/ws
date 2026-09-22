@@ -366,3 +366,12 @@ test("обновление агента: только https и настоящи�
 	assert.equal(buildAdminPayload(cfg, { patch: { password: "x" } }).ok, false);
 	assert.equal(buildAdminPayload(cfg, { patch: { bases: [{ key: "Б1", address: "srv" }] } }).ok, false);
 });
+
+test("аудит 21.09: журнал агента — по своей способности, со старой как запасной", () => {
+	const spec = findAdminCommand("AGENT_LOG_TAIL")!;
+	assert.equal(spec.capability, "agent.log");
+	// Сборка 2026-09-20 объявляет agent.log; прежние — одну agent.procs на процессы и журнал.
+	assert.equal(agentCanRun({ role: "business", capabilities: ["agent.log"] }, spec), true);
+	assert.equal(agentCanRun({ role: "admin", capabilities: ["agent.procs"] }, spec), true);
+	assert.equal(agentCanRun({ role: "admin", capabilities: ["cluster.admin"] }, spec), false);
+});

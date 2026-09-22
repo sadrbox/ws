@@ -26,7 +26,8 @@ import {
   ChatList,
   CommunicationsPanel,
   AiAssistantList,
-  OneCAdminList,
+  OneCClustersList,
+  OneCAgentsList,
   NotificationsList,
   WarehousesList,
   CashboxesList,
@@ -365,10 +366,26 @@ export const NavList = ({ label }: TypeNavListProps) => {
           </NavItem>
           {/* AI-помощник: команды 1С на естественном языке (сервис ai/, см. models/AiAssistant). */}
           <NavItem onClick={() => addPane({ component: AiAssistantList, label: translate("AiAssistant") })}>{translate("AiAssistant")}</NavItem>
-          {/* Администрирование 1С: базы и сеансы кластера (E15). Право OneCAdmin; у сервиса
-              своя проверка — суперадмин или администратор организации. */}
+        </ul>
+      </div>
+    </>
+  );
+
+  /**
+   * АДМИНИСТРИРОВАНИЕ — про наше хозяйство, а не про учёт: серверы 1С и службы, которые к ним ходят.
+   * Разделено по предмету: «Кластеры 1С» — сервер и его базы, «Агенты» — службы, их подключение и настройки.
+   * Право одно (OneCAdmin); что именно внутри доступно, решают вложенные разрешения (onecPermissions).
+   */
+  const AdministrationGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("onec")}</h3>
+        <ul className={styles.NavList}>
           {(isSuperAdmin || can("OneCAdmin")) && (
-            <NavItem onClick={() => addPane({ component: OneCAdminList, label: translate("OneCAdmin") })}>{translate("OneCAdmin")}</NavItem>
+            <NavItem onClick={() => addPane({ component: OneCClustersList, label: translate("OneCClusters") })}>{translate("OneCClusters")}</NavItem>
+          )}
+          {(isSuperAdmin || can("OneCAdmin")) && (
+            <NavItem onClick={() => addPane({ component: OneCAgentsList, label: translate("OneCAgents") })}>{translate("OneCAgents")}</NavItem>
           )}
         </ul>
       </div>
@@ -430,6 +447,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <AccountingGroups />
           {moduleOn("hr") && <HRGroups />}
           <CRMGroups />
+          <AdministrationGroups />
           <SettingsGroups />
         </div>
       </div>
@@ -475,6 +493,17 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <h1>{translate("crm")}</h1>
         <div className={styles.NavSection}>
           <CRMGroups />
+        </div>
+      </div>
+    );
+  }
+
+  if (label.toLocaleLowerCase() === "Administration".toLocaleLowerCase()) {
+    return (
+      <div className={styles.NavListWrapper}>
+        <h1>{translate("administration")}</h1>
+        <div className={styles.NavSection}>
+          <AdministrationGroups />
         </div>
       </div>
     );

@@ -152,12 +152,13 @@ export class AgentService {
 	}
 
 	/** Создаёт агента и возвращает токен — единственный раз, когда он виден. */
-	async create(organizationUuid: string, name: string): Promise<{ agent: AgentView; token: string }> {
+	/** `role` — роль, о которой договорились при заведении (заявка по коду её называет); дальше её задаёт не агент. */
+	async create(organizationUuid: string, name: string, role: AgentRole = "business"): Promise<{ agent: AgentView; token: string }> {
 		const id = randomUUID();
 		const token = newToken();
 		await this.db.query(
-			`INSERT INTO agents (id, organization_uuid, name, token_hash) VALUES ($1, $2, $3, $4)`,
-			[id, organizationUuid, name, sha256(token)],
+			`INSERT INTO agents (id, organization_uuid, name, role, token_hash) VALUES ($1, $2, $3, $4, $5)`,
+			[id, organizationUuid, name, role, sha256(token)],
 		);
 		const agent = await this.get(id);
 		if (!agent) throw new Error("агент не создан");
@@ -229,6 +230,16 @@ export class AgentService {
 	async setActiveBins(id: string, bins: string[] | null): Promise<boolean> {
 		const list = bins === null ? null : [...new Set(bins.map((b) => b.trim()).filter(Boolean))];
 		const r = await this.db.query(`UPDATE agents SET active_bins = $2 WHERE id = $1`, [id, list]);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/**
+	 * Организация ERP агента. Меняется при повторном подключении по коду: та же служба может быть одобрена для
+	 * другой организации, и без этого агент остался бы в прежней — команды чата новой организации его не нашли бы.
+	 * Пусто — «не привязан» (агент кластера).
+	 */
+	async setOrganization(id: string, organizationUuid: string): Promise<boolean> {
+		const r = await this.db.query(`UPDATE agents SET organization_uuid = $2 WHERE id = $1`, [id, organizationUuid]);
 		return (r.rowCount ?? 0) > 0;
 	}
 
@@ -401,17 +412,31 @@ export class AgentService {
 		if (p) this.polls.set(id, { open: p.open, closedAt: p.closedAt, busyUntil: 0 });
 	}
 
-	async register(id: string, info: { name?: string; version: string; os: string; capabilities: string[]; role?: AgentRole; serverId?: string | null }): Promise<void> {
-		await this.db.query(
+	/**
+	 * РОЛЬ НАЗНАЧАЕТ ТОТ, КТО ЗАВОДИТ АГЕНТА (аудит 21.09). Раньше она бралась из каждого register,
+	 * то есть её объявлял сам агент. Владелец токена бизнес-агента мог назваться `admin` и получить то, что
+	 * положено только агенту кластера: учётную запись администратора базы в payload команды (см. setAuthResolver
+	 * в server.ts) и право быть источником истины о списке баз сервера. Теперь роль меняется только вместе с
+	 * агентом (заведение в панели, одобрение заявки по коду, служебная команда с `--role`), а попытка
+	 * представиться иначе видна в журнале и ничего не меняет.
+	 *
+	 * Возвращает роль, с которой агент записан, и роль, которую он назвал: их расхождение — повод для тревоги.
+	 */
+	async register(id: string, info: { name?: string; version: string; os: string; capabilities: string[]; role?: AgentRole; serverId?: string | null }): Promise<{ role: AgentRole; claimed: AgentRole | null; first: boolean }> {
+		const before = await this.db.query<{ registered_at: Date | null }>(`SELECT registered_at FROM agents WHERE id = $1`, [id]);
+		const first = !before.rows[0]?.registered_at;
+		const r = await this.db.query<{ role: AgentRole }>(
 			`UPDATE agents
 			    SET version = $2, os = $3, capabilities = $4::jsonb, status = 'ONLINE',
 			        registered_at = now(), last_seen_at = now(),
-			        role = COALESCE($6, role), server_id = COALESCE($7, server_id),
+			        server_id = COALESCE($6, server_id),
 			        name = CASE WHEN $5 <> '' AND name = '' THEN $5 ELSE name END
-			  WHERE id = $1`,
-			[id, info.version, info.os, JSON.stringify(info.capabilities), info.name ?? "",
-				info.role ?? null, info.serverId ?? null],
+			  WHERE id = $1
+			 RETURNING role`,
+			[id, info.version, info.os, JSON.stringify(info.capabilities), info.name ?? "", info.serverId ?? null],
 		);
+		const role = r.rows[0]?.role ?? "business";
+		return { role, claimed: info.role ?? null, first };
 	}
 
 	/** Отметка «полный срез по базам получен» — от неё считается троттлинг (см. needsFullBases). */

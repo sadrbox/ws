@@ -49,7 +49,13 @@ export type AgentIdentity = { agentId: string; organizationUuid: string };
  * Пользователь 1С (канал «чат внутри 1С»). Имени здесь нет: заголовки — только ASCII, а имя пользователя
  * 1С кириллическое, поэтому оно приходит в теле хода (`user.name`).
  */
-export type OnecChatUser = { tokenId: string; baseId: string; baseKey: string; baseName: string; organizationUuid: string; userId: string };
+export type OnecChatUser = {
+	tokenId: string; baseId: string; baseKey: string; baseName: string; organizationUuid: string; userId: string;
+	/** Состояние смены токена (§3): подробности — в BaseTokenStore. Здесь они нужны роутеру канала. */
+	rotateDue: boolean;
+	pending: boolean;
+	firstUse: boolean;
+};
 
 // Расширяем Request типами субъектов — без any.
 declare module "express-serve-static-core" {
@@ -138,7 +144,13 @@ export function requireAgent(db: Db) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type BaseTokenResolver = { resolve: (token: string) => Promise<{ tokenId: string; baseId: string; baseKey: string; baseName: string; organizationUuid: string; revoked: boolean; baseDisabled: boolean } | null> };
+/** Всё, что нужно проверке доступа от хранилища токенов: остальное (выпуск, смена) — не её дело. */
+export type BaseTokenResolver = { resolve: (token: string) => Promise<{
+	tokenId: string; baseId: string; baseKey: string; baseName: string; organizationUuid: string;
+	revoked: boolean; baseDisabled: boolean;
+	// Состояние смены токена (§3). Необязательны: хранилище без ротации (и стенд в тестах) их не заполняет.
+	rotateDue?: boolean; pending?: boolean; firstUse?: boolean;
+} | null> };
 
 /**
  * Токен базы + пользователь ИБ. Порядок отказов — по контракту: сначала токен (401 BASE_TOKEN_INVALID —
@@ -162,7 +174,11 @@ export function requireOnecUser(tokens: BaseTokenResolver) {
 			deny(res, 400, "VALIDATION_ERROR", "X-1C-User-Id: ожидается UUID пользователя информационной базы");
 			return;
 		}
-		req.onecUser = { tokenId: owner.tokenId, baseId: owner.baseId, baseKey: owner.baseKey, baseName: owner.baseName, organizationUuid: owner.organizationUuid, userId: userId.toLowerCase() };
+		req.onecUser = {
+			tokenId: owner.tokenId, baseId: owner.baseId, baseKey: owner.baseKey, baseName: owner.baseName,
+			organizationUuid: owner.organizationUuid, userId: userId.toLowerCase(),
+			rotateDue: !!owner.rotateDue, pending: !!owner.pending, firstUse: !!owner.firstUse,
+		};
 		next();
 	};
 }

@@ -571,8 +571,14 @@ body {
 	flex: 1 1 auto;
 	min-height: 0;
 	min-width: 0;
+	// max-width: min-content;
 	// border-bottom: 1px solid $color10;
-	padding-bottom: 6px;
+	padding: 0 0px 6px 0px;
+
+	// &>.VSplitBar {
+	// 	margin: 0px !important;
+	// 	padding: 0px !important;
+	// }
 
 	// Область сообщений перенесли вниз — те же две области становятся столбцом: пейны
 	// сверху, сообщения полосой под ними. Больше ничего не меняется: и сворачивание, и
@@ -592,18 +598,19 @@ body {
 	// уезжают под неё: min-width/min-height: 0 обязательны, иначе флекс не даст им
 	// сузиться — по ширине, когда область справа, и по высоте, когда она внизу.
 	flex: 1 1 auto;
-	min-width: 0;
+	min-width: min-content;
 	min-height: 0;
-	// background: red;
+	background: transparent;
 	// padding-bottom: 3px;
+	padding: 6px 6px 0 6px;
 }
 
 
 
 .PaneItem {
 	// background: ghostwhite;
-	margin: 0px 6px 0 6px;
-	padding: 6px;
+	margin: 0px 0px 0 0px;
+	// padding: 6px 6px 0 6px;
 	border: 0px solid $color10;
 	border-radius: 3px;
 	//===================
@@ -612,6 +619,7 @@ body {
 	overflow: auto;
 	// padding: 0 6px;
 	display: none;
+	background: transparent;
 	gap: 12px;
 }
 
@@ -647,7 +655,7 @@ body {
 	display: flex;
 	align-items: center;
 	margin: 0;
-	padding: 0;
+	padding: 0 0 0 6px;
 	font-weight: 600;
 	font-size: $fontsize + 2px;
 	color: $color6;
@@ -1308,7 +1316,7 @@ body {
 	flex-direction: column;
 	min-height: 0;
 	height: 100%;
-	overflow: auto;
+	overflow: hidden;
 }
 
 // Единый тулбар пейна/дашборда — горизонтальный ряд контролов (тип/поиск/кнопки/

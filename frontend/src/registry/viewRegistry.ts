@@ -77,6 +77,10 @@ export const UserPerformanceList = lazyView("UserPerformanceList", () => import(
 export const ChatList = lazyView("ChatList", () => import('src/models/Chat').then(m => ({ default: m.ChatList })));
 export const CommunicationsPanel = lazyView("CommunicationsPanel", () => import('src/models/Communications').then(m => ({ default: m.CommunicationsPanel })));
 export const AiAssistantList = lazyView("AiAssistantList", () => import('src/models/AiAssistant').then(m => ({ default: m.AiAssistantList })));
+// Администрирование: кластеры 1С и агенты — два раздела меню (см. models/OneCAdmin/index.tsx).
+export const OneCClustersList = lazyView("OneCClustersList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCClustersList })));
+export const OneCAgentsList = lazyView("OneCAgentsList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAgentsList })));
+/** Прежний объединённый раздел: имя остаётся ради восстановления панелей после перезагрузки. */
 export const OneCAdminList = lazyView("OneCAdminList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAdminList })));
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
@@ -186,6 +190,8 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	CommunicationsPanel: CommunicationsPanel,
 	AiAssistantList: AiAssistantList,
 	OneCAdminList: OneCAdminList,
+	OneCClustersList: OneCClustersList,
+	OneCAgentsList: OneCAgentsList,
 	NotificationsList: NotificationsList,
 	WarehousesList: WarehousesList,
 	CashboxesList: CashboxesList,

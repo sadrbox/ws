@@ -3,6 +3,7 @@ import axios, {
 	type AxiosRequestConfig,
 	type AxiosError,
 } from "axios";
+import { getOnecServer } from "src/services/onec/serverScope";
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
 import { isNetworkError as isNetworkLikeError } from "../networkUtils";
 import { notify } from "src/components/TechMessages/store";
@@ -84,6 +85,17 @@ apiClient.interceptors.request.use((config) => {
 		}
 	} catch {
 		/* localStorage недоступен (private browsing и т.д.) */
+	}
+
+	/*
+	 * ВЫБРАННЫЙ КЛАСТЕР 1С — и в запросах к ERP (аудит 21.09). Список баз идёт через прокси бэкенда
+	 * (`onec-bases`), и без этого заголовка он отдавал базы всех серверов, хотя в панели выбран один.
+	 * Прочих запросов ERP заголовок не касается — бэкенд его просто не читает.
+	 */
+	const onecServer = getOnecServer();
+	// Только прокси-эндпойнты панели 1С: лишний заголовок в остальных запросах — лишняя предварительная проверка.
+	if (onecServer && typeof config.url === "string" && /(^|\/)onec-/.test(config.url)) {
+		config.headers["X-Onec-Server"] = onecServer;
 	}
 
 	return config;

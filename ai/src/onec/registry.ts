@@ -204,7 +204,8 @@ export class OnecRegistry {
 	 * именно она есть, показывает карточка — но ради простого просмотра списка второй
 	 * запрос на человека делать незачем.
 	 */
-	async userSummary(): Promise<{ name: string; bases: number; disabled: number; roles: string[] }[]> {
+	/** `serverIds` — считать только по базам этих серверов (выбранный кластер и видимость); null — по всем. */
+	async userSummary(serverIds?: readonly string[] | null): Promise<{ name: string; bases: number; disabled: number; roles: string[] }[]> {
 		const r = await this.db.query<{ name: string; bases: string; disabled: string; roles: string[] }>(
 			`SELECT min(name) AS name, count(*)::text AS bases,
 			        count(*) FILTER (WHERE disabled)::text AS disabled,
@@ -213,7 +214,10 @@ export class OnecRegistry {
 			             FROM base_users u2, jsonb_array_elements_text(u2.roles) role
 			            WHERE lower(u2.name) = lower(min(base_users.name))),
 			          ARRAY[]::text[]) AS roles
-			   FROM base_users GROUP BY lower(name) ORDER BY min(name)`,
+			   FROM base_users
+			  WHERE $1::uuid[] IS NULL OR base_id IN (SELECT id FROM bases WHERE server_id = ANY($1::uuid[]))
+			  GROUP BY lower(name) ORDER BY min(name)`,
+			[serverIds ?? null],
 		);
 		return r.rows.map((x) => ({
 			name: x.name, bases: Number(x.bases), disabled: Number(x.disabled), roles: x.roles ?? [],
@@ -254,13 +258,15 @@ export class OnecRegistry {
 	 * принадлежать разным расширениям (типовые «EF_00_…» — исправления от поставщика),
 	 * и склеивать их в одну строку значило бы врать о том, что стоит одинаковое.
 	 */
-	async extensionSummary(): Promise<{ name: string; synonym: string; bases: number; versions: string[] }[]> {
+	async extensionSummary(serverIds?: readonly string[] | null): Promise<{ name: string; synonym: string; bases: number; versions: string[] }[]> {
 		const r = await this.db.query<{ name: string; synonym: string | null; bases: string; versions: (string | null)[] }>(
 			`SELECT min(name) AS name, coalesce(min(synonym), '') AS synonym, count(*)::text AS bases,
 			        array_agg(DISTINCT version) AS versions
 			   FROM base_extensions
+			  WHERE $1::uuid[] IS NULL OR base_id IN (SELECT id FROM bases WHERE server_id = ANY($1::uuid[]))
 			  GROUP BY lower(name), lower(coalesce(synonym, ''))
 			  ORDER BY min(name)`,
+			[serverIds ?? null],
 		);
 		return r.rows.map((x) => ({
 			name: x.name, synonym: x.synonym ?? "", bases: Number(x.bases),

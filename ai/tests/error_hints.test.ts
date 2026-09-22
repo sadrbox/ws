@@ -217,3 +217,11 @@ test("многобазовый агент: подсказки для BASE_REQUIR
 	const own = { code: "LICENSE_LIMIT", message: "База «Б3» сверх лимита (тариф: 2 базы, подключено 3). Увеличьте тариф или уберите лишнее из настроек агента." };
 	assert.equal(humanizeAgentError(own)?.message, own.message);
 });
+
+test("СП6: отказ по недоверенному узлу обновления объясняется как настройка агента", () => {
+	const byCode = humanizeAgentError({ code: "UPDATE_HOST_NOT_ALLOWED", message: "хост не разрешён" });
+	assert.match(byCode!.message, /agent\.toml/);
+	// Тот же смысл под другим кодом узнаётся по тексту.
+	const byText = humanizeAgentError({ code: "COMMAND_FAILED", message: "адрес не в списке доверенных узлов" });
+	assert.match(byText!.message, /update_hosts/);
+});

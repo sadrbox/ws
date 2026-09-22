@@ -7,7 +7,7 @@
 //
 // Ответы — тот же конверт {success, data | error}, что и у buhprof_api: один формат на всю цепочку.
 
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
@@ -84,7 +84,12 @@ const registerSchema = z.object({
 	/** Идентификатор ПРОЦЕССА (pid + время старта): им ловится второй запущенный экземпляр. */
 	instanceId: z.string().max(200).optional(),
 	os: z.string().max(50).optional().default(""),
-	capabilities: z.array(z.string().max(50)).max(100).optional().default([]),
+	/*
+	 * СПОСОБНОСТИ — С ЗАПАСОМ И БЕЗ ПАДЕНИЯ (СП5). Агент перечисляет типы команд поимённо: полсотни у каждой роли, и
+	 * прежний предел в сотню однажды отверг бы ВСЮ регистрацию — агент ушёл бы в офлайн сразу после обновления.
+	 * Лишнее обрезается при разборе, а не роняет запрос.
+	 */
+	capabilities: z.array(z.string().max(50)).max(1000).optional().default([]),
 	// v2: роль службы (business | admin), сервер 1С и список его баз.
 	role: z.enum(["business", "admin"]).optional(),
 	server: z.object({
@@ -108,8 +113,9 @@ const heartbeatSchema = z.object({
 	instanceId: z.string().max(200).optional(),
 	status: z.string().max(20),
 	onec: z.object({ reachable: z.boolean(), version: z.string().nullable().optional() }).optional(),
-	commandsDone: z.number().int().optional(),
-	commandsFailed: z.number().int().optional(),
+	// Пределы — не придирка: значение сверх int4 роняло запрос ошибкой СУБД (22003), а с ней и весь heartbeat.
+	commandsDone: z.number().int().min(0).max(2_000_000_000).optional(),
+	commandsFailed: z.number().int().min(0).max(2_000_000_000).optional(),
 	// v2: состояния баз. basesComplete=true — это полный срез, иначе только изменившиеся.
 	bases: z.array(baseStateSchema).max(500).optional(),
 	basesComplete: z.boolean().optional(),
@@ -181,6 +187,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 	const agentBases = new AgentBasesStore(db);
 	const activation = new ActivationStore(db);
 
+
 	/** База результата — на сервере агента, который его прислал (C10): одноимённая база другого сервера — другая база. */
 	const baseOfAgent = async (agentId: string, key: string) =>
 		bases.findByKeyGlobal(key, (await agents.findById(agentId))?.serverId ?? null);
@@ -244,6 +251,22 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		return { limits: limitsForAgent(limits), activation: await activation.decisions(agentId) };
 	};
 	const r = Router();
+	/*
+	 * ОТКАЗ ПРОМИСА НЕ ДОЛЖЕН РОНЯТЬ СЛУЖБУ (аудит 21.09). Обработчики здесь асинхронные; express 4 их отказы не
+	 * ловит, и сбой БД в heartbeat оставлял запрос без ответа, а процесс — с необработанным отказом промиса, то
+	 * есть с падением и обрывом всех long-poll агентов. Оборачиваем все маршруты роутера разом.
+	 */
+	for (const method of ["get", "post", "put", "patch", "delete"] as const) {
+		const original = r[method].bind(r);
+		(r as unknown as Record<string, (path: string, ...h: RequestHandler[]) => void>)[method] = (path: string, ...handlers: RequestHandler[]) => {
+			original(path, ...handlers.map((h): RequestHandler => (req, res, next) => {
+				Promise.resolve(h(req, res, next)).catch((e: unknown) => {
+					log.error({ err: e instanceof Error ? e.message : String(e), path: req.path, method: req.method }, "маршрут агента: сбой");
+					if (!res.headersSent) res.status(500).json({ success: false, error: { code: "INTERNAL", message: "Внутренняя ошибка сервиса" } });
+				});
+			}));
+		};
+	}
 	r.use(requireAgent(db));
 	// Любой запрос агента = он на связи. Запись лёгкая (одно UPDATE по первичному ключу),
 	// а частота — раз в цикл опроса, то есть десятки секунд.
@@ -352,16 +375,41 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// сервер, а не заводить второй: иначе те же 110 баз появляются в реестре дважды,
 		// и в панели каждая база двоится.
 		const role = p.data.role ?? "business";
+		// Обрезаем молча для агента, но громко для нас: пропавшая способность иначе выглядит как «агент разучился».
+		const CAPABILITIES_MAX = 300;
+		const capabilities = p.data.capabilities.slice(0, CAPABILITIES_MAX);
+		if (p.data.capabilities.length > CAPABILITIES_MAX) {
+			log.warn({ agentId: req.agent!.agentId, declared: p.data.capabilities.length, kept: CAPABILITIES_MAX },
+				"агент объявил слишком много способностей — список обрезан");
+			await audit.write({ event: "agent.capabilities.truncated", agentId: req.agent!.agentId,
+				details: { declared: p.data.capabilities.length, kept: CAPABILITIES_MAX } });
+		}
 		const ras = { host: p.data.server?.rasHost ?? null, port: p.data.server?.rasPort ?? null };
 		const known = await agents.findById(req.agent!.agentId);
+		/*
+		 * СЕРВЕР АГЕНТА БЕЗ ОРГАНИЗАЦИИ — СВОЙ (аудит 21.09). Строка сервера уникальна парой «организация + имя», а
+		 * у агента кластера организации нет: два клиента с сервером «SRV-1C» получали ОДНУ строку, и базы разных
+		 * клиентов смешивались в реестре — вплоть до пароля базы одного клиента, ушедшего агенту другого. Своё
+		 * пространство имён по идентификатору агента такую встречу исключает; повторная регистрация того же агента
+		 * находит свой сервер через known.serverId и имя не плодит.
+		 */
+		const serverOrg = req.agent!.organizationUuid || `agent:${req.agent!.agentId}`;
 		const server = known?.serverId
 			? (await bases.renameServer(known.serverId, p.data.server?.name ?? "", ras))
-				?? await bases.ensureServer(req.agent!.organizationUuid, p.data.server?.name ?? "", ras)
-			: await bases.ensureServer(req.agent!.organizationUuid, p.data.server?.name ?? "", ras);
-		await agents.register(req.agent!.agentId, {
-			name: p.data.agentName, version: p.data.version, os: p.data.os, capabilities: p.data.capabilities,
+				?? await bases.ensureServer(serverOrg, p.data.server?.name ?? "", ras)
+			: await bases.ensureServer(serverOrg, p.data.server?.name ?? "", ras);
+		const registered = await agents.register(req.agent!.agentId, {
+			name: p.data.agentName, version: p.data.version, os: p.data.os, capabilities,
 			role, serverId: server.id,
 		});
+		// Роль назначает тот, кто завёл агента; агент её только сообщает. Расхождение — тревожный признак: служба
+		// представляется не тем, чем её завели (или её подменили). Роль от этого не меняется, но в журнале видно.
+		if (registered.claimed && registered.claimed !== registered.role) {
+			log.warn({ agentId: req.agent!.agentId, claimed: registered.claimed, role: registered.role },
+				"агент представился другой ролью — действует роль, с которой он заведён");
+			await audit.write({ event: "agent.role_mismatch", agentId: req.agent!.agentId,
+				details: { claimed: registered.claimed, role: registered.role } });
+		}
 		/**
 		 * НОВЫЙ ПРОЦЕСС — ЗНАЧИТ, ЗАБРАННОЕ ПРЕЖНИМ УЖЕ НЕ ВЕРНЁТСЯ.
 		 *
@@ -379,10 +427,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			log.warn({ agentId: req.agent!.agentId, count: lost.length, commands: lost },
 				"агент перезапустился — команды прежнего процесса закрыты, очередь освобождена");
 		}
-		if (p.data.bases?.length) {
-			await bases.sync(server.id, forRegistry(p.data.bases), { complete: true, authoritative: role === "admin" });
+		/*
+		 * РЕЕСТР КЛАСТЕРА ВЕДЁТ АДМИН-АГЕНТ (СП4). У агента без организации своё пространство имён серверов (ниже),
+		 * поэтому бизнес-агент того же компьютера писал те же базы в ДРУГУЮ строку `servers` — и база двоилась в
+		 * списке: скрытие одной строки не влияло на вторую. Базы бизнес-агента и так хранятся в `agent_bases`
+		 * (карточка агента, лимит тарифа, выбор базы для команды чата) — в реестре кластера им делать нечего.
+		 */
+		if (role === "admin" && p.data.bases?.length) {
+			await bases.sync(server.id, forRegistry(p.data.bases), { complete: true, authoritative: true });
 			await agents.markBasesSynced(req.agent!.agentId);
 			logLockCoverage(log, req.agent!.agentId, p.data.bases);
+		} else if (p.data.bases?.length) {
+			// Отметка нужна и бизнес-агенту: по ней сервис решает, когда просить полный срез (wantFullBases).
+			await agents.markBasesSynced(req.agent!.agentId);
 		}
 		// Базы бизнес-агента в ЕГО порядке (СВ3): регистрация несёт полный срез — список заменяется целиком.
 		if (role === "business" && p.data.bases) {
@@ -413,7 +470,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version, req.ip ?? null);
 		log.info({ agentId: req.agent!.agentId, version: p.data.version, role, bases: p.data.bases?.length ?? 0 }, "агент зарегистрирован");
 		await audit.write({ event: "agent.register", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
-			details: { version: p.data.version, os: p.data.os, role, capabilities: p.data.capabilities.length, bases: p.data.bases?.length ?? 0 } });
+			details: { version: p.data.version, os: p.data.os, role, capabilities: capabilities.length, bases: p.data.bases?.length ?? 0 } });
 		res.json({ success: true, data: {
 			ok: true,
 			pollMaxWaitSecs: cfg.POLL_MAX_WAIT_SECS,
@@ -490,22 +547,24 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		}
 		if (me?.role === "business" && p.data.activationRequests?.length) {
 			const reqs = parseActivation(p.data.activationRequests);
-			const n = await activation.upsert(req.agent!.agentId, reqs, me.limits.activeBins ?? null);
-			if (n) {
+			const fresh = await activation.upsert(req.agent!.agentId, reqs, me.limits.activeBins ?? null);
+			if (fresh.length) {
 				await audit.write({ event: "agent.bin_activation.requested", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
-					details: { bins: reqs.map((q) => q.bin) } });
+					details: { bins: fresh } });
 			}
 			if (reqs.length < p.data.activationRequests.length) {
 				log.warn({ agentId: req.agent!.agentId, dropped: p.data.activationRequests.length - reqs.length }, "запросы активации БИН: часть строк не разобрана");
 			}
 		}
-		if (p.data.bases?.length && me?.serverId) {
-			await bases.sync(me.serverId, forRegistry(p.data.bases),
-				{ complete: p.data.basesComplete === true, authoritative: me.role === "admin" });
+		if (p.data.bases?.length && me?.serverId && me.role === "admin") {
+			// Реестр кластера — от админ-агента (СП4); срез бизнес-агента живёт в agent_bases (см. saveSlice выше).
+			await bases.sync(me.serverId, forRegistry(p.data.bases), { complete: p.data.basesComplete === true, authoritative: true });
 			if (p.data.basesComplete) {
 				await agents.markBasesSynced(req.agent!.agentId);
 				logLockCoverage(log, req.agent!.agentId, p.data.bases);
 			}
+		} else if (p.data.bases?.length && p.data.basesComplete) {
+			await agents.markBasesSynced(req.agent!.agentId);
 		}
 		// Сервер сам решает, когда ему нужен полный срез: агенту остаётся только слушаться.
 		// Так интервал меняется в конфигурации сервиса, а не переустановкой службы на сервере 1С,

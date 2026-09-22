@@ -46,6 +46,18 @@ export class FileStore {
 		return { id: x.id, conversationId: x.conversation_id, organizationUuid: x.organization_uuid, userUuid: x.user_uuid, fileName: x.file_name, mimeType: x.mime_type, size: x.size, content: x.content, source: x.source, createdAt: x.created_at, expiresAt: x.expires_at };
 	}
 
+	/**
+	 * Файл, загруженный ПАРОЙ «база + пользователь» (§1: `POST /v1/onec-chat/uploads`).
+	 *
+	 * Организации мало: в канале 1С одна организация ERP — это все пользователи всех её баз, а чужое
+	 * вложение не должно открываться по угаданному идентификатору. Владелец здесь — тот же `user_uuid`
+	 * вида `1c:<base_id>:<uuid пользователя ИБ>`, которым подписаны и диалоги.
+	 */
+	async getForOwner(id: string, organizationUuid: string, userUuid: string): Promise<(StoredFile & { content: Buffer }) | null> {
+		const f = await this.get(id, organizationUuid);
+		return f && f.userUuid === userUuid ? f : null;
+	}
+
 	async purgeExpired(): Promise<number> {
 		const r = await this.db.query(`DELETE FROM chat_files WHERE expires_at <= now()`);
 		return r.rowCount ?? 0;

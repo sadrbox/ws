@@ -745,9 +745,14 @@ export type AgentProcess = {
 	seenAt?: string | null;
 };
 
-export const fetchAgentProcesses = (live?: boolean) =>
-	aiFetch<{ items: AgentProcess[] } | Pending>(`/v1/onec/agent-processes${live ? "?live=1" : ""}`)
-		.then((d) => awaitCommand<{ items: AgentProcess[] }>(d));
+/**
+ * `live` — спросить агентов живьём. `agentId` — адресно того, чьи процессы смотрят: без него сервис опрашивает
+ * всех на связи, кто это умеет (обе роли), и склеивает ответы.
+ */
+export const fetchAgentProcesses = (live?: boolean, agentId?: string) =>
+	aiFetch<{ items: AgentProcess[]; failed?: { agentId: string; agentName: string; status: number }[] } | Pending>(
+		`/v1/onec/agent-processes${live ? `?live=1${agentId ? `&agentId=${encodeURIComponent(agentId)}` : ""}` : ""}`)
+		.then((d) => awaitCommand<{ items: AgentProcess[]; failed?: { agentId: string; agentName: string; status: number }[] }>(d));
 
 /** Снять процесс. `force` — согласие снять конфигуратор: он этого не переживёт безболезненно. */
 /** Ответ на снятие: `state.processes` — список после снятия (агент E5), сервис его уже сохранил. */
@@ -909,7 +914,17 @@ export type AgentHealth = {
  * поэтому тип открытый: панель показывает известные поля и перечисляет остальные.
  */
 export type BusinessHealth = Record<string, unknown> & {
-	bases?: { key?: string; status?: string; transport?: string; extVersion?: string; overLimit?: boolean; error?: string }[];
+	/** Сама служба: сборка, время работы, экземпляр (агент с выпуска 2026-09-21). */
+	agent?: { version?: string; build?: string; instanceId?: string; startedAt?: string; uptimeSecs?: number; os?: string };
+	bases?: {
+		/** `baseKey` — основное имя (выпуск 21.09), `key` — прежнее: агент шлёт оба. */
+		baseKey?: string; key?: string;
+		status?: string; transport?: string; extVersion?: string; overLimit?: boolean; error?: string;
+		/** `reachable` — отвечала ли база при последней попытке; `probed` — пробовали ли вообще. */
+		reachable?: boolean; probed?: boolean; organizations?: number;
+		/** Когда база отвечала в последний раз и когда последний раз отказала. */
+		lastOkAt?: string | null; lastError?: { message?: string; at?: string } | null;
+	}[];
 	limits?: { maxBases?: number | null; maxBins?: number | null; activeBins?: string[] };
 };
 
@@ -1111,7 +1126,8 @@ export const fetchEnrollments = (params: { state?: EnrollmentState | ""; q?: str
 	return aiFetch<{ items: AgentEnrollment[]; canDecide: boolean }>(`/v1/onec/enrollments${qs.toString() ? `?${qs.toString()}` : ""}`);
 };
 
-export const approveEnrollment = (id: string, body: { organizationUuid: string; name?: string; agentId?: string | null; note?: string }) =>
+/** Организация нужна бизнес-агенту; агент кластера обслуживает весь сервер — ему её не задают. */
+export const approveEnrollment = (id: string, body: { organizationUuid?: string; name?: string; agentId?: string | null; note?: string }) =>
 	aiFetch<{ ok: boolean; agentId: string; created: boolean }>(`/v1/onec/enrollments/${encodeURIComponent(id)}/approve`, {
 		method: "POST", body: JSON.stringify(body),
 	});
@@ -1160,10 +1176,28 @@ export const approveRegistration = (id: string, body: { organizationUuid: string
 export const rejectRegistration = (id: string, note: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/registrations/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ note }) });
 
+/**
+ * Базы 1С организации (ПН4): откуда приходят её задачи, заметки и документы.
+ *
+ * Две разные связи, и обе видны как есть: базе выдан токен чата для этой организации (`chat`) и/или
+ * база назвала её БИН в своём списке (`declaredBin`). Первое без второго — база подключена, но эту
+ * организацию не ведёт; второе без первого — называет БИН, а чат ей не выдан.
+ */
+export type OrganizationBase = {
+	baseKey: string; name: string; serverName: string | null; disabled: boolean;
+	chat: "active" | "revoked" | "none";
+	declaredBin: string | null; declaredAt: string | null; lastSeenAt: string | null;
+};
+
+export const fetchOrganizationBases = (organizationUuid: string) =>
+	aiFetch<{ bin: string | null; items: OrganizationBase[] }>(`/v1/organization-bases?organizationUuid=${encodeURIComponent(organizationUuid)}`);
+
 /** Токен базы для чата внутри 1С: сам токен не хранится — только кем и когда выпущен, отозван ли. */
 export type BaseToken = {
 	id: string; baseId: string; baseKey: string; organizationUuid: string;
 	createdAt: string; createdBy: string; revokedAt: string | null; revokedBy: string | null;
+	/** Смена токена: когда пора сменить, кем заменён и до какого мига принимается прежний (перекрытие). */
+	rotateAfter: string | null; acceptedUntil: string | null; replacedBy: string | null;
 };
 
 export const fetchBaseTokens = (baseId: string) =>
@@ -1171,6 +1205,14 @@ export const fetchBaseTokens = (baseId: string) =>
 
 export const revokeBaseToken = (id: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/base-tokens/${encodeURIComponent(id)}/revoke`, { method: "POST", body: "{}" });
+
+/**
+ * Сменить токен базы: сервис выпускает новый и отдаёт его базе в ответе очередного хода — сама база
+ * ничего не делает. Прежний токен работает, пока не кончится перекрытие. Оборвать связь немедленно —
+ * это «Отозвать», а не смена.
+ */
+export const rotateBaseToken = (id: string) =>
+	aiFetch<{ ok: boolean }>(`/v1/onec/base-tokens/${encodeURIComponent(id)}/rotate`, { method: "POST", body: "{}" });
 
 // ── Активация БИНов (СВ4, часть 2) ──────────────────────────────────────────────────────────────────────
 
@@ -1356,9 +1398,10 @@ export const retryBatch = (id: string, baseKeys?: string[]) =>
 // Токен возвращается ОДИН раз при создании и при ротации: в БД лежит только его
 // SHA-256, восстановить нельзя.
 
-export const createAgent = (name: string) =>
+/** `cluster` — агент кластера: обслуживает весь сервер 1С, организация ERP ему не задаётся. */
+export const createAgent = (name: string, cluster = false) =>
 	aiFetch<{ agent: OnecAgent; token: string }>("/v1/onec/agents", {
-		method: "POST", body: JSON.stringify({ name }),
+		method: "POST", body: JSON.stringify({ name, ...(cluster ? { cluster: true } : {}) }),
 	});
 
 export const rotateAgentToken = (id: string) =>

@@ -11,9 +11,14 @@ import { humanizeAgentError } from "../src/onec/errorHints.ts";
 import type { Db } from "../src/db/pool.ts";
 
 type Call = { sql: string; params: unknown[] };
+/** Запрос-заглушка: пишет вызовы и отдаёт заранее подготовленные строки — один и для пула, и для клиента. */
+const fakeQuery = (calls: { sql: string; params: unknown[] }[], rows: unknown[]) =>
+	async (sql: string, params: unknown[] = []) => { calls.push({ sql, params }); return { rows, rowCount: rows.length }; };
+
 const fakeDb = (calls: Call[], rows: unknown[] = []): Db => ({
-	query: async (sql: string, params: unknown[] = []) => { calls.push({ sql, params }); return { rows, rowCount: rows.length }; },
-	connect: async () => { throw new Error("не нужен"); },
+	query: fakeQuery(calls, rows),
+	// Выдача команд идёт в транзакции с замком на агента (А1): клиент отдаёт те же ответы, что и пул.
+	connect: async () => ({ query: fakeQuery(calls, rows), release: () => {} }),
 }) as unknown as Db;
 
 describe("С1: место базы — только у команд внутрь базы", () => {
@@ -134,7 +139,8 @@ describe("С33: продление срока выполняемых коман�
 			.extendRunning("a", [{ commandId: "cmd_1", startedAt: "2026-09-15T17:00:00Z" }, { commandId: "cmd_2", startedAt: "мусор" }], 90);
 		assert.equal(n, 1);
 		assert.match(calls[0].sql, /c\.agent_id = \$1 AND c\.state = 'dispatched'/);
-		assert.match(calls[0].sql, /LEAST\(GREATEST\(c\.expires_at/);
+		// Продление не сокращает срок: потолок «выдача + сутки» применяется к НОВОМУ сроку, а не к уже назначенному.
+		assert.match(calls[0].sql, /GREATEST\(c\.expires_at,\s*\n?\s*LEAST\(now\(\)/);
 		assert.equal(calls[0].params[3], RUNNING_LEASE_CAP_SECS);
 		assert.deepEqual(calls[0].params[4], ["2026-09-15T17:00:00.000Z", null]);
 		assert.equal(await new CommandQueue(fakeDb([], [])).extendRunning("a", [], 90), 0);
@@ -154,5 +160,22 @@ describe("предел внутрибазовых команд по роли а�
 		};
 		assert.equal(await slotsOf(), 0, "общий предел 1, одна уже выполняется — мест нет");
 		assert.equal(await slotsOf(4), 3, "у бизнес-агента 4 — осталось 3");
+	});
+});
+
+describe("А1: выдача под замком на агента (аудит 21.09)", () => {
+	it("выдача идёт в транзакции с консультативной блокировкой этого агента", async () => {
+		const calls: Call[] = [];
+		await new CommandQueue(fakeDb(calls, []), 1, 600).take("agent-1", 0);
+		const sqls = calls.map((c) => c.sql.trim());
+		assert.ok(sqls.includes("BEGIN"), "выдача открывает транзакцию");
+		assert.ok(sqls.includes("COMMIT"), "и закрывает её");
+		const lock = calls.find((c) => c.sql.includes("pg_advisory_xact_lock"));
+		assert.ok(lock, "замок на время выдачи взят");
+		assert.deepEqual(lock!.params, ["agent-dispatch:agent-1"], "замок именно на этого агента");
+		// Замок берётся ДО подсчёта занятых мест: иначе два опроса увидят одно и то же число.
+		const lockAt = sqls.findIndex((s) => s.includes("pg_advisory_xact_lock"));
+		const countAt = sqls.findIndex((s) => s.includes("count(*) AS n FROM commands"));
+		assert.ok(lockAt >= 0 && countAt > lockAt, "сначала замок, потом счёт мест");
 	});
 });

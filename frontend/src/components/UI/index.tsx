@@ -133,6 +133,9 @@ export const Container: FC = () => {
     defaultPercent: 24,
     min: 15,
     max: 60,
+    // У пейнов свой минимум по ширине, и 60% бывают недостижимы: тянуть дальше предела
+    // нечего — иначе указатель уезжает, а граница стоит и назад идёт не сразу.
+    clampToContent: true,
   });
   const splitBottom = useSplitResize({
     storageKey: "tech_messages_height",
@@ -140,6 +143,7 @@ export const Container: FC = () => {
     defaultPercent: 30,
     min: 15,
     max: 70,
+    clampToContent: true,
   });
   const split = techBottom ? splitBottom : splitSide;
 

@@ -11,7 +11,7 @@
  * а не «посмотреть ещё раз».
  */
 import { FC, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
@@ -25,9 +25,10 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { createAgent, restartAgent, setAgentDisabled, updateAgent, type OnecAgent } from "src/services/onec/api";
+import { createAgent, fetchErpOrganizations, fetchServers, restartAgent, setAgentDisabled, updateAgent, type OnecAgent } from "src/services/onec/api";
 import EnrollmentsTab from "./EnrollmentsTab";
 import { agentMatches, agentOfflineSummary, type AgentRoleFilter, type AgentStateFilter } from "./agentsView";
+import { withStableIds } from "src/utils/stableRowId";
 import { stateLabel, useOpenAgent } from "./AgentForm";
 import { agentBuildLabel } from "./agentHealth";
 import {
@@ -38,7 +39,10 @@ import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
 	{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
-	{ identifier: "role", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "role", type: "string", width: "150px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
+	// ЗА ЧТО ОТВЕЧАЕТ АГЕНТ: админ-агент — за свой кластер (сервер 1С целиком), бизнес-агент — за базы своей
+	// организации ERP. Это главное различие ролей, и в списке оно должно читаться без открытия карточки.
+	{ identifier: "agentScope", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	// Что сервис знает об агенте (п. 6): ОС, доступна ли 1С, базы бизнес-агента, счётчики команд с запуска службы.
 	{ identifier: "agentOs", type: "string", width: "160px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "agentOnecLabel", type: "string", width: "110px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
@@ -59,6 +63,11 @@ export const AgentsTab: FC = () => {
 	const qc = useQueryClient();
 	const agents = useAgents();
 	const limits = agents.data?.limits;
+	// Имена кластеров и организаций — справочники панели: в списке агентов нужны только подписи.
+	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers, staleTime: 60_000 });
+	const erpOrgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
+	const serverNames = useMemo(() => new Map((servers.data?.items ?? []).map((s) => [s.id, s.name])), [servers.data]);
+	const orgNames = useMemo(() => new Map((erpOrgs.data?.items ?? []).map((o) => [o.uuid, o.name])), [erpOrgs.data]);
 	const quota = {
 		left: limits?.clusterRemaining ?? 0,
 		max: limits?.clusterPerMin ?? 0,
@@ -71,6 +80,8 @@ export const AgentsTab: FC = () => {
 	const [stateFilter, setStateFilter] = useState<AgentStateFilter>("");
 	const [selected, setSelected] = useState<string[]>([]);
 	const [name, setName] = useState("");
+	// Агент кластера заводится без организации: он обслуживает сервер целиком (см. подсказку в окне).
+	const [cluster, setCluster] = useState(false);
 	// Токен живёт только в этом состоянии и только до закрытия окна — на сервере его нет.
 	const [issued, setIssued] = useState<{ token: string; name: string } | null>(null);
 	const openAgent = useOpenAgent();
@@ -78,8 +89,8 @@ export const AgentsTab: FC = () => {
 	const refresh = () => qc.invalidateQueries({ queryKey: ["onec", "agents"] });
 
 	const create = useMutation({
-		mutationFn: () => createAgent(name.trim()),
-		onSuccess: (d) => { setDialog(null); setIssued({ token: d.token, name: d.agent.name || name }); void refresh(); },
+		mutationFn: () => createAgent(name.trim(), cluster),
+		onSuccess: (d) => { setDialog(null); setCluster(false); setIssued({ token: d.token, name: d.agent.name || name }); void refresh(); },
 		onError: (e) => reportError(e, { source: translate("onecTabAgents") }),
 	});
 
@@ -111,17 +122,22 @@ export const AgentsTab: FC = () => {
 	const ableTo = (cap: string) => selectedAgents.filter((a) => a.capabilities.includes(cap));
 	const service = useMutation({
 		mutationFn: async (what: "restart" | "update") => {
-			const targets = ableTo(what === "restart" ? "agent.restart" : "agent.update");
+			// Молчащему агенту команда уйдёт в очередь и умрёт по сроку — и всё это время панель будет её ждать.
+			const targets = ableTo(what === "restart" ? "agent.restart" : "agent.update").filter((a) => a.online && !a.disabled);
 			const results = await Promise.allSettled(targets.map((a) => (what === "restart"
 				? restartAgent(a.id, translate("onecAgentRestartReason"))
 				: updateAgent(a.id))));
-			return { ok: results.filter((r) => r.status === "fulfilled").length, failed: results.filter((r) => r.status === "rejected").length, skipped: selectedAgents.length - targets.length };
+			const failures = results.flatMap((r, i) => (r.status === "rejected"
+				? [`${targets[i].name || targets[i].id.slice(0, 8)}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`]
+				: []));
+			return { ok: results.length - failures.length, failures, skipped: selectedAgents.length - targets.length };
 		},
 		onSuccess: (r) => {
 			setDialog(null);
 			showToast(`${translate("onecAgentsBulkSent")}: ${r.ok}`
-				+ (r.failed ? `, ${translate("onecAgentsBulkFailed")}: ${r.failed}` : "")
-				+ (r.skipped ? `, ${translate("onecAgentsBulkSkipped")}: ${r.skipped}` : ""), r.failed ? "warning" : "success");
+				+ (r.skipped ? `, ${translate("onecAgentsBulkSkipped")}: ${r.skipped}` : ""), r.failures.length ? "warning" : "success");
+			// Причина отказа — сама по себе ответ: «не удалось у двоих» без слов не говорит ничего.
+			for (const text of r.failures.slice(0, 5)) showToast(text, "error");
 			void refresh();
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabAgents") }),
@@ -133,9 +149,14 @@ export const AgentsTab: FC = () => {
 	);
 	const offlineSummary = useMemo(() => agentOfflineSummary(agents.data?.items ?? []), [agents.data]);
 
-	const rowsRaw = useMemo(() => filtered.map((a: OnecAgent, i) => ({
-		id: i + 1, uuid: a.id, agentId: a.id,
-		name: a.name || "—", role: a.role,
+	// Номер строки — из идентификатора агента (utils/stableRowId): таблица не пересчитывает отметки при обновлении
+	// списка, и на порядковых номерах галочка «переезжала» на другого агента (аудит 21.09).
+	const rowsRaw = useMemo(() => withStableIds(filtered.map((a: OnecAgent) => ({
+		uuid: a.id, agentId: a.id,
+		name: a.name || "—", role: a.role === "admin" ? translate("onecRoleAdminFull") : translate("onecRoleBusinessFull"),
+		agentScope: a.role === "admin"
+			? `${translate("onecServer")}: ${(a.serverId && serverNames.get(a.serverId)) || a.serverId?.slice(0, 8) || "—"}`
+			: `${translate("organization")}: ${(a.organizationUuid && orgNames.get(a.organizationUuid)) || a.organizationUuid?.slice(0, 8) || translate("onecAgentNoOrg")}`,
 		// Отключённый агент не «оффлайн»: его исключили намеренно, и это разные вещи.
 		// Три состояния, а не два: «выполняет команду» — не «на связи» (см. stateLabel).
 		onlineLabel: stateLabel(a),
@@ -152,7 +173,7 @@ export const AgentsTab: FC = () => {
 		// перезапуске службы, и за сутки их набирается десяток.
 		instancesCount: (a.instances ?? []).filter((i) => i.live).length,
 		ownerInstance: a.owner?.instanceId || "—",
-	})), [filtered]);
+	})), (r) => r.uuid), [filtered, serverNames, orgNames]);
 
 	// Больше одного процесса под одним токеном — предупреждаем прямо в панели. Симптом
 	// (команда отказывает через раз, при этом «пароль верный») ни на что другое не похож,
@@ -261,6 +282,13 @@ export const AgentsTab: FC = () => {
 					<div className={styles.ModalForm}>
 						<Field name="onec_agent_name" label={translate("name")} value={name} noAutofill
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+						<FieldSelect name="onec_agent_kind" label={translate("onecAgentKind")} value={cluster ? "cluster" : "business"}
+							onChange={(e) => setCluster(e.target.value === "cluster")}
+							options={[
+								{ value: "business", label: translate("onecAgentKindBusiness") },
+								{ value: "cluster", label: translate("onecAgentKindCluster") },
+							]}
+							hint={translate(cluster ? "onecEnrollClusterHint" : "onecEnrollOrgHint")} />
 						<div className={styles.Hint}>{translate("onecAgentCreateHint")}</div>
 					</div>
 				</Modal>

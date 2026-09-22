@@ -130,7 +130,10 @@ export async function startBatch(
 			}
 		}
 		const base = await deps.bases.findByKeyGlobal(key, input.serverId ?? null);
-		const refused = base ? baseRefusal(spec, base) : null;
+		// Базы нет в реестре — так и пишем (аудит 21.09): раньше команда уходила агенту и падала у него, а в задании
+		// стояло «нет агента на связи» — причина, которая никого никуда не ведёт.
+		if (!base) { skipped.push({ baseKey: key, reason: "базы нет в реестре — обновите список из кластера" }); continue; }
+		const refused = baseRefusal(spec, base);
 		if (refused) { skipped.push({ baseKey: key, reason: refused.message }); continue; }
 		const agent = await deps.agents.pickAdminAgent(key, { serverId: input.serverId ?? null, allowedServers: input.allowedServers ?? null });
 		if (!agent || !agentCanRun(agent, spec)) {

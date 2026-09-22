@@ -23,6 +23,7 @@ const erpDb = (superAdmin = true) => ({
 		if (sql.includes("FROM users")) return { rows: [{ uuid: USER, is_super_admin: superAdmin, organization_uuid: "org-1" }], rowCount: 1 };
 		if (sql.includes("FROM access_rights")) return { rows: [{ organization_uuid: "org-1", role: "admin" }], rowCount: 1 };
 		if (sql.includes("count(*) FILTER")) return { rows: [{ full: "1", any: "1" }], rowCount: 1 };
+		if (sql.includes("FROM organizations")) return { rows: [{ uuid: "org-1", name: "ТОО Альфа", legal_name: null, bin: "123456789012" }], rowCount: 1 };
 		return { rows: [], rowCount: 0 };
 	},
 });
@@ -78,8 +79,14 @@ async function harness(opts: {
 	const agents = {
 		pickAdminAgent: async () => admin,
 		listAll: async () => [admin],
-		findById: async (id: string) => (id === "biz"
-			? { id: "biz", role: "business", online: true, disabled: false, organizationUuid: "org-2",
+		create: async (organizationUuid: string, name: string) => { journal.push(`create:${organizationUuid || "-"}:${name}`); return { agent: { id: "new", name, organizationUuid }, token: "bpa_x" }; },
+		rename: async (id: string, name: string) => { journal.push(`rename:${id}:${name}`); return true; },
+		setDisabled: async (id: string, disabled: boolean) => { journal.push(`setDisabled:${id}:${disabled}`); return true; },
+		setOrganization: async (id: string, org: string) => { journal.push(`setOrganization:${id}:${org}`); return true; },
+		findById: async (id: string) => (id === "bizOld"
+			? { id: "bizOld", name: "Бухгалтерия", role: "business", online: false, disabled: true, organizationUuid: "org-2", capabilities: [], limits: { maxBases: null, maxBins: null } }
+			: id === "biz"
+			? { id: "biz", name: "Бухгалтерия", role: "business", online: true, disabled: false, organizationUuid: "org-2",
 				capabilities: ["agent.procs", "agent.cancel", "agent.config", "agent.restart", "agent.update"],
 				limits: { maxBases: 2, maxBins: null } }
 			: admin),
@@ -99,7 +106,21 @@ async function harness(opts: {
 		erp: erpDb(opts.superAdmin ?? true), cfg: { JWT_SECRET, ONEC_COMMAND_TIMEOUT_SECS: 5, RATE_LIMIT_ONEC_CLUSTER_PER_MIN: 1000, ONEC_SERVER_SCOPE: opts.scope ?? "all" },
 		log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 		agents, bases, queue, audit,
-		batches: {}, registry: {}, credentials: { usersByBaseKeys: async () => new Map() }, schedules: {}, agentBases,
+		batches: { ownerOf: async () => ({ organizationUuid: "org-1", userUuid: null }) },
+		registry: { userSummary: async (ids: unknown) => { journal.push(`userSummary:${JSON.stringify(ids)}`); return []; }, extensionSummary: async () => [] },
+		credentials: { usersByBaseKeys: async () => new Map() }, schedules: {}, agentBases,
+		enrollments: {
+			get: async (id: string) => (id === "enr-adm"
+				? { id, code: "ADM-001", state: "PENDING", role: "admin", computer: "SRV-1C", serviceName: "BPAPIAgentAdmin", name: "Кластер" }
+				: id === "enr-live"
+					? { id, code: "BIZ-003", state: "PENDING", role: "business", computer: "BUH-PC-3", serviceName: "BPAPIAgent", name: "Живой" }
+				: id === "enr-again"
+					? { id, code: "BIZ-002", state: "PENDING", role: "business", computer: "BUH-PC-2", serviceName: "BPAPIAgent", name: "Бухгалтерия, новое имя" }
+					: { id, code: "BIZ-001", state: "PENDING", role: "business", computer: "BUH-PC", serviceName: "BPAPIAgent", name: "Бухгалтерия" }),
+			previousAgent: async (computer: string) => (computer === "BUH-PC-2" ? "bizOld" : computer === "BUH-PC-3" ? "biz" : null),
+			approve: async (id: string, d: { organizationUuid: string; agentId: string }) => { journal.push(`approveEnroll:${id}:${d.organizationUuid || "-"}:${d.agentId}`); return true; },
+			list: async () => [],
+		},
 		activation: {
 			get: async (agentId: string, bin: string) => ({ agentId, bin, state: bin === "000000000009" ? "APPROVED" : "PENDING" }),
 			decide: async (agentId: string, bin: string, d: { state: string }) => { journal.push(`decide:${agentId}:${bin}:${d.state}`); return true; },
@@ -117,7 +138,7 @@ async function harness(opts: {
 		});
 		return { status: r.status, body: await r.json() as Record<string, never> };
 	};
-	return { call, journal, enqueued, close: () => srv.close() };
+	return { call, journal, enqueued, url: `http://127.0.0.1:${port}/v1/onec`, token, close: () => srv.close() };
 }
 
 test("«Обновить» без просьбы о публикациях спрашивает только список баз", async () => {
@@ -309,5 +330,72 @@ test("управление службой бизнес-агента: настр�
 	assert.equal(ok.status, 200);
 	assert.deepEqual(h.enqueued.map((c) => c.type), ["AGENT_CONFIG_GET", "AGENT_CONFIG_SET", "AGENT_RESTART", "AGENT_UPDATE"]);
 	assert.equal(h.enqueued[3].payload.restart, true);
+	h.close();
+});
+
+test("агент кластера подключается без организации ERP: он обслуживает весь сервер, а не одну организацию", async () => {
+	const h = await harness();
+	const adm = await h.call("POST", "/enrollments/enr-adm/approve", {});
+	assert.equal(adm.status, 200);
+	assert.ok(h.journal.some((j) => j.startsWith("approveEnroll:enr-adm:-:")), h.journal.join("\n"));
+	assert.ok(h.journal.includes("create:-:Кластер"), "агент заведён без организации");
+
+	// Бизнес-агенту организация по-прежнему обязательна: по ней выбирается исполнитель команд чата.
+	const biz = await h.call("POST", "/enrollments/enr-biz/approve", {});
+	assert.equal(biz.status, 400);
+
+	// И создание вручную: «агент кластера» — без организации.
+	const created = await h.call("POST", "/agents", { name: "Кластер 2", cluster: true });
+	assert.equal(created.status, 201);
+	assert.ok(h.journal.includes("create:-:Кластер 2"));
+	h.close();
+});
+
+test("повторное подключение той же службы приводит прежнего агента в соответствие с решением", async () => {
+	const h = await harness();
+	// Заглушка агента «biz»: отключён, в организации org-2, со старым именем.
+	const r = await h.call("POST", "/enrollments/enr-again/approve", { organizationUuid: "org-1" });
+	assert.equal(r.status, 200);
+	assert.equal((r.body.data as unknown as { created: boolean }).created, false, "агент тот же, а не новый");
+	assert.ok(h.journal.includes("setDisabled:bizOld:false"), "отключённого включаем: его только что одобрили");
+	assert.ok(h.journal.includes("rename:bizOld:Бухгалтерия, новое имя"));
+	assert.ok(h.journal.includes("setOrganization:bizOld:org-1"), "организация из решения, иначе команды чата его не найдут");
+	h.close();
+});
+
+test("аудит 21.09: заявка не забирает токен у работающего агента — по умолчанию заводится новый", async () => {
+	const h = await harness();
+	// «biz» на связи; заявка той же службы (previousAgent → biz) не должна занимать его без явного выбора.
+	const r = await h.call("POST", "/enrollments/enr-live/approve", { organizationUuid: "org-1" });
+	assert.equal(r.status, 200);
+	assert.equal((r.body.data as unknown as { created: boolean }).created, true);
+	assert.ok(h.journal.some((j) => j.startsWith("create:org-1:")), h.journal.join("\n"));
+	h.close();
+});
+
+test("аудит 21.09: хвостовая косая черта больше не обходит проверку прав", async () => {
+	const h = await harness();
+	// Тот же путь без черты — обычный отказ/ответ маршрута; с чертой раньше уходил мимо ОБОИХ гейтов прав.
+	const r = await fetch(`${h.url}/bases/_transition/lock/`, {
+		method: "POST", headers: { authorization: `Bearer ${h.token}`, "content-type": "application/json" }, body: JSON.stringify({ enabled: true }),
+	});
+	assert.equal(r.status, 404, "строгий путь: такого маршрута нет");
+	assert.equal(h.enqueued.length, 0, "команда в кластер не ушла");
+	h.close();
+});
+
+test("аудит 21.09: запрет регламентных заданий — разрушающая операция, просмотру не даётся", async () => {
+	const h = await harness({ superAdmin: false });
+	// erpDb даёт «полный доступ», поэтому проверяем сам список: путь должен считаться разрушающим.
+	const { isDestructive } = await import("../src/onec/access.ts");
+	assert.equal(isDestructive("POST", "/bases/acme/scheduled-jobs"), true);
+	assert.equal(isDestructive("POST", "/bases/acme/scheduled-jobs/"), false, "гейт смотрит на нормализованный путь");
+	h.close();
+});
+
+test("аудит 21.09: сводки пользователей и расширений считаются по выбранному кластеру", async () => {
+	const h = await harness({ servers: [{ id: S1, name: "SRV-A", organizationUuid: "org-1" }, { id: S2, name: "SRV-B", organizationUuid: "org-1" }] });
+	await h.call("GET", `/users?serverId=${S1}`);
+	assert.ok(h.journal.includes(`userSummary:["${S1}"]`), h.journal.join("\n"));
 	h.close();
 });

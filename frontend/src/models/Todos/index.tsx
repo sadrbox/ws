@@ -1,4 +1,4 @@
-import { FC, useMemo, useCallback } from "react";
+import { FC, useMemo, useCallback, useState } from "react";
 import { asText } from "src/utils/asText";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { translate } from "src/i18";
@@ -6,6 +6,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
+import { ONEC_CHAT_SOURCE, isFromOnec, onecSourceLabel, sourceChipLabel, sourceCellText } from "./source";
 import FilesPanel from "src/components/FilesPanel";
 import { FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
@@ -13,7 +14,6 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import ObjectLink from "src/components/ObjectLink";
 import ObjectMarks from "src/components/ObjectMarks";
 import { refFromRestore } from "src/utils/objectRef";
-import { getByEndpoint } from "src/registry/modelRegistry";
 import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -32,14 +32,6 @@ const MODEL_ENDPOINT = "todos";
  * («Реализация ТМЗ и услуг») + ссылка на запись («№ 12 - 01.02.2026»), вместо
  * сырого кода типа («sales»/«Sale»). Если ссылки нет — только имя типа.
  */
-function sourceChipLabel(sourceType: string, sourceLabel: string): string {
-  const typeName = getByEndpoint(sourceType)?.label || translate(sourceType) || sourceType;
-  // sourceLabel мог оказаться самим кодом типа (старые данные) — тогда игнорируем.
-  const ref = sourceLabel && sourceLabel !== sourceType ? sourceLabel : "";
-  return ref ? `${typeName} ${ref}` : typeName;
-}
-
-
 interface TFields {
   id?: number; uuid?: string;
   description: string; status: string;
@@ -176,6 +168,16 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                     клик по чипу открывает сам объект. Подпись = «Тип + ссылка»
                     (напр. «Реализация ТМЗ и услуг № 12 - 01.02.2026»), а не сырой
                     код типа: имя типа берём из реестра моделей. */}
+                {/* Задача из чата в 1С: объекта-источника нет, поэтому не чип-ссылка, а подпись
+                    с базой — по ней видно, откуда запись и почему автор незнакомый. */}
+                {isFromOnec(form.fields.sourceType) && (
+                  <Group>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12, color: "var(--sv-color51, #666)" }}>{translate("source")}:</span>
+                      <span>{onecSourceLabel(form.fields.sourceLabel)}</span>
+                    </div>
+                  </Group>
+                )}
                 {form.fields.sourceUuid && (
                   <Group>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -223,11 +225,34 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
 };
 TodosForm.displayName = "TodosForm";
 
-const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => (
-  <ModelList endpoint={MODEL_ENDPOINT} listName="TodosList" columnsJson={columnsJson} FormComponent={TodosForm}
-    getLabel={(d) => d?.description ? ((d.description as string).slice(0, 50) + ((d.description as string).length > 50 ? "..." : "")) : "?"}
-    variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField} extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }} />
-);
+const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => {
+  /*
+   * ФИЛЬТР ПО ИСТОЧНИКУ (ПН2). Задач из 1С со временем станет больше, чем заведённых руками, и
+   * «показать только их» — первое, что спросят. Отбор идёт на сервере, как и весь список: страница
+   * в тысячу задач не должна приезжать в браузер ради одного признака.
+   *
+   * Обратного отбора («только из панели») здесь нет намеренно: список задач принимает операторы
+   * contains/equals/gte/lte (backend/api/router/todos.js), «не равно» среди них нет, а городить
+   * отбор на клиенте — значит врать о постраничности.
+   */
+  const [source, setSource] = useState("");
+  return (
+    <ModelList endpoint={MODEL_ENDPOINT} listName="TodosList" columnsJson={columnsJson} FormComponent={TodosForm}
+      getLabel={(d) => d?.description ? ((d.description as string).slice(0, 50) + ((d.description as string).length > 50 ? "..." : "")) : "?"}
+      variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
+      extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }}
+      extraFilter={source ? { sourceType: source } : undefined}
+      renderCell={(row, col) => (col.identifier === "sourceLabel" ? sourceCellText(row) : undefined)}
+      extraButtons={(
+        <FieldSelect name="todos_source" label={translate("source")} size="sm" value={source}
+          onChange={(e) => setSource(e.target.value)}
+          options={[
+            { value: "", label: translate("todoSourceAll") },
+            { value: ONEC_CHAT_SOURCE, label: translate("todoFromOnec") },
+          ]} />
+      )} />
+  );
+};
 TodosList.displayName = "TodosList";
 
 export { TodosList, TodosForm };

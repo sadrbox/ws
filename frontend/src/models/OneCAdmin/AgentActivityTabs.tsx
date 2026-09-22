@@ -4,7 +4,7 @@
  * СВОДКА БИЗНЕС-АГЕНТА — по кнопке, как «Состояние сервера» у агента кластера: это команда агенту, и слать её на
  * каждое открытие карточки незачем. Команды и журнал — чтения базы сервиса, они грузятся сами.
  */
-import { FC, useState } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
@@ -14,7 +14,8 @@ import { getFormatDate } from "src/utils/datetime";
 import { cancelCommands, fetchAgentAudit, fetchAgentCommands, fetchBusinessHealth } from "src/services/onec/api";
 import { withOp } from "./progress";
 import { QueryError } from "./shared";
-import { auditEventLabel, auditDetailsText, commandStateLabel, commandStateTone, healthScalars } from "./agentActivityView";
+import { auditEventLabel, auditDetailsText, commandStateLabel, commandStateTone, healthBaseState, healthScalars } from "./agentActivityView";
+import { formatDuration } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";
 
 const TONE_CLASS = { wait: styles.ReqWait, ok: styles.ReqOk, bad: styles.ReqBad, off: styles.ReqOff };
@@ -37,6 +38,16 @@ export const BusinessHealthTab: FC<{ agentId: string; agentName: string }> = ({ 
 				</Button>
 			</div>
 			<QueryError error={health.error} noticeKey={`agent-health-${agentId}`} source={translate("onecAgentHealth")} />
+			{/* Сама служба — строкой над таблицей: сборка, сколько работает, какой экземпляр отвечает (СП2). */}
+			{h?.agent && (
+				<div className={styles.Hint}>
+					{[h.agent.version || h.agent.build, h.agent.os,
+						h.agent.uptimeSecs != null ? `${translate("onecAgentUptime")}: ${formatDuration(h.agent.uptimeSecs)}` : "",
+						h.agent.startedAt ? `${translate("onecAgentStartedAt")}: ${getFormatDate(h.agent.startedAt)}` : "",
+						h.agent.instanceId ? `${translate("onecAgentInstance")}: ${h.agent.instanceId}` : "",
+					].filter(Boolean).join(" · ")}
+				</div>
+			)}
 			{h && (
 				<table className={`${styles.StatsTable} ${styles.ReqTable}`}>
 					<tbody>
@@ -60,17 +71,25 @@ export const BusinessHealthTab: FC<{ agentId: string; agentName: string }> = ({ 
 							<th>{translate("status")}</th>
 							<th>{translate("onecTransport")}</th>
 							<th>{translate("onecExtVersion")}</th>
+							{/* Недоступная база без времени выглядит одинаково и через минуту молчания, и через неделю. */}
+							<th>{translate("onecHealthLastOk")}</th>
+							<th>{translate("onecHealthLastError")}</th>
 						</tr>
 					</thead>
 					<tbody>
 						{bases.map((b, i) => (
-							<tr key={`${b.key ?? ""}-${i}`}>
-								<td className={styles.Mono}>{b.key ?? "—"}</td>
+							<tr key={`${b.baseKey ?? b.key ?? ""}-${i}`}>
+								<td className={styles.Mono}>{b.baseKey ?? b.key ?? "—"}</td>
 								<td className={b.overLimit || b.status === "OVER_LIMIT" ? styles.OverLimit : undefined}>
-									{b.status ?? "—"}{b.error ? ` · ${b.error}` : ""}
+									{healthBaseState(b)}{b.error ? ` · ${b.error}` : ""}
 								</td>
 								<td>{b.transport ? b.transport.toUpperCase() : "—"}</td>
 								<td>{b.extVersion ?? "—"}</td>
+								<td>{b.lastOkAt ? getFormatDate(b.lastOkAt) : "—"}</td>
+								<td className={styles.Hint}>
+									{b.lastError?.at ? getFormatDate(b.lastError.at) : ""}
+									{b.lastError?.message ? ` ${b.lastError.message}` : (b.lastError?.at ? "" : "—")}
+								</td>
 							</tr>
 						))}
 					</tbody>
@@ -87,10 +106,21 @@ export const BusinessHealthTab: FC<{ agentId: string; agentName: string }> = ({ 
 export const AgentCommandsTab: FC<{ agentId: string; canManage: boolean }> = ({ agentId, canManage }) => {
 	const qc = useQueryClient();
 	const queryKey = ["onec", "agent-commands", agentId];
-	const list = useQuery({ queryKey, queryFn: () => fetchAgentCommands(agentId, 50), enabled: !!agentId, refetchInterval: 10_000 });
-	const items = list.data?.items ?? [];
+	/*
+	 * БЕЗ ФОНОВОГО ОПРОСА. Вкладки карточки монтируются все сразу (components/Tabs), и опрос шёл даже у вкладки,
+	 * которую не открывали. Список читается при открытии карточки и по кнопке «Обновить» (аудит 21.09).
+	 */
+	const list = useQuery({ queryKey, queryFn: () => fetchAgentCommands(agentId, 50), enabled: !!agentId });
+	const items = useMemo(() => list.data?.items ?? [], [list.data]);
 	const [picked, setPicked] = useState<string[]>([]);
-	const queued = items.filter((c) => c.state === "queued");
+	const queued = useMemo(() => items.filter((c) => c.state === "queued"), [items]);
+	// Команда ушла из очереди — отметка с ней: иначе кнопка обещает снять то, чего уже нет (аудит 21.09).
+	useEffect(() => {
+		setPicked((p) => {
+			const live = p.filter((id) => queued.some((c) => c.id === id));
+			return live.length === p.length ? p : live;
+		});
+	}, [queued]);
 	const cancel = useMutation({
 		mutationFn: () => cancelCommands(picked),
 		onSuccess: (r) => {

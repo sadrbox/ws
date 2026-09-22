@@ -34,7 +34,7 @@ import type { AgentRole, AgentView } from "../agents/service.ts";
  * командами. Способность объявляет сборка 13.09 14:58 и новее.
  */
 export type AgentCapability = "cluster.admin" | "ib.admin" | "agent.procs" | "agent.cancel" | "agent.config"
-	| "agent.restart" | "agent.update";
+	| "agent.restart" | "agent.update" | "agent.log";
 
 /**
  * КТО ИСПОЛНЯЕТ КОМАНДУ. `admin` — кластер и базы через rac/COM, `business` — внутрибазовые команды расширения,
@@ -64,6 +64,11 @@ export type AdminCommandSpec = {
 	type: string;
 	operation: OperationClass;
 	capability: AgentCapability;
+	/**
+	 * Запасная способность: сборки до 2026-09-20 объявляли одну `agent.procs` на процессы и журнал, а новые
+	 * называют журнал отдельно (`agent.log`). Годится любая из двух — иначе обновлённый агент терял бы журнал.
+	 */
+	capabilityAlt?: AgentCapability;
 	role: CommandRole;
 	/** Нужна ли конкретная база: для неё выбирается агент того сервера, где она живёт. */
 	requiresBase: boolean;
@@ -301,7 +306,8 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		type: "AGENT_LOG_TAIL",
 		title: "Журнал агента",
 		operation: "READ",
-		capability: "agent.procs",
+		capability: "agent.log",
+		capabilityAlt: "agent.procs",
 		role: "any",
 		requiresBase: false,
 		schema: z.object({
@@ -653,9 +659,14 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 					enabled: z.boolean().optional(),
 				}).strict()).max(500).optional(),
 				ibParallel: z.number().int().min(1).max(32).optional(),
-				commandTimeoutSecs: z.number().int().min(10).max(3600).optional(),
-				longCommandTimeoutSecs: z.number().int().min(60).max(86_400).optional(),
-				logLevel: z.enum(["debug", "info", "warn", "error"]).optional(),
+				/*
+				 * НОЛЬ — «БЕЗ ПРЕДЕЛА», и агент его принимает (СП3). Сервис его отвергал, и правка одного лишь уровня
+				 * журнала у агента с нулём в пределе отвечала отказом по полю, которого человек не трогал. Верхние
+				 * границы оставлены как страховка от опечатки.
+				 */
+				commandTimeoutSecs: z.number().int().refine((v) => v === 0 || (v >= 10 && v <= 3600), "commandTimeoutSecs: 0 (без предела) или 10…3600").optional(),
+				longCommandTimeoutSecs: z.number().int().refine((v) => v === 0 || (v >= 60 && v <= 86_400), "longCommandTimeoutSecs: 0 (без предела) или 60…86400").optional(),
+				logLevel: z.enum(["trace", "debug", "info", "warn", "error"]).optional(),
 			}).strict(),
 		}).strict(),
 	},
@@ -766,7 +777,9 @@ export function isAdminCommand(type: string): boolean {
  * права учётной записи ОС, под которой служба работает.
  */
 export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spec: AdminCommandSpec): boolean {
-	if ((spec.role !== "any" && agent.role !== spec.role) || !agent.capabilities.includes(spec.capability)) return false;
+	const hasCapability = agent.capabilities.includes(spec.capability)
+		|| (!!spec.capabilityAlt && agent.capabilities.includes(spec.capabilityAlt));
+	if ((spec.role !== "any" && agent.role !== spec.role) || !hasCapability) return false;
 
 	// Агент перечисляет не только способности (`cluster.admin`), но и КОНКРЕТНЫЕ типы
 	// команд, которые умеет. Если такой перечень есть — проверяем по нему: иначе команда,

@@ -107,6 +107,8 @@ import employeeHistoriesRouter from "./api/router/employeehistories.js";
 import accessRightsRouter from "./api/router/accessrights.js";
 import accessPermissionsRouter from "./api/router/accesspermissions.js";
 import { publicRouter as esfLicensePublicRouter, adminRouter as esfLicenseAdminRouter } from "./api/router/esfLicense.js";
+import bpaiRouter from "./api/router/bpai.js";
+import { bpaiAuth } from "./utils/bpaiAuth.js";
 import userDefaultsRouter from "./api/router/userdefaults.js";
 import payrollCalculationsRouter from "./api/router/payrollcalculations.js";
 import payrollPaymentsRouter from "./api/router/payrollpayments.js";
@@ -211,6 +213,9 @@ app.use(
 			"Pragma",
 			"X-Force-Overwrite",
 			"X-Organization-ID",
+			// Выбранный в панели кластер 1С: прокси `onec-bases` передаёт его сервису (21.09). Без разрешения
+			// заголовка браузер отменяет запрос на предварительной проверке, и список баз не грузится вовсе.
+			"X-Onec-Server",
 		],
 	}),
 );
@@ -234,6 +239,9 @@ app.options(
 			"Pragma",
 			"X-Force-Overwrite",
 			"X-Organization-ID",
+			// Выбранный в панели кластер 1С: прокси `onec-bases` передаёт его сервису (21.09). Без разрешения
+			// заголовка браузер отменяет запрос на предварительной проверке, и список баз не грузится вовсе.
+			"X-Onec-Server",
 		],
 	}),
 );
@@ -339,6 +347,12 @@ app.use("/api/v1", chatStreamRouter);
 // их дёргает 1С-расширение, которое не проходит обычный логин. Свой rate-limit внутри.
 // Отдельный префикс /api1 не попадает под authMiddleware (тот на /api/v1).
 app.use("/api1/esf-license", esfLicensePublicRouter);
+
+// Служебный канал BuhProf AI (/bpai/*): задачи и заметки организации для чата внутри
+// 1С. Ходит AI-сервис ключом X-Api-Key — JWT пользователя ERP у него нет, пользователь
+// сидит в 1С. Организацию называет БИН, автора — имя пользователя 1С (bpaiActor.js);
+// поэтому tenant-middleware здесь не нужен, изоляция сделана в самих маршрутах.
+app.use("/bpai", bpaiAuth, bpaiRouter);
 
 // Документация API (T2.1): /api/docs (Swagger UI) + /api/v1/openapi.json.
 // ДО authMiddleware — публичная дока (перечень маршрутов, без данных).

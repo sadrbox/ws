@@ -250,6 +250,9 @@ const App: React.FC = () => {
       { id: useUID(), isActive: false, title: translate("accounting"), component: <NavList label="Accounting" /> },
       { id: useUID(), isActive: false, title: translate("hr"), component: <NavList label="HR" /> },
       { id: useUID(), isActive: false, title: translate("crm"), component: <NavList label="CRM" /> },
+      // Администрирование: серверы 1С (кластеры) и службы-агенты. Отдельный раздел — это про наше
+      // хозяйство, а не про учёт, и искать его среди документов и справочников неоткуда.
+      { id: useUID(), isActive: false, title: translate("administration"), component: <NavList label="Administration" /> },
       { id: useUID(), isActive: false, title: translate("settings"), component: <NavList label="Settings" /> },
     ]
 

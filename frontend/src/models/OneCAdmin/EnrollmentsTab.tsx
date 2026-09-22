@@ -140,13 +140,19 @@ export const EnrollmentsTab: FC = () => {
 };
 
 const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: () => void; onDone: () => void }> = ({ enr, previousName, onClose, onDone }) => {
+	/*
+	 * ОРГАНИЗАЦИЯ — ТОЛЬКО БИЗНЕС-АГЕНТУ. Он ходит в базы одной организации ERP: по ней выбирается исполнитель
+	 * команд чата и считается лимит тарифа. Агент кластера обслуживает весь сервер — все базы всех клиентов, и
+	 * организация ему ни на что не влияет: спрашивать её значило бы требовать выбор «для галочки».
+	 */
+	const needsOrg = enr.role !== "admin";
 	const [organizationUuid, setOrganizationUuid] = useState("");
 	const [name, setName] = useState(enr.name);
 	const [reuse, setReuse] = useState(!!enr.previousAgentId);
 	const orgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
 	const approve = useMutation({
 		mutationFn: () => approveEnrollment(enr.id, {
-			organizationUuid, name: name.trim() || undefined,
+			...(needsOrg ? { organizationUuid } : {}), name: name.trim() || undefined,
 			// Новый агент вместо прежнего — явно: сервис иначе отдаст той же службе её прежнего агента.
 			...(enr.previousAgentId && !reuse ? { agentId: null } : {}),
 		}),
@@ -157,12 +163,17 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 		onError: (e) => reportError(e, { source: translate("onecEnrollments") }),
 	});
 	return (
-		<Modal title={`${translate("onecReqApprove")}: ${enr.code}`} onClose={onClose} onApply={() => { if (organizationUuid && !approve.isPending) approve.mutate(); }}>
+		<Modal title={`${translate("onecReqApprove")}: ${enr.code}`} onClose={onClose}
+			onApply={() => { if ((!needsOrg || organizationUuid) && !approve.isPending) approve.mutate(); }}>
 			<div className={styles.ModalForm}>
 				<div>{enr.computer} · {enr.serviceName} · {enr.role === "admin" ? translate("onecRoleAdmin") : translate("onecRoleBusiness")}</div>
-				<FieldSelect name="enr_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}
-					onChange={(e) => setOrganizationUuid(e.target.value)}
-					options={[{ value: "", label: "—" }, ...(orgs.data?.items ?? []).map((o) => ({ value: o.uuid, label: `${o.name}${o.bin ? ` (${o.bin})` : ""}` }))]} />
+				{needsOrg
+					? (
+						<FieldSelect name="enr_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}
+							onChange={(e) => setOrganizationUuid(e.target.value)} hint={translate("onecEnrollOrgHint")}
+							options={[{ value: "", label: "—" }, ...(orgs.data?.items ?? []).map((o) => ({ value: o.uuid, label: `${o.name}${o.bin ? ` (${o.bin})` : ""}` }))]} />
+					)
+					: <div className={styles.Hint}>{translate("onecEnrollClusterHint")}</div>}
 				<Field name="enr_name" label={translate("name")} width={FIELD_WIDTH.lg} value={name}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 				{enr.previousAgentId && (

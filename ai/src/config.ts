@@ -19,6 +19,14 @@ const schema = z.object({
 	OPENAI_BASE_URL: z.string().default(""),
 	LLM_MODEL: z.string().default("claude-opus-5"),
 	AGENT_ADMIN_KEY: z.string().min(16, "AGENT_ADMIN_KEY слишком короткий"),
+	/**
+	 * Служебный канал ERP (/bpai): задачи и заметки организации для чата внутри 1С. Пустой ключ —
+	 * канал выключен: чат работает как прежде, а задачи и заметки недоступны с внятным отказом,
+	 * а не с пятисоткой. Ключ тот же, что BPAI_API_KEY в backend/.env.
+	 */
+	ERP_API_URL: z.string().default("http://127.0.0.1:5000"),
+	ERP_API_KEY: z.string().default(""),
+	ERP_API_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
 	PUBLIC_URL: z.string().url().default("http://localhost:3100"),
 	// Origins браузерных клиентов (ERP-фронт), через запятую. Агентам CORS не нужен.
 	ALLOWED_ORIGINS: z.string().default("https://aleppo.kz,http://192.168.1.112:5173,http://localhost:5173,http://tauri.localhost")
@@ -125,6 +133,23 @@ const schema = z.object({
 	// у сотни баз один кластер, и три администратора с открытой панелью сеансов дают тройную
 	// нагрузку на rac. Локальное чтение реестра баз сюда не входит — оно не трогает кластер.
 	RATE_LIMIT_ONEC_CLUSTER_PER_MIN: z.coerce.number().int().min(0).max(600).default(60),
+	// ── Канал «расширение 1С ↔ сервис» (TASK_SERVICE_ONEC_CHAT_CHANNEL_2026-09-21) ──
+	// Через сколько дней токен базы меняется сам. 0 — только по кнопке «Сменить токен» в панели.
+	// Смену получает лишь расширение, умеющее её сохранить (ONEC_EXT_ROTATION_MIN), — остальные не трогаем.
+	BASE_TOKEN_ROTATE_DAYS: z.coerce.number().int().min(0).max(3650).default(90),
+	// Сколько прежний токен принимается после смены: расширение сохраняет новый не мгновенно.
+	BASE_TOKEN_OVERLAP_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+	// Версия расширения, с которой оно принимает новый токен в ответе хода.
+	ONEC_EXT_ROTATION_MIN: z.string().default("1.5.0"),
+	// Версия расширения, ниже которой канал отвечает EXT_TOO_OLD. Пусто — не проверяем.
+	ONEC_EXT_MIN_VERSION: z.string().default(""),
+	// Сколько помнить ключ хода (Idempotency-Key): повтор в пределах срока получает тот же ответ.
+	ONEC_TURN_KEY_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+	// Адрес панели BuhProf для ссылок на задачи, которые уходят в 1С («https://aleppo.kz»).
+	// Пусто — ссылок нет вовсе: лучше не давать ссылку, чем давать неоткрывающуюся.
+	PUBLIC_PANEL_URL: z.string().default(""),
+	// Изменяющие вызовы задач и заметок на пару «база + пользователь» в минуту. 0 — без лимита.
+	RATE_LIMIT_TASKS_WRITE_PER_MIN: z.coerce.number().int().min(0).max(600).default(20),
 });
 
 export type Config = z.infer<typeof schema>;

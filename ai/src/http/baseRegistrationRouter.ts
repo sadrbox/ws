@@ -57,7 +57,12 @@ export function baseRegistrationRouter(deps: {
 	const byIp = rateLimit({ max: perHour, windowMs: hour, key: (req: Request) => `reg-ip:${req.ip ?? "?"}`, message: "Слишком много заявок с этого адреса — повторите через час" });
 	const byBase = rateLimit({
 		max: perHour, windowMs: hour,
-		key: (req: Request) => `reg-base:${String((req.body as { base?: { id?: unknown } } | undefined)?.base?.id ?? "?")}`,
+		// Тело читается до схемы: чужой формат не должен сваливать все заявки в одно ведро «?».
+		key: (req: Request) => {
+			const raw = req.body as { base?: { id?: unknown } } | undefined;
+			const id = raw && typeof raw === "object" && raw.base && typeof raw.base === "object" ? raw.base.id : null;
+			return `reg-base:${typeof id === "string" && id.trim() ? id.trim() : `ip:${req.ip ?? "?"}`}`;
+		},
 		message: "Слишком много заявок от этой базы — повторите через час",
 	});
 
@@ -113,8 +118,10 @@ export function baseRegistrationRouter(deps: {
 	async function deliverToken(row: RegistrationRow): Promise<string | null> {
 		if (row.tokenDeliveredAt || !row.baseId || !row.organizationUuid) return null;
 		if (!(await registrations.claimDelivery(row.id))) return null;
+		let issued: { id: string; token: string } | null = null;
 		try {
 			const t = await tokens.issue({ baseId: row.baseId, organizationUuid: row.organizationUuid, createdBy: `заявка ${row.code} (одобрил ${row.decidedBy ?? "?"})` });
+			issued = t;
 			await registrations.setToken(row.id, t.id);
 			const previous = await registrations.previousTokens(row.onecBaseId, row.id);
 			for (const id of previous) await tokens.revoke(id, `новая заявка ${row.code}`);
@@ -124,6 +131,11 @@ export function baseRegistrationRouter(deps: {
 			});
 			return t.token;
 		} catch (e) {
+			/*
+			 * ВЫПУЩЕННЫЙ, НО НЕ ЗАПИСАННЫЙ ТОКЕН ОТЗЫВАЕМ (аудит 21.09). Иначе следующий опрос выпускал второй, а
+			 * первый оставался действующим и ничьим: в заявке его нет, и отозвать его было бы нечем.
+			 */
+			if (issued) await tokens.revoke(issued.id, `сбой выдачи по заявке ${row.code}`).catch(() => {});
 			await registrations.releaseDelivery(row.id);
 			throw e;
 		}

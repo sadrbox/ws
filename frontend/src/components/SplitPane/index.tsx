@@ -36,6 +36,20 @@ export interface UseSplitResizeOptions {
   /** Границы, % — обе области обязаны оставаться видимыми. */
   min?: number;
   max?: number;
+  /**
+   * Считаться с тем, сколько места область СМОГЛА занять.
+   *
+   * Проценты — доля контейнера, но у соседней области бывает собственный минимум
+   * (`min-width: min-content` у пейнов), и тогда запрошенная доля недостижима: вёрстка
+   * подрезает панель, а хук продолжает думать, что она шире. Указатель уходит дальше,
+   * а граница стоит — и на обратном ходе панель не двигается, пока процент не упадёт
+   * до реального предела: разделитель выглядит залипшим.
+   *
+   * Включено — предел вычисляется из разметки: как только панель не добрала
+   * запрошенного, выше добранного не поднимаемся. Выключено (по умолчанию) — прежнее
+   * поведение для мест, где у соседа минимума нет.
+   */
+  clampToContent?: boolean;
 }
 
 export interface SplitResizeApi {
@@ -57,6 +71,7 @@ export function useSplitResize({
   defaultPercent,
   min = 15,
   max = 70,
+  clampToContent = false,
 }: UseSplitResizeOptions): SplitResizeApi {
   const [percent, setPercent] = useState<number>(() => {
     const v = Number(localStorage.getItem(storageKey));
@@ -67,6 +82,36 @@ export function useSplitResize({
   // (без зависимости startResize от percent).
   const percentRef = useRef(percent);
   percentRef.current = percent;
+
+  /**
+   * Привести запрошенную долю к той, что панель реально заняла. ТОЛЬКО ПО ОТПУСКАНИЮ.
+   *
+   * Панель — крайний элемент контейнера со стороны `side`: так стоят обе области во всех
+   * местах приложения (пейны ↔ сообщения, список ↔ предпросмотр, фильтры ↔ отчёт).
+   *
+   * ПОЧЕМУ НЕ ВО ВРЕМЯ ПЕРЕТАСКИВАНИЯ. Измерение, поданное обратно в состояние на каждом
+   * движении, замыкает круг: доля → разметка → измерение → доля. Пока предел неподвижен,
+   * круг сходится, но минимум соседа сам зависит от отданной ему ширины (таблица
+   * переносит тулбар, появляется полоса прокрутки) — и панель начинала прыгать между двумя
+   * значениями на каждом кадре. Поэтому во время движения доля идёт за указателем и ничем,
+   * кроме min/max, не ограничена: за край не пустит вёрстка (`flex-shrink` у панели), а
+   * согласуем записанное с действительным один раз, когда движение закончилось.
+   */
+  const settleToContent = useCallback(() => {
+    if (!clampToContent) return;
+    const vertical = side === "top" || side === "bottom";
+    const box = containerRef.current?.getBoundingClientRect();
+    const size = vertical ? box?.height : box?.width;
+    const panel = side === "right" || side === "bottom"
+      ? containerRef.current?.lastElementChild
+      : containerRef.current?.firstElementChild;
+    if (!size || !(panel instanceof HTMLElement)) return;
+    const rect = panel.getBoundingClientRect();
+    const got = ((vertical ? rect.height : rect.width) / size) * 100;
+    // Меньше запрошенного — значит упёрлись в соседа: запоминаем достижимое, иначе
+    // следующее перетаскивание начнётся с доли, которой на экране никогда не было.
+    setPercent((p) => (got < p - 0.5 ? Math.max(min, got) : p));
+  }, [clampToContent, side, min]);
 
   const startResize = useCallback(
     (e: ReactPointerEvent) => {
@@ -93,6 +138,8 @@ export function useSplitResize({
         window.removeEventListener("pointerup", up);
         document.body.style.userSelect = "";
         document.body.style.cursor = "";
+        // После кадра: последнее движение к этому моменту ещё не разложено в разметку.
+        requestAnimationFrame(settleToContent);
       };
       // Пока тянем — гасим выделение текста и держим курсор col-resize,
       // иначе он мигает при уходе указателя с узкой полоски разделителя.
@@ -101,15 +148,19 @@ export function useSplitResize({
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
     },
-    [side, min, max],
+    [side, min, max, settleToContent],
   );
 
   const reset = useCallback(() => setPercent(defaultPercent), [defaultPercent]);
 
   // Клавиатурный сдвиг живёт здесь, а не в разделителе: границы и персист — забота хука.
   const nudge = useCallback(
-    (delta: number) => setPercent((p) => Math.min(max, Math.max(min, p + delta))),
-    [min, max],
+    (delta: number) => {
+      setPercent((p) => Math.min(max, Math.max(min, p + delta)));
+      // Шаг с клавиатуры — то же движение, только дискретное: согласуем после кадра.
+      requestAnimationFrame(settleToContent);
+    },
+    [min, max, settleToContent],
   );
 
   useEffect(() => {

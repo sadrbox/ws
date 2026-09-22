@@ -139,6 +139,23 @@ export type WorkflowDeps = {
 	files: FileStore;
 	/** БИН организации ERP — по нему выбирается база многобазового агента (СВ3); нет — база только по диалогу. */
 	orgBin?: (organizationUuid: string) => Promise<string | null>;
+	/**
+	 * Инструменты, которые исполняет сам сервис: задачи и заметки организации в ERP
+	 * (план docs/PLAN_1C_TASKS_NOTES_2026-09-22.md). null — канал не настроен, и модель их не видит.
+	 */
+	serverTools?: ServerToolRunner | null;
+};
+
+/**
+ * Исполнитель серверных инструментов. Он получает уже проверенный payload и отвечает тем же, чем
+ * ответила бы 1С: данными или отказом с кодом и текстом для человека.
+ */
+export type ServerToolRunner = {
+	/** Доступен ли инструмент этому пользователю: организация хода известна и канал настроен. */
+	available: (user: ChatUser) => boolean;
+	run: (spec: ToolSpec, payload: Record<string, unknown>, user: ChatUser) => Promise<Outcome>;
+	/** Короткий контекст организации для промпта (задачи и заметки); null — нечего показать. */
+	summary?: (user: ChatUser) => Promise<string | null>;
 };
 
 // Границу слова  здесь использовать нельзя: в JS она знает только латиницу, и «да» не
@@ -275,14 +292,36 @@ export class ChatWorkflow {
 		let usage: ChatReply["usage"];
 
 		const client = isClient(user);
-		for (let round = client ? (conv.context.rounds ?? 0) : 0; round < this.d.maxToolRounds; round++) {
+		const startRound = client ? (conv.context.rounds ?? 0) : 0;
+		/*
+		 * Задачи и заметки организации — контекстом хода: спросили «что у нас по этому клиенту» —
+		 * ответ должен учитывать их, не дожидаясь отдельного вызова инструмента. Один раз за ход:
+		 * внутри цикла раундов список не меняется, а запрос к ERP стоит времени.
+		 *
+		 * СВ6. ПРОДОЛЖЕНИЕ ЦИКЛА `TOOL_CALLS` — НЕ НОВЫЙ ХОД. Форма 1С приносит результаты вызовов, и
+		 * модель продолжает начатое: сводка уже лежит в истории этого хода, а второй её экземпляр стоит
+		 * токенов на каждом круге и запроса к ERP на ровном месте. Считаем по раундам: круг не первый —
+		 * сводку не подмешиваем.
+		 */
+		const serverRunner = this.d.serverTools;
+		const systemExtra = startRound === 0 && serverRunner?.summary && serverRunner.available(user)
+			? (await serverRunner.summary(user).catch(() => null)) ?? undefined
+			: undefined;
+
+		for (let round = startRound; round < this.d.maxToolRounds; round++) {
 			if (client) conv.context.rounds = round + 1;
 			const history = await this.history(conv.id);
 			let res;
 			try {
 				// 16k: вызов инструмента со списком документов или длинный отчёт по выписке не должны
 				// обрезаться по лимиту — обрезанный JSON инструмента превращается в пустой вызов.
-				res = await this.d.llm.chat({ system: SYSTEM_PROMPT, messages: history, tools: toolDefinitions(), cacheable: true, maxTokens: 16_000 });
+				res = await this.d.llm.chat({
+					system: SYSTEM_PROMPT, messages: history,
+					// Задачи и заметки — только там, где они доступны: иначе модель предлагала бы то,
+					// что в этом ходе всё равно откажет.
+					tools: toolDefinitions({ serverTools: !!serverRunner?.available(user) }),
+					cacheable: true, systemExtra, maxTokens: 16_000,
+				});
 			} catch (e) {
 				const err = e instanceof LLMError ? e : new LLMError("LLM_ERROR", String(e));
 				this.d.log.error({ err, conversationId: conv.id }, "ошибка модели");
@@ -415,6 +454,13 @@ export class ChatWorkflow {
 				conv.context.client = null;
 				return this.askConfirmation(conv, user, spec, built.payload, call.id, cyc.results, lead, carry, usage);
 			}
+			// Задачи и заметки форме не отдаём: они в ERP, а не в 1С — исполняем здесь и кладём
+			// результат в тот же цикл, каким идут ответы формы.
+			if (spec.runsOnServer) {
+				const out = await this.runServer(conv, user, spec, built.payload, call.id);
+				cyc.results.push(out.result);
+				continue;
+			}
 			const prep = await this.preparePayload(user, spec, built.payload, call.id);
 			if ("error" in prep) {
 				cyc.results.push(prep.error);
@@ -450,6 +496,13 @@ export class ChatWorkflow {
 		const spec = TOOLS_BY_NAME.get(p.tool)!;
 		await this.audit(user, { event: "chat.confirmed", conversationId: conv.id, userUuid: user.uuid, requestId: p.requestId, details: { tool: p.tool } });
 		conv.context.pending = null;
+		// Подтверждённые задачи и заметки исполняет сервис — одинаково в обоих каналах.
+		if (spec.runsOnServer) {
+			const out = await this.runServer(conv, user, spec, p.payload, p.toolCallId);
+			await this.appendMessage(conv.id, { role: "user", toolResults: [...p.priorResults, out.result] });
+			if (isClient(user)) conv.context.rounds = 0;
+			return this.runModel(conv, user);
+		}
 		if (isClient(user)) {
 			// Подтверждённый вызов уходит клиенту с тем requestId, что был выдан при карточке: повтор — тот же.
 			conv.context.rounds = 0;
@@ -476,9 +529,39 @@ export class ChatWorkflow {
 		return { conversationId: conv.id, state: "COMPLETED", text: `Отменено. ${what}` };
 	}
 
+	// ── исполнение в самом сервисе ────────────────────────────────────────
+
+	/**
+	 * Инструмент, который исполняет сервис: задачи и заметки организации в ERP. В 1С ничего не
+	 * уходит, поэтому ни агента, ни базы, ни requestId здесь нет — повтор безопасен тем, что
+	 * изменяющий вызов проходит через карточку подтверждения.
+	 */
+	private async runServer(conv: Conversation, user: ChatUser, spec: ToolSpec, payload: Record<string, unknown>, callId: string): Promise<{ result: ToolResult; attachment?: FileRef }> {
+		const runner = this.d.serverTools;
+		if (!runner?.available(user)) {
+			return { result: { toolCallId: callId, content: {
+				error: "TASKS_UNAVAILABLE",
+				message: "Задачи и заметки сейчас недоступны: не выбрана организация или служебный канал ERP не настроен",
+			}, isError: true } };
+		}
+		await this.setState(conv.id, "EXECUTING", conv.context);
+		const outcome = await runner.run(spec, payload, user);
+		// Отказ записываем КОДОМ (СВ8): «не сработало» в журнале не отличает «ERP не ответила» от «ERP
+		// отказала по делу», а лечатся они по-разному — и видно это должно быть в панели, не только в логе.
+		await this.audit(user, { event: "chat.server_tool", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid,
+			details: {
+				tool: spec.name, type: spec.commandType, ok: outcome.ok,
+				...(outcome.ok ? {} : { code: outcome.error?.code ?? "ERROR", message: outcome.error?.message ?? null }),
+				...(user.onec ? { baseId: user.onec.baseId, bin: user.onec.organization?.bin ?? null } : {}),
+			} });
+		return this.interpret(conv, user, spec, payload, callId, null, outcome);
+	}
+
 	// ── исполнение через агента ───────────────────────────────────────────
 
 	private async execute(conv: Conversation, user: ChatUser, spec: ToolSpec, payload: Record<string, unknown>, call: ToolCall, requestId: string | null): Promise<{ result: ToolResult; attachment?: FileRef }> {
+		// Задачи и заметки лежат в ERP: ни агента, ни базы им не нужно.
+		if (spec.runsOnServer) return this.runServer(conv, user, spec, payload, call.id);
 		const target = await this.targetBase(conv, user, spec, payload);
 		if (target.kind === "mixed") {
 			await this.audit(user, { event: "chat.mixed_bases", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid, details: { tool: spec.name, ...target.details } });

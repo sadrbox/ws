@@ -503,7 +503,33 @@ export class CommandQueue {
 		 * Команды КЛАСТЕРА (base_key IS NULL) под ограничение не попадают: они идут через
 		 * rac, в базы не заходят и друг другу не мешают.
 		 */
-		const busy = await this.db.query<{ n: string }>(
+		/*
+		 * ВЫДАЧА — ПОД ЗАМКОМ НА АГЕНТА (А1, аудит 21.09). Места считались одним запросом, а команды выдавались
+		 * другим: два одновременных опроса одного агента (два его процесса, переоткрытие опроса) видели одинаковое
+		 * число занятых мест и получали по полному пределу каждый — в базу уходили две внутрибазовые команды, и
+		 * вторая падала с «база занята». Консультативная блокировка на время выдачи стоит доли миллисекунды и
+		 * сериализует только опросы ОДНОГО агента.
+		 */
+		const client = await this.db.connect();
+		try {
+			await client.query("BEGIN");
+			await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`agent-dispatch:${agentId}`]);
+			const batch = await this.dispatchLocked(client, agentId, instanceId, parallel);
+			await client.query("COMMIT");
+			return batch;
+		} catch (e) {
+			await client.query("ROLLBACK").catch(() => {});
+			throw e;
+		} finally {
+			client.release();
+		}
+	}
+
+	/** Сама выдача: считает свободные места и забирает команды. Вызывается внутри транзакции с замком на агента. */
+	private async dispatchLocked(
+		db: Pick<Db, "query">, agentId: string, instanceId: string | null, parallel?: number,
+	): Promise<WireCommand[]> {
+		const busy = await db.query<{ n: string }>(
 			`SELECT count(*) AS n FROM commands d
 			  WHERE d.agent_id = $1 AND ${IN_BASE("d")} AND ${OCCUPIES("d", "$2")}`,
 			[agentId, this.lateGraceSecs],
@@ -511,7 +537,7 @@ export class CommandQueue {
 		const limit = parallel && parallel > 0 ? parallel : this.ibParallel;
 		const slots = Math.max(0, limit - Number(busy.rows[0]?.n ?? 0));
 
-		const r = await this.db.query<CommandRow>(
+		const r = await db.query<CommandRow>(
 			`WITH candidates AS (
 			      SELECT c.id, c.priority, c.created_at, c.base_key, ${IN_BASE("c")} AS ib,
 			             row_number() OVER (
@@ -578,7 +604,6 @@ export class CommandQueue {
 		}
 		return wire;
 	}
-
 	private waitForBell(agentId: string, ms: number): Promise<void> {
 		return new Promise((resolve) => {
 			const done = () => {
@@ -683,9 +708,12 @@ export class CommandQueue {
 			return Number.isFinite(t) ? new Date(t).toISOString() : null;
 		});
 		const r = await this.db.query<{ id: string }>(
+			// Продление НЕ СОКРАЩАЕТ срок (аудит 21.09): у команды, идущей дольше суток (выгрузка, загрузка), потолок
+			// «выдача + 24 ч» оказывался в прошлом, и подтверждение работы объявляло её просроченной.
 			`UPDATE commands c
-			    SET expires_at = LEAST(GREATEST(c.expires_at, now() + make_interval(secs => $3::int)),
-			                           c.dispatched_at + make_interval(secs => $4::int)),
+			    SET expires_at = GREATEST(c.expires_at,
+			                              LEAST(now() + make_interval(secs => $3::int),
+			                                    c.dispatched_at + make_interval(secs => $4::int))),
 			        running_seen_at = now(),
 			        started_at = COALESCE(c.started_at, x.started_at)
 			   FROM unnest($2::text[], $5::timestamptz[]) AS x(id, started_at)

@@ -137,6 +137,13 @@ export class BatchService {
 	 * Тонкая обёртка над `reports`: логика сборки одна на список и на одиночный отчёт —
 	 * иначе экран «Задания» и карточка задания рано или поздно начали бы считать по-разному.
 	 */
+	/** Чьё это задание: организация и автор. Нужно там, где задание адресуется по id (видимость, C11). */
+	async ownerOf(id: string): Promise<{ organizationUuid: string; userUuid: string | null } | null> {
+		const r = await this.db.query<{ organization_uuid: string; user_uuid: string | null }>(
+			`SELECT organization_uuid, user_uuid FROM command_batches WHERE id = $1`, [id]);
+		return r.rows[0] ? { organizationUuid: r.rows[0].organization_uuid, userUuid: r.rows[0].user_uuid } : null;
+	}
+
 	async progress(id: string): Promise<BatchProgress | null> {
 		const [only] = await this.reports([id]);
 		return only ?? null;

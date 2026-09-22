@@ -18,6 +18,7 @@ import { ContactPersonsList } from "../ContactPersons";
 import { WarehousesTable } from "../Warehouses";
 import { CashboxesTable } from "../Cashboxes";
 import FilesPanel from "src/components/FilesPanel";
+import OnecBasesTab from "./OnecBasesTab";
 import { OrganizationAccountingSettingsList } from "../OrganizationAccountingSettings";
 import { AccessRightsList } from "../AccessRights";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -305,6 +306,13 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     if (form.isEditMode && ownerUuid && canReadAccessRights) result.push({
       id: "tab-access-rights", label: translate("AccessRightsList"), component: (
         <AccessRightsList variant="default" organizationUuid={ownerUuid} organizationName={form.fields.name ?? ""} />
+      ),
+    });
+    // Базы 1С организации (ПН4): читаются из AI-сервиса, а не из ERP — реестр баз ведёт он.
+    // Прав «Администрирование 1С» не требует: это сведения о своей организации, и отбор идёт по ней.
+    if (form.isEditMode && ownerUuid) result.push({
+      id: "tab-onec-bases", label: translate("onecOrgBases"), component: (
+        <OnecBasesTab organizationUuid={ownerUuid} />
       ),
     });
     return result;

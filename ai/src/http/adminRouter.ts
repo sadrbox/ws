@@ -23,6 +23,8 @@ import { resolveTarget, type AgentBasesStore } from "../agents/agentBases.ts";
 const createAgentSchema = z.object({
 	organizationUuid: z.string().min(1).max(64),
 	name: z.string().max(200).optional().default(""),
+	// Роль назначается здесь и дальше не меняется: агент её только сообщает, а не задаёт (аудит 21.09).
+	role: z.enum(["business", "admin"]).optional().default("business"),
 });
 
 const commandSchema = z.object({
@@ -50,7 +52,7 @@ export function adminRouter(deps: {
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "organizationUuid обязателен" } });
 			return;
 		}
-		const { agent, token } = await agents.create(p.data.organizationUuid, p.data.name);
+		const { agent, token } = await agents.create(p.data.organizationUuid, p.data.name, p.data.role);
 		log.info({ agentId: agent.id, organizationUuid: agent.organizationUuid }, "агент создан");
 		await audit.write({ event: "agent.create", agentId: agent.id, organizationUuid: agent.organizationUuid });
 		res.status(201).json({ success: true, data: { agent, token, note: "Токен показывается один раз. Впишите его в agent.toml: cloud.token" } });

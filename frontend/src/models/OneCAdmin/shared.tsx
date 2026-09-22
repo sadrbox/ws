@@ -636,15 +636,19 @@ export const VSplit: FC<{
 	storageKey: string;
 	main: React.ReactNode;
 	side: React.ReactNode;
-}> = ({ storageKey, main, side }) => {
+	/** Доля левой половины при первом открытии и её пределы: у списка-указателя она уже, чем у равных таблиц. */
+	defaultPercent?: number;
+	min?: number;
+	max?: number;
+}> = ({ storageKey, main, side, defaultPercent = 50, min = 20, max = 80 }) => {
 	// side: "left" — управляем левой (главной) половиной; границы 20–80%: узкая колонка
 	// бесполезна, а «схлопнуть» половину случайным движением мыши — потерять таблицу.
 	const { percent, containerRef, startResize, reset, nudge } = useSplitResize({
 		storageKey: `onec_vsplit_${storageKey}`,
 		side: "left",
-		defaultPercent: 50,
-		min: 20,
-		max: 80,
+		defaultPercent,
+		min,
+		max,
 	});
 
 	return (

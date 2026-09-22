@@ -13,6 +13,7 @@ import { FC, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
+import Modal from "src/components/Modal";
 import { Field } from "src/components/Field";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { showToast } from "src/components/UIToast";
@@ -82,9 +83,13 @@ export const AgentBasesTab: FC<{ agentId: string; agentName: string }> = ({ agen
 		},
 		onError: (e) => reportError(e, { source: translate("onecActiveBins") }),
 	});
+	// Выключение БИНа — не мелочь: агент сразу перестаёт обслуживать эту организацию, и команды по ней получат
+	// отказ. Включение спрашивать незачем — оно ничего не отнимает.
+	const [confirmOff, setConfirmOff] = useState<string | null>(null);
 	const toggleBin = (bin: string, on: boolean) => {
 		const list = activeBins ?? [];
-		setBins.mutate({ bins: on ? [...list, bin] : list.filter((b) => b !== bin) });
+		if (!on) { setConfirmOff(bin); return; }
+		setBins.mutate({ bins: [...list, bin] });
 	};
 
 	const bases = v?.bases ?? [];
@@ -202,6 +207,16 @@ export const AgentBasesTab: FC<{ agentId: string; agentName: string }> = ({ agen
 			)}
 
 			{/* Запросы активации этого агента — рядом с его базами: решать удобнее, видя, что он обслуживает. */}
+			{confirmOff && (
+				<Modal title={translate("onecBinDisable")} onClose={() => setConfirmOff(null)}
+					onApply={() => { setBins.mutate({ bins: (activeBins ?? []).filter((b) => b !== confirmOff) }); setConfirmOff(null); }}>
+					<div className={styles.ModalForm}>
+						<div className={styles.Mono}>{confirmOff}</div>
+						<div className={styles.ConfirmWarning}>{translate("onecBinDisableWarning")}</div>
+					</div>
+				</Modal>
+			)}
+
 			{v && <div className={styles.SectionTitle}>{translate("onecReqActivation")}</div>}
 			{v && <div className={styles.EmbeddedTable}><ActivationRequestsTab agentId={agentId} /></div>}
 		</div>

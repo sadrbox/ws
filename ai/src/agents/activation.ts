@@ -45,10 +45,20 @@ export class ActivationStore {
 	 * если БИН сейчас не активен: клиент просит снова (после отказа или после «Отключить»). Запрос уже активного БИН
 	 * решения не меняет — просить нечего.
 	 */
-	async upsert(agentId: string, requests: readonly ActivationInput[], activeBins: readonly string[] | null): Promise<number> {
+	async upsert(agentId: string, requests: readonly ActivationInput[], activeBins: readonly string[] | null): Promise<string[]> {
 		const seen = new Set<string>();
 		const rows = requests.map((q) => ({ ...q, bin: q.bin.trim() })).filter((q) => !!q.bin && !seen.has(q.bin) && !!seen.add(q.bin));
-		if (!rows.length) return 0;
+		if (!rows.length) return [];
+		/*
+		 * ЧТО ИЗМЕНИЛОСЬ, А НЕ ЧТО ПРИШЛО (аудит 21.09). Агент повторяет запрос в каждом heartbeat, пока сервис его
+		 * не принял, — и аудит заполнялся одним и тем же событием раз в полминуты. Запись о запросе нужна, когда он
+		 * ПОЯВИЛСЯ или открылся заново после решения; прежнее состояние читается до записи.
+		 */
+		const before = await this.db.query<{ bin: string; state: ActivationState }>(
+			`SELECT bin, state FROM bin_activation_requests WHERE agent_id = $1 AND bin = ANY($2::text[])`,
+			[agentId, rows.map((q) => q.bin)],
+		);
+		const known = new Map(before.rows.map((x) => [x.bin, x.state]));
 		await this.db.query(
 			`INSERT INTO bin_activation_requests (agent_id, bin, name, base_key, comment, requested_at)
 			 SELECT $1, x.bin, x.name, x.base_key, x.comment, x.requested_at::timestamptz
@@ -73,7 +83,14 @@ export class ActivationStore {
 				[...(activeBins ?? [])],
 			],
 		);
-		return rows.length;
+		const active = new Set(activeBins ?? []);
+		return rows
+			.map((q) => q.bin)
+			.filter((bin) => {
+				const was = known.get(bin);
+				// Новый запрос или решённый, который агент просит заново (и БИН сейчас не активен).
+				return was === undefined || (was !== "PENDING" && !active.has(bin));
+			});
 	}
 
 	/** Решения по запросам агента за 90 дней — для ответа register/heartbeat. */

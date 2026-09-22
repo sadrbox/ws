@@ -23,8 +23,10 @@ const ALGO = "aes-256-gcm";
 /** Соль постоянна: ключ должен получаться одинаковым при каждом запуске сервиса. */
 const SALT = "onec-base-credentials";
 
-export function deriveKey(secret: string): Buffer {
-	return scryptSync(secret, SALT, 32);
+/** Соль передают, когда ключ нужен для другой надобности (см. BaseTokenStore): одинаковый ключ на
+ *  два разных назначения — лишняя связь между ними. */
+export function deriveKey(secret: string, salt: string = SALT): Buffer {
+	return scryptSync(secret, salt, 32);
 }
 
 /** Зашифровать пароль. Формат: v1:<iv>:<tag>:<data>, всё base64. */

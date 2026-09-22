@@ -21,12 +21,14 @@ type Call = { sql: string; params: unknown[] };
 
 /** Поддельная база: запоминает запросы и отвечает тем, что нужно разбираемому пути. */
 function fakeDb(calls: Call[], answer: (sql: string) => { rows: unknown[]; rowCount: number }): Db {
+	const query = async (sql: string, params: unknown[] = []) => {
+		calls.push({ sql, params });
+		return answer(sql);
+	};
 	return {
-		query: async (sql: string, params: unknown[] = []) => {
-			calls.push({ sql, params });
-			return answer(sql);
-		},
-		connect: async () => { throw new Error("не нужен"); },
+		query,
+		// Выдача команд идёт в транзакции с замком на агента (А1): клиент отдаёт те же ответы, что и пул.
+		connect: async () => ({ query, release: () => {} }),
 	} as unknown as Db;
 }
 

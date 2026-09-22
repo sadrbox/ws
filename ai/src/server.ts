@@ -11,6 +11,9 @@
 //   /v1/*                     пользователи ERP (JWT бэкенда)
 
 import { EnrollmentStore } from "./agents/enrollments.ts";
+import { BaseOrganizationsStore } from "./bases/organizations.ts";
+import { ErpTasks } from "./erp/tasks.ts";
+import { serverTools } from "./chat/serverTools.ts";
 import { agentEnrollRouter } from "./http/agentEnrollRouter.ts";
 import { ActivationStore } from "./agents/activation.ts";
 import { RegistrationStore } from "./bases/registrations.ts";
@@ -36,6 +39,7 @@ import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
 import { onecChatRouter } from "./http/onecChatRouter.ts";
 import { BaseTokenStore } from "./bases/tokens.ts";
+import { TurnKeyStore } from "./chat/turnKeys.ts";
 import { purgeOldData } from "./retention.ts";
 import { ScheduleStore } from "./onec/schedules.ts";
 import { runDueSchedules } from "./onec/maintenanceRunner.ts";
@@ -122,8 +126,14 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	});
 	const audit = new Audit(db, log);
 	// Токены баз и заявки на подключение (СВ4): одни хранилища на канал 1С, регистрацию и панель.
-	const baseTokens = new BaseTokenStore(db);
+	// Токены баз: секрет нужен для закрытой копии преемника при смене токена (§3 канала 1С).
+	const baseTokens = new BaseTokenStore(db, cfg.JWT_SECRET, { rotateDays: cfg.BASE_TOKEN_ROTATE_DAYS, overlapHours: cfg.BASE_TOKEN_OVERLAP_HOURS });
+	const turnKeys = new TurnKeyStore(db, cfg.ONEC_TURN_KEY_TTL_HOURS);
 	const registrations = new RegistrationStore(db);
+	// Задачи и заметки организации в чате 1С: хранит их ERP, сервис только посредничает
+	// (план docs/PLAN_1C_TASKS_NOTES_2026-09-22.md). Без ERP_API_KEY канал выключен.
+	const baseOrgs = new BaseOrganizationsStore(db);
+	const erpTasks = new ErpTasks({ url: cfg.ERP_API_URL, key: cfg.ERP_API_KEY, timeoutMs: cfg.ERP_API_TIMEOUT_MS, log });
 	const enrollments = new EnrollmentStore(db);
 	const llm = deps.llm === undefined ? createProvider(cfg, log) : deps.llm;
 	// Чтение PDF выписок — прямой вызов модели с документом на входе (Claude или OpenAI по
@@ -134,6 +144,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,
 			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, files,
+			serverTools: serverTools({ tasks: erpTasks, baseOrgs }),
 			orgBin: async (uuid) => {
 				const r = await erp.query<{ bin: string | null }>(`SELECT bin FROM organizations WHERE uuid = $1`, [uuid]);
 				const bin = r.rows[0]?.bin?.trim() ?? "";
@@ -141,7 +152,10 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 			} })
 		: null;
 	// Просроченные файлы диалогов — при старте и раз в час.
-	const purge = () => files.purgeExpired().then((n) => { if (n) log.info({ n }, "удалены просроченные файлы диалогов"); }).catch((e) => log.warn({ err: e }, "очистка файлов"));
+	const purge = () => files.purgeExpired().then((n) => { if (n) log.info({ n }, "удалены просроченные файлы диалогов"); })
+		// Ключи ходов 1С живут сутки: та же уборка, отдельной таблицей.
+		.then(() => turnKeys.purgeExpired()).then((n) => { if (n) log.info({ n }, "удалены просроченные ключи ходов 1С"); })
+		.catch((e) => log.warn({ err: e }, "очистка файлов"));
 	void purge();
 	setInterval(purge, 3_600_000).unref();
 	// Старые диалоги, выписки и команды — при старте и раз в сутки.
@@ -164,6 +178,15 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		.then((r) => { if (r.started || r.failed) log.info(r, "расписание обслуживания: проход"); })
 		.catch((e) => log.warn({ err: e }, "расписание обслуживания"));
 	setInterval(maintenance, 60_000).unref();
+
+	/*
+	 * ПОСЛЕДНЯЯ СЕТКА ПОД ПРОМИСАМИ (аудит 21.09). Маршруты обёрнуты, но отказ может прийти из таймера или из
+	 * фоновой задачи; по умолчанию Node роняет процесс, обрывая long-poll агентов и ожидание результатов. Пишем в
+	 * журнал и продолжаем: служба, потерявшая одну операцию, полезнее остановленной.
+	 */
+	process.on("unhandledRejection", (reason) => {
+		log.error({ err: reason instanceof Error ? reason.message : String(reason) }, "необработанный отказ промиса");
+	});
 
 	const app = express();
 	app.disable("x-powered-by");
@@ -202,10 +225,23 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		res.json({ success: true, data: { service: "buhprof-ai", version: VERSION, status: "ok", chat: !!workflow, timestamp: new Date().toISOString() } });
 	});
 
+	/*
+	 * ХВОСТОВАЯ КОСАЯ ЧЕРТА — НЕ НОВЫЙ АДРЕС (А4, аудит 21.09). Проверки прав сравнивают путь с образцом, поэтому
+	 * роутер панели строгий: `/bases/acme/lock/` там просто не существует. Чтобы старый клиент не получил 404 на
+	 * ровном месте, приводим адрес к каноническому виду до маршрутизации — проверка при этом видит тот же путь,
+	 * что и маршрут.
+	 */
+	app.use("/v1/onec", (req, _res, next) => {
+		const [path, query] = req.url.split("?", 2);
+		const trimmed = path.replace(/\/+$/, "");
+		if (trimmed !== path && trimmed !== "") req.url = query === undefined ? trimmed : `${trimmed}?${query}`;
+		next();
+	});
+
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
-		batches, registry: onecRegistry, credentials, schedules, agentBases: new AgentBasesStore(db), registrations, baseTokens, activation: new ActivationStore(db), enrollments,
+		batches, registry: onecRegistry, credentials, schedules, agentBases: new AgentBasesStore(db), registrations, baseTokens, activation: new ActivationStore(db), enrollments, baseOrgs,
 	}));
 	// Подключение агента по коду (СВ5) — до agentRouter: у агента, который просит подключение, токена ещё нет.
 	app.use("/agent/v1", agentEnrollRouter({ enrollments, agents, erp, audit, log }));
@@ -215,10 +251,16 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	app.use("/v1/onec-chat", baseRegistrationRouter({ registrations, tokens: baseTokens, erp, audit, log }));
 	// Раньше /v1: у формы 1С нет JWT ERP, её субъект — токен базы.
 	app.use("/v1/onec-chat", onecChatRouter({
-		workflow, tokens: baseTokens, erp, log, version: VERSION,
+		workflow, tokens: baseTokens, erp, log, version: VERSION, tasks: erpTasks, baseOrgs,
 		maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN,
+		// Вложение отдельным запросом, ключ хода и смена токена базы: каждая часть включается своей
+		// зависимостью, и GET /ping объявляет ровно то, что включено (features).
+		files, turnKeys, rotation: baseTokens,
+		rotationMinExtVersion: cfg.ONEC_EXT_ROTATION_MIN, minExtVersion: cfg.ONEC_EXT_MIN_VERSION,
+		// Ссылки на задачи для 1С и отдельный лимит на изменяющие вызовы задач и заметок.
+		panelUrl: cfg.PUBLIC_PANEL_URL, tasksWritePerMin: cfg.RATE_LIMIT_TASKS_WRITE_PER_MIN,
 	}));
-	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db) }));
+	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db), db }));
 
 	app.use((_req, res) => {
 		res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ресурс не найден" } });
