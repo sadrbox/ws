@@ -6,10 +6,10 @@
  * useTableVolatile для чекбокса «все»); вынос безопасен после context.tsx.
  */
 import { memo, useCallback, useMemo, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
-import { getTranslateColumn } from 'src/i18';
+import { getTranslateColumn, translate } from 'src/i18';
 import { useTableContext, useTableVolatile } from './context';
 import { normalizeLastColumnWidth, isNarrowedView, selectionIndicator, toggleAllSelection } from './services';
-import { spreadResize, type ResizeColumn } from './columnResize';
+import { autoFitWidth, spreadResize, type ResizeColumn } from './columnResize';
 import styles from './Table.module.scss';
 
 export const TableHeader = memo(() => {
@@ -188,6 +188,114 @@ export const TableHeader = memo(() => {
     document.addEventListener('mouseup', onMouseUp);
   }, [visibleColumns, columns, actions, componentName, showCheckbox]);
 
+  /*
+   * АВТОПОДБОР ШИРИНЫ — ДВОЙНОЙ ЩЕЛЧОК ПО ГРАНИЦЕ. Ровно то же, что делает двойной щелчок в
+   * любой другой таблице: колонка становится такой ширины, чтобы в неё помещалось самое
+   * длинное значение. Подгонять это мышью — работа на несколько попыток, да ещё и вслепую:
+   * самое длинное значение может быть ниже по списку и не видно на экране.
+   *
+   * ПОЧЕМУ НЕ `scrollWidth`. Первая попытка меряла им — и не работала вовсе. Содержимое
+   * ячейки лежит во флекс-контейнере с `overflow: hidden`: его дочерний элемент СЖИМАЕТСЯ до
+   * ширины ячейки, а не вылезает за неё, поэтому прокручивать нечего и `scrollWidth` всегда
+   * равен текущей ширине. Колонка «подбиралась» под саму себя.
+   *
+   * КАК МЕРЯЕМ. Ячейкам этой колонки на миг разрешается занять столько, сколько просит
+   * содержимое (`width: max-content`, без обрезки), после чего читаются их настоящие ширины,
+   * и стили снимаются. Записи и чтения идут ДВУМЯ пачками, а не вперемешку: иначе каждое
+   * чтение заставляло бы браузер пересчитывать раскладку заново — сорок строк, сорок
+   * пересчётов.
+   *
+   * Строки за пределами виртуального окна в замер не попадают: их нет в DOM. Для видимого
+   * списка этого достаточно, а тянуть с сервера все записи ради ширины колонки — плохой размен.
+   */
+  const handleAutoFit = useCallback((e: ReactMouseEvent, colIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.target as HTMLElement).closest('th') as HTMLElement | null;
+    const table = th?.closest('table');
+    if (!th || !table) return;
+
+    const colOffset = showCheckbox ? 1 : 0;
+    const cellIndex = colIndex + colOffset;
+    const boxes: HTMLElement[] = [th];
+    for (const tr of table.querySelectorAll<HTMLElement>('tbody tr')) {
+      const td = tr.children[cellIndex];
+      // Строки-распорки виртуализации (VirtualPaddingRow) пусты — мерить в них нечего.
+      if (td instanceof HTMLElement && !tr.classList.contains(styles.VirtualPaddingRow)) boxes.push(td);
+    }
+    // Мерить нужно ВНУТРЕННИЙ узел (.TableBodyCell / .TableHeaderCell): именно он обрезает
+    // содержимое, и именно он знает его настоящую ширину, когда обрезку снять.
+    const inners = boxes.map((b) => (b.firstElementChild instanceof HTMLElement ? b.firstElementChild : b));
+    // Отступы ячейки читаем ДО правок стилей: после них чтение стоило бы лишнего пересчёта.
+    const cs = window.getComputedStyle(inners[1] ?? th);
+    const padding = parseFloat(cs.paddingLeft || '0') + parseFloat(cs.paddingRight || '0') + 2;
+
+    /*
+     * ВТОРАЯ МЕРА — ШИРИНА САМОГО ТЕКСТА, измеренная шрифтом ячейки на холсте.
+     *
+     * Раскладка бывает хитрее замера: поле ввода шириной в 100 %, вложенный флекс со своим
+     * сжатием, содержимое в абсолютном позиционировании. Текст же меряется всегда одинаково и
+     * ни от чего не зависит. Берём большее из двух — так подбор не зависит от того, чем именно
+     * ячейка нарисована.
+     */
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (ctx) ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const textWidth = (el: HTMLElement) => (ctx ? ctx.measureText((el.textContent ?? '').trim()).width : 0);
+    const texts = inners.map(textWidth);
+
+    /*
+     * Ячейки С ПОЛЕМ ВВОДА не сужаем ниже нынешней ширины. У поля ширина в процентах, а от
+     * «по содержимому» проценты схлопываются в ноль: подбор ужал бы редактируемую колонку
+     * до многоточия. Текущая ширина для них — нижняя граница, для остальных её нет, иначе
+     * подбор умел бы только расширять.
+     */
+    const floors = inners.map((el) => (el.querySelector('input, select, textarea')
+      ? el.getBoundingClientRect().width
+      : 0));
+
+    const saved = inners.map((el) => el.style.cssText);
+    for (const el of inners) {
+      el.style.width = 'max-content';
+      el.style.maxWidth = 'none';
+      el.style.minWidth = '0';
+      el.style.overflow = 'visible';
+      el.style.flex = '0 0 auto';
+    }
+    // Большее из двух мер (и нижняя граница — для ячеек с полем ввода, см. floors).
+    const measured = inners.map((el, i) => Math.max(el.getBoundingClientRect().width, texts[i], floors[i]));
+    inners.forEach((el, i) => { el.style.cssText = saved[i]; });
+
+    // Видимая область списка — предел, дальше которого расти некуда: одна ячейка с длинным
+    // примечанием не должна выдавливать за край всё остальное.
+    const scroller = table.closest<HTMLElement>('[class*="TableScrollWrapper"]');
+    const viewport = scroller?.clientWidth ?? table.clientWidth;
+    const width = autoFitWidth({
+      contents: measured.slice(1),
+      header: measured[0],
+      padding,
+      min: parseInt(visibleColumns[colIndex]?.minWidth ?? '50', 10),
+      max: Math.max(280, viewport),
+    });
+
+    // Показываем сразу (как при перетаскивании), а потом сохраняем — иначе колонка дёрнется
+    // на перерисовке обратно к прежней ширине.
+    const px = `${width}px`;
+    th.style.width = px;
+    const colEl = table.querySelector('colgroup')?.children[cellIndex];
+    if (colEl instanceof HTMLElement) colEl.style.width = px;
+
+    const id = visibleColumns[colIndex]?.identifier;
+    if (!id) return;
+    const mapped = columns.map((c) => (c.identifier === id ? { ...c, width: px } : c));
+    const isLastCol = colIndex === visibleColumns.length - 1;
+    const updatedColumns = isLastCol ? mapped : normalizeLastColumnWidth(mapped);
+    actions.setColumns(updatedColumns);
+    localStorage.setItem(
+      `table_columns_${componentName}`,
+      JSON.stringify(updatedColumns.filter((c) => !c.identifier.startsWith('__'))),
+    );
+  }, [visibleColumns, columns, actions, componentName, showCheckbox]);
+
   return (
     <thead>
       <tr>
@@ -213,11 +321,20 @@ export const TableHeader = memo(() => {
           return (
             <th
               key={col.identifier}
-              title={col.hint || undefined}
+              title={col.hint || (!isLoading && isSortable ? translate("columnSortHint") : undefined)}
               // Курсор — оформление, а не данные: его место в CSS. Атрибут говорит,
               // можно ли сортировать по колонке ЗДЕСЬ И СЕЙЧАС (во время загрузки нельзя).
               data-sortable={(!isLoading && isSortable) || undefined}
-              onClick={(!isLoading && isSortable) ? () => handleSort(col.identifier) : undefined}
+              /*
+               * СОРТИРОВКА — ДВОЙНЫМ ЩЕЛЧКОМ, а не одиночным.
+               *
+               * Одиночный щелчок по шапке слишком дёшев: попав по заголовку мимо строки или
+               * задев его при выделении, человек перестраивал весь список и терял место, на
+               * котором работал. Перестроить тысячу строк — заметное действие, и жест под него
+               * нужен намеренный. Двойной щелчок по самой границе колонки занят подбором
+               * ширины (см. handleAutoFit) — он гасит всплытие и сюда не доходит.
+               */
+              onDoubleClick={(!isLoading && isSortable) ? () => handleSort(col.identifier) : undefined}
             >
               <div className={styles.TableHeaderCell}>
                 <span>{getTranslateColumn(col)}</span>
@@ -231,7 +348,12 @@ export const TableHeader = memo(() => {
               {!isLast && (
                 <div
                   className={styles.ResizeHandle}
+                  title={translate("columnAutoFitHint")}
                   onMouseDown={(e) => handleResizeMouseDown(e, idx)}
+                  onDoubleClick={(e) => handleAutoFit(e, idx)}
+                  // Щелчок по границе — про ширину, а не про сортировку: без этого двойной
+                  // щелчок заодно дважды переключал бы порядок сортировки колонки.
+                  onClick={(e) => e.stopPropagation()}
                 />
               )}
             </th>

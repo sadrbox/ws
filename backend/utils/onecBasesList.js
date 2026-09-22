@@ -115,7 +115,8 @@ export function matchesBaseSearch(x, needle) {
 	if (!words.length) return true;
 	const haystack = [
 		x.baseKey, x.name, x.status, ...(BASE_STATE_LABELS[baseStateRank(x)] ?? []),
-		x.serverName, x.onecVersion,
+		// Версия расширения — в колонках списка (ПН7), значит и в поиске: «поиск по тому, что видно».
+		x.serverName, x.onecVersion, x.extVersion,
 		...PUBLISH_LABELS[x.published === true ? "true" : x.published === false ? "false" : "null"],
 		x.publishUrlPublic, x.publishUrl,
 		x.extensionsCount, x.sessionsCount,

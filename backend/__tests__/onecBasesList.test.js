@@ -96,6 +96,16 @@ test("поиск по «Статусу» — по показанной подп�
 	assert.deepEqual(keys([b("a_ok"), nodb, b("u", { ibUnreachableAt: "t" })].filter((x) => matchesBaseSearch(x, "недоступна"))), ["u"]);
 });
 
+// АУДИТ 22.09: колонка «Расширение» (ПН7) появилась в списке, а прокси ERP её не отдавал — у всех баз было
+// «не видели». Версия должна и доходить до строки, и искаться: поиск идёт по тому, что видно в колонках.
+test("поиск по версии расширения BuhProf — она в колонках списка", () => {
+	const withExt = b("erp", { extVersion: "1.6.0" });
+	assert.equal(matchesBaseSearch(withExt, "1.6.0"), true);
+	assert.equal(matchesBaseSearch(b("old", { extVersion: "1.4.0" }), "1.6.0"), false);
+	// Версии нет — база не должна находиться по чужой версии и не должна ронять поиск.
+	assert.equal(matchesBaseSearch(b("none"), "1.6.0"), false);
+});
+
 test("поиск по «Адресу публикации» — и по публичному адресу, и по адресу от агента", () => {
 	const pub = b("pub", { publishUrl: "http://localhost/trade", publishUrlPublic: "https://1c.example.kz/trade" });
 	assert.equal(matchesBaseSearch(pub, "1c.example"), true);

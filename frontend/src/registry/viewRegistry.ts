@@ -80,6 +80,7 @@ export const AiAssistantList = lazyView("AiAssistantList", () => import('src/mod
 // Администрирование: кластеры 1С и агенты — два раздела меню (см. models/OneCAdmin/index.tsx).
 export const OneCClustersList = lazyView("OneCClustersList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCClustersList })));
 export const OneCAgentsList = lazyView("OneCAgentsList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAgentsList })));
+export const OneCExtensionList = lazyView("OneCExtensionList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCExtensionList })));
 /** Прежний объединённый раздел: имя остаётся ради восстановления панелей после перезагрузки. */
 export const OneCAdminList = lazyView("OneCAdminList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAdminList })));
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
@@ -191,6 +192,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	AiAssistantList: AiAssistantList,
 	OneCAdminList: OneCAdminList,
 	OneCClustersList: OneCClustersList,
+	OneCExtensionList: OneCExtensionList,
 	OneCAgentsList: OneCAgentsList,
 	NotificationsList: NotificationsList,
 	WarehousesList: WarehousesList,

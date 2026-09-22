@@ -25,6 +25,7 @@ import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAl
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
 import { agentBuild, buildOutdated, missingFeatures } from "../agents/features.ts";
 import { mergeDurationStats } from "../agents/commandStats.ts";
+import { extensionBaseRows } from "../onec/extensionBases.ts";
 import { describeAgentBases, parseLimit, type AgentBasesStore } from "../agents/agentBases.ts";
 import type { RegistrationRow, RegistrationState, RegistrationStore } from "../bases/registrations.ts";
 import type { BaseOrganizationsStore } from "../bases/organizations.ts";
@@ -47,7 +48,7 @@ import type { BatchService } from "../onec/batches.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import type { CredentialsStore } from "../onec/credentials.ts";
 import {
-	DEFAULT_COMMAND_TTL_SECS, LONG_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
+	DEFAULT_COMMAND_TTL_SECS, LONG_COMMAND_TTL_SECS, type AdminCommandSpec, agentCanRun, agentKnowsType, buildAdminPayload, commandRequestId, findAdminCommand, payloadRefusal,
 	runsInsideBase, validateSchedulePayload, abortAllowed, isAbortable, CANCEL_CHECK_CAPABILITY, baseRefusal,
 	type CommandRole,
 } from "../commands/admin.ts";
@@ -393,11 +394,21 @@ export function onecRouter(deps: Deps) {
 	 * агента свой набор, и из панели ему нужна лишь сводка о себе (HEALTH). Ответ — в той же форме, что у run():
 	 * 200 с данными, 202 «ещё идёт» (панель дождётся по /commands/:id), 422 — отказ агента.
 	 */
-	async function runBusiness(req: Request, agent: { id: string; organizationUuid: string; online: boolean; disabled: boolean }, type: string, payload: Record<string, unknown>): Promise<Outcome> {
+	async function runBusiness(req: Request, agent: { id: string; organizationUuid: string; online: boolean; disabled: boolean; capabilities: string[] }, type: string, payload: Record<string, unknown>, baseKey?: string | null): Promise<Outcome> {
 		if (agent.disabled) return fail(409, "AGENT_DISABLED", "Агент отключён в панели");
 		if (!agent.online) return fail(409, "AGENT_OFFLINE", "Агент не на связи — служба на компьютере не запущена или нет сети");
+		/*
+		 * Команду, которой сборка агента не знает, не ставим вовсе (аудит 22.09): иначе она ждёт исполнителя,
+		 * уходит к агенту и возвращается через минуту с `UNKNOWN_COMMAND`. Ответ «обновите агента» тот же,
+		 * но сразу и понятный.
+		 */
+		if (!agentKnowsType(agent, type)) {
+			return fail(409, "CAPABILITY_MISSING", `Агент BuhProf этой базы не умеет команду ${type} — обновите агента на компьютере с 1С`);
+		}
 		const u = req.erpUser!;
-		const cmd = await queue.enqueue({ agentId: agent.id, organizationUuid: agent.organizationUuid, type, payload, userUuid: u.uuid, ttlSeconds: 120 });
+		// База — и в колонке очереди: у многобазового агента без неё команда уйдёт не туда, а команды одной базы
+		// должны идти по очереди (С1). У команд о самой службе (HEALTH) базы нет — там поле просто не ставится.
+		const cmd = await queue.enqueue({ agentId: agent.id, organizationUuid: agent.organizationUuid, type, payload, userUuid: u.uuid, ttlSeconds: 120, ...(baseKey ? { baseKey } : {}) });
 		await audit.write({ event: "onec.business", organizationUuid: agent.organizationUuid, userUuid: u.uuid, agentId: agent.id, commandId: cmd.id, details: { type } });
 		const done = await queue.waitResult(cmd.id, cfg.ONEC_COMMAND_TIMEOUT_SECS * 1000);
 		if (!done || done.state === "queued" || done.state === "dispatched") {
@@ -964,6 +975,28 @@ export function onecRouter(deps: Deps) {
 		send(res, await run(req, "IB_SELFTEST", { baseKey: req.params.key }));
 	});
 
+	/**
+	 * САМОПРОВЕРКА БАЗЫ (СВ16). Одна кнопка вместо расспросов: расширение в базе отвечает, что у него не так —
+	 * нет токена сервиса, нет организаций с БИН, старая версия, не хватает прав. Сегодня это выясняется по
+	 * частям и разными людьми: связь проверяет панель, токен — форма в 1С, права — по отказу конкретной операции.
+	 *
+	 * Исполняет БИЗНЕС-агент: проверка идёт внутри базы через расширение, а не через rac. Отказ «нет агента»
+	 * отличаем от «агент не на связи» — лечатся они по-разному.
+	 */
+	r.post("/bases/:key/self-check", async (req, res) => {
+		const org = req.erpUser!.organizationUuid;
+		if (!org) {
+			send(res, fail(409, "ORGANIZATION_REQUIRED", "Выберите активную организацию: базу проверяет агент BuhProf этой организации"));
+			return;
+		}
+		const agent = await agents.pickAgentFor(org, req.params.key, "business");
+		if (!agent) {
+			send(res, fail(409, "AGENT_OFFLINE", `Базу «${req.params.key}» некому проверить: агент BuhProf, обслуживающий её, не на связи или не настроен`));
+			return;
+		}
+		send(res, await runBusiness(req, agent, "SELF_CHECK", {}, req.params.key));
+	});
+
 	r.get("/agents/:id/health", async (req, res) => {
 		const agent = await agents.findById(req.params.id);
 		// Бизнес-агент (п. 1): своей AGENT_HEALTH у него нет — сводку по базам и лимитам даёт его команда HEALTH.
@@ -1053,6 +1086,109 @@ export function onecRouter(deps: Deps) {
 			}
 		}
 		res.json({ success: true, data: { items: rows.map((x) => ({ ...x, userName: x.userUuid ? names.get(x.userUuid) ?? x.userUuid : null })) } });
+	});
+
+	/*
+	 * ОТКАЗЫ ЧАТА 1С ПО ЗАДАЧАМ И ЗАМЕТКАМ (СВ8). Эти события не принадлежат ни агенту, ни базе:
+	 * их порождает чат в 1С, обращаясь к ERP. Видны они были только в логе службы — а разбор
+	 * «у клиента задача не создалась» начинается в панели.
+	 *
+	 * Организацию показываем именем: uuid в журнале не говорит ничего тому, кто его читает.
+	 */
+	r.get("/chat-failures", async (req, res) => {
+		if (!sharedListsAllowed(req)) { send(res, fail(403, "FORBIDDEN", "Этот список открыт администратору BuhProf")); return; }
+		const q = req.query as Record<string, unknown>;
+		// Карточка базы спрашивает про себя, общий разбор — про всех: один маршрут, один отбор.
+		const baseId = typeof q.baseId === "string" && /^[0-9a-f-]{36}$/i.test(q.baseId) ? q.baseId : null;
+		const rows = await audit.listChatFailures({ baseId, limit: Number(q.limit) || 200 });
+		const orgs = [...new Set(rows.map((x) => x.organizationUuid).filter((x): x is string => !!x))];
+		const names = new Map<string, string>();
+		if (orgs.length) {
+			try {
+				const o = await erp.query<{ uuid: string; name: string | null; legal_name: string | null }>(
+					`SELECT uuid, name, "legalName" AS legal_name FROM organizations WHERE uuid = ANY($1::text[])`, [orgs]);
+				for (const x of o.rows) names.set(x.uuid, x.name || x.legal_name || x.uuid);
+			} catch (e) {
+				log.warn({ err: e instanceof Error ? e.message : String(e) }, "отказы чата 1С: имена организаций не прочитаны");
+			}
+		}
+		res.json({ success: true, data: { items: rows.map((x) => ({
+			at: x.at, tool: x.tool, code: x.code, message: x.message,
+			organizationName: x.organizationUuid ? names.get(x.organizationUuid) ?? x.organizationUuid : null,
+			baseId: typeof x.details.baseId === "string" ? x.details.baseId : null,
+			bin: typeof x.details.bin === "string" ? x.details.bin : null,
+		})) } });
+	});
+
+	/**
+	 * БАЗЫ С РАСШИРЕНИЕМ BuhProf AI — сводка ПО ИСТОЧНИКАМ РАСШИРЕНИЯ, а не по реестру кластера (23.09).
+	 *
+	 * Реестр баз ведёт админ-агент и показывает выбранный КЛАСТЕР; расширение живёт в базе и к кластеру не
+	 * привязано — у клиента без админ-агента его базы в том списке не появятся вовсе. Поэтому здесь три своих
+	 * источника: заявки на подключение, выданные токены и срез баз бизнес-агентов. Отбора по серверу нет
+	 * намеренно: вопрос «где стоит расширение» задают про всю установку.
+	 */
+	r.get("/extension-bases", async (req, res) => {
+		if (!sharedListsAllowed(req)) { send(res, fail(403, "FORBIDDEN", "Этот список открыт администратору BuhProf")); return; }
+		const business = (await agents.listAll()).filter((a) => a.role === "business");
+		const slicesByAgent = await agentBases.listMany(business.map((a) => a.id), { cached: true });
+		const names = new Map(business.map((a) => [a.id, a.name]));
+		const slices = [...slicesByAgent.entries()].flatMap(([agentId, list]) => list.map((b) => ({
+			agentId, agentName: names.get(agentId) ?? null,
+			key: b.key, status: b.status, transport: b.transport, extVersion: b.extVersion, seenAt: b.seenAt,
+		})));
+		const rows = extensionBaseRows({
+			registrations: (await registrations.list({ limit: 500 })).map((r) => ({
+				baseKey: r.baseKey, baseName: r.baseName, state: r.state, organizationUuid: r.organizationUuid,
+				decidedAt: r.decidedAt, extensionVersion: r.body?.base?.extensionVersion ?? null,
+			})),
+			tokens: (await baseTokens.list(null)).map((t) => ({
+				baseKey: t.baseKey, organizationUuid: t.organizationUuid,
+				createdAt: t.createdAt, revokedAt: t.revokedAt, replacedBy: t.replacedBy, acceptedUntil: t.acceptedUntil,
+			})),
+			slices,
+		});
+		// Организацию показываем именем: uuid ничего не говорит тому, кто читает список.
+		const orgs = [...new Set(rows.map((r) => r.organizationUuid).filter((x): x is string => !!x))];
+		const orgNames = new Map<string, string>();
+		if (orgs.length) {
+			try {
+				const o = await erp.query<{ uuid: string; name: string | null; legal_name: string | null }>(
+					`SELECT uuid, name, "legalName" AS legal_name FROM organizations WHERE uuid = ANY($1::text[])`, [orgs]);
+				for (const x of o.rows) orgNames.set(x.uuid, x.name || x.legal_name || x.uuid);
+			} catch (e) {
+				log.warn({ err: e instanceof Error ? e.message : String(e) }, "базы с расширением: имена организаций не прочитаны");
+			}
+		}
+		res.json({ success: true, data: { items: rows.map((r) => ({
+			...r, organizationName: r.organizationUuid ? orgNames.get(r.organizationUuid) ?? r.organizationUuid : null,
+		})) } });
+	});
+
+	/*
+	 * ЖУРНАЛ ВЫЗОВОВ ЧАТА (ПН8). Дополняет «отказы чата» выше: там только неудачи серверных инструментов, а
+	 * здесь весь след канала — что вызывали, по какой базе и чем кончилось, включая вызовы в саму 1С.
+	 * Карточка базы спрашивает про себя (baseId), общий разбор — про всех.
+	 */
+	r.get("/chat-calls", async (req, res) => {
+		if (!sharedListsAllowed(req)) { send(res, fail(403, "FORBIDDEN", "Этот список открыт администратору BuhProf")); return; }
+		const q = req.query as Record<string, unknown>;
+		const baseId = typeof q.baseId === "string" && /^[0-9a-f-]{36}$/i.test(q.baseId) ? q.baseId : null;
+		const rows = await audit.listChatCalls({ baseId, limit: Number(q.limit) || 200 });
+		const orgs = [...new Set(rows.map((x) => x.organizationUuid).filter((x): x is string => !!x))];
+		const names = new Map<string, string>();
+		if (orgs.length) {
+			try {
+				const o = await erp.query<{ uuid: string; name: string | null; legal_name: string | null }>(
+					`SELECT uuid, name, "legalName" AS legal_name FROM organizations WHERE uuid = ANY($1::text[])`, [orgs]);
+				for (const x of o.rows) names.set(x.uuid, x.name || x.legal_name || x.uuid);
+			} catch (e) {
+				log.warn({ err: e instanceof Error ? e.message : String(e) }, "журнал вызовов чата: имена организаций не прочитаны");
+			}
+		}
+		res.json({ success: true, data: { items: rows.map((x) => ({
+			...x, organizationName: x.organizationUuid ? names.get(x.organizationUuid) ?? x.organizationUuid : null,
+		})) } });
 	});
 
 	r.get("/agents/:id/log", async (req, res) => {
@@ -2182,11 +2318,16 @@ export function onecRouter(deps: Deps) {
 	});
 
 	/** Токены базы для карточки базы: кем и когда выпущены, отозваны ли. Сам токен не хранится и не показывается. */
+	/*
+	 * ТОКЕНЫ БАЗ: одной базы или ВСЕХ. Карточка базы спрашивает про себя (`baseId`), раздел «Расширение
+	 * БухПроф-AI» — про все сразу: вопрос «каким базам вообще открыт чат» иначе решался обходом карточек.
+	 * Кривой идентификатор — по-прежнему отказ: «не разобрали» не должно молча превращаться в «покажи всё».
+	 */
 	r.get("/base-tokens", async (req, res) => {
 		if (!sharedListsAllowed(req)) { send(res, fail(403, "FORBIDDEN", "Этот список открыт администратору BuhProf")); return; }
 		const baseId = String((req.query as Record<string, unknown>).baseId ?? "").trim();
-		if (!/^[0-9a-f-]{36}$/i.test(baseId)) { send(res, fail(400, "VALIDATION_ERROR", "baseId: ожидается идентификатор базы")); return; }
-		res.json({ success: true, data: { items: await baseTokens.list(baseId), canRevoke: !!req.erpUser!.isSuperAdmin } });
+		if (baseId && !/^[0-9a-f-]{36}$/i.test(baseId)) { send(res, fail(400, "VALIDATION_ERROR", "baseId: ожидается идентификатор базы")); return; }
+		res.json({ success: true, data: { items: await baseTokens.list(baseId || null), canRevoke: !!req.erpUser!.isSuperAdmin } });
 	});
 
 	/*

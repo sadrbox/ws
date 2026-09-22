@@ -37,9 +37,10 @@ import { getFormatDate } from "src/utils/datetime";
 import {
 	abortCommand, applyBaseUpdate, awaitLateResult, checkBase, fetchAgentProcesses, followCommand, planText, restoreBase, runBatch,
 	type CommandPending,
-	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest,
-	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelftestResult, type Started,
+	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest, startSelfCheck,
+	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelfCheckResult, type SelftestResult, type Started,
 } from "src/services/onec/api";
+import { selfCheckLines, selfCheckSummary } from "./selfCheckView";
 import main from "src/styles/main.module.scss";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
 
@@ -72,6 +73,8 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const [report, setReport] = useState("");
 	const [confirmSelftest, setConfirmSelftest] = useState(false);
 	const [selftest, setSelftest] = useState<SelftestResult | null>(null);
+	// Самопроверка BuhProf (ПН6) — про расширение в базе, а не про агента: своё состояние и своя таблица.
+	const [selfCheck, setSelfCheck] = useState<SelfCheckResult | null>(null);
 
 	/*
 	 * ОТКАЗ «БАЗА ЗАНЯТА» ДАЁТ КНОПКИ (П25): повторить ту же операцию и посмотреть, кто держит базу.
@@ -314,6 +317,47 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 			});
 	};
 
+	/**
+	 * САМОПРОВЕРКА БАЗЫ СРЕДСТВАМИ РАСШИРЕНИЯ (ПН6/СВ16). Отвечает не агент, а сам BuhProf в базе: есть ли
+	 * токен сервиса, видны ли организации с БИН, хватает ли прав, не устарела ли сборка. Прежде это
+	 * выяснялось по частям — связь смотрели в панели, токен в форме 1С, права по отказу конкретной операции.
+	 *
+	 * Ничего не меняет, поэтому подтверждения нет. Неудачные проверки — предупреждение, а не отказ команды:
+	 * прогон СОСТОЯЛСЯ, и его итог и есть ответ.
+	 */
+	const runSelfCheck = async () => {
+		setSelfCheck(null);
+		const title = translate("onecSelfCheck");
+		const op = startOp({ kind: "read", title, target: baseKey, total: 1, scope: { bases: [baseKey] }, workKey });
+		const settle = (r: SelfCheckResult) => {
+			setSelfCheck(r);
+			const s = selfCheckSummary(r);
+			const text = s.ok ? translate("onecSelfCheckPassed") : `${translate("onecSelfCheckFailed")}: ${s.failed}`;
+			finishOp(op, s.ok ? undefined : { failed: 1, note: text });
+			showToast(text, s.ok ? "success" : "warning");
+		};
+		let started: Started<SelfCheckResult>;
+		try {
+			started = await startSelfCheck(baseKey);
+		} catch (e) {
+			finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+			fail(e, () => void runSelfCheck());
+			return;
+		}
+		if ("done" in started) { settle(started.done); return; }
+		const watched = () => getOps().some((o) => o.id === op && o.state === "running");
+		const onPending = track(op, title);
+		if (started.pending) onPending(started.pending);
+		void followCommand<SelfCheckResult>(started.commandId, watched, onPending)
+			.then((r) => { setLive(null); settle(r); })
+			.catch((e: unknown) => {
+				setLive(null);
+				if (!watched()) return;
+				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+				if (!isAborted(e)) fail(e);
+			});
+	};
+
 	const busy = plan.isPending || apply.isPending || workRunning;
 	/** Проверка без исправления ничего не меняет — её запускают сразу, без подтверждения. */
 	const runCheck = () => (check.repair ? plan.mutate("check") : apply.mutate("check"));
@@ -371,6 +415,56 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 									{translate("onecMaintCheck")}
 								</Button>
 							</GroupRow>
+						</GroupCol>
+					</FormArea>
+
+					{/*
+					  * ПРОВЕРКА САМОГО BuhProf В БАЗЕ (ПН6). Отличается от самопроверки агента ниже: та
+					  * проверяет, что АГЕНТ умеет работать с базой (и заводит временного пользователя),
+					  * а эта спрашивает РАСШИРЕНИЕ, всё ли у него на месте. Ничего не меняет, поэтому
+					  * доступна и при праве «только просмотр».
+					  */}
+					<FormArea title={translate("onecSelfCheck")}>
+						<GroupCol>
+							<GroupRow>
+								<Button icon="reload" variant="secondary" disabled={busy} title={translate("onecSelfCheckHint")}
+									onClick={() => void runSelfCheck()}>
+									{translate("onecSelfCheck")}
+								</Button>
+								{selfCheck && selfCheckSummary(selfCheck).version && (
+									<span className={main.Muted}>{translate("extVersion")}: {selfCheckSummary(selfCheck).version}</span>
+								)}
+							</GroupRow>
+							{selfCheck && (<>
+								<table className={styles.StatsTable}>
+									<thead>
+										<tr>
+											<th>{translate("onecSelfCheckStep")}</th>
+											<th>{translate("onecSelftestResult")}</th>
+											<th>{translate("onecSelfCheckDetail")}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{selfCheckLines(selfCheck).map((l, i) => (
+											<tr key={`${i}-${l.title}`}>
+												<td>{l.title}</td>
+												{/* «Не сказали» — не отказ: красить незнание в поломку значит гонять чинить целое. */}
+												<td>{l.ok === null ? "—" : l.ok ? translate("onecSelftestOk") : translate("onecSelftestFail")}</td>
+												<td>{[l.detail, l.hint].filter(Boolean).join(" · ")}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+								{!selfCheckLines(selfCheck).length && (
+									<Notice inline items={[{ type: "info", text: translate("onecSelfCheckEmpty") }]} />
+								)}
+								{selfCheckSummary(selfCheck).organizationsWithoutBin.length > 0 && (
+									<Notice inline items={[{
+										type: "attention",
+										text: `${translate("onecSelfCheckNoBin")}: ${selfCheckSummary(selfCheck).organizationsWithoutBin.join(", ")}`,
+									}]} />
+								)}
+							</>)}
 						</GroupCol>
 					</FormArea>
 

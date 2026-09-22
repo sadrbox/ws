@@ -8,7 +8,7 @@
 // Модели отдаём КОРОТКИЕ строки, а не записи ERP целиком: у задачи десяток служебных полей,
 // которые в разговоре не нужны и стоят токенов на каждом ходе.
 
-import type { ServerToolRunner } from "./workflow.ts";
+import type { ServerToolRunner, ServerToolContext } from "./workflow.ts";
 import type { ChatUser } from "./workflow.ts";
 import type { ToolSpec } from "../tools/registry.ts";
 import { ErpRefused, ErpUnavailable, type ErpTask, type ErpNote, type ErpTasks } from "../erp/tasks.ts";
@@ -24,6 +24,8 @@ const taskView = (t: ErpTask) => ({
 	deadline: t.deadline,
 	executor: t.executorName,
 	author: t.curatorName,
+	// Связанный документ — одной подписью: модели незачем знать ни типа, ни идентификатора.
+	...(t.sourceLabel ? { document: t.sourceLabel } : {}),
 });
 
 const noteView = (n: ErpNote) => ({ noteId: n.uuid, body: n.body, author: n.authorName, at: n.createdAt });
@@ -76,7 +78,7 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 			}
 		},
 
-		async run(spec: ToolSpec, payload: Record<string, unknown>, user: ChatUser): Promise<Outcome> {
+		async run(spec: ToolSpec, payload: Record<string, unknown>, user: ChatUser, ctx?: ServerToolContext): Promise<Outcome> {
 			const bin = binOf(user);
 			if (!bin) {
 				return { ok: false, error: { code: "NO_ORGANIZATION", message: "В форме чата не выбрана организация — задачи и заметки ведутся по организации" } };
@@ -93,11 +95,27 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 						return { ok: true, data: { items: items.map(taskView), count: items.length } };
 					}
 					case "TASKS_CREATE": {
+						/*
+						 * СВЯЗЬ С ДОКУМЕНТОМ (СВ7). Модель называет только идентификатор, и он уже проверен
+						 * по `seenIds` — выдуманный сюда не доходит. Тип и подпись берём из того, что 1С
+						 * вернула в этом диалоге: со слов модели документ мог бы оказаться «реализацией»
+						 * с номером из воздуха.
+						 *
+						 * ТИП С ПРИСТАВКОЙ `1c:`. Документ лежит В 1С, а не в ERP: ссылка вида `sales` +
+						 * чужой uuid открывала бы в панели карточку, которой там нет. Приставка говорит
+						 * панели, что открыть объект нельзя, — и подпись показывается как есть.
+						 */
+						const documentId = typeof payload.documentId === "string" ? payload.documentId : "";
+						const doc = documentId ? ctx?.documents?.[documentId] : undefined;
+						if (documentId && !doc) {
+							return { ok: false, error: { code: "UNKNOWN_DOCUMENT", message: "Этот документ в диалоге не встречался — связать задачу с ним нельзя" } };
+						}
 						const item = await tasks.createTask(actor, {
 							name: String(payload.name ?? ""),
 							description: typeof payload.description === "string" ? payload.description : undefined,
 							deadline: typeof payload.deadline === "string" ? payload.deadline : undefined,
 							executorName: typeof payload.executorName === "string" ? payload.executorName : undefined,
+							...(doc ? { sourceType: `1c:${doc.type}`, sourceUuid: documentId, sourceLabel: doc.label } : {}),
 						});
 						return { ok: true, data: taskView(item) };
 					}

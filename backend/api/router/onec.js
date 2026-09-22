@@ -53,6 +53,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			clusterStatus: b.clusterStatus ?? b.status,
 			serverName: b.serverName,
 			onecVersion: b.onecVersion,
+			// Версия расширения BuhProf в базе (ПН7): ею определяется, какие операции база умеет. Без неё колонка
+			// «Расширение» в списке показывала «не видели» у ВСЕХ баз — картина хуже отсутствия колонки (аудит 22.09).
+			extVersion: b.extVersion ?? null,
 			extensionsCount: b.extensionsCount,
 			sessionsCount: b.sessionsCount,
 			lastSeenAt: b.lastSeenAt,

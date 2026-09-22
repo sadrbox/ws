@@ -22,7 +22,7 @@
  * свёрнутая занимает узкую полосу, раскрытая — свою долю. Никакого `position: absolute`:
  * накладка закрывала бы содержимое формы ровно там, где с ним работают.
  */
-import { FC, useEffect, useRef, useState } from "react";
+import { FC, Suspense, lazy, useEffect, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import IconButton from "src/components/IconButton/IconButton";
@@ -30,11 +30,26 @@ import { Icon } from "src/components/IconButton/icons";
 import { useAppContext } from "src/app/context";
 import {
 	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
-	useScopedNotices, useTechMessagesOpen, useTechMessagesPlacement, type TechMessage,
+	TECH_DOCK_TITLES, useScopedNotices, useTechDockView, useTechMessagesOpen,
+	useTechMessagesPlacement, type TechMessage,
 } from "./store";
+import DockViewMenu from "./DockViewMenu";
 import { clearFinished, useOps } from "./operations";
 import MessagesView from "./MessagesView";
 import styles from "./TechMessages.module.scss";
+
+/*
+ * ВИДЫ-СПУТНИКИ ЗАГРУЖАЮТСЯ ПО ТРЕБОВАНИЮ. Журнал сообщений нужен всегда и лежит здесь же, а
+ * переписка, помощник, задачи и заметки — это целые разделы приложения со своими запросами и
+ * таблицами. Тянуть их в общий кусок ради переключателя, которым воспользуются не все и не
+ * сразу, значит удлинять загрузку каждому. React.lazy заодно снимает вопрос круговых импортов:
+ * список задач тянет ModelList, а тот — половину каркаса.
+ */
+const CommunicationsPanel = lazy(() => import("src/models/Communications"));
+const ChatList = lazy(() => import("src/models/Chat").then((m) => ({ default: m.ChatList })));
+const AiAssistantList = lazy(() => import("src/models/AiAssistant"));
+const TodosList = lazy(() => import("src/models/Todos").then((m) => ({ default: m.TodosList })));
+const OrgNotes = lazy(() => import("src/components/Notes/OrgNotes"));
 
 /** Чьи сообщения показывать — настройка рабочего места, переживает перезагрузку. */
 const ALL_KEY = "tech_messages_all";
@@ -101,6 +116,13 @@ export const TechMessages: FC = () => {
 	 * граница слева и подпись боком, у нижней полосы — граница сверху и подпись как обычно.
 	 */
 	const placement = useTechMessagesPlacement();
+	/*
+	 * ЧТО ПОКАЗЫВАЕТ ОБЛАСТЬ. Место справа (или внизу) одно, а спутников основного экрана
+	 * несколько; переключатель в шапке меняет содержимое, не трогая ни размер, ни место.
+	 * Выбор живёт в общем состоянии, а не здесь: его же читает свёрнутая полоса, подписываясь
+	 * тем, что человек оставил открытым.
+	 */
+	const view = useTechDockView();
 	const [showAll, setShowAll] = useState(readAll);
 
 	const scope = showAll ? APP_SCOPE : (activePane || APP_SCOPE);
@@ -133,14 +155,16 @@ export const TechMessages: FC = () => {
 		try { localStorage.setItem(ALL_KEY, v ? "1" : "0"); } catch { /* не беда */ }
 	};
 
+	const viewTitle = translate(TECH_DOCK_TITLES[view]);
+
 	if (!open) {
 		return (
 			<>
 			<Announcer />
-			<aside className={styles.Rail} data-place={placement} aria-label={translate("techMessages")}>
+			<aside className={styles.Rail} data-place={placement} aria-label={viewTitle}>
 				<IconButton
 					size="md"
-					title={`${translate("techMessages")}${active ? `: ${active}` : ""}`}
+					title={`${viewTitle}${active ? `: ${active}` : ""}`}
 					aria-label={translate("techMessagesOpen")}
 					onClick={() => setTechMessagesOpen(true)}
 				>
@@ -157,7 +181,8 @@ export const TechMessages: FC = () => {
 						{active}
 					</span>
 				)}
-				<span className={styles.RailTitle}>{translate("techMessages")}</span>
+				{/* Подпись — то, что человек оставил открытым: свернув «Задачи», он ищет глазами их. */}
+				<span className={styles.RailTitle}>{viewTitle}</span>
 			</aside>
 			</>
 		);
@@ -166,15 +191,31 @@ export const TechMessages: FC = () => {
 	return (
 		<>
 		<Announcer />
-		<aside className={styles.Dock} data-place={placement} aria-label={translate("techMessages")}>
+		<aside className={styles.Dock} data-place={placement} aria-label={viewTitle}>
+			{/*
+			  * ШАПКА — ДВЕ ОБЛАСТИ, А НЕ ОДИН РЯД. Слева то, ЧТО показано (выбор вида и признак
+			  * идущей работы), справа — что сделать с самой областью (где держать, свернуть).
+			  * Разные обязанности не должны сходиться в одну строку впритык: растянутый на всю
+			  * ширину список упирался в кнопки, и на узкой колонке было не понять, где кончается
+			  * выбор и начинается управление.
+			  */}
 			<div className={styles.Head}>
-				<span className={styles.Title}>{translate("techMessages")}</span>
-				{running > 0 && (
-					<span className={styles.HeadRunning} title={translate("techMsgProgress")}>
-						<span className={styles.Spinner} />
-						{running}
-					</span>
-				)}
+				<div className={styles.HeadLeft}>
+					{/*
+					  * ЗАГОЛОВОК ОН ЖЕ ВЫБОР. Название области называет то, что под ним, — и оно же
+					  * переключает содержимое. Поле ввода (FieldSelect) здесь читалось как «что-то
+					  * вводят в шапке», поэтому вид у кнопки заголовочный, а меню выезжает порталом
+					  * (см. DockViewMenu) — иначе его обрезала бы узкая колонка у края экрана.
+					  */}
+					<DockViewMenu />
+					{running > 0 && (
+						<span className={styles.HeadRunning} title={translate("techMsgProgress")}>
+							<span className={styles.Spinner} />
+							{running}
+						</span>
+					)}
+				</div>
+				<div className={styles.HeadRight}>
 				{/*
 				  * ГДЕ ДЕРЖАТЬ ОБЛАСТЬ — решает тот, кто работает. Длинной ошибке нужна
 				  * ширина: в узкой колонке справа абзац превращается в лесенку из двух слов.
@@ -215,12 +256,36 @@ export const TechMessages: FC = () => {
 				>
 					<Icon name="caretDown" />
 				</IconButton>
+				</div>
 			</div>
 
 			<div className={styles.Body}>
+				{/*
+				  * СОДЕРЖИМОЕ ПО ВЫБОРУ. Виды-спутники подгружаются по требованию, поэтому нужен
+				  * Suspense: без него первое переключение показало бы пустоту вместо «загружаю».
+				  * Каждый вид монтируется заново — состояние переписки и списков живёт в их
+				  * собственных хранилищах (react-query, SSE), а не в этой области.
+				  */}
+				{view !== "messages" && (
+					/*
+					  * ОБЁРТКА ВИДА. Она даёт чужой панели тот же каркас, что и журналу сообщений
+					  * (см. .Panel), а `data-dock-view` — зацепка, по которой каждый вид ужимает
+					  * СЕБЯ в своём же модуле стилей: правила про Коммуникации не должны лежать
+					  * в файле области сообщений.
+					  */
+					<div className={styles.Panel} data-dock-view={view}>
+						<Suspense fallback={<div className={styles.Empty}>{translate("loading")}</div>}>
+							{view === "communications" && <CommunicationsPanel />}
+							{view === "chat" && <ChatList />}
+							{view === "assistant" && <AiAssistantList />}
+							{view === "tasks" && <TodosList variant="embedded" />}
+							{view === "notes" && <OrgNotes />}
+						</Suspense>
+					</div>
+				)}
 				{/* Переключатели и очистка — команды ВСЕГО списка, поэтому стоят над ним.
 				    Действия по отдельному сообщению живут в самом сообщении. */}
-				<MessagesView
+				{view === "messages" && <MessagesView
 					messages={messages}
 					pane={scope === APP_SCOPE ? undefined : scope}
 					toolbar={(
@@ -249,7 +314,7 @@ export const TechMessages: FC = () => {
 							</Button>
 						</>
 					)}
-				/>
+				/>}
 			</div>
 		</aside>
 		</>

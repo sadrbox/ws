@@ -156,8 +156,12 @@ POST /agent/v1/commands/{id}/result     ← результат
 | `agent.running` | heartbeat сообщает выполняемые команды (`running`) — сервис продлевает их срок (В2) | всегда, у обеих ролей — со сборки `2026-09-15 18:00` | без неё срок команды — только из спецификации (С33) |
 | `ib.echo` | изменяющие команды прикладывают `state` | всегда при `role = admin` | сервис способность не проверяет: `state` разбирает, если он пришёл (`agentRouter.ts:434`) |
 | `ib.roles` | правка ролей применяется так, как прислана | всегда при `role = admin` | `IB_UPDATE_USER` с `addRoles`/`removeRoles`/`roles` без неё — 409 `CAPABILITY_MISSING` (`requiredCapability`, `admin.ts:724-743`) |
+| `agent.log` | журнал службы отдаётся отдельной способностью | сборки с 2026-09-20 | гейт `AGENT_LOG_TAIL`; годится и прежняя `agent.procs` (`capabilityAlt`, `admin.ts`) |
+| `agent.config` | читает и меняет свои настройки | сборки с удалённым управлением (`TASK_AGENT_REMOTE_CONTROL_2026-09-19.md`) | гейт `AGENT_CONFIG_GET`, `AGENT_CONFIG_SET` |
+| `agent.restart` | перезапускает свою службу | там же | гейт `AGENT_RESTART` |
+| `agent.update` | ставит новую сборку себе | там же | гейт `AGENT_UPDATE`; узел загрузки должен быть доверенным (`UPDATE_HOST_NOT_ALLOWED`) |
 | `onec.business` | это бизнес-агент | всегда при `role ≠ admin` | не проверяется: бизнес-агента выбирают по роли (`pickAgentFor`, `agents/service.ts:247-249`) |
-| имена типов | конкретные команды, которые знает сборка | админ-агент: все `CLUSTER_*` и `AGENT_*`, `IB_*` — только вместе с `ib.admin`; бизнес-агент — типы документов (`HEALTH`, `CREATE_SALE`, …) | если в списке есть хоть одно имя типа, команда ставится, только когда её тип в списке (`admin.ts:656-657`) |
+| имена типов | конкретные команды, которые знает сборка | админ-агент: все `CLUSTER_*` и `AGENT_*`, `IB_*` — только вместе с `ib.admin`; бизнес-агент — типы документов (`HEALTH`, `CREATE_SALE`, …) | если в списке есть хоть одно имя типа, команда ставится, только когда её тип в списке (`agentKnowsType`, `admin.ts`). С 22.09 правило действует и на БИЗНЕС-команды — чат и панель отказывают сразу («обновите агента»), вместо минуты ожидания и `UNKNOWN_COMMAND` по сети |
 
 `IB_BATCH` агент **не объявляет** (`commands/mod.rs:380-383`): его исполняет только расписание самого агента, а в
 `ADMIN_COMMANDS` сервиса такого типа нет.
@@ -165,7 +169,9 @@ POST /agent/v1/commands/{id}/result     ← результат
 Сводка `AGENT_HEALTH` показывает признаки с точкой, но `ib.admin` в ней считается по одному лишь заданному
 администратору (`health.rs:52`, `rt.ib.is_some()`), без пробы входа: там он может быть, хотя при регистрации не объявлен.
 
-**Команда → способность** (`ADMIN_COMMANDS`, `admin.ts:111-630`; у всех `role = admin`):
+**Команда → способность** (`ADMIN_COMMANDS`, `admin.ts`). Роль `admin` у всех команд кластера и баз; у команд
+о САМОЙ СЛУЖБЕ (`AGENT_*`) роль `any` — с выпуска агента 2026-09-20 их умеют обе роли, и адресуются они
+конкретному агенту, а не выбираются по базе:
 
 | Команда | Способность | Класс | База | Срок, с |
 |---|---|---|---|---|
@@ -180,7 +186,12 @@ POST /agent/v1/commands/{id}/result     ← результат
 | `IB_SELFTEST` | `ib.admin` | WRITE | да | 900 |
 | `IB_CHECK` | `ib.admin` | WRITE | да | 15 000 |
 | `IB_BACKUP`, `IB_RESTORE`, `IB_APPLY_UPDATE` | `ib.admin` | CRITICAL | да | 15 000 |
-| `AGENT_LIST_PROCESSES`, `AGENT_HEALTH`, `AGENT_LOG_TAIL` | `agent.procs` | READ | нет | 900 |
+| `AGENT_LIST_PROCESSES`, `AGENT_HEALTH` | `agent.procs` | READ | нет | 900 |
+| `AGENT_LOG_TAIL` | `agent.log`, годится и `agent.procs` | READ | нет | 900 |
+| `AGENT_CONFIG_GET` | `agent.config` | READ | нет | 900 |
+| `AGENT_CONFIG_SET` | `agent.config` | WRITE | нет | 900 |
+| `AGENT_RESTART` | `agent.restart` | CRITICAL | нет | 900 |
+| `AGENT_UPDATE` | `agent.update` | CRITICAL | нет | 900 |
 | `AGENT_KILL_PROCESS` | `agent.procs` | CRITICAL | нет | 900 |
 | `AGENT_CANCEL_COMMAND` | `agent.cancel`; прервать `IB_CHECK` — ещё `agent.cancel.check` | CRITICAL | нет | 900 |
 
@@ -196,6 +207,10 @@ POST /agent/v1/commands/{id}/result     ← результат
 
 Схема (`heartbeatSchema`, `agentRouter.ts:79-111`). Лишние поля отбрасываются молча; неверное поле — 400
 `VALIDATION_ERROR` «Некорректный heartbeat» на весь heartbeat:
+
+> `activationRequests` — единственное поле heartbeat, описанное НЕ здесь: это запросы бизнес-агента на
+> активацию БИН, и весь их разбор (лимит `activeBins`, решения панели, аудит) живёт в
+> [CONTRACT_BASE_REGISTRATION_2026-09-19.md](CONTRACT_BASE_REGISTRATION_2026-09-19.md). Сервис их принимает.
 
 | Поле | Тип и предел | Обяз. | Что шлёт агент (`Heartbeat`, `cloud/protocol.rs:117-154`; `send_heartbeat`, `agent.rs`) |
 |---|---|---|---|

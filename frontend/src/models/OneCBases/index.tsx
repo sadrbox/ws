@@ -11,6 +11,7 @@
  * Отсюда `hideAddDelete` — тот же режим, что у справочников, наполняемых системой.
  */
 import BaseChatTokens from "./BaseChatTokens";
+import BaseChatCalls from "./BaseChatCalls";
 import { useRunningCommand } from "src/components/TechMessages/operations";
 import { finishOp } from "src/models/OneCAdmin/progress";
 import { startOp } from "src/models/OneCAdmin/progress";
@@ -390,9 +391,19 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 			),
 		},
 		{
-			// Доступ базы к чату внутри 1С (СВ4): токены выпускаются при одобрении заявки, здесь их видно и отзывают.
-			id: "chat", label: translate("onecTabChat"),
+			/*
+			 * Доступ базы к чату внутри 1С (СВ4): токены выпускаются при одобрении заявки, здесь их видно, меняют и
+			 * отзывают. Вкладка называется ТОКЕНОМ, а не «Чат в 1С» (22.09): подсказка в самой 1С отсылает «в панель
+			 * за новым токеном», и искали её по слову «токен», а не по слову «чат».
+			 */
+			id: "chat", label: translate("onecTabBaseToken"),
 			component: <BaseChatTokens baseId={asText(row.registryId)} baseKey={baseKey} />,
+		},
+		{
+			// Что помощник вызывал из чата этой базы и чем кончилось (ПН8) — рядом с доступом, но отдельной
+			// вкладкой: токены отзывают редко, а в журнал ходят при каждой жалобе.
+			id: "chatCalls", label: translate("onecTabChatCalls"),
+			component: <BaseChatCalls baseId={asText(row.registryId)} />,
 		},
 	];
 };
@@ -400,7 +411,7 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 /** Запись реестра → строка карточки. Один код на открытие и на обновление после команд. */
 const baseToRow = (b: OnecBase): TDataItem => ({
 	baseKey: b.key, name: b.name, status: b.status, clusterStatus: b.clusterStatus ?? b.status, serverName: b.serverName,
-	onecVersion: b.onecVersion, extensionsCount: b.extensionsCount,
+	onecVersion: b.onecVersion, extVersion: b.extVersion, extensionsCount: b.extensionsCount,
 	published: b.published, publishUrl: b.publishUrl,
 	publishUrlPublic: b.publishUrlPublic, publishSeenAt: b.publishSeenAt,
 	ibUnreachableAt: b.ibUnreachableAt, ibUnreachableReason: b.ibUnreachableReason,
@@ -1005,6 +1016,18 @@ export const OneCBasesList: FC<{
 			// «—» читалось бы как «версии нет»; версия есть всегда, её просто не сообщили.
 			if (col.identifier === "onecVersion") {
 				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;
+			}
+			/*
+			 * ВЕРСИЯ РАСШИРЕНИЯ BuhProf (ПН7). Ею определяется, что база вообще умеет: списки документов,
+			 * аналитику и кассу знает не всякая сборка, и вопрос «почему у этой базы нет списков» без
+			 * колонки выяснялся руками. Пусто — расширение ни разу не отзывалось: это не «старое», а
+			 * «не видели», и подменять одно другим нельзя.
+			 */
+			if (col.identifier === "extVersion") {
+				const v = asText(row.extVersion);
+				return v
+					? <span title={translate("onecExtVersionHint")}>{v}</span>
+					: <span className={main.Muted} title={translate("onecExtVersionUnknownHint")}>{translate("onecExtVersionUnknown")}</span>;
 			}
 			/*
 			 * Адрес публикации — тоже скрыт по умолчанию: он длинный, а нужен точечно.

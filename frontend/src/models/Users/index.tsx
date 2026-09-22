@@ -157,7 +157,17 @@ UsersForm.displayName = "UsersForm";
 
 const UsersList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => (
   <ModelList endpoint={MODEL_ENDPOINT} listName="UsersList" columnsJson={columnsJson} FormComponent={UsersForm}
-    getLabel={(d) => d?.username ? (d.username as string) : (d?.employee as { fullName?: string | null } | null)?.fullName || "?"} variant={variant} onSelectItem={onSelectItem} />
+    getLabel={(d) => d?.username ? (d.username as string) : (d?.employee as { fullName?: string | null } | null)?.fullName || "?"} variant={variant} onSelectItem={onSelectItem}
+    /*
+     * УЧЁТНАЯ ЗАПИСЬ, ЗАВЕДЁННАЯ ИНТЕГРАЦИЕЙ (ПН3). Автор задачи или события из 1С — настоящий
+     * пользователь ERP с пустым паролем: войти под ним нельзя, он существует, чтобы у записи был
+     * автор. В списке такие выглядели как брошенные учётки, и их порывались удалять — вместе с
+     * авторством всего, что они успели создать. Признак приходит с сервера (`isIntegration`);
+     * самого пароля в списке нет и не было.
+     */
+    renderCell={(row, col) => (col.identifier === "isIntegration"
+      ? translate(row.isIntegration ? "userIntegrationOnly" : "userCanLogin")
+      : undefined)} />
 );
 UsersList.displayName = "UsersList";
 

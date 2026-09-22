@@ -6,7 +6,7 @@ import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
-import { ONEC_CHAT_SOURCE, isFromOnec, onecSourceLabel, sourceChipLabel, sourceCellText } from "./source";
+import { ONEC_CHAT_SOURCE, isFromOnec, isOnecObject, onecOriginLabel, originOf, sourceChipLabel, sourceCellText } from "./source";
 import FilesPanel from "src/components/FilesPanel";
 import { FieldNumber, FieldDate, FieldSelect, FieldTextarea } from "src/components/Field";
 import { FormLookup } from "src/components/Field/FormLookup";
@@ -41,6 +41,8 @@ interface TFields {
   createdAt: string; deadline: string; deadlineDays: string;
   /** Объект-источник задачи (документ/справочник/заметка) — ссылка «Источник». */
   sourceType: string; sourceUuid: string; sourceLabel: string;
+  /** Откуда пришла задача («из чата в 1С») и подпись происхождения — отдельно от ссылки. */
+  origin: string; originLabel: string;
 }
 
 const DEFAULT_FIELDS: TFields = {
@@ -50,6 +52,7 @@ const DEFAULT_FIELDS: TFields = {
   executorUuid: "", executorName: "",
   createdAt: "", deadline: "", deadlineDays: "",
   sourceType: "", sourceUuid: "", sourceLabel: "",
+  origin: "", originLabel: "",
 };
 
 
@@ -64,6 +67,8 @@ interface TodoServerRecord {
   curatorUuid?: string | null;
   executorUuid?: string | null;
   sourceType?: string | null;
+  origin?: string | null;
+  originLabel?: string | null;
   sourceUuid?: string | null;
   sourceLabel?: string | null;
   createdAt?: string | null;
@@ -105,6 +110,8 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       createdAt: d.createdAt?.slice(0, 10) ?? "",
       deadline: d.deadline?.slice(0, 10) ?? "", deadlineDays: d.deadlineDays?.toString() ?? "",
       sourceType: d.sourceType ?? "", sourceUuid: d.sourceUuid ?? "", sourceLabel: d.sourceLabel ?? "",
+      // Происхождение только показываем: ставит его тот, кто создал запись (панель или канал 1С).
+      origin: d.origin ?? "", originLabel: d.originLabel ?? "",
       id: d.id, uuid: d.uuid,
     }),
     buildPayload: (fd) => ({
@@ -168,13 +175,13 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                     клик по чипу открывает сам объект. Подпись = «Тип + ссылка»
                     (напр. «Реализация ТМЗ и услуг № 12 - 01.02.2026»), а не сырой
                     код типа: имя типа берём из реестра моделей. */}
-                {/* Задача из чата в 1С: объекта-источника нет, поэтому не чип-ссылка, а подпись
-                    с базой — по ней видно, откуда запись и почему автор незнакомый. */}
-                {isFromOnec(form.fields.sourceType) && (
+                {/* ОТКУДА ПРИШЛА задача — не то же, что «на что ссылается»: задача из чата 1С
+                    может быть связана с созданным там документом, и видеть нужно обе вещи. */}
+                {isFromOnec(form.fields) && (
                   <Group>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 12, color: "var(--sv-color51, #666)" }}>{translate("source")}:</span>
-                      <span>{onecSourceLabel(form.fields.sourceLabel)}</span>
+                      <span style={{ fontSize: 12, color: "var(--sv-color51, #666)" }}>{translate("origin")}:</span>
+                      <span>{onecOriginLabel(originOf(form.fields).label)}</span>
                     </div>
                   </Group>
                 )}
@@ -182,12 +189,18 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
                   <Group>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 12, color: "var(--sv-color51, #666)" }}>{translate("source")}:</span>
-                      <ObjectLink
-                        objectRef={refFromRestore(
-                          { kind: "form", endpoint: form.fields.sourceType, uuid: form.fields.sourceUuid },
-                          sourceChipLabel(form.fields.sourceType, form.fields.sourceLabel),
+                      {/* Объект 1С в панели не открыть — его здесь нет. Подпись показываем, а ссылку
+                          не делаем: чип, ведущий в «не найдено», хуже простого текста. */}
+                      {isOnecObject(form.fields.sourceType)
+                        ? <span>{sourceChipLabel(form.fields.sourceType, form.fields.sourceLabel)}</span>
+                        : (
+                          <ObjectLink
+                            objectRef={refFromRestore(
+                              { kind: "form", endpoint: form.fields.sourceType, uuid: form.fields.sourceUuid },
+                              sourceChipLabel(form.fields.sourceType, form.fields.sourceLabel),
+                            )}
+                          />
                         )}
-                      />
                     </div>
                   </Group>
                 )}
@@ -227,27 +240,33 @@ TodosForm.displayName = "TodosForm";
 
 const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }> = ({ variant, onSelectItem, ownerUuid, ownerField, extraQueryParams }) => {
   /*
-   * ФИЛЬТР ПО ИСТОЧНИКУ (ПН2). Задач из 1С со временем станет больше, чем заведённых руками, и
-   * «показать только их» — первое, что спросят. Отбор идёт на сервере, как и весь список: страница
-   * в тысячу задач не должна приезжать в браузер ради одного признака.
+   * ФИЛЬТР ПО ПРОИСХОЖДЕНИЮ (ПН2). Задач из 1С со временем станет больше, чем заведённых руками, и
+   * «показать только их» (или наоборот) — первое, что спросят. Отбор идёт на сервере, как и весь
+   * список: страница в тысячу задач не должна приезжать в браузер ради одного признака.
    *
-   * Обратного отбора («только из панели») здесь нет намеренно: список задач принимает операторы
-   * contains/equals/gte/lte (backend/api/router/todos.js), «не равно» среди них нет, а городить
-   * отбор на клиенте — значит врать о постраничности.
+   * «Из панели» — это ПУСТОЕ происхождение, и отбирается оно оператором `isNull`, а не «не равно»:
+   * Prisma в `not` строки со значением NULL не возвращает (проверено на живой базе), и «не из 1С»
+   * так не выразить.
    */
-  const [source, setSource] = useState("");
+  const [origin, setOrigin] = useState("");
+  const originFilter = origin === ONEC_CHAT_SOURCE
+    ? { origin: ONEC_CHAT_SOURCE }
+    : origin === "panel"
+      ? { origin: { value: true, operator: "isNull" } }
+      : undefined;
   return (
     <ModelList endpoint={MODEL_ENDPOINT} listName="TodosList" columnsJson={columnsJson} FormComponent={TodosForm}
       getLabel={(d) => d?.description ? ((d.description as string).slice(0, 50) + ((d.description as string).length > 50 ? "..." : "")) : "?"}
       variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
       extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }}
-      extraFilter={source ? { sourceType: source } : undefined}
+      extraFilter={originFilter}
       renderCell={(row, col) => (col.identifier === "sourceLabel" ? sourceCellText(row) : undefined)}
       extraButtons={(
-        <FieldSelect name="todos_source" label={translate("source")} size="sm" value={source}
-          onChange={(e) => setSource(e.target.value)}
+        <FieldSelect name="todos_origin" label={translate("origin")} size="sm" value={origin}
+          onChange={(e) => setOrigin(e.target.value)}
           options={[
             { value: "", label: translate("todoSourceAll") },
+            { value: "panel", label: translate("todoFromPanel") },
             { value: ONEC_CHAT_SOURCE, label: translate("todoFromOnec") },
           ]} />
       )} />

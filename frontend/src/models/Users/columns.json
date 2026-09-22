@@ -30,6 +30,16 @@
 		"inlist": true
 	},
 	{
+		"identifier": "isIntegration",
+		"type": "string",
+		"width": "150px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Вход",
+		"visible": true,
+		"inlist": true
+	},
+	{
 		"identifier": "employee.fullName",
 		"type": "string",
 		"width": "300px",

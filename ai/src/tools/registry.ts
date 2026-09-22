@@ -567,6 +567,287 @@ export const TOOLS: ToolSpec[] = [
 		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId), form: str(i.form, "form") }),
 	},
 
+	// ── Списки документов, справочники и числа (план PLAN_ONEC_CAPABILITIES_2026-09-22, СВ11–СВ14) ──
+	//
+	// ЧЕГО НЕ ХВАТАЛО. Документ читался только по идентификатору — «покажи реализации за сентябрь» отвечать
+	// было нечем; справочники только читались — нет контрагента, и разговор упирался в тупик; числа
+	// приходили печатной формой, по которой ни сложить, ни сравнить. Эти инструменты закрывают три дыры:
+	// список документов с отбором, заведение контрагента и номенклатуры, и суммы — числами, а не картинкой.
+	// Печать осталась у print_document: за списком — сюда, за бумагой — туда.
+	{
+		name: "list_document_types",
+		description: "Какие виды документов эта база умеет отдавать списком (list_documents) — с русскими названиями. Вызывай, если не уверен, как называется вид, или пользователь просит «все документы».",
+		inputSchema: { type: "object", properties: {}, additionalProperties: false },
+		operation: "READ",
+		commandType: "LIST_DOCUMENT_TYPES",
+		mutating: false,
+		buildPayload: () => ({}),
+	},
+	{
+		name: "list_documents",
+		description:
+			"СПИСОК документов 1С за период с отбором — это НЕ печать и НЕ отчёт: возвращает строки (номер, дата, контрагент, сумма, проведён ли, id), по которым можно считать и сравнивать. "
+			+ "documentType: sale (реализация), purchase (поступление ТиУ), invoice (счёт на оплату), cashIn/cashOut (кассовые ордера), incoming/outgoing (платёжные поручения), taxInvoice (счёт-фактура), reconciliationAct (акт сверки). "
+			+ "from/to — период YYYY-MM-DD, обязателен. counterpartyId — id из search_counterparties, если спрашивают про конкретного контрагента. posted: true — только проведённые, false — только непроведённые (например «какие счета не проведены»). "
+			+ "Вызывай на вопросы «покажи реализации за сентябрь», «какие счета не оплачены», «сколько продали на прошлой неделе». За печатной формой найденного документа — print_document с тем же id.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				documentType: { type: "string", enum: DOCUMENT_TYPES },
+				from: { type: "string", description: "начало периода YYYY-MM-DD" },
+				to: { type: "string", description: "конец периода YYYY-MM-DD" },
+				counterpartyId: { type: "string", description: "id контрагента из search_counterparties — отбор по контрагенту" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если в базе их несколько" },
+				posted: { type: "boolean", description: "true — только проведённые, false — только непроведённые; не передавать — все" },
+				minAmount: { type: "number", minimum: 0, description: "сумма документа не меньше этой" },
+				maxAmount: { type: "number", minimum: 0, description: "сумма документа не больше этой" },
+				limit: { type: "integer", minimum: 1, maximum: 100, description: "сколько строк вернуть, по умолчанию 20" },
+			},
+			required: ["documentType", "from", "to"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "LIST_DOCUMENTS",
+		mutating: false,
+		buildPayload: (i, ctx) => {
+			const min = i.minAmount === undefined || i.minAmount === null ? null : num(i.minAmount, NaN, "minAmount");
+			const max = i.maxAmount === undefined || i.maxAmount === null ? null : num(i.maxAmount, NaN, "maxAmount");
+			if (min !== null && max !== null && min > max) throw new ToolInputError("minAmount", "minAmount не может быть больше maxAmount");
+			return {
+				documentType: docType(i.documentType),
+				from: isoDate(i.from, "from"),
+				to: isoDate(i.to, "to"),
+				...(i.counterpartyId ? { counterpartyId: known(ctx, "counterpartyId", i.counterpartyId) } : {}),
+				...(orgBin(i.organizationBin) ? { organizationBin: orgBin(i.organizationBin) } : {}),
+				...(typeof i.posted === "boolean" ? { posted: i.posted } : {}),
+				...(min !== null ? { minAmount: min } : {}),
+				...(max !== null ? { maxAmount: max } : {}),
+				limit: limited(i.limit, 20, 100, "limit"),
+			};
+		},
+	},
+	{
+		name: "create_counterparty",
+		description:
+			"Завести контрагента в 1С. Вызывай ТОЛЬКО когда search_counterparties ничего не нашёл И пользователь подтвердил, что контрагента нужно создать: дубль в справочнике дороже лишнего вопроса. "
+			+ "БИН/ИИН обязателен — 12 цифр; по нему 1С и ищет существующего, чтобы не плодить двойников.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				name: { type: "string", description: "наименование как в документах контрагента" },
+				bin: { type: "string", description: "БИН или ИИН, 12 цифр" },
+				kind: { type: "string", enum: ["buyer", "supplier", "both"], description: "покупатель, поставщик или и то и другое (по умолчанию both)" },
+				fullName: { type: "string", description: "полное юридическое наименование, если известно" },
+				comment: { type: "string" },
+			},
+			required: ["name", "bin"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_COUNTERPARTY",
+		mutating: true,
+		buildPayload: (i) => ({
+			name: str(i.name, "name").slice(0, 200),
+			bin: bin12(i.bin, "bin"),
+			kind: typeof i.kind === "string" && ["buyer", "supplier", "both"].includes(i.kind) ? i.kind : "both",
+			...(typeof i.fullName === "string" && i.fullName.trim() ? { fullName: i.fullName.trim().slice(0, 500) } : {}),
+			comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
+		}),
+	},
+	{
+		name: "create_product",
+		description:
+			"Завести номенклатуру (товар или услугу) в 1С. Вызывай ТОЛЬКО когда search_products ничего не нашёл и пользователь подтвердил создание. "
+			+ "kind: goods — товар (нужен склад при продаже), service — услуга. unit — единица измерения, как её называет пользователь («шт», «услуга», «кг»); если не названа, 1С возьмёт свою по умолчанию.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				name: { type: "string", description: "наименование номенклатуры" },
+				kind: { type: "string", enum: ["goods", "service"], description: "товар или услуга" },
+				unit: { type: "string", description: "единица измерения: шт, кг, услуга…" },
+				vatRate: { type: "string", description: "ставка НДС, если названа: «12%», «Без НДС»" },
+				article: { type: "string", description: "артикул, если назван" },
+				comment: { type: "string" },
+			},
+			required: ["name", "kind"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_PRODUCT",
+		mutating: true,
+		buildPayload: (i) => {
+			const kind = str(i.kind, "kind");
+			if (!["goods", "service"].includes(kind)) throw new ToolInputError("kind", "kind: goods (товар) или service (услуга)");
+			return {
+				name: str(i.name, "name").slice(0, 200),
+				kind,
+				...(typeof i.unit === "string" && i.unit.trim() ? { unit: i.unit.trim().slice(0, 50) } : {}),
+				...(typeof i.vatRate === "string" && i.vatRate.trim() ? { vatRate: i.vatRate.trim().slice(0, 50) } : {}),
+				...(typeof i.article === "string" && i.article.trim() ? { article: i.article.trim().slice(0, 100) } : {}),
+				comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
+			};
+		},
+	},
+	{
+		name: "get_debts",
+		description:
+			"Задолженность по контрагентам на дату — ЧИСЛАМИ: кто должен нам (receivable, счета 1210/1610), кому должны мы (payable, 3310/3510), сколько просрочено. "
+			+ "Вызывай на вопросы «кто сколько должен», «какая у нас дебиторка», «сколько мы должны поставщикам», «есть ли просрочка». Отчёт (run_report) для этого НЕ нужен — он даёт картинку, а не суммы.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				onDate: { type: "string", description: "дата, на которую считать, YYYY-MM-DD (обычно сегодня)" },
+				kind: { type: "string", enum: ["receivable", "payable", "both"], description: "нам должны, мы должны или и то и другое (по умолчанию both)" },
+				counterpartyId: { type: "string", description: "id контрагента из search_counterparties — долг одного контрагента" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				overdueOnly: { type: "boolean", description: "только просроченная задолженность" },
+				limit: { type: "integer", minimum: 1, maximum: 100, description: "сколько строк вернуть, по умолчанию 50" },
+			},
+			required: ["onDate"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "GET_DEBTS",
+		mutating: false,
+		buildPayload: (i, ctx) => ({
+			onDate: isoDate(i.onDate, "onDate"),
+			kind: typeof i.kind === "string" && ["receivable", "payable", "both"].includes(i.kind) ? i.kind : "both",
+			...(i.counterpartyId ? { counterpartyId: known(ctx, "counterpartyId", i.counterpartyId) } : {}),
+			...(orgBin(i.organizationBin) ? { organizationBin: orgBin(i.organizationBin) } : {}),
+			...(typeof i.overdueOnly === "boolean" ? { overdueOnly: i.overdueOnly } : {}),
+			limit: limited(i.limit, 50, 100, "limit"),
+		}),
+	},
+	{
+		name: "get_balances",
+		description:
+			"Остатки по счетам учёта на дату — числами: касса (1010), банк (1030), расчёты с покупателями (1210) и поставщиками (3310), запасы (1330) и другие. "
+			+ "accounts — коды счетов, если спрашивают про конкретные; без них 1С вернёт основные. Вызывай на «сколько денег на счету», «какой остаток в кассе», «что у нас по складу в деньгах».",
+		inputSchema: {
+			type: "object",
+			properties: {
+				onDate: { type: "string", description: "дата, на которую считать, YYYY-MM-DD" },
+				accounts: { type: "array", items: { type: "string" }, description: "коды счетов: [\"1010\", \"1030\"]" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+			},
+			required: ["onDate"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "GET_BALANCES",
+		mutating: false,
+		buildPayload: (i) => {
+			const accounts = Array.isArray(i.accounts)
+				? i.accounts.filter((a): a is string => typeof a === "string" && !!a.trim()).map((a) => a.trim().slice(0, 20)).slice(0, 20)
+				: [];
+			return {
+				onDate: isoDate(i.onDate, "onDate"),
+				...(accounts.length ? { accounts } : {}),
+				...(orgBin(i.organizationBin) ? { organizationBin: orgBin(i.organizationBin) } : {}),
+			};
+		},
+	},
+	{
+		name: "get_turnovers",
+		description:
+			"Обороты по счёту за период числами, при надобности — в разрезе: by = counterparties (по контрагентам), products (по номенклатуре), cashFlowItems (по статьям движения денег), none (итогом). "
+			+ "Вызывай на «сколько прошло через кассу за месяц», «обороты по 1030 за квартал», «кому больше всего платили».",
+		inputSchema: {
+			type: "object",
+			properties: {
+				account: { type: "string", description: "код счёта: 1030, 1010, 1210…" },
+				from: { type: "string", description: "начало периода YYYY-MM-DD" },
+				to: { type: "string", description: "конец периода YYYY-MM-DD" },
+				by: { type: "string", enum: ["counterparties", "products", "cashFlowItems", "none"], description: "разрез (по умолчанию none — итогом)" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				limit: { type: "integer", minimum: 1, maximum: 100, description: "сколько строк разреза вернуть, по умолчанию 50" },
+			},
+			required: ["account", "from", "to"],
+			additionalProperties: false,
+		},
+		operation: "READ",
+		commandType: "GET_TURNOVERS",
+		mutating: false,
+		buildPayload: (i) => ({
+			account: str(i.account, "account").slice(0, 20),
+			from: isoDate(i.from, "from"),
+			to: isoDate(i.to, "to"),
+			by: typeof i.by === "string" && ["counterparties", "products", "cashFlowItems", "none"].includes(i.by) ? i.by : "none",
+			...(orgBin(i.organizationBin) ? { organizationBin: orgBin(i.organizationBin) } : {}),
+			limit: limited(i.limit, 50, 100, "limit"),
+		}),
+	},
+
+	// ── Касса (СВ14) — по образцу реализаций: создание не проводит, проведение спрашивают отдельно ──
+	{
+		name: "create_cash_order",
+		description:
+			"Создать кассовый ордер в 1С (НЕ проведённый): direction in — приходный (ПКО, деньги приняли), out — расходный (РКО, деньги выдали). "
+			+ "Поддержаны расчёты с контрагентом: counterpartyId — из search_counterparties. amount — сумма в тенге. purpose — основание («оплата по счёту №12»). "
+			+ "Проведение — отдельно, post_cash_order, и только по просьбе пользователя.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				direction: { type: "string", enum: ["in", "out"], description: "in — приходный ордер, out — расходный" },
+				counterpartyId: { type: "string", description: "id контрагента из search_counterparties" },
+				amount: { type: "number", exclusiveMinimum: 0, description: "сумма" },
+				purpose: { type: "string", description: "основание: за что деньги" },
+				date: { type: "string", description: "дата документа YYYY-MM-DD, если названа" },
+				contractId: { type: "string", description: "id договора, если 1С вернула CONTRACT_AMBIGUOUS" },
+				organizationBin: { type: "string", description: "БИН организации (12 цифр), если их несколько" },
+				comment: { type: "string" },
+			},
+			required: ["direction", "counterpartyId", "amount"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_CASH_ORDER",
+		mutating: true,
+		buildPayload: (i, ctx) => {
+			const direction = str(i.direction, "direction");
+			if (!["in", "out"].includes(direction)) throw new ToolInputError("direction", "direction: in (приходный) или out (расходный)");
+			const amount = num(i.amount, NaN, "amount");
+			if (!(amount > 0)) throw new ToolInputError("amount", "amount: сумма должна быть больше нуля");
+			return {
+				direction,
+				counterpartyId: known(ctx, "counterpartyId", i.counterpartyId),
+				amount,
+				...(typeof i.purpose === "string" && i.purpose.trim() ? { purpose: i.purpose.trim().slice(0, 500) } : {}),
+				...(i.date ? { date: isoDate(i.date, "date") } : {}),
+				...(i.contractId ? { contractId: known(ctx, "contractId", i.contractId) } : {}),
+				...(orgBin(i.organizationBin) ? { organizationBin: orgBin(i.organizationBin) } : {}),
+				comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
+			};
+		},
+	},
+	{
+		name: "get_cash_order",
+		description: "Прочитать кассовый ордер по id: номер, дата, сумма, контрагент, проведён ли.",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "READ",
+		commandType: "GET_CASH_ORDER",
+		mutating: false,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "post_cash_order",
+		description: "Провести кассовый ордер. Только по явной просьбе пользователя.",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "CRITICAL",
+		commandType: "POST_CASH_ORDER",
+		mutating: true,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+	{
+		name: "unpost_cash_order",
+		description: "Отменить проведение кассового ордера. Только по явной просьбе пользователя.",
+		inputSchema: { type: "object", properties: { documentId: { type: "string" } }, required: ["documentId"], additionalProperties: false },
+		operation: "CRITICAL",
+		commandType: "UNPOST_CASH_ORDER",
+		mutating: true,
+		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
+	},
+
 	// ── Задачи и заметки организации (ERP, план PLAN_1C_TASKS_NOTES_2026-09-22) ──────────────────
 	//
 	// Исполняет сервис: они лежат в ERP, а не в 1С. Организация — та, что выбрана в форме чата, её
@@ -595,7 +876,8 @@ export const TOOLS: ToolSpec[] = [
 		name: "create_task",
 		description:
 			"Поставить задачу по организации в BuhProf AI. Автор — пользователь 1С. Исполнителя указывай, только "
-			+ "если человек назвал его по имени. Срок — ISO-дата (2026-10-01).",
+			+ "если человек назвал его по имени. Срок — ISO-дата (2026-10-01). Если задача про документ, который "
+			+ "создавали или читали в этом диалоге, укажи documentId — задача будет связана с ним.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -603,6 +885,7 @@ export const TOOLS: ToolSpec[] = [
 				description: { type: "string", description: "Подробности, если они есть" },
 				deadline: { type: "string", description: "Срок, ISO-дата" },
 				executorName: { type: "string", description: "Имя исполнителя, если он назван" },
+				documentId: { type: "string", description: "uuid документа 1С из этого диалога, если задача о нём" },
 			},
 			required: ["name"],
 			additionalProperties: false,
@@ -611,11 +894,14 @@ export const TOOLS: ToolSpec[] = [
 		commandType: "TASKS_CREATE",
 		mutating: true,
 		runsOnServer: true,
-		buildPayload: (i) => ({
+		buildPayload: (i, ctx) => ({
 			name: str(i.name, "name"),
 			...(typeof i.description === "string" && i.description.trim() ? { description: i.description.trim() } : {}),
 			...(typeof i.deadline === "string" && i.deadline.trim() ? { deadline: i.deadline.trim() } : {}),
 			...(typeof i.executorName === "string" && i.executorName.trim() ? { executorName: i.executorName.trim() } : {}),
+			// Документ называется ТОЛЬКО идентификатором, и тот обязан встретиться в диалоге: тип и
+			// подпись сервис возьмёт из результата вызова 1С, а не со слов модели (СВ7).
+			...(i.documentId === undefined ? {} : { documentId: known(ctx, "documentId", i.documentId) }),
 		}),
 	},
 	{
@@ -747,6 +1033,36 @@ export function collectIds(value: unknown, into: Set<string>): void {
 function str(v: unknown, field: string): string {
 	if (typeof v !== "string" || !v.trim()) throw new ToolInputError(field, `${field}: ожидается непустая строка`);
 	return v.trim();
+}
+
+/** Дата в виде YYYY-MM-DD: 1С принимает только её, а модель охотно пишет «сентябрь 2026». */
+function isoDate(v: unknown, field: string): string {
+	const d = str(v, field);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new ToolInputError(field, `${field}: дата в виде YYYY-MM-DD`);
+	return d;
+}
+
+/** БИН/ИИН — ровно 12 цифр. Проверка здесь, а не в 1С: отказ до команды понятнее и дешевле. */
+function bin12(v: unknown, field: string): string {
+	const b = str(v, field).replace(/\s/g, "");
+	if (!/^\d{12}$/.test(b)) throw new ToolInputError(field, `${field}: БИН/ИИН — ровно 12 цифр`);
+	return b;
+}
+
+/** Необязательный БИН организации: пустой и кривой — одинаково «не передавать». */
+function orgBin(v: unknown): string {
+	return typeof v === "string" && /^\d{12}$/.test(v.trim()) ? v.trim() : "";
+}
+
+/**
+ * Предел строк списка. Числа читают ГЛАЗАМИ и считают моделью, поэтому сотня строк в ответе — это не
+ * щедрость, а потерянный ответ: модель утонет в перечислении. Сверх предела 1С возвращает `total`,
+ * и модель говорит «показаны 50 из 320» — это честнее обрезанного списка без предупреждения.
+ */
+function limited(v: unknown, dflt: number, max: number, field: string): number {
+	const n = Math.trunc(num(v, dflt, field));
+	if (!(n > 0)) throw new ToolInputError(field, `${field}: должно быть больше нуля`);
+	return Math.min(n, max);
 }
 
 function num(v: unknown, dflt: number, field = "limit"): number {

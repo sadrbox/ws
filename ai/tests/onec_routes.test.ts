@@ -37,6 +37,9 @@ async function harness(opts: {
 	removed?: boolean;
 	staleKeys?: string[];
 	superAdmin?: boolean;
+	/** Способности бизнес-агента базы: `null` — агента нет вовсе (самопроверка базы). */
+	businessAgent?: string[] | null;
+	chatCalls?: Record<string, unknown>[];
 	/** Серверы, где есть каждая база реестра (C9–C11); нет — один сервер srv-1. */
 	servers?: { id: string; name: string; organizationUuid: string }[];
 	scope?: "all" | "organizations";
@@ -90,6 +93,11 @@ async function harness(opts: {
 				capabilities: ["agent.procs", "agent.cancel", "agent.config", "agent.restart", "agent.update"],
 				limits: { maxBases: 2, maxBins: null } }
 			: admin),
+		/** Исполнитель бизнес-команды по базе (самопроверка базы): кого выберет сервис для SELF_CHECK. */
+		pickAgentFor: async (_org: string, baseKey: string) => (opts.businessAgent === null ? null : {
+			id: "biz", organizationUuid: "org-1", role: "business", online: true, disabled: false,
+			capabilities: opts.businessAgent ?? ["HEALTH", "SELF_CHECK"], baseKey,
+		}),
 		setLimits: async (id: string, l: unknown) => { journal.push(`setLimits:${id}:${JSON.stringify(l)}`); return true; },
 		setActiveBins: async (id: string, bins: unknown) => { journal.push(`setActiveBins:${id}:${JSON.stringify(bins)}`); return true; },
 	};
@@ -98,7 +106,11 @@ async function harness(opts: {
 		organizations: [{ id: `o-${key}`, name: key, bin: `00000000000${pos}` }],
 	});
 	const agentBases = { list: async () => [agentBase("Б1", 0, "com"), agentBase("Б2", 1, "com"), agentBase("Б3", 2, "http")], listMany: async () => new Map() };
-	const audit = { write: async () => { journal.push("audit"); } };
+	const audit = {
+		write: async () => { journal.push("audit"); },
+		listChatCalls: async (o: { baseId?: string | null }) => { journal.push(`chatCalls:${o.baseId ?? "-"}`); return opts.chatCalls ?? []; },
+		listChatFailures: async () => [],
+	};
 
 	const app = express();
 	app.use(express.json());
@@ -398,4 +410,47 @@ test("аудит 21.09: сводки пользователей и расшир�
 	await h.call("GET", `/users?serverId=${S1}`);
 	assert.ok(h.journal.includes(`userSummary:["${S1}"]`), h.journal.join("\n"));
 	h.close();
+});
+
+// ── Самопроверка базы средствами расширения (СВ16) и журнал вызовов чата (ПН8) ──
+
+test("самопроверка базы идёт бизнес-агенту той базы — командой SELF_CHECK с её ключом", async () => {
+	const h = await harness({ results: { SELF_CHECK: { ok: true, version: "1.6.0", checks: [] } } });
+	try {
+		const r = await h.call("POST", "/bases/_transition/self-check");
+		assert.equal(r.status, 200);
+		assert.deepEqual(h.enqueued.at(-1)!.type, "SELF_CHECK");
+		assert.equal((r.body as unknown as { data: { ok: boolean } }).data.ok, true);
+	} finally { h.close(); }
+});
+
+test("самопроверка: агента нет — 409 и текст про агента, а не «база не найдена»", async () => {
+	const h = await harness({ businessAgent: null });
+	try {
+		const r = await h.call("POST", "/bases/_transition/self-check");
+		assert.equal(r.status, 409);
+		assert.equal((r.body as unknown as { error: { code: string } }).error.code, "AGENT_OFFLINE");
+		assert.equal(h.enqueued.length, 0, "команда не ставится вовсе");
+	} finally { h.close(); }
+});
+
+test("самопроверка: сборка агента не знает SELF_CHECK — отказ ДО очереди (аудит 22.09)", async () => {
+	const h = await harness({ businessAgent: ["HEALTH", "CREATE_SALE"] });
+	try {
+		const r = await h.call("POST", "/bases/_transition/self-check");
+		assert.equal(r.status, 409);
+		assert.equal((r.body as unknown as { error: { code: string } }).error.code, "CAPABILITY_MISSING");
+		assert.equal(h.enqueued.length, 0, "минуту ожидания и UNKNOWN_COMMAND по сети экономим");
+	} finally { h.close(); }
+});
+
+test("журнал вызовов чата: отбор по базе доходит до хранилища, строки отдаются как есть", async () => {
+	const rows = [{ at: "2026-09-22T10:00:00.000Z", tool: "list_documents", target: "1c", state: "ok", organizationUuid: null }];
+	const h = await harness({ chatCalls: rows });
+	try {
+		const r = await h.call("GET", "/chat-calls?baseId=bbbbbbbb-0000-4000-8000-000000000001");
+		assert.equal(r.status, 200);
+		assert.equal((r.body as unknown as { data: { items: unknown[] } }).data.items.length, 1);
+		assert.ok(h.journal.includes("chatCalls:bbbbbbbb-0000-4000-8000-000000000001"), "база передана в отбор");
+	} finally { h.close(); }
 });

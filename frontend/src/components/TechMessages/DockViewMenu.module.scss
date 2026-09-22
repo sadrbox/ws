@@ -1,0 +1,130 @@
+@use "src/styles/variables" as *;
+
+// Кнопка-ЗАГОЛОВОК: набрана как заголовок области (полужирным, без рамки и фона) и только по
+// наведению показывает, что она кнопка. Стрелка стоит всегда — иначе о выборе никто не узнает.
+.Trigger {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	max-width: 100%;
+	min-width: 0;
+	height: $heightFieldInput - 2px;
+	padding: 0 12px 0 3px;
+	border: 0px solid transparent;
+	border-radius: $radius2;
+	background: none;
+	color: $color6;
+	// font: 600 #{$fontsize} $fontfamily;
+	cursor: pointer;
+	white-space: nowrap;
+	outline: none;
+
+
+	&:hover {
+		background: $color60;
+		// border-color: $color34;
+	}
+
+	// Меню открыто — кнопка держит акцент: видно, откуда оно выехало.
+	&[aria-expanded="true"] {
+		background: $color60;
+		// border-color: $color1;
+	}
+
+	// Фокус рамкой внутрь: обводка снаружи налезала бы на соседние кнопки шапки.
+	&:focus-visible {
+		// outline: none;
+		box-shadow: inset 0 0 0 1px $color1;
+	}
+}
+
+.Label {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+// Стрелка — та же иконка, что у сворачивания области и у заголовков групп в журнале
+// (caretDown): одна стрелка на всё приложение, разный только поворот. Открытое меню
+// поворачивает её вверх — туда, куда список уедет при закрытии.
+.Chevron {
+	flex: 1 1 auto;
+	align-self: center;
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+
+	svg {
+		display: block;
+		width: 16px;
+		height: 16px;
+		transition: transform 0.12s ease;
+	}
+
+	&[data-open] svg {
+		transform: rotate(180deg);
+	}
+}
+
+// Движение — не для всех: кому анимация мешает, тот её отключил в системе.
+@media (prefers-reduced-motion: reduce) {
+	.Chevron svg {
+		transition: none;
+	}
+}
+
+// ── Меню ─────────────────────────────────────────────────────────────────────
+// Живёт в портале (см. DockViewMenu.tsx), поэтому позиционируется из кода, а здесь — только вид.
+.Menu {
+	max-width: 320px;
+	padding: 3px;
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	background: var(--sv-color60);
+	box-shadow: 0 8px 24px $color30;
+	z-index: 1000;
+	overflow: hidden;
+}
+
+// Строка меню ростом с поле ввода — тот же ритм, что у списков и форм рядом.
+.Item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-height: $heightFieldInput;
+	padding: 0 6px;
+	border: none;
+	border-radius: $radius3;
+	background: none;
+	color: $color6;
+	font: 400 #{$fontsize} $fontfamily;
+	text-align: left;
+	cursor: pointer;
+
+	&:hover {
+		background: $accentBlueHover;
+	}
+
+	&:focus-visible {
+		outline: none;
+		box-shadow: inset 0 0 0 1px $color1;
+	}
+}
+
+.Active {
+	font-weight: 600;
+	background: $color30;
+}
+
+.ItemName {
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.Check {
+	flex: 0 0 auto;
+	color: $color1;
+}

@@ -6,7 +6,8 @@
 //   GET  /v1/onec-chat/conversations        диалоги пользователя 1С в этой базе
 //   GET  /v1/onec-chat/conversations/:id    диалог: сообщения, состояние, карточка, ожидающие calls
 //   POST /v1/onec-chat/organizations        организации базы (БИНы, которые она вправе называть)
-//   GET/POST/PATCH  …/tasks, …/notes        задачи и заметки организации из ERP
+//   GET/POST/PATCH  …/tasks                 задачи организации из ERP
+//   GET/POST/PATCH/DELETE …/notes           заметки организации из ERP (правит и убирает автор)
 //
 // Субъект — пара «база + пользователь ИБ» (X-Base-Token + X-1C-User-Id, requireOnecUser). Имя пользователя и
 // организация 1С — в теле хода: заголовки только ASCII. Инструменты выполняет форма (state TOOL_CALLS) —
@@ -34,17 +35,19 @@ export const ONEC_CHAT_PROTOCOL = "onec-chat/1";
 export const onecOwnerUuid = (baseId: string, userId: string): string => `1c:${baseId}:${userId}`;
 
 /*
- * ВЛОЖЕНИЕ — ДВУМЯ ПУТЯМИ (§1). `content` (base64 внутри хода) остаётся и не устаревает: расширения
- * обновляются не в один день, а старое шлёт именно его. `fileId` — файл, загруженный заранее отдельным
- * запросом: 20 МБ не раздуваются до 27 и не держатся в памяти дважды. Ровно одно из двух: ход, где есть
- * и то и другое, — это ошибка сборки расширения, и молчать о ней значит разбираться потом.
+ * ВЛОЖЕНИЕ — ОДНИМ ПУТЁМ (§1, правка 22.09). Файл загружается заранее (`POST /uploads`), в ходе едет только
+ * `fileId`: 20 МБ не раздуваются до 27 в base64 и не держатся в памяти дважды. Прежний путь (`content` прямо
+ * в ходе) убран с ОБЕИХ сторон: расширение `buhprof_api` ещё нигде не установлено, и баз, которые слали бы
+ * base64, не существует — защищать совместимость не перед кем. Ход с `content` не молчит: отказ называет
+ * причину, иначе разбираться пришлось бы по раздутому телу неизвестного происхождения.
  */
 const attachmentSchema = z.object({
 	fileName: z.string().trim().min(1).max(200),
 	mimeType: z.string().trim().max(100).default("application/pdf"),
+	/** Оставлен в схеме ТОЛЬКО ради внятного отказа: разбор ходит мимо него (см. UNSUPPORTED_ATTACHMENT). */
 	content: z.string().min(1).optional(),
 	fileId: z.string().uuid().optional(),
-}).refine((a) => !!a.content !== !!a.fileId, { message: "нужно либо content (base64), либо fileId загруженного файла" });
+});
 
 const toolResultSchema = z.object({
 	callId: z.string().min(1).max(200),
@@ -65,7 +68,13 @@ const turnSchema = z.object({
 		id: z.string().trim().max(100).nullable().optional(),
 	}).nullable().optional(),
 	text: z.string().trim().max(4000).default(""),
-	attachments: z.array(attachmentSchema).max(3).optional(),
+	/*
+	 * ЧИСЛО ВЛОЖЕНИЙ НЕ ЗАШИТО (задача о пределе, 22.09). Тройка была взята на глаз под «прислал выписку —
+	 * разобрали»; живой сценарий — пачка выписок за месяц. Здесь предел щедрый и общий на схему, а настоящий
+	 * (CHAT_ATTACHMENTS_MAX установки) проверяется отдельно, чтобы отказ мог НАЗВАТЬ число: текст zod
+	 * «expected array to have <=3 items» человеку в 1С ничего не говорит.
+	 */
+	attachments: z.array(attachmentSchema).max(100).optional(),
 	decision: z.object({ accepted: z.boolean() }).nullable().optional(),
 	toolResults: z.array(toolResultSchema).max(50).optional(),
 });
@@ -121,6 +130,12 @@ export function onecChatRouter(deps: {
 	/** Смена токена базы (§3). Без него токены живут как жили. */
 	rotation?: Pick<BaseTokenStore, "markUsed" | "rotate" | "redeliver"> | null;
 	/**
+	 * Отзыв токена самой базой (контракт регистрации, «база отключается сама»). Без него кнопка «Отключить
+	 * базу» в 1С стирает токен только на своей стороне, а на сервисе он остаётся годным — ровно то, от чего
+	 * отзыв и заводили (аудит РС10).
+	 */
+	revoke?: Pick<BaseTokenStore, "revoke"> | null;
+	/**
 	 * Версия расширения, с которой оно умеет сохранять присланный токен. Смену получает только такое:
 	 * старое расширение новый токен проигнорирует, и через перекрытие база осталась бы без связи.
 	 */
@@ -135,6 +150,8 @@ export function onecChatRouter(deps: {
 	tasks?: ErpTasks | null;
 	baseOrgs?: BaseOrganizationsStore | null;
 	maxAttachmentBytes?: number;
+	/** Сколько файлов принимать в одном сообщении (CHAT_ATTACHMENTS_MAX). По умолчанию 20. */
+	maxAttachments?: number;
 	chatPerMin?: number;
 	attachmentsPerMin?: number;
 	/** Сколько держать ход до ответа PROCESSING (форма ждёт до 120 с). */
@@ -144,7 +161,9 @@ export function onecChatRouter(deps: {
 	const files = deps.files ?? null;
 	const panelUrl = (deps.panelUrl ?? "").replace(/\/+$/, "");
 	const turnKeys = deps.turnKeys ?? null;
+	const maxAttachments = deps.maxAttachments ?? 20;
 	const rotation = deps.rotation ?? null;
+	const revoke = deps.revoke ?? null;
 	const rotationMinExtVersion = deps.rotationMinExtVersion ?? "";
 	const minExtVersion = deps.minExtVersion ?? "";
 	const maxAttachmentBytes = deps.maxAttachmentBytes ?? 20 * 1048576;
@@ -186,7 +205,11 @@ export function onecChatRouter(deps: {
 		 * утопила бы в шуме то, ради чего журнал и ведётся.
 		 */
 		const loud = req.method === "POST" && (req.path === "/turn" || req.path === "/uploads");
-		(loud ? log.info : log.debug)({ ...who(req), method: req.method, path: req.path }, "запрос из 1С");
+		// Метод зовём НА ОБЪЕКТЕ. `(loud ? log.info : log.debug)(…)` отрывает функцию от логгера, а pino
+		// внутри читает `this` — и каждый запрос из 1С падал пятисоткой, включая ping и загрузку файла.
+		const line = { ...who(req), method: req.method, path: req.path };
+		if (loud) log.info(line, "запрос из 1С");
+		else log.debug(line, "запрос из 1С");
 		next();
 	});
 
@@ -222,6 +245,12 @@ export function onecChatRouter(deps: {
 			// Что эта установка умеет сверх базового контракта (§4): форма показывает список администратору,
 			// поддержка по нему сразу видит, чего ждать, а расширение — каким путём слать вложения.
 			features,
+			/*
+			 * ПРЕДЕЛЫ УСТАНОВКИ. Форма «Подключение к BuhProf AI» показывает их администратору, и по ним же
+			 * расширение понимает, сколько файлов можно прикрепить, — вместо того чтобы узнавать это отказом
+			 * после того, как человек выбрал двадцать сканов.
+			 */
+			limits: { attachmentsPerTurn: maxAttachments, attachmentMaxBytes: maxAttachmentBytes },
 		} });
 	});
 
@@ -247,6 +276,32 @@ export function onecChatRouter(deps: {
 	const rawUpload = express.raw({ type: ["application/pdf", "application/octet-stream"], limit: `${Math.ceil(maxAttachmentBytes / 1048576)}mb` });
 	const tooLarge = (res: Response) =>
 		res.status(413).json({ success: false, error: { code: "FILE_TOO_LARGE", message: `Файл больше ${Math.round(maxAttachmentBytes / 1048576)} МБ` } });
+
+	/**
+	 * БАЗА ОТКЛЮЧАЕТСЯ САМА (контракт регистрации, часть «POST /v1/onec-chat/revoke»).
+	 *
+	 * Кнопка «Отключить базу» в 1С стирает токен у себя. Если не сказать об этом сервису, токен остаётся
+	 * действующим: кто угодно, у кого осталась его копия, продолжит говорить от имени базы. Поэтому отзыв —
+	 * односторонний и безусловный: субъект запроса и есть владелец токена, доказывать ему нечего.
+	 *
+	 * Повторный отзыв — не ошибка: база могла не получить ответ и повторить. Отвечаем тем же `revoked: true`.
+	 */
+	r.post("/revoke", async (req, res) => {
+		const u = req.onecUser!;
+		if (!revoke) {
+			res.status(404).json({ success: false, error: { code: "UNKNOWN_ROUTE", message: "Отзыв токена базой в этой установке не включён" } });
+			return;
+		}
+		try {
+			await revoke.revoke(u.tokenId, `1С: ${u.userId}`);
+		} catch (e) {
+			log.error({ err: e, ...who(req) }, "токен базы не отозван по просьбе базы");
+			res.status(500).json({ success: false, error: { code: "INTERNAL", message: "Не удалось отозвать токен — повторите" } });
+			return;
+		}
+		log.info({ ...who(req) }, "база отозвала свой токен");
+		res.json({ success: true, data: { revoked: true } });
+	});
 
 	r.post("/uploads", uploadLimiter, rawUpload,
 		// Предел разборщика — это отказ 413, а не «необработанная ошибка»: обработчик ошибок в цепочке
@@ -375,6 +430,11 @@ export function onecChatRouter(deps: {
 		}
 		const results = b.toolResults ?? [];
 		const attachmentsIn = b.attachments ?? [];
+		// Предел числа файлов называет число: расширение показывает этот текст пользователю как есть.
+		if (attachmentsIn.length > maxAttachments) {
+			res.status(400).json({ success: false, error: { code: "TOO_MANY_ATTACHMENTS", message: `К одному сообщению — не больше ${maxAttachments} файлов, прислано ${attachmentsIn.length}` } });
+			return;
+		}
 		// Ход — ровно одно действие: сообщение (текст и/или вложения), решение по карточке или результаты вызовов.
 		const kinds = [b.text.length > 0 || attachmentsIn.length > 0, !!b.decision, results.length > 0].filter(Boolean).length;
 		if (kinds !== 1) {
@@ -385,21 +445,28 @@ export function onecChatRouter(deps: {
 			bad("decision и toolResults относятся к существующему диалогу — нужен conversationId");
 			return;
 		}
-		// Вложение приходит двумя путями (§1): байтами в base64 — как было, или идентификатором ранее
-		// загруженного файла. Чужой файл по угаданному идентификатору не открывается: владелец тот же,
-		// что и у диалогов, — пара «база + пользователь».
+		/*
+		 * Вложение приходит ОДНИМ путём (§1): идентификатором файла, загруженного заранее. Чужой файл по
+		 * угаданному идентификатору не открывается — владелец тот же, что у диалогов: пара «база + пользователь».
+		 * base64 прямо в ходе — сборка расширения старше правки 22.09: отказываем и называем, что делать, вместо
+		 * того чтобы принять многомегабайтное тело, которое больше никто не шлёт.
+		 */
 		const attachments: { fileName: string; mimeType: string; content: Buffer }[] = [];
 		for (const a of attachmentsIn) {
-			if (a.fileId) {
-				const stored = files ? await files.getForOwner(a.fileId, u.organizationUuid, onecOwnerUuid(u.baseId, u.userId)) : null;
-				if (!stored) {
-					res.status(400).json({ success: false, error: { code: "UNKNOWN_FILE", message: "Загруженный файл не найден или устарел — отправьте его заново" } });
-					return;
-				}
-				attachments.push({ fileName: a.fileName || stored.fileName, mimeType: a.mimeType || stored.mimeType, content: stored.content });
-				continue;
+			if (a.content) {
+				res.status(415).json({ success: false, error: { code: "UNSUPPORTED_ATTACHMENT", message: `Вложение «${a.fileName}» пришло в теле хода: загрузите файл запросом POST /v1/onec-chat/uploads и пришлите fileId — обновите BuhProf AI` } });
+				return;
 			}
-			attachments.push({ fileName: a.fileName, mimeType: a.mimeType, content: Buffer.from(a.content ?? "", "base64") });
+			if (!a.fileId) {
+				res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: `Вложение «${a.fileName}» без fileId: сначала загрузите файл запросом POST /v1/onec-chat/uploads` } });
+				return;
+			}
+			const stored = files ? await files.getForOwner(a.fileId, u.organizationUuid, onecOwnerUuid(u.baseId, u.userId)) : null;
+			if (!stored) {
+				res.status(400).json({ success: false, error: { code: "UNKNOWN_FILE", message: "Загруженный файл не найден или устарел — отправьте его заново" } });
+				return;
+			}
+			attachments.push({ fileName: a.fileName || stored.fileName, mimeType: a.mimeType || stored.mimeType, content: stored.content });
 		}
 		const tooBig = attachments.find((a) => a.content.length > maxAttachmentBytes);
 		if (tooBig) {
@@ -630,11 +697,17 @@ export function onecChatRouter(deps: {
 		if (!bin) return;
 		const actor = actorOf(req, bin);
 		if (!actor) return void needActor(res);
-		const b = req.body as { name?: string; description?: string; deadline?: string | null; executorName?: string | null };
+		const b = req.body as {
+			name?: string; description?: string; deadline?: string | null; executorName?: string | null;
+			sourceType?: string | null; sourceUuid?: string | null; sourceLabel?: string | null;
+		};
 		try {
 			const item = await tasks.createTask(actor, {
 				name: b.name, description: b.description, deadline: b.deadline ?? null, executorName: b.executorName ?? null,
-				sourceLabel: `Чат в 1С — ${req.onecUser!.baseName}`,
+				// Происхождение — отдельным полем от ссылки на объект: задача из 1С может ссылаться
+				// на созданный в 1С документ, и метку «пришла из чата» это стирать не должно.
+				originLabel: `Чат в 1С — ${req.onecUser!.baseName}`,
+				sourceType: b.sourceType ?? null, sourceUuid: b.sourceUuid ?? null, sourceLabel: b.sourceLabel ?? null,
 			});
 			res.status(201).json({ success: true, data: { item: withUrl(item) } });
 		} catch (e) {
@@ -687,6 +760,42 @@ export function onecChatRouter(deps: {
 			res.status(201).json({ success: true, data: { item } });
 		} catch (e) {
 			erpFail(e, res, "создания заметки");
+		}
+	});
+
+	/*
+	 * ПРАВКА И УБОРКА ЗАМЕТКИ (СВ3). В панели это разрешено автору, в 1С не было вовсе: написал с
+	 * опечаткой — и она навсегда. Право решает ERP (автор, организация), сервис лишь не даёт назвать
+	 * чужой БИН. Уборка — пометка, а не стирание: заметка могла быть основанием задачи.
+	 */
+	r.patch("/notes/:uuid", tasksWriteLimiter, async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		const actor = actorOf(req, bin);
+		if (!actor) return void needActor(res);
+		const body = String((req.body as { body?: unknown } | undefined)?.body ?? "").trim();
+		if (!body) {
+			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "body: текст заметки" } });
+			return;
+		}
+		try {
+			res.json({ success: true, data: { item: await tasks.updateNote(actor, String(req.params.uuid), body) } });
+		} catch (e) {
+			erpFail(e, res, "изменения заметки");
+		}
+	});
+
+	r.delete("/notes/:uuid", tasksWriteLimiter, async (req, res) => {
+		if (!tasks?.enabled) return void noTasks(res);
+		const bin = await binOf(req, res);
+		if (!bin) return;
+		const actor = actorOf(req, bin);
+		if (!actor) return void needActor(res);
+		try {
+			res.json({ success: true, data: { item: await tasks.deleteNote(actor, String(req.params.uuid)) } });
+		} catch (e) {
+			erpFail(e, res, "уборки заметки");
 		}
 	});
 

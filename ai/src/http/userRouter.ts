@@ -18,6 +18,9 @@ import type { Logger } from "../logger.ts";
 import type { FileStore } from "../files/store.ts";
 import { chatRouter } from "./chatRouter.ts";
 import { llmHealth } from "../llm/health.ts";
+import type { CommandQueue } from "../commands/queue.ts";
+import type { Audit } from "../audit/index.ts";
+import { agentKnowsType } from "../commands/admin.ts";
 
 export function userRouter(deps: {
 	erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore; version: string;
@@ -25,8 +28,16 @@ export function userRouter(deps: {
 	db?: Db;
 	/** Срез баз бизнес-агентов (C12): список агентов показывает их базы и лимит. Нет — без баз. */
 	agentBases?: Pick<AgentBasesStore, "listMany">;
+	/**
+	 * Очередь команд агенту: нужна для чисел из 1С в карточке организации (ПН9). Без неё маршрут отвечает
+	 * «не включено» — сервис без агентов эти числа взять неоткуда.
+	 */
+	queue?: Pick<CommandQueue, "enqueue" | "waitResult">;
+	audit?: Pick<Audit, "write">;
 }) {
 	const { erp, cfg, agents, workflow, log, files, version, agentBases } = deps;
+	const queue = deps.queue ?? null;
+	const audit = deps.audit ?? null;
 	const db = deps.db ?? erp;
 	const r = Router();
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
@@ -116,6 +127,90 @@ export function userRouter(deps: {
 			declaredAt: x.declared_at,
 			lastSeenAt: x.last_seen,
 		})) } });
+	});
+
+	/**
+	 * ЧИСЛА ИЗ 1С В КАРТОЧКЕ ОРГАНИЗАЦИИ (ПН9): задолженность контрагентов и остатки по счетам.
+	 *
+	 * ЗДЕСЬ, А НЕ В `/v1/onec`: весь тот раздел закрыт правом «Администрирование 1С», а эти числа смотрит
+	 * бухгалтер в карточке СВОЕЙ организации. Доступ — по организации, как у списка баз выше.
+	 *
+	 * НЕ КЭШИРУЕТСЯ (решение владельца, 22.09). Кэш означал бы третью версию правды рядом с 1С и панелью;
+	 * вместо него в ответе `readAt` — на какой миг числа верны.
+	 *
+	 * ЖДЁМ ДОЛЬШЕ ОБЫЧНОГО. Ответ на «сколько нам должны» 1С считает по регистрам, и двадцати секунд, что
+	 * отведены командам панели, ей часто мало. Ждём `ORG_FINANCE_TIMEOUT_SECS` (по умолчанию 60): пустая
+	 * карточка с «1С не ответила» у базы, которая просто думает, — худший из возможных ответов.
+	 *
+	 * ДВЕ КОМАНДЫ ПАРАЛЛЕЛЬНО и независимо: долги могли не дасться, а остатки дались — показываем, что есть.
+	 */
+	r.post("/organization-finance", async (req, res) => {
+		const u = req.erpUser!;
+		const body = (req.body ?? {}) as { organizationUuid?: unknown; onDate?: unknown };
+		const requested = typeof body.organizationUuid === "string" ? body.organizationUuid.trim() : "";
+		const org = requested || u.organizationUuid;
+		if (!org) {
+			res.status(409).json({ success: false, error: { code: "ORGANIZATION_REQUIRED", message: "У пользователя не выбрана активная организация" } });
+			return;
+		}
+		if (!u.isSuperAdmin && !u.allowedOrgUuids.includes(org)) {
+			res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Эта организация не в вашем доступе" } });
+			return;
+		}
+		if (!queue) {
+			res.status(503).json({ success: false, error: { code: "AGENTS_DISABLED", message: "Служба агентов 1С не настроена — чисел из 1С нет" } });
+			return;
+		}
+		// БИН берём у ERP, а не у клиента: по присланному БИН можно было бы спросить чужую базу.
+		const o = await erp.query<{ bin: string | null; name: string | null }>(`SELECT bin, name FROM organizations WHERE uuid = $1`, [org]);
+		const bin = (o.rows[0]?.bin ?? "").trim();
+		const orgName = o.rows[0]?.name ?? null;
+		if (!/^\d{12}$/.test(bin)) {
+			res.status(409).json({ success: false, error: { code: "ORG_BIN_REQUIRED", message: "У организации не указан БИН — по нему находится её база 1С" } });
+			return;
+		}
+		const target = await agents.resolveBusiness(org, { bin });
+		if (target.kind === "refused") {
+			res.status(409).json({ success: false, error: { code: target.code, message: target.message } });
+			return;
+		}
+		if (target.kind !== "agent") {
+			res.status(409).json({ success: false, error: { code: "AGENT_OFFLINE", message: `Базу организации «${orgName ?? bin}» некому спросить: агент BuhProf не на связи или база с этим БИН ему неизвестна` } });
+			return;
+		}
+		if (!agentKnowsType(target.agent, "GET_DEBTS")) {
+			res.status(409).json({ success: false, error: { code: "CAPABILITY_MISSING", message: "Агент BuhProf этой базы не умеет читать задолженность и остатки — обновите агента" } });
+			return;
+		}
+		const onDate = typeof body.onDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.onDate)
+			? body.onDate
+			: new Date().toISOString().slice(0, 10);
+		const waitMs = cfg.ORG_FINANCE_TIMEOUT_SECS * 1000;
+		const ask = async (type: string, payload: Record<string, unknown>) => {
+			const cmd = await queue.enqueue({
+				agentId: target.agent.id, organizationUuid: target.agent.organizationUuid, baseKey: target.baseKey,
+				type, payload, userUuid: u.uuid, ttlSeconds: Math.max(cfg.ORG_FINANCE_TIMEOUT_SECS * 2, 120),
+			});
+			await audit?.write({ event: "onec.finance", organizationUuid: org, userUuid: u.uuid, agentId: target.agent.id, commandId: cmd.id, details: { type, bin } });
+			const done = await queue.waitResult(cmd.id, waitMs);
+			if (!done || done.state === "queued" || done.state === "dispatched") {
+				// Команда жива и, скорее всего, выполнится — но ответ нужен сейчас: честно говорим, что ждём.
+				return { ok: false as const, error: { code: "TIMEOUT", message: `1С не ответила за ${cfg.ORG_FINANCE_TIMEOUT_SECS} с — повторите чтение` } };
+			}
+			if (done.state !== "done") {
+				const e = done.error ?? { code: "COMMAND_FAILED", message: "1С не выполнила команду" };
+				return { ok: false as const, error: { code: e.code, message: e.message } };
+			}
+			return { ok: true as const, data: done.result ?? null };
+		};
+		const [debts, balances] = await Promise.all([
+			ask("GET_DEBTS", { onDate, kind: "both", organizationBin: bin, limit: 20 }),
+			ask("GET_BALANCES", { onDate, organizationBin: bin }),
+		]);
+		res.json({ success: true, data: {
+			onDate, bin, baseKey: target.baseKey, agentId: target.agent.id,
+			readAt: new Date().toISOString(), debts, balances,
+		} });
 	});
 
 	r.get("/agents", async (req, res) => {

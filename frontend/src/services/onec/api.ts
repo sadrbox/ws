@@ -1176,6 +1176,105 @@ export const approveRegistration = (id: string, body: { organizationUuid: string
 export const rejectRegistration = (id: string, note: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/registrations/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ note }) });
 
+/*
+ * ОТКАЗЫ ЧАТА ОТДЕЛЬНОЙ ФУНКЦИЕЙ БОЛЬШЕ НЕ ЧИТАЮТСЯ (23.09). Их показывала таблица под токенами базы, а с
+ * появлением журнала вызовов (ниже) это стало вторым рассказом об одном событии: журнал отдаёт и отказы, и
+ * успешные вызовы, по одной базе и по всем сразу. Маршрут `/v1/onec/chat-failures` в сервисе остался — как
+ * точка разбора для поддержки, а панель ходит в журнал.
+ */
+
+/**
+ * ЖУРНАЛ ВЫЗОВОВ ЧАТА (ПН8): что вызывали из чата в 1С, по какой базе и чем кончилось.
+ *
+ * Дополняет отказы выше: там только неудачи задач и заметок, здесь — весь след канала, включая
+ * вызовы в саму 1С. `state` различает четыре исхода, и каждый лечится по-своему: `sent` — ушло в
+ * 1С, ответа пока нет (форма могла закрыться); `ok`; `failed` — 1С или ERP ответили отказом;
+ * `rejected` — сервис не выпустил вызов (модель сослалась на объект, которого в диалоге не было).
+ */
+export type ChatCall = {
+	at: string; conversationId: string | null; target: "1c" | "erp";
+	tool: string; commandType: string; callId: string | null;
+	state: "sent" | "ok" | "failed" | "rejected";
+	code: string | null; message: string | null;
+	baseId: string | null; organizationUuid: string | null; organizationName: string | null; userUuid: string | null;
+};
+
+/**
+ * БАЗЫ С РАСШИРЕНИЕМ — сводка по источникам самого расширения: заявки, токены, срез бизнес-агентов.
+ *
+ * НЕ ИЗ РЕЕСТРА КЛАСТЕРА. Тот ведёт админ-агент, и панель сужает его до выбранного кластера; расширение к
+ * кластеру не привязано, и у клиента без админ-агента его базы в реестре не появятся вовсе — экран был пуст
+ * ровно там, где нужен (разбор 23.09).
+ */
+export type ExtensionBase = {
+	baseKey: string;
+	name: string;
+	organizationUuid: string | null;
+	organizationName: string | null;
+	extVersion: string;
+	/** Откуда версия: `agent` — сообщает агент сейчас, `registration` — со слов заявки, `none` — не знаем. */
+	extVersionSource: "agent" | "registration" | "none";
+	/** Доступ к чату 1С: действует, сменён (идёт перекрытие), отозван, не выдавался. */
+	access: "active" | "rotating" | "revoked" | "none";
+	transport: "http" | "com" | null;
+	agentId: string | null;
+	agentName: string | null;
+	approvedAt: string | null;
+	seenAt: string | null;
+	/** Заявка подана, решения нет: база просится, доступа пока нет. */
+	pending: boolean;
+};
+
+export const fetchExtensionBases = () =>
+	aiFetch<{ items: ExtensionBase[] }>("/v1/onec/extension-bases");
+
+export const fetchChatCalls = (baseId?: string, limit = 200) =>
+	aiFetch<{ items: ChatCall[] }>(`/v1/onec/chat-calls?limit=${limit}${baseId ? `&baseId=${encodeURIComponent(baseId)}` : ""}`);
+
+/**
+ * САМОПРОВЕРКА БАЗЫ (ПН6): расширение в базе отвечает, что у него не так. Формат ответа задаёт
+ * расширение; разбираем его мягко (selfCheckView), потому что набор проверок будет расти.
+ */
+export type SelfCheckResult = {
+	ok?: boolean;
+	version?: string | null;
+	checks?: { id?: string; title?: string; ok?: boolean; detail?: string | null; hint?: string | null }[];
+	organizations?: { name?: string | null; bin?: string | null }[];
+	[k: string]: unknown;
+};
+
+export const startSelfCheck = (baseKey: string) =>
+	startJob<SelfCheckResult>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/self-check`, {});
+
+/**
+ * ЧИСЛА ИЗ 1С В КАРТОЧКЕ ОРГАНИЗАЦИИ (ПН9). Читаются ПО КНОПКЕ и не кэшируются: кэш означал бы
+ * третью версию правды рядом с 1С и панелью. Поэтому в ответе есть `readAt` — на какой миг числа
+ * верны, и каждая половина отвечает за себя: долги могли не даться, а остатки даться.
+ */
+export type FinancePart<T> = { ok: true; data: T | null } | { ok: false; error: { code?: string; message?: string } };
+
+/**
+ * `TIMEOUT` в половине ответа — не поломка: 1С считает долги по регистрам, сервис ждёт её дольше обычных
+ * команд панели (ORG_FINANCE_TIMEOUT_SECS) и, не дождавшись, честно говорит об этом. Команда при этом жива,
+ * и повторное чтение обычно приносит ответ сразу.
+ */
+
+export type OrganizationFinance = {
+	onDate: string; bin: string; baseKey: string; agentId: string; readAt: string;
+	debts: FinancePart<unknown>;
+	balances: FinancePart<unknown>;
+};
+
+/*
+ * АДРЕС — В ПОЛЬЗОВАТЕЛЬСКОМ API, А НЕ В `/v1/onec` (аудит 22.09). Тот раздел закрыт правом
+ * «Администрирование 1С», а числа смотрит бухгалтер в карточке своей организации: на прежнем адресе
+ * вкладка отвечала бы 403 ровно тем, для кого сделана.
+ */
+export const fetchOrganizationFinance = (organizationUuid: string, onDate?: string) =>
+	aiFetch<OrganizationFinance>("/v1/organization-finance", {
+		method: "POST", body: JSON.stringify({ organizationUuid, ...(onDate ? { onDate } : {}) }),
+	});
+
 /**
  * Базы 1С организации (ПН4): откуда приходят её задачи, заметки и документы.
  *
@@ -1200,8 +1299,9 @@ export type BaseToken = {
 	rotateAfter: string | null; acceptedUntil: string | null; replacedBy: string | null;
 };
 
-export const fetchBaseTokens = (baseId: string) =>
-	aiFetch<{ items: BaseToken[]; canRevoke: boolean }>(`/v1/onec/base-tokens?baseId=${encodeURIComponent(baseId)}`);
+/** Токены одной базы (карточка) или всех сразу (раздел «Расширение БухПроф-AI»). */
+export const fetchBaseTokens = (baseId?: string) =>
+	aiFetch<{ items: BaseToken[]; canRevoke: boolean }>(`/v1/onec/base-tokens${baseId ? `?baseId=${encodeURIComponent(baseId)}` : ""}`);
 
 export const revokeBaseToken = (id: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/base-tokens/${encodeURIComponent(id)}/revoke`, { method: "POST", body: "{}" });

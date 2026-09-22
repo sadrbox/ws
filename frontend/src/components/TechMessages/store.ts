@@ -763,6 +763,54 @@ export const useTechMessagesPlacement = (): TechPlacement => useSyncExternalStor
 	() => "right" as TechPlacement,
 );
 
+/**
+ * ЧТО ПОКАЗЫВАЕТ ОБЛАСТЬ. Место у правой колонки (и у нижней полосы) одно, а рабочих
+ * «спутников» основного экрана несколько: журнал сообщений, переписка, помощник, задачи,
+ * заметки. Держать их отдельными окнами значило бы делить и без того небольшой экран, а
+ * заводить по колонке на каждый — тем более.
+ *
+ * Поэтому область одна, а содержимое переключается. Выбор — настройка рабочего места и
+ * переживает перезагрузку: человек возвращается туда, где работал.
+ *
+ * Сообщения остаются значением по умолчанию: они появляются сами, без спроса, и потерять
+ * их за чужой вкладкой нельзя.
+ */
+export type TechDockView = "messages" | "communications" | "chat" | "assistant" | "tasks" | "notes";
+
+export const TECH_DOCK_VIEWS: TechDockView[] = ["messages", "communications", "chat", "assistant", "tasks", "notes"];
+
+/** Подпись вида — ключ перевода. Одна на шапку, свёрнутую полосу и подсказки. */
+export const TECH_DOCK_TITLES: Record<TechDockView, string> = {
+	messages: "techMessages",
+	communications: "communicationsSection",
+	chat: "techDockChat",
+	assistant: "AiAssistant",
+	tasks: "TodosList",
+	notes: "notes",
+};
+
+const VIEW_KEY = "tech_dock_view";
+let dockView: TechDockView = (() => {
+	try {
+		const v = localStorage.getItem(VIEW_KEY) as TechDockView | null;
+		return v && TECH_DOCK_VIEWS.includes(v) ? v : "messages";
+	} catch { return "messages"; }
+})();
+const viewListeners = new Set<() => void>();
+
+export function setTechDockView(v: TechDockView): void {
+	if (dockView === v) return;
+	dockView = v;
+	try { localStorage.setItem(VIEW_KEY, v); } catch { /* не беда */ }
+	for (const l of viewListeners) l();
+}
+
+export const useTechDockView = (): TechDockView => useSyncExternalStore(
+	(l) => { viewListeners.add(l); return () => { viewListeners.delete(l); }; },
+	() => dockView,
+	() => "messages" as TechDockView,
+);
+
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const snapshot = () => notices;
 

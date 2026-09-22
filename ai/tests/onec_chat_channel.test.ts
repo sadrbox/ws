@@ -4,7 +4,7 @@
  *
  * Держим то, что ошибкой обходится дороже всего:
  *   §1 файл, загруженный одним пользователем, не открывается другому по угаданному идентификатору;
- *      установка без хранилища отвечает 404 — по нему расширение возвращается к base64, а не падает;
+ *      установка без хранилища отвечает 404 и называет себя, а не падает; base64 в ходе больше не принимается;
  *   §2 повтор хода с тем же ключом не создаёт второго сообщения — ни после ответа, ни во время работы;
  *   §3 новый токен уезжает только расширению, которое умеет его сохранить, и один и тот же — пока не дошёл;
  *   §4 номер запроса возвращается, старое расширение получает внятный отказ, /ping называет умения.
@@ -89,7 +89,7 @@ function fakeTurnKeys() {
 
 type Owner = { rotateDue?: boolean; pending?: boolean; firstUse?: boolean };
 
-function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; owner?: Owner; minExt?: string; rotateMinExt?: string } = {}) {
+function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; revoke?: boolean; owner?: Owner; minExt?: string; rotateMinExt?: string; maxAttachments?: number } = {}) {
 	const wf = fakeWorkflow();
 	const files = fakeFiles();
 	const keys = fakeTurnKeys();
@@ -100,6 +100,9 @@ function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; ow
 		rotate: async (tokenId: string) => { rotated.push(tokenId); return "bpb_new-token"; },
 		redeliver: async () => "bpb_pending-token",
 	};
+	/** Отзыв токена самой базой: кто и сколько раз его отозвал (контракт регистрации, «база отключается сама»). */
+	const revoked: { tokenId: string; by: string }[] = [];
+	const revoke = { revoke: async (tokenId: string, by: string) => { revoked.push({ tokenId, by }); return true; } };
 	const tokens = {
 		resolve: async (t: string) => t === TOKEN
 			? { tokenId: TOKEN_ID, baseId: BASE_ID, baseKey: "Dev_01", baseName: "Бухгалтерия (Dev_01)", organizationUuid: ORG, revoked: false, baseDisabled: false, ...opts.owner }
@@ -113,15 +116,19 @@ function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; ow
 		files: opts.files === false ? null : files.store,
 		turnKeys: opts.keys === false ? null : keys.store,
 		rotation: opts.rotation === false ? null : rotation,
+		revoke: opts.revoke === false ? null : revoke,
 		rotationMinExtVersion: opts.rotateMinExt ?? "1.5.0",
 		minExtVersion: opts.minExt ?? "",
 		maxAttachmentBytes: 64 * 1024,
+		maxAttachments: opts.maxAttachments ?? 20,
+		// Предел загрузок в тесте не проверяем: он про злоупотребление, а здесь пачка файлов — обычный ход.
+		attachmentsPerMin: 1000,
 	}));
 	const server = app.listen(0);
 	const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/onec-chat`;
 	const head = (user: string, extra: Record<string, string> = {}) => ({ "x-base-token": TOKEN, "x-1c-user-id": user, ...extra });
 	return {
-		wf, files, keys, rotated, used,
+		wf, files, keys, rotated, used, revoked,
 		get: async (path: string, extra: Record<string, string> = {}, user = USER) => {
 			const r = await fetch(`${url}${path}`, { headers: head(user, extra) });
 			return { status: r.status, headers: r.headers, body: await r.json() as { success: boolean; data?: Record<string, any>; error?: { code: string; message: string } } };
@@ -140,6 +147,13 @@ function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; ow
 				body: JSON.stringify({ user: { id: user, name: "Бухгалтер" }, ...body }),
 			});
 			return { status: r.status, headers: r.headers, body: await r.json() as { success: boolean; data?: any; error?: { code: string; message: string } } };
+		},
+		/** Любой POST канала с токеном базы: отзыв, список организаций и прочее без тела хода. */
+		post: async (path: string, body: Record<string, unknown>, user = USER) => {
+			const r = await fetch(`${url}${path}`, {
+				method: "POST", headers: head(user, { "content-type": "application/json" }), body: JSON.stringify(body),
+			});
+			return { status: r.status, body: await r.json() as { success: boolean; data?: any; error?: { code: string; message: string } } };
 		},
 		close: () => { server.closeAllConnections(); server.close(); },
 	};
@@ -179,16 +193,22 @@ test("§1: чужой файл по идентификатору не откры
 	} finally { h.close(); }
 });
 
-test("§1: base64 остаётся, но вместе с fileId в одном вложении — отказ; файл сверх предела — FILE_TOO_LARGE", async () => {
+test("§1: base64 в ходе отвергнут и назван; вложение без fileId — отказ; файл сверх предела — FILE_TOO_LARGE", async () => {
 	const h = harness();
 	try {
+		/*
+		 * Правка 22.09: путь один — загрузка отдельным запросом. Отказ обязан НАЗВАТЬ причину и лечение:
+		 * молчаливый приём base64 означал бы, что раздутые ходы живут дальше и находятся уже по памяти службы.
+		 */
 		const old = await h.turn({ text: "разнеси", attachments: [{ fileName: "Старая.pdf", content: Buffer.alloc(32, 3).toString("base64") }] });
-		assert.equal(old.status, 200, "прежний путь не должен устареть: расширения обновляются не в один день");
-		assert.equal(h.wf.turns[0]!.files[0]!.bytes, 32);
+		assert.equal(old.status, 415);
+		assert.equal(old.body.error!.code, "UNSUPPORTED_ATTACHMENT");
+		assert.match(old.body.error!.message, /uploads/, "отказ называет, куда загружать файл");
+		assert.equal(h.wf.turns.length, 0, "ход с base64 не выполняется");
 
 		const both = await h.turn({ text: "разнеси", attachments: [{ fileName: "Обе.pdf", content: "AQI=", fileId: randomUUID() }] });
-		assert.equal(both.status, 400);
-		assert.equal(both.body.error!.code, "VALIDATION_ERROR");
+		assert.equal(both.status, 415);
+		assert.equal(both.body.error!.code, "UNSUPPORTED_ATTACHMENT");
 
 		const big = await h.upload(Buffer.alloc(64 * 1024 + 1, 9), "Толстая.pdf");
 		assert.equal(big.status, 413);
@@ -196,7 +216,7 @@ test("§1: base64 остаётся, но вместе с fileId в одном в
 	} finally { h.close(); }
 });
 
-test("§1: установка без хранилища отвечает 404 — по нему расширение возвращается к base64", async () => {
+test("§1: установка без хранилища отвечает 404 и не обещает загрузку в features", async () => {
 	const h = harness({ files: false });
 	try {
 		const up = await h.upload(Buffer.alloc(8, 1), "Выписка.pdf");
@@ -321,4 +341,68 @@ test("§4: сравнение версий", () => {
 	assert.equal(versionAtLeast("1.4.9", "1.5.0"), false);
 	assert.equal(versionAtLeast("2.0", "1.9.9"), true);
 	assert.equal(versionAtLeast("", ""), true, "предел не задан — не проверяем");
+});
+
+// ── Отзыв токена самой базой (контракт регистрации: «база отключается сама») ──
+
+test("база отзывает свой токен: отзыв безусловный, повтор — тот же ответ", async () => {
+	const h = harness();
+	try {
+		const r = await h.post("/revoke", {});
+		assert.equal(r.status, 200);
+		assert.equal(r.body.data!.revoked, true);
+		assert.deepEqual(h.revoked.map((x) => x.tokenId), [TOKEN_ID], "отзывается именно токен субъекта запроса");
+		assert.match(h.revoked[0]!.by, /1С/, "в журнале видно, что отозвала сама база");
+
+		/*
+		 * Повтор — не ошибка: база могла не получить ответ. Иначе кнопка «Отключить базу» в 1С при обрыве
+		 * связи оставила бы человека с ошибкой при уже отозванном токене.
+		 */
+		const again = await h.post("/revoke", {});
+		assert.equal(again.status, 200);
+		assert.equal(again.body.data!.revoked, true);
+	} finally { h.close(); }
+});
+
+test("отзыв не включён в установке — честный 404, а не молчаливый успех", async () => {
+	const h = harness({ revoke: false });
+	try {
+		const r = await h.post("/revoke", {});
+		assert.equal(r.status, 404);
+		assert.equal(r.body.error!.code, "UNKNOWN_ROUTE");
+	} finally { h.close(); }
+});
+
+// ── Сколько файлов принимать в одном сообщении (задача о пределе, 22.09) ──────
+
+test("предел вложений — настройка установки: двадцать проходят, двадцать первое отвергнуто с числом", async () => {
+	const h = harness();
+	try {
+		const ids: string[] = [];
+		for (let i = 0; i < 21; i++) {
+			const up = await h.upload(Buffer.alloc(8, i), `Выписка ${i}.pdf`);
+			ids.push(up.body.data.fileId as string);
+		}
+		const attach = (n: number) => ids.slice(0, n).map((fileId, i) => ({ fileName: `Выписка ${i}.pdf`, fileId }));
+
+		const ok = await h.turn({ text: "разнеси", attachments: attach(20) });
+		assert.equal(ok.status, 200, "пачка выписок за месяц — обычный случай, а не злоупотребление");
+		assert.equal(h.wf.turns[0]!.files.length, 20);
+
+		const tooMany = await h.turn({ text: "разнеси", attachments: attach(21) });
+		assert.equal(tooMany.status, 400);
+		assert.equal(tooMany.body.error!.code, "TOO_MANY_ATTACHMENTS");
+		// Число в тексте: человек в 1С видит его как есть, и из отказа понятно, что делать.
+		assert.match(tooMany.body.error!.message, /20/);
+		assert.equal(h.wf.turns.length, 1, "ход с лишними файлами не выполняется");
+	} finally { h.close(); }
+});
+
+test("предел установки виден заранее — в limits ответа /ping, а не только в отказе", async () => {
+	const h = harness({ maxAttachments: 5 });
+	try {
+		const ping = await h.get("/ping");
+		assert.equal(ping.body.data!.limits.attachmentsPerTurn, 5);
+		assert.equal(ping.body.data!.limits.attachmentMaxBytes, 64 * 1024);
+	} finally { h.close(); }
 });

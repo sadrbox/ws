@@ -19,6 +19,7 @@ import { WarehousesTable } from "../Warehouses";
 import { CashboxesTable } from "../Cashboxes";
 import FilesPanel from "src/components/FilesPanel";
 import OnecBasesTab from "./OnecBasesTab";
+import OnecFinanceTab from "./OnecFinanceTab";
 import { OrganizationAccountingSettingsList } from "../OrganizationAccountingSettings";
 import { AccessRightsList } from "../AccessRights";
 import { useFormStore } from "src/hooks/useFormStore";
@@ -313,6 +314,15 @@ const OrganizationsForm: FC<Partial<TPane>> = (paneProps) => {
     if (form.isEditMode && ownerUuid) result.push({
       id: "tab-onec-bases", label: translate("onecOrgBases"), component: (
         <OnecBasesTab organizationUuid={ownerUuid} />
+      ),
+    });
+    /*
+     * Долги и остатки из 1С (ПН9). Отдельной вкладкой, а не в «Основном»: числа читаются из базы по кнопке
+     * и стоят обращения в 1С — открывать карточку ради реквизитов и каждый раз дёргать базу незачем.
+     */
+    if (form.isEditMode && ownerUuid) result.push({
+      id: "tab-onec-finance", label: translate("onecOrgFinance"), component: (
+        <OnecFinanceTab organizationUuid={ownerUuid} />
       ),
     });
     return result;

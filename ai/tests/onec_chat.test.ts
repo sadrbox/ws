@@ -8,6 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import express from "express";
 import type { AddressInfo } from "node:net";
 import { ChatWorkflow } from "../src/chat/workflow.ts";
@@ -138,9 +139,25 @@ async function harness(steps: Step[], opts: { bank?: boolean; chatPerMin?: numbe
 			: null,
 	};
 	const erp = { query: async () => ({ rows: [{ name: "ТОО Алеппо", legal_name: null }], rowCount: 1 }) } as unknown as Db;
+	/*
+	 * Хранилище канала: вложение приходит ТОЛЬКО загруженным заранее (§1, правка 22.09), поэтому без него
+	 * ход с файлом не составить. Те же два метода, что у настоящего files-хранилища.
+	 */
+	const uploaded = new Map<string, { organizationUuid: string; userUuid: string; fileName: string; mimeType: string; content: Buffer }>();
+	const channelFiles = {
+		save: async (i: { organizationUuid: string; userUuid: string; fileName: string; mimeType: string; content: Buffer }) => {
+			const fileId = randomUUID();
+			uploaded.set(fileId, i);
+			return { fileId, fileName: i.fileName, mimeType: i.mimeType, size: i.content.length, url: `/v1/files/${fileId}` };
+		},
+		getForOwner: async (id: string, org: string, owner: string) => {
+			const f = uploaded.get(id);
+			return f && f.organizationUuid === org && f.userUuid === owner ? { ...f, id, size: f.content.length } : null;
+		},
+	} as never;
 	const app = express();
 	app.use(express.json({ limit: "10mb" }));
-	app.use("/v1/onec-chat", onecChatRouter({ workflow, tokens, erp, log: silent, version: "0.4.0", chatPerMin: opts.chatPerMin }));
+	app.use("/v1/onec-chat", onecChatRouter({ workflow, tokens, erp, log: silent, version: "0.4.0", chatPerMin: opts.chatPerMin, files: channelFiles }));
 	const server = app.listen(0);
 	const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/onec-chat`;
 	const headers = (user = USER_ID, token = TOKEN) => ({ "content-type": "application/json", "x-base-token": token, "x-1c-user-id": user });
@@ -150,9 +167,18 @@ async function harness(steps: Step[], opts: { bank?: boolean; chatPerMin?: numbe
 	};
 	const get = async (path: string, user = USER_ID, token = TOKEN) => {
 		const r = await fetch(`${url}${path}`, { headers: headers(user, token) });
-		return { status: r.status, body: await r.json() as { success: boolean; data?: Record<string, any>; error?: { code: string } } };
+		return { status: r.status, body: await r.json() as { success: boolean; data?: Record<string, any>; error?: { code: string; message: string } } };
 	};
-	return { mem, seen, turn, get, close: () => { server.closeAllConnections(); server.close(); } };
+	/** Вложение — отдельным запросом: так его шлёт форма 1С с правки 22.09. */
+	const upload = async (bytes: Buffer, fileName: string, user = USER_ID) => {
+		const r = await fetch(`${url}/uploads?fileName=${encodeURIComponent(fileName)}`, {
+			method: "POST",
+			headers: { "content-type": "application/pdf", "x-base-token": TOKEN, "x-1c-user-id": user },
+			body: new Uint8Array(bytes),
+		});
+		return { status: r.status, body: await r.json() as { success: boolean; data?: { fileId: string; bytes: number }; error?: { code: string } } };
+	};
+	return { mem, seen, turn, get, upload, close: () => { server.closeAllConnections(); server.close(); } };
 }
 
 // ── аутентификация ────────────────────────────────────────────────────────
@@ -180,6 +206,12 @@ test("ping: база, организация ERP, версия; отказы т�
 		const r = await revoked.get("/ping");
 		assert.equal(r.status, 401);
 		assert.equal(r.body.error!.code, "BASE_TOKEN_INVALID");
+		/*
+		 * Отказ обязан называть ВЫПОЛНИМОЕ действие (22.09): выпустить токен в панели нечем — смена работает
+		 * только с действующим, а выдача по заявке одноразовая. Единственный путь — новая заявка из 1С.
+		 */
+		assert.match(r.body.error!.message, /заявк/i, "текст должен вести к заявке, а не к несуществующей кнопке");
+		assert.doesNotMatch(r.body.error!.message, /выпустите новый в панели/i);
 	} finally { revoked.close(); }
 
 	const disabled = await harness([], { disabled: true });
@@ -336,7 +368,9 @@ test("PDF выписки: фоновое распознавание, затем 
 		() => ({ text: "Загружено: создан 1 документ, не проведён." }),
 	], { bank: true });
 	try {
-		const t1 = await h.turn({ conversationId: null, text: "", attachments: [{ fileName: "выписка.pdf", mimeType: "application/pdf", content: Buffer.from("%PDF-1.4").toString("base64") }] });
+		const up = await h.upload(Buffer.from("%PDF-1.4"), "выписка.pdf");
+		assert.equal(up.status, 200);
+		const t1 = await h.turn({ conversationId: null, text: "", attachments: [{ fileName: "выписка.pdf", mimeType: "application/pdf", fileId: up.body.data!.fileId }] });
 		assert.equal(t1.body.data!.state, "PROCESSING");
 		const conversationId = t1.body.data!.conversationId;
 

@@ -4,8 +4,10 @@
 //   GET   /bpai/tasks?bin=&state=open|all&limit=   задачи организации
 //   POST  /bpai/tasks                              создать задачу
 //   PATCH /bpai/tasks/:uuid                        изменить или закрыть
-//   GET   /bpai/notes?bin=&limit=                  заметки организации
-//   POST  /bpai/notes                              создать заметку
+//   GET    /bpai/notes?bin=&limit=                 заметки организации
+//   POST   /bpai/notes                             создать заметку
+//   PATCH  /bpai/notes/:uuid                       изменить свою заметку
+//   DELETE /bpai/notes/:uuid                       убрать свою заметку
 //   GET   /bpai/task-statuses                      справочник статусов
 //
 // Сюда ходит AI-сервис ключом X-Api-Key (utils/bpaiAuth.js), а НЕ человек: JWT
@@ -32,8 +34,15 @@ const router = express.Router();
 /** Заметки организации — тот же полиморфный механизм, что у заметок к записи. */
 const ORG_ENTITY = "organizations";
 
-/** Источник записи (E9.5 sourceType): по нему в панели видно, что задача пришла из 1С. */
-const SOURCE_TYPE = "1c-chat";
+/**
+ * ПРОИСХОЖДЕНИЕ записи: по нему в панели видно, что задача пришла из чата в 1С.
+ *
+ * Не `sourceType`. Тем полем задача ссылается на ОБЪЕКТ-источник (реализацию, заметку,
+ * контрагента), и пока задача из 1С ни с чем не связана, метку можно было класть туда. Как
+ * только понадобилось связать задачу с созданным документом, стало видно: поле одно, а
+ * смыслов два. Теперь `origin` — откуда пришла, `sourceType`/`sourceUuid` — на что ссылается.
+ */
+const ORIGIN = "1c-chat";
 
 const MAX_LIMIT = 200;
 
@@ -51,6 +60,20 @@ function deadlineOf(raw) {
 	const d = new Date(String(raw));
 	if (Number.isNaN(d.getTime())) throw new ActorError(400, "Некорректный срок задачи");
 	return d;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Ссылка задачи на объект-источник. Пара «тип + uuid» либо есть целиком, либо её нет вовсе:
+ * тип без идентификатора открыть нечего, идентификатор без типа — некуда идти.
+ */
+function sourceOf(body) {
+	const sourceType = text(body?.sourceType);
+	const sourceUuid = text(body?.sourceUuid);
+	if (!sourceType && !sourceUuid) return {};
+	if (!sourceType || !UUID_RE.test(sourceUuid)) throw new ActorError(400, "Ссылка на объект: нужны и sourceType, и sourceUuid (uuid)");
+	return { sourceType, sourceUuid, sourceLabel: text(body?.sourceLabel) || null };
 }
 
 /** Коды завершающих статусов: по ним отбираются открытые задачи и закрывается задача. */
@@ -76,7 +99,12 @@ const taskView = (t) => ({
 	curatorName: t.curator?.username ?? null,
 	executorName: t.executor?.username ?? null,
 	counterpartyUuid: t.counterpartyUuid,
+	// Ссылка на объект (если задачу связали с документом) и происхождение — разными полями.
+	sourceType: t.sourceType,
+	sourceUuid: t.sourceUuid,
 	sourceLabel: t.sourceLabel,
+	origin: t.origin,
+	originLabel: t.originLabel,
 });
 
 const noteView = (n) => ({
@@ -147,6 +175,14 @@ router.post("/tasks", async (req, res) => {
 		const executorName = text(req.body?.executorName);
 		const executor = executorName ? await resolveUser({ user: { name: executorName } }) : null;
 
+		/*
+		 * СВЯЗЬ С ОБЪЕКТОМ (СВ7). Модель создала в 1С реализацию и ставит по ней задачу — чип
+		 * «Источник» в панели должен открывать саму реализацию. Идентификатор сюда приходит уже
+		 * проверенным: сервис отдаёт только то, что встречалось в результатах вызовов этого
+		 * диалога, — выдуманный id до нас не доходит. Здесь остаётся форма: uuid должен быть uuid.
+		 */
+		const source = sourceOf(req.body);
+
 		const item = await prisma.todo.create({
 			data: {
 				name: name || description.slice(0, 200),
@@ -155,8 +191,9 @@ router.post("/tasks", async (req, res) => {
 				curatorUuid: author.uuid,
 				executorUuid: executor?.uuid ?? null,
 				deadline: deadlineOf(req.body?.deadline),
-				sourceType: SOURCE_TYPE,
-				sourceLabel: text(req.body?.sourceLabel) || "Чат в 1С",
+				...source,
+				origin: ORIGIN,
+				originLabel: text(req.body?.originLabel) || text(req.body?.sourceLabel) || "Чат в 1С",
 			},
 			include: TASK_INCLUDE,
 		});
@@ -242,6 +279,55 @@ router.post("/notes", async (req, res) => {
 		return res.status(201).json({ success: true, item: noteView(item) });
 	} catch (error) {
 		return fail(res, error, "POST /notes");
+	}
+});
+
+/*
+ * ПРАВКА И УБОРКА ЗАМЕТКИ (СВ3). В панели заметку правит и убирает её автор — в 1С этого не
+ * было вовсе: написал с опечаткой, и она осталась навсегда.
+ *
+ * ПРАВО — АВТОРСТВО, а не организация. Организация здесь одна на запрос (по БИН), и её мало:
+ * иначе любой пользователь любой базы этой организации правил бы чужие записи. Автор —
+ * пользователь 1С, найденный по имени, тот же, что и при создании.
+ *
+ * УБОРКА — ПОМЕТКА, а не удаление строки: `deletedAt`, как у всего остального в ERP. Заметка
+ * могла быть основанием задачи, и стирать её из истории нельзя.
+ */
+async function ownNote(req) {
+	const { organizationUuid, author } = await resolveContext(req.body);
+	const note = await prisma.note.findUnique({ where: { uuid: String(req.params.uuid) } });
+	// Чужая организация отвечает «не найдено», а не «нет доступа»: иначе по коду ответа
+	// можно перебирать чужие заметки.
+	if (!note || note.deletedAt || note.entityType !== ORG_ENTITY || note.entityUuid !== organizationUuid) {
+		throw new ActorError(404, "Заметка не найдена");
+	}
+	if (note.authorUuid && note.authorUuid !== author.uuid) {
+		throw new ActorError(403, "Заметку правит и убирает тот, кто её написал");
+	}
+	return note;
+}
+
+router.patch("/notes/:uuid", async (req, res) => {
+	try {
+		const note = await ownNote(req);
+		const body = text(req.body?.body);
+		if (!body) throw new ActorError(400, "Текст заметки обязателен");
+		const item = await prisma.note.update({ where: { uuid: note.uuid }, data: { body } });
+		return res.status(200).json({ success: true, item: noteView(item) });
+	} catch (error) {
+		return fail(res, error, "PATCH /notes/:uuid");
+	}
+});
+
+router.delete("/notes/:uuid", async (req, res) => {
+	try {
+		// Тело у DELETE непривычно, но здесь оно обязательно: в нём БИН и имя автора —
+		// субъекта у этого канала нет иначе (ключ принадлежит сервису, а не человеку).
+		const note = await ownNote(req);
+		await prisma.note.update({ where: { uuid: note.uuid }, data: { deletedAt: new Date() } });
+		return res.status(200).json({ success: true, item: { uuid: note.uuid } });
+	} catch (error) {
+		return fail(res, error, "DELETE /notes/:uuid");
 	}
 });
 

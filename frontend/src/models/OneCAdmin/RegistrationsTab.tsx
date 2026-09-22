@@ -115,7 +115,6 @@ export const RegistrationsTab: FC = () => {
 				isLoading: list.isLoading, reloading: list.isFetching && !list.isLoading,
 				onReload: () => void list.refetch(),
 				emptyText: translate("onecReqNone"),
-				wrapCells: true,
 				renderCell: (r, col) => (col.identifier === "reqState"
 					? <span className={TONE_CLASS[asText(r.__tone) as keyof typeof TONE_CLASS]}>{asText(r.reqState)}</span>
 					// Код — крупнее и моноширинным: его диктуют по телефону и сверяют посимвольно.

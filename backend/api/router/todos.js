@@ -113,7 +113,10 @@ router.get("/todos", async (req, res) => {
 		}
 
 		// ── Произвольные фильтры ──────────────────────────────────────────────
-		const ALLOWED_OPERATORS = ["contains", "equals", "gte", "lte", "gt", "lt"];
+		// isNull — отбор по ПУСТОМУ полю («задачи не из 1С»: origin пуст). Через `not` его не
+		// выразить: Prisma 7 в `not` строки со значением NULL не возвращает — проверено на живой
+		// базе, 9 пустых из 15 не попали в выборку. Значение приходит строкой из query.
+		const ALLOWED_OPERATORS = ["contains", "equals", "gte", "lte", "gt", "lt", "isNull"];
 		const SKIP_KEYS = ["searchBy", "dateRange"];
 		const filterWhereClause = {};
 
@@ -131,6 +134,9 @@ router.get("/todos", async (req, res) => {
 						contains: String(value),
 						mode: "insensitive",
 					};
+				} else if (operator === "isNull") {
+					const empty = value === true || value === "true" || value === "1";
+					filterWhereClause[field] = empty ? { equals: null } : { not: null };
 				} else {
 					filterWhereClause[field][operator] = value;
 				}

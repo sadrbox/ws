@@ -74,10 +74,14 @@ interface ModelListProps {
   ownerField?: string;
   /**
    * Дополнительные фильтры (помимо ownerUuid/ownerField).
-   * Каждый ключ — имя поля, значение — строка для сравнения `equals`.
-   * Используется, например, для LookupField extraParams в ContractsList.
+   *
+   * Ключ — имя поля. Значение — строка (сравнение `equals`, как было) либо пара
+   * `{ value, operator }`, когда нужен другой оператор: например `{ operator: "isNull",
+   * value: true }` для отбора «поле пустое» — так список задач отбирает «не из 1С»
+   * (через `not` такие строки не находятся: Prisma не возвращает в нём NULL).
+   * Набор операторов ограничен маршрутом модели на бэкенде.
    */
-  extraFilter?: Record<string, string>;
+  extraFilter?: Record<string, string | { value: unknown; operator: string }>;
   /** Дополнительные query-параметры, отправляемые напрямую (не через filter[...]). Для эндпоинтов, читающих params напрямую (например contacts: ownerType, ownerUuid). */
   extraQueryParams?: Record<string, string>;
   /** Включить фильтр по дате */
@@ -332,7 +336,8 @@ const ModelList: FC<ModelListProps> = ({
 
     if (extraFilter) {
       for (const [key, val] of Object.entries(extraFilter)) {
-        if (val) f[key] = { value: val, operator: "equals" };
+        if (!val) continue;
+        f[key] = typeof val === "string" ? { value: val, operator: "equals" } : val;
       }
     }
 

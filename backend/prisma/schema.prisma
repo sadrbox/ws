@@ -592,6 +592,15 @@ model Todo {
   sourceType       String?
   sourceUuid       String?
   sourceLabel      String?
+  // ОТКУДА ВЗЯЛАСЬ ЗАДАЧА — отдельно от ссылки на объект. Раньше происхождение писали в
+  // sourceType ("1c-chat"), и связать задачу из 1С с созданным документом было нельзя:
+  // поле одно, а смыслов два — либо «пришла из чата 1С», либо «относится к реализации».
+  // Теперь source* — только ссылка на объект, origin — только происхождение.
+  // Пусто — задачу завели руками в панели.
+  origin           String?
+  // Подпись происхождения на момент создания: «Чат в 1С — Dev_01». Живёт отдельно от
+  // sourceLabel по той же причине: та подписывает ОБЪЕКТ, эта — откуда пришла задача.
+  originLabel      String?
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   curator          User?         @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
   executor         User?         @relation("TodoExecutor", fields: [executorUuid], references: [uuid])
@@ -604,6 +613,7 @@ model Todo {
   @@index([status])
   @@index([updatedAt])
   @@index([sourceType, sourceUuid])
+  @@index([origin])
   @@map("todos")
 }
 
@@ -751,6 +761,7 @@ model Purchase {
   updatedAt        DateTime       @default(now()) @updatedAt
   deletedAt        DateTime?
   purchaseItems    PurchaseItem[]
+  fixedAssetItems  PurchaseFixedAssetItem[] @relation("PurchaseFixedAssets")
   contract         Contract?      @relation(fields: [contractUuid], references: [uuid])
   counterparty     Counterparty?  @relation(fields: [counterpartyUuid], references: [uuid])
   organization     Organization?  @relation(fields: [organizationUuid], references: [uuid])
@@ -3096,6 +3107,7 @@ model FixedAsset {
   updatedAt        DateTime  @default(now()) @updatedAt
   deletedAt        DateTime?
   acceptances      FixedAssetAcceptance[] @relation("FixedAssetAcceptances")
+  purchaseItems    PurchaseFixedAssetItem[] @relation("FixedAssetPurchaseItems")
 
   @@index([organizationUuid])
   @@index([updatedAt])
@@ -3157,6 +3169,12 @@ model PurchaseFixedAssetItem {
   organizationUuid String?
   updatedAt        DateTime  @default(now()) @updatedAt
   deletedAt        DateTime?
+
+  // Внешние ключи жили только в миграции 20260809140000_fixed_assets, и Prisma, не видя их в схеме,
+  // на каждой проверке дрейфа предлагала их СНЕСТИ (аудит 22.09). Имена ограничений заданы явно
+  // (`map`) — те самые, что уже стоят в базе: схема описывает существующее, а не заводит новое.
+  purchase         Purchase   @relation("PurchaseFixedAssets", fields: [purchaseUuid], references: [uuid], onDelete: Cascade, map: "pfa_items_purchase_fkey")
+  fixedAsset       FixedAsset? @relation("FixedAssetPurchaseItems", fields: [fixedAssetUuid], references: [uuid], onDelete: SetNull, map: "pfa_items_fixed_asset_fkey")
 
   @@index([purchaseUuid])
   @@index([fixedAssetUuid])

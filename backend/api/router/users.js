@@ -148,7 +148,9 @@ router.get("/users", async (req, res) => {
 				username: true,
 				employeeUuid: true,
 				employee: true,
-				// password excluded from list queries
+				// Пароль читаем, но НАРУЖУ НЕ ОТДАЁМ (см. ниже): из него нужен один бит —
+				// «под этой учётной записью вообще можно войти».
+				password: true,
 			},
 		};
 
@@ -157,7 +159,16 @@ router.get("/users", async (req, res) => {
 			queryOptions.skip = 1;
 		}
 
-		const items = await prisma.user.findMany(queryOptions);
+		const rows = await prisma.user.findMany(queryOptions);
+		/*
+		 * УЧЁТНАЯ ЗАПИСЬ, ЗАВЕДЁННАЯ ИНТЕГРАЦИЕЙ (ПН3). Автор задачи или события из 1С — реальный
+		 * пользователь ERP, созданный по имени с пустым паролем: войти под ним нельзя, он
+		 * существует, чтобы у записи был автор. В списке такие выглядели как брошенные учётки, и
+		 * их порывались удалять — вместе с авторством всего, что они успели создать.
+		 *
+		 * Наружу уходит признак, а не пароль: хеш из списка не показывают никому и никогда.
+		 */
+		const items = rows.map(({ password, ...user }) => ({ ...user, isIntegration: !password }));
 
 		const hasMore = items.length === limitNumber;
 		const nextCursor = hasMore ? items[items.length - 1].id : null;

@@ -31,6 +31,7 @@ import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
 import type { LLMProvider, ChatMessage, ToolCall, ToolResult } from "../llm/provider.ts";
 import { LLMError } from "../llm/provider.ts";
+import { agentKnowsType } from "../commands/admin.ts";
 import { TOOLS_BY_NAME, toolDefinitions, collectIds, hasOwnOrganization, ROUTING_ORGANIZATION, ToolInputError, type ToolSpec } from "../tools/registry.ts";
 import { SYSTEM_PROMPT } from "./prompt.ts";
 import type { AgentService } from "../agents/service.ts";
@@ -96,6 +97,14 @@ type Context = {
 	baseAgents?: Record<string, string>;
 	/** БИН организации ERP, прочитанный в этом диалоге (C18): организация диалога не меняется, ERP спрашиваем раз. */
 	erpBin?: { org: string; bin: string | null };
+	/**
+	 * Документы 1С, о которых шла речь в этом диалоге: id → тип и подпись (СВ7).
+	 *
+	 * Нужны, чтобы задачу можно было связать с созданным документом, НЕ доверяя модели ни типа, ни
+	 * подписи: она называет только идентификатор, и тот обязан встретиться в результатах вызовов
+	 * (та же защита `seenIds`, что у всех остальных идентификаторов).
+	 */
+	docs?: Record<string, { type: string; label: string }>;
 };
 
 /** Куда идёт команда чата (СВ3, C0): база агента, отказ по лимиту, смешение баз или «решит прежний путь». */
@@ -150,10 +159,13 @@ export type WorkflowDeps = {
  * Исполнитель серверных инструментов. Он получает уже проверенный payload и отвечает тем же, чем
  * ответила бы 1С: данными или отказом с кодом и текстом для человека.
  */
+/** Что исполнителю нужно знать о диалоге: документы, о которых в нём шла речь (СВ7). */
+export type ServerToolContext = { documents: Record<string, { type: string; label: string }> };
+
 export type ServerToolRunner = {
 	/** Доступен ли инструмент этому пользователю: организация хода известна и канал настроен. */
 	available: (user: ChatUser) => boolean;
-	run: (spec: ToolSpec, payload: Record<string, unknown>, user: ChatUser) => Promise<Outcome>;
+	run: (spec: ToolSpec, payload: Record<string, unknown>, user: ChatUser, ctx?: ServerToolContext) => Promise<Outcome>;
 	/** Короткий контекст организации для промпта (задачи и заметки); null — нечего показать. */
 	summary?: (user: ChatUser) => Promise<string | null>;
 };
@@ -271,7 +283,13 @@ export class ChatWorkflow {
 				: { ok: false, error: { code: r.result.error?.code ?? "ERROR", message: r.result.error?.message ?? `1С вернула ошибку${r.result.status ? ` (${r.result.status})` : ""}`, details: r.result.error?.details ?? null } };
 			const out = await this.interpret(conv, user, spec, oc.payload, oc.callId, oc.statementId ?? null, outcome);
 			cyc.results.push(out.result);
-			if (outcome.ok) documents.push(...documentsOf(spec.commandType, outcome.data));
+			if (outcome.ok) {
+				const seen = documentsOf(spec.commandType, outcome.data);
+				documents.push(...seen);
+				// Запоминаем тип и подпись документа: связать с ним задачу можно будет и через
+				// несколько ходов, когда результата вызова в истории уже не разобрать.
+				for (const d of seen) conv.context.docs = { ...conv.context.docs, [d.id]: { type: d.type, label: d.title } };
+			}
 		}
 		conv.context.client = cyc;
 
@@ -545,7 +563,7 @@ export class ChatWorkflow {
 			}, isError: true } };
 		}
 		await this.setState(conv.id, "EXECUTING", conv.context);
-		const outcome = await runner.run(spec, payload, user);
+		const outcome = await runner.run(spec, payload, user, { documents: conv.context.docs ?? {} });
 		// Отказ записываем КОДОМ (СВ8): «не сработало» в журнале не отличает «ERP не ответила» от «ERP
 		// отказала по делу», а лечатся они по-разному — и видно это должно быть в панели, не только в логе.
 		await this.audit(user, { event: "chat.server_tool", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid,
@@ -608,6 +626,20 @@ export class ChatWorkflow {
 					}, isError: true } };
 				}
 			}
+		}
+
+		/*
+		 * КОМАНДА, КОТОРОЙ СБОРКА АГЕНТА НЕ ЗНАЕТ, НЕ СТАВИТСЯ (аудит 22.09). Агент перечисляет свои типы
+		 * (`HEALTH`, `CREATE_SALE`, …), и раньше проверка по этому перечню была только у административных
+		 * команд: новый инструмент на старом агенте молчал до таймаута, а потом отвечал `UNKNOWN_COMMAND`.
+		 * Для модели это одинаково бесполезно, но стоит минуты ожидания и занятого места в очереди.
+		 */
+		if (!agentKnowsType(agent, spec.commandType)) {
+			return { result: { toolCallId: call.id, content: {
+				error: "CAPABILITY_MISSING",
+				message: `Агент 1С этой базы не умеет операцию ${spec.name} (${spec.commandType}) — его сборка старее сервиса. `
+					+ "Скажите пользователю, что нужно обновить агента BuhProf на компьютере с 1С, и не повторяйте этот вызов.",
+			}, isError: true } };
 		}
 
 		await this.setState(conv.id, "EXECUTING", conv.context);
@@ -860,6 +892,44 @@ export class ChatWorkflow {
 				"Заполняется по данным учёта 1С; данные контрагента — зеркально.",
 			].filter(Boolean).join("\n");
 		}
+		/*
+		 * СПРАВОЧНИКИ (СВ12). Защита от выдуманных идентификаторов здесь не работает: объекта ещё нет, и
+		 * подтверждать нечего, кроме того, ЧТО именно заведут. Поэтому карточка показывает поля дословно —
+		 * лишний контрагент в справочнике живёт вечно и всплывает в сверках годами.
+		 */
+		if (spec.name === "create_counterparty") {
+			const kind = String(payload.kind ?? "both");
+			return [
+				"Новый контрагент в 1С",
+				`Наименование: ${String(payload.name)}`,
+				`БИН/ИИН: ${String(payload.bin)}`,
+				`Вид: ${kind === "buyer" ? "покупатель" : kind === "supplier" ? "поставщик" : "покупатель и поставщик"}`,
+				payload.fullName ? `Полное наименование: ${String(payload.fullName)}` : null,
+				"1С поищет по БИН существующего: если он есть, двойник не появится.",
+			].filter(Boolean).join("\n");
+		}
+		if (spec.name === "create_product") {
+			return [
+				"Новая номенклатура в 1С",
+				`Наименование: ${String(payload.name)}`,
+				`Вид: ${payload.kind === "service" ? "услуга" : "товар"}`,
+				payload.unit ? `Единица: ${String(payload.unit)}` : null,
+				payload.vatRate ? `НДС: ${String(payload.vatRate)}` : null,
+				payload.article ? `Артикул: ${String(payload.article)}` : null,
+			].filter(Boolean).join("\n");
+		}
+		if (spec.name === "create_cash_order") {
+			const out = payload.direction === "out";
+			return [
+				out ? "Расходный кассовый ордер" : "Приходный кассовый ордер",
+				`Контрагент: ${nameOf(payload.counterpartyId)}`,
+				`Сумма: ${String(payload.amount)} ₸`,
+				payload.purpose ? `Основание: ${String(payload.purpose)}` : null,
+				payload.date ? `Дата: ${String(payload.date)}` : null,
+				payload.organizationBin ? `Организация: БИН ${String(payload.organizationBin)}` : null,
+				"Документ будет записан без проведения.",
+			].filter(Boolean).join("\n");
+		}
 		if (spec.name === "import_bank_statement") {
 			const s = ctx.statements?.[String(payload.statementId)];
 			if (!s) return `Загрузка выписки ${String(payload.statementId)}`;
@@ -879,7 +949,8 @@ export class ChatWorkflow {
 			const list = docs.slice(0, 15).map((d) => `• ${d.type === "incoming" ? "ПП входящее" : "ПП исходящее"} ${nameOf(d.id)}`);
 			return [`Провести документы (${docs.length}):`, ...list, docs.length > 15 ? `… и ещё ${docs.length - 15}` : null].filter(Boolean).join("\n");
 		}
-		const verb = spec.name === "post_sale" ? "Провести" : spec.name === "unpost_sale" ? "Отменить проведение" : spec.name;
+		const posting = spec.name.startsWith("post_") ? "Провести" : spec.name.startsWith("unpost_") ? "Отменить проведение" : "";
+		const verb = posting || spec.name;
 		return `${verb}: документ ${nameOf(payload.documentId)}`;
 	}
 
@@ -1126,7 +1197,17 @@ const DOCUMENT_COMMANDS: Record<string, { type: string; label: string }> = {
 	POST_PURCHASE: { type: "purchase", label: "Поступление" }, UNPOST_PURCHASE: { type: "purchase", label: "Поступление" },
 	CREATE_INVOICE: { type: "invoice", label: "Счёт на оплату" }, GET_INVOICE: { type: "invoice", label: "Счёт на оплату" },
 	CREATE_RECONCILIATION_ACT: { type: "reconciliationAct", label: "Акт сверки" },
+	/*
+	 * Кассовый ордер — ДВА вида документа на одну команду: приходный и расходный. Тип берётся из ответа 1С
+	 * (`direction`), а не из команды: по команде его не угадать, а ссылка не на тот вид открывает у
+	 * пользователя чужой документ.
+	 */
+	CREATE_CASH_ORDER: { type: "cashIn", label: "Кассовый ордер" }, GET_CASH_ORDER: { type: "cashIn", label: "Кассовый ордер" },
+	POST_CASH_ORDER: { type: "cashIn", label: "Кассовый ордер" }, UNPOST_CASH_ORDER: { type: "cashIn", label: "Кассовый ордер" },
 };
+
+/** Команды кассы: вид документа различает только `direction` из ответа 1С. */
+const CASH_COMMANDS = new Set(["CREATE_CASH_ORDER", "GET_CASH_ORDER", "POST_CASH_ORDER", "UNPOST_CASH_ORDER"]);
 
 /** Созданные и найденные документы из результата 1С. Поле необязательное: форма строит ссылки и сама. */
 export function documentsOf(commandType: string, data: unknown): DocumentRef[] {
@@ -1137,6 +1218,12 @@ export function documentsOf(commandType: string, data: unknown): DocumentRef[] {
 	if (!id) return [];
 	const num = d.number ?? d.document?.number;
 	const number = typeof num === "string" || typeof num === "number" ? String(num).trim() : "";
+	if (CASH_COMMANDS.has(commandType)) {
+		const dir = (data as { direction?: unknown }).direction ?? (data as { document?: { direction?: unknown } }).document?.direction;
+		const out = dir === "out";
+		const label = out ? "Расходный кассовый ордер" : "Приходный кассовый ордер";
+		return [{ type: out ? "cashOut" : "cashIn", id, number, title: number ? `${label} №${number}` : label }];
+	}
 	return [{ type: kind.type, id, number, title: number ? `${kind.label} №${number}` : kind.label }];
 }
 

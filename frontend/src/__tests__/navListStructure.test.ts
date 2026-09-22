@@ -67,18 +67,24 @@ describe("NavList structure", () => {
 	});
 });
 
-it("Администрирование: кластеры и агенты — разные пункты, оба под правом OneCAdmin", () => {
+it("Администрирование: кластеры, агенты и расширение — разные пункты под одним правом OneCAdmin", () => {
 	const admin = groupsOf("Administration");
-	// Разделение по предмету: сервер 1С с его базами — одно, службы-агенты — другое.
+	/*
+	 * Разделение по ПРЕДМЕТУ, а не по виду экрана: сервер 1С с его базами — одно, службы-агенты — другое,
+	 * расширение внутри базы — третье. Заявку базы искали среди агентских ровно потому, что «всё, что
+	 * называется заявкой» лежало вместе (22.09).
+	 */
 	expect(admin).toContain('translate("OneCClusters")');
 	expect(admin).toContain('translate("OneCAgents")');
+	expect(admin).toContain('translate("OneCExtension")');
 	expect(admin).toContain('component: OneCClustersList');
 	expect(admin).toContain('component: OneCAgentsList');
+	expect(admin).toContain('component: OneCExtensionList');
 	// Прежний объединённый пункт из меню убран: он остался только для восстановления панелей.
 	expect(admin).not.toContain('component: OneCAdminList');
 	expect(SRC).not.toContain('component: OneCAdminList');
-	// Право одно на оба пункта; внутри действуют вложенные разрешения.
-	expect(admin.match(/can\("OneCAdmin"\)/g)?.length).toBe(2);
+	// Право одно на все три пункта; внутри действуют вложенные разрешения.
+	expect(admin.match(/can\("OneCAdmin"\)/g)?.length).toBe(3);
 });
 
 it("раздел «Администрирование» есть в навбаре и отвечает на свой label", () => {

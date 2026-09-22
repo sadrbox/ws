@@ -23,6 +23,12 @@ export type ErpTask = {
 	curatorName: string | null;
 	executorName: string | null;
 	sourceLabel: string | null;
+	/** Ссылка на объект-источник, если задачу связали с документом (СВ7). */
+	sourceType?: string | null;
+	sourceUuid?: string | null;
+	/** Происхождение задачи и его подпись: «из чата в 1С — Dev_01». Отдельно от ссылки. */
+	origin?: string | null;
+	originLabel?: string | null;
 };
 
 export type ErpNote = {
@@ -71,7 +77,13 @@ export class ErpTasks {
 		return (await this.call<{ items: ErpTask[] }>("GET", `/bpai/tasks?${q}`)).items;
 	}
 
-	async createTask(actor: ErpActor, task: { name?: string; description?: string; deadline?: string | null; executorName?: string | null; sourceLabel?: string | null }): Promise<ErpTask> {
+	async createTask(actor: ErpActor, task: {
+		name?: string; description?: string; deadline?: string | null; executorName?: string | null;
+		/** Подпись происхождения: «Чат в 1С — Dev_01». Метку ставит сама ERP. */
+		originLabel?: string | null;
+		/** Ссылка на объект 1С: пара «тип + uuid» целиком или ничего (СВ7). */
+		sourceType?: string | null; sourceUuid?: string | null; sourceLabel?: string | null;
+	}): Promise<ErpTask> {
 		return (await this.call<{ item: ErpTask }>("POST", "/bpai/tasks", { ...actor, ...task })).item;
 	}
 
@@ -86,6 +98,19 @@ export class ErpTasks {
 
 	async addNote(actor: ErpActor, body: string): Promise<ErpNote> {
 		return (await this.call<{ item: ErpNote }>("POST", "/bpai/notes", { ...actor, body })).item;
+	}
+
+	/**
+	 * Правка и уборка заметки (СВ3). Право — авторство: ERP откажет чужому (403), а чужую
+	 * организацию назовёт «не найдено» (404), чтобы по коду ответа нельзя было перебирать записи.
+	 * Тело у DELETE непривычно, но обязательно: в нём БИН и имя автора — иначе субъекта нет.
+	 */
+	async updateNote(actor: ErpActor, uuid: string, body: string): Promise<ErpNote> {
+		return (await this.call<{ item: ErpNote }>("PATCH", `/bpai/notes/${encodeURIComponent(uuid)}`, { ...actor, body })).item;
+	}
+
+	async deleteNote(actor: ErpActor, uuid: string): Promise<{ uuid: string }> {
+		return (await this.call<{ item: { uuid: string } }>("DELETE", `/bpai/notes/${encodeURIComponent(uuid)}`, { ...actor })).item;
 	}
 
 	async statuses(): Promise<ErpTaskStatus[]> {

@@ -37,19 +37,25 @@ export interface UseSplitResizeOptions {
   min?: number;
   max?: number;
   /**
-   * Считаться с тем, сколько места область СМОГЛА занять.
+   * МИНИМУМ ОБЕИХ ОБЛАСТЕЙ В ПИКСЕЛЯХ — предел, который и виден человеку.
    *
-   * Проценты — доля контейнера, но у соседней области бывает собственный минимум
-   * (`min-width: min-content` у пейнов), и тогда запрошенная доля недостижима: вёрстка
-   * подрезает панель, а хук продолжает думать, что она шире. Указатель уходит дальше,
-   * а граница стоит — и на обратном ходе панель не двигается, пока процент не упадёт
-   * до реального предела: разделитель выглядит залипшим.
+   * Проценты говорят о доле, а невместимость измеряется не долей: 20 % от полутора тысяч
+   * пикселей — удобная колонка, от шестисот — полоска, в которую не влезает и кнопка.
+   * Поэтому предел задаётся в пикселях и считается по РЕАЛЬНОМУ размеру контейнера.
    *
-   * Включено — предел вычисляется из разметки: как только панель не добрала
-   * запрошенного, выше добранного не поднимаемся. Выключено (по умолчанию) — прежнее
-   * поведение для мест, где у соседа минимума нет.
+   * Окно уже двух минимумов — делим пополам: лучше две тесные области, чем одна нормальная
+   * и одна в ноль. Ноль (по умолчанию) — предел только процентный, как было.
    */
-  clampToContent?: boolean;
+  minPx?: number;
+  /**
+   * CSS-переменная контейнера, которой задаётся размер области («--tech-width»).
+   *
+   * Передана — во время перетаскивания хук пишет размер ПРЯМО В DOM, не трогая состояние
+   * React: перерисовывать на каждое движение указателя область, в которой открыт список
+   * задач или переписка, — это и есть те самые рывки. Состояние догоняет один раз, когда
+   * движение закончилось.
+   */
+  cssVar?: string;
 }
 
 export interface SplitResizeApi {
@@ -71,96 +77,136 @@ export function useSplitResize({
   defaultPercent,
   min = 15,
   max = 70,
-  clampToContent = false,
+  minPx = 0,
+  cssVar,
 }: UseSplitResizeOptions): SplitResizeApi {
   const [percent, setPercent] = useState<number>(() => {
     const v = Number(localStorage.getItem(storageKey));
     return v >= min && v <= max ? v : defaultPercent;
   });
   const containerRef = useRef<HTMLDivElement>(null);
-  // Зеркало текущего процента — стартовое значение для дельта-перетаскивания
-  // (без зависимости startResize от percent).
+  // Зеркало текущего процента: обработчики перетаскивания живут вне React-рендера и
+  // не должны от него зависеть — иначе каждое движение пересоздавало бы их.
   const percentRef = useRef(percent);
   percentRef.current = percent;
 
+  const vertical = side === "top" || side === "bottom";
+  /** Панель у дальнего края (right/bottom) меряется от конца контейнера, у ближнего — от начала. */
+  const far = side === "right" || side === "bottom";
+
   /**
-   * Привести запрошенную долю к той, что панель реально заняла. ТОЛЬКО ПО ОТПУСКАНИЮ.
+   * Свести желаемый размер панели (в пикселях) к возможному.
    *
-   * Панель — крайний элемент контейнера со стороны `side`: так стоят обе области во всех
-   * местах приложения (пейны ↔ сообщения, список ↔ предпросмотр, фильтры ↔ отчёт).
+   * ПРЕДЕЛ — ПИКСЕЛЬНЫЙ И ВИДИМЫЙ. Обе области обязаны остаться пригодными для работы, поэтому
+   * ни одна не становится уже `minPx`. Процентные `min`/`max` остаются как грубая рамка (и как
+   * прежнее поведение там, где `minPx` не задан), но решает именно пиксельный предел: он не
+   * зависит от того, насколько широко окно.
    *
-   * ПОЧЕМУ НЕ ВО ВРЕМЯ ПЕРЕТАСКИВАНИЯ. Измерение, поданное обратно в состояние на каждом
-   * движении, замыкает круг: доля → разметка → измерение → доля. Пока предел неподвижен,
-   * круг сходится, но минимум соседа сам зависит от отданной ему ширины (таблица
-   * переносит тулбар, появляется полоса прокрутки) — и панель начинала прыгать между двумя
-   * значениями на каждом кадре. Поэтому во время движения доля идёт за указателем и ничем,
-   * кроме min/max, не ограничена: за край не пустит вёрстка (`flex-shrink` у панели), а
-   * согласуем записанное с действительным один раз, когда движение закончилось.
+   * ОКНО УЖЕ ДВУХ МИНИМУМОВ — делим пополам. Иначе пришлось бы выбирать, какая из областей
+   * останется полноценной, а какая схлопнется в ноль, — а это не выбор, это поломка.
    */
-  const settleToContent = useCallback(() => {
-    if (!clampToContent) return;
-    const vertical = side === "top" || side === "bottom";
-    const box = containerRef.current?.getBoundingClientRect();
-    const size = vertical ? box?.height : box?.width;
-    const panel = side === "right" || side === "bottom"
-      ? containerRef.current?.lastElementChild
-      : containerRef.current?.firstElementChild;
-    if (!size || !(panel instanceof HTMLElement)) return;
-    const rect = panel.getBoundingClientRect();
-    const got = ((vertical ? rect.height : rect.width) / size) * 100;
-    // Меньше запрошенного — значит упёрлись в соседа: запоминаем достижимое, иначе
-    // следующее перетаскивание начнётся с доли, которой на экране никогда не было.
-    setPercent((p) => (got < p - 0.5 ? Math.max(min, got) : p));
-  }, [clampToContent, side, min]);
+  const clampPx = useCallback((wanted: number, size: number): number => {
+    const lo = Math.min(minPx, size / 2);
+    const hi = Math.max(lo, size - Math.min(minPx, size / 2));
+    const byPercent = { lo: (min / 100) * size, hi: (max / 100) * size };
+    // Пиксельный предел строже процентного там, где они спорят: он про пригодность к работе.
+    const low = minPx > 0 ? Math.max(lo, Math.min(byPercent.lo, hi)) : byPercent.lo;
+    const high = minPx > 0 ? Math.min(hi, Math.max(byPercent.hi, low)) : byPercent.hi;
+    return Math.min(high, Math.max(low, wanted));
+  }, [min, max, minPx]);
 
   const startResize = useCallback(
     (e: ReactPointerEvent) => {
       e.preventDefault();
-      // ДЕЛЬТА, а не абсолют: двигаем от стартовой позиции/процента, поэтому граница
-      // не «прыгает» под курсор при клике не ровно по разделителю (offset схвата).
-      const vertical = side === "top" || side === "bottom";
+      const container = containerRef.current;
+      if (!container) return;
       const startClient = vertical ? e.clientY : e.clientX;
-      const startPercent = percentRef.current;
-      const move = (ev: PointerEvent) => {
-        const box = containerRef.current?.getBoundingClientRect();
-        const size = vertical ? box?.height : box?.width;
-        if (!box || !size) return;
-        const deltaPercent = (((vertical ? ev.clientY : ev.clientX) - startClient) / size) * 100;
-        // Панель у дальнего края (right/bottom) от движения «к себе» сужается, у ближнего
-        // (left/top) — расширяется: знак дельты зависит только от этого.
-        const raw = side === "right" || side === "bottom"
-          ? startPercent - deltaPercent
-          : startPercent + deltaPercent;
-        setPercent(Math.min(max, Math.max(min, raw)));
+      /*
+       * ОТСЧЁТ ОТ ФАКТИЧЕСКОГО РАЗМЕРА ОБЛАСТИ, А НЕ ОТ КРАЁВ КОНТЕЙНЕРА.
+       *
+       * Считать «сколько осталось от указателя до края» нельзя: между полосой и областью есть
+       * зазор, сама полоса имеет ширину, у контейнера бывают отступы — всё это складывалось в
+       * постоянное смещение, и разделитель ехал не там, где курсор.
+       *
+       * Здесь размер области меняется РОВНО на столько, на сколько сдвинулся указатель: полоса
+       * остаётся под курсором в той же точке, за которую её взяли, чем бы ни была обставлена
+       * вёрстка. Отсчёт при этом абсолютный — от размера на момент нажатия, — поэтому
+       * накопленной ошибки, из-за которой обратный ход «залипал», не возникает.
+       */
+      const box = container.getBoundingClientRect();
+      // Размер на момент нажатия — из доли, которой область сейчас и нарисована (flex-basis:
+      // X% контейнера). Мерить сам элемент значило бы знать, который он по счёту, а порядок
+      // детей у контейнеров разный: где-то первым идёт портал шапки, где-то сама область.
+      const startSize = (percentRef.current / 100) * (vertical ? box.height : box.width);
+
+      let frame = 0;
+      let last = percentRef.current;
+      const apply = (pct: number) => {
+        last = pct;
+        /*
+         * ВО ВРЕМЯ ДВИЖЕНИЯ — МИМО REACT. Размер пишется в CSS-переменную контейнера: браузер
+         * перекладывает флексы сам, без перерисовки поддерева. Перерисовывать на каждое
+         * движение область, в которой открыты переписка или список задач, — это и есть рывки,
+         * из-за которых разделитель «залипал».
+         */
+        if (cssVar) container.style.setProperty(cssVar, `${pct}%`);
+        else setPercent(pct);
       };
+
+      const move = (ev: PointerEvent) => {
+        // Не чаще кадра: события указателя приходят пачками, а показать можно только один раз.
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          const now = container.getBoundingClientRect();
+          const size = vertical ? now.height : now.width;
+          if (!size) return;
+          const moved = (vertical ? ev.clientY : ev.clientX) - startClient;
+          // Область у дальнего края растёт, когда указатель идёт «к себе», у ближнего — наоборот.
+          const wanted = startSize + (far ? -moved : moved);
+          apply((clampPx(wanted, size) / size) * 100);
+        });
+      };
+
       const up = () => {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        if (frame) { cancelAnimationFrame(frame); frame = 0; }
         document.body.style.userSelect = "";
         document.body.style.cursor = "";
-        // После кадра: последнее движение к этому моменту ещё не разложено в разметку.
-        requestAnimationFrame(settleToContent);
+        // Состояние догоняет один раз — и оно же уходит в localStorage.
+        if (cssVar) {
+          container.style.removeProperty(cssVar);
+          setPercent(last);
+        }
       };
+
       // Пока тянем — гасим выделение текста и держим курсор col-resize,
       // иначе он мигает при уходе указателя с узкой полоски разделителя.
       document.body.style.userSelect = "none";
       document.body.style.cursor = vertical ? "row-resize" : "col-resize";
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
+      // Системная отмена жеста (окно потеряло фокус, палец ушёл за экран) — тот же конец:
+      // без этого слушатели оставались висеть, а курсор — col-resize на всём приложении.
+      window.addEventListener("pointercancel", up);
     },
-    [side, min, max, settleToContent],
+    [vertical, far, cssVar, clampPx],
   );
 
   const reset = useCallback(() => setPercent(defaultPercent), [defaultPercent]);
 
   // Клавиатурный сдвиг живёт здесь, а не в разделителе: границы и персист — забота хука.
   const nudge = useCallback(
-    (delta: number) => {
-      setPercent((p) => Math.min(max, Math.max(min, p + delta)));
-      // Шаг с клавиатуры — то же движение, только дискретное: согласуем после кадра.
-      requestAnimationFrame(settleToContent);
-    },
-    [min, max, settleToContent],
+    (delta: number) => setPercent((p) => {
+      const box = containerRef.current?.getBoundingClientRect();
+      const size = box ? (vertical ? box.height : box.width) : 0;
+      const wanted = p + delta;
+      // Без контейнера (в тестах и до первой раскладки) остаётся процентная рамка.
+      return size ? (clampPx((wanted / 100) * size, size) / size) * 100 : Math.min(max, Math.max(min, wanted));
+    }),
+    [vertical, clampPx, min, max],
   );
 
   useEffect(() => {

@@ -193,8 +193,15 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// За cloudflared: реальный IP клиента — в X-Forwarded-For.
 	app.set("trust proxy", true);
 	app.use(helmet());
-	// Вложения чата (PDF выписок, base64) идут в теле JSON: лимит — с запасом над CHAT_ATTACHMENT_MAX_MB × 3 файла.
-	app.use(express.json({ limit: `${cfg.CHAT_ATTACHMENT_MAX_MB * 4 + 2}mb` }));
+	/*
+	 * ПРЕДЕЛ ТЕЛА — РАЗНЫЙ У ДВУХ ЧАТОВ. Веб-чат ERP шлёт вложения (PDF выписок) прямо в JSON, base64: ему
+	 * нужен запас над CHAT_ATTACHMENT_MAX_MB × 3 файла, и этот маршрут разбирает тело своим парсером.
+	 * Всему остальному — обычный предел (JSON_BODY_MAX_MB): канал 1С с правки 22.09 шлёт вложения отдельным
+	 * запросом `POST /v1/onec-chat/uploads`, и держать 82 МБ на каждом маршруте значит держать память и
+	 * поверхность для злоупотреблений ради пути, которым никто не ходит.
+	 */
+	app.use("/v1/chat", express.json({ limit: `${cfg.CHAT_ATTACHMENT_MAX_MB * 4 + 2}mb` }));
+	app.use(express.json({ limit: `${cfg.JSON_BODY_MAX_MB}mb` }));
 
 	// CORS — только для браузерного API /v1 и только для перечисленных origins. Агенты и
 	// admin-вызовы идут не из браузера, им заголовки CORS ни к чему. Без библиотеки: правил
@@ -252,15 +259,18 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Раньше /v1: у формы 1С нет JWT ERP, её субъект — токен базы.
 	app.use("/v1/onec-chat", onecChatRouter({
 		workflow, tokens: baseTokens, erp, log, version: VERSION, tasks: erpTasks, baseOrgs,
-		maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN,
+		maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, maxAttachments: cfg.CHAT_ATTACHMENTS_MAX,
+		chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN,
 		// Вложение отдельным запросом, ключ хода и смена токена базы: каждая часть включается своей
 		// зависимостью, и GET /ping объявляет ровно то, что включено (features).
-		files, turnKeys, rotation: baseTokens,
+		files, turnKeys, rotation: baseTokens, revoke: baseTokens,
 		rotationMinExtVersion: cfg.ONEC_EXT_ROTATION_MIN, minExtVersion: cfg.ONEC_EXT_MIN_VERSION,
 		// Ссылки на задачи для 1С и отдельный лимит на изменяющие вызовы задач и заметок.
 		panelUrl: cfg.PUBLIC_PANEL_URL, tasksWritePerMin: cfg.RATE_LIMIT_TASKS_WRITE_PER_MIN,
 	}));
-	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db), db }));
+	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db), db,
+		// Числа из 1С в карточке организации (ПН9): команда агенту и запись о ней в журнал.
+		queue, audit }));
 
 	app.use((_req, res) => {
 		res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Ресурс не найден" } });
@@ -271,6 +281,16 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		const e = err as { type?: string; status?: number; message?: string };
 		if (e?.type === "entity.parse.failed") {
 			res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "Тело запроса не является корректным JSON" } });
+			return;
+		}
+		/*
+		 * ТЕЛО БОЛЬШЕ ПРЕДЕЛА — ЭТО НЕ ПОЛОМКА СЕРВИСА (аудит 22.09). Раньше отказ разборщика падал в общий
+		 * обработчик, и расширение получало «Внутренняя ошибка сервера» на ход, который всего лишь оказался
+		 * велик: отличить одно от другого было нечем, а чинить предлагалось сервис. Теперь ответ называет и
+		 * причину, и предел — и совпадает с тем, чем на своей стороне отвечает расширение.
+		 */
+		if (e?.type === "entity.too.large") {
+			res.status(413).json({ success: false, error: { code: "PAYLOAD_TOO_LARGE", message: `Тело запроса больше предела установки (${cfg.JSON_BODY_MAX_MB} МБ)` } });
 			return;
 		}
 		log.error({ err, path: req.path, method: req.method }, "необработанная ошибка");

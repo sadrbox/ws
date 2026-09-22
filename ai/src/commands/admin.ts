@@ -780,14 +780,30 @@ export function agentCanRun(agent: Pick<AgentView, "role" | "capabilities">, spe
 	const hasCapability = agent.capabilities.includes(spec.capability)
 		|| (!!spec.capabilityAlt && agent.capabilities.includes(spec.capabilityAlt));
 	if ((spec.role !== "any" && agent.role !== spec.role) || !hasCapability) return false;
+	return agentKnowsType(agent, spec.type);
+}
 
-	// Агент перечисляет не только способности (`cluster.admin`), но и КОНКРЕТНЫЕ типы
-	// команд, которые умеет. Если такой перечень есть — проверяем по нему: иначе команда,
-	// добавленная в сервисе раньше, чем в агенте, уходит в очередь и возвращается через
-	// сеть с «тип команды не поддерживается». Отказать сразу и сказать, что агент устарел,
-	// полезнее, чем round-trip ради того же вывода.
-	const declaresTypes = agent.capabilities.some((c) => /^[A-Z][A-Z0-9_]+$/.test(c));
-	return declaresTypes ? agent.capabilities.includes(spec.type) : true;
+/**
+ * ЗНАЕТ ЛИ АГЕНТ ТАКОЙ ТИП КОМАНДЫ.
+ *
+ * Агент перечисляет не только способности (`cluster.admin`), но и КОНКРЕТНЫЕ типы команд, которые умеет его
+ * сборка. Если такой перечень есть — проверяем по нему: иначе команда, добавленная в сервисе раньше, чем в
+ * агенте, уходит в очередь и возвращается через сеть с «тип команды не поддерживается». Отказать сразу и
+ * сказать, что агент устарел, полезнее, чем round-trip ради того же вывода.
+ *
+ * ЭТО НУЖНО И БИЗНЕС-КОМАНДАМ (аудит 22.09). Проверка жила только в `agentCanRun`, то есть в
+ * административных командах; чат и панель ставили бизнес-команды вслепую, и новый инструмент на старом
+ * агенте молчал минуту, а потом отвечал `UNKNOWN_COMMAND`. Бизнес-агент перечисляет свои типы так же
+ * (`HEALTH`, `CREATE_SALE`, …), поэтому правило одно на обе стороны.
+ *
+ * Перечня нет (сборка старее этого механизма) — не мешаем: молчание не равно «не умеет».
+ */
+export function agentKnowsType(agent: { capabilities?: readonly string[] | null }, type: string): boolean {
+	// Способностей нет вовсе (сборка старее механизма, запись из миграции, агент ещё не регистрировался):
+	// молчание не равно «не умеет» — пропускаем, как пропускали до этой проверки.
+	const caps = agent.capabilities ?? [];
+	const declaresTypes = caps.some((c) => /^[A-Z][A-Z0-9_]+$/.test(c));
+	return declaresTypes ? caps.includes(type) : true;
 }
 
 /**

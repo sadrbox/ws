@@ -27,6 +27,7 @@ import {
   CommunicationsPanel,
   AiAssistantList,
   OneCClustersList,
+  OneCExtensionList,
   OneCAgentsList,
   NotificationsList,
   WarehousesList,
@@ -372,8 +373,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
   );
 
   /**
-   * АДМИНИСТРИРОВАНИЕ — про наше хозяйство, а не про учёт: серверы 1С и службы, которые к ним ходят.
-   * Разделено по предмету: «Кластеры 1С» — сервер и его базы, «Агенты» — службы, их подключение и настройки.
+   * АДМИНИСТРИРОВАНИЕ — про наше хозяйство, а не про учёт: серверы 1С, службы и расширение в базах.
+   * Разделено по ПРЕДМЕТУ, а не по виду экрана: «Кластеры 1С» — сервер и его базы, «Агенты 1С» — службы, их
+   * подключение и настройки, «Расширение БухПроф-AI» — то, что стоит внутри баз: заявки баз, версии, чат.
    * Право одно (OneCAdmin); что именно внутри доступно, решают вложенные разрешения (onecPermissions).
    */
   const AdministrationGroups = () => (
@@ -386,6 +388,10 @@ export const NavList = ({ label }: TypeNavListProps) => {
           )}
           {(isSuperAdmin || can("OneCAdmin")) && (
             <NavItem onClick={() => addPane({ component: OneCAgentsList, label: translate("OneCAgents") })}>{translate("OneCAgents")}</NavItem>
+          )}
+          {/* Расширение — третья сущность: не сервер и не служба, а то, что живёт внутри базы 1С. */}
+          {(isSuperAdmin || can("OneCAdmin")) && (
+            <NavItem onClick={() => addPane({ component: OneCExtensionList, label: translate("OneCExtension") })}>{translate("OneCExtension")}</NavItem>
           )}
         </ul>
       </div>

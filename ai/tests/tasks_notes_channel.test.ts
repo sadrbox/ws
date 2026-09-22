@@ -12,6 +12,7 @@ import express from "express";
 import type { AddressInfo } from "node:net";
 import { onecChatRouter } from "../src/http/onecChatRouter.ts";
 import { serverTools } from "../src/chat/serverTools.ts";
+import type { ServerToolContext } from "../src/chat/workflow.ts";
 import { ErpUnavailable, ErpRefused, type ErpTasks, type ErpTask } from "../src/erp/tasks.ts";
 import { toolDefinitions, TOOLS_BY_NAME } from "../src/tools/registry.ts";
 import { ToolInputError } from "../src/tools/registry.ts";
@@ -40,7 +41,24 @@ const onecUser = (bin = BIN): ChatUser => ({
 	onec: { baseId: BASE_ID, userName: "Бухгалтер", organization: { bin, name: "ИП Азимов С.М.", id: null } },
 } as ChatUser);
 
-function harness(opts: { tasks?: Partial<ErpTasks>; enabled?: boolean; panelUrl?: string; writePerMin?: number } = {}) {
+/**
+ * Логгер, который ведёт себя как настоящий pino: метод, оторванный от объекта, падает.
+ *
+ * ЗАЧЕМ ОН НУЖЕН. 22.09 канал отвечал 500 на КАЖДЫЙ запрос из 1С — `(loud ? log.info : log.debug)(…)`
+ * теряло `this`, а pino внутри читает `this[Symbol(pino.msgPrefix)]`. Заглушка со стрелочными функциями
+ * такую ошибку не замечает, поэтому проверка возможна только строгим логгером.
+ */
+function strictLogger(): Logger {
+	const self = {
+		info(this: unknown, ..._a: unknown[]) { if (this !== self) throw new Error("логгер вызван без контекста"); },
+		debug(this: unknown, ..._a: unknown[]) { if (this !== self) throw new Error("логгер вызван без контекста"); },
+		warn(this: unknown, ..._a: unknown[]) { if (this !== self) throw new Error("логгер вызван без контекста"); },
+		error(this: unknown, ..._a: unknown[]) { if (this !== self) throw new Error("логгер вызван без контекста"); },
+	};
+	return self as unknown as Logger;
+}
+
+function harness(opts: { tasks?: Partial<ErpTasks>; enabled?: boolean; panelUrl?: string; writePerMin?: number; log?: Logger } = {}) {
 	const calls: { method: string; args: unknown[] }[] = [];
 	const tasksStub = {
 		enabled: opts.enabled !== false,
@@ -49,6 +67,8 @@ function harness(opts: { tasks?: Partial<ErpTasks>; enabled?: boolean; panelUrl?
 		updateTask: async (...args: unknown[]) => { calls.push({ method: "updateTask", args }); return task({ status: "done" }); },
 		listNotes: async () => [],
 		addNote: async (...args: unknown[]) => { calls.push({ method: "addNote", args }); return { uuid: "n1", id: 1, body: "текст", authorName: "Бухгалтер", createdAt: "2026-09-22T10:00:00.000Z", updatedAt: "2026-09-22T10:00:00.000Z" }; },
+		updateNote: async (...args: unknown[]) => { calls.push({ method: "updateNote", args }); return { uuid: "n1", id: 1, body: String((args[2] ?? "")), authorName: "Бухгалтер", createdAt: "2026-09-22T10:00:00.000Z", updatedAt: "2026-09-22T11:00:00.000Z" }; },
+		deleteNote: async (...args: unknown[]) => { calls.push({ method: "deleteNote", args }); return { uuid: String(args[1] ?? "") }; },
 		statuses: async () => [{ code: "new", name: "Новая", isFinal: false, sortOrder: 1 }, { code: "done", name: "Выполнена", isFinal: true, sortOrder: 9 }],
 		...opts.tasks,
 	} as unknown as ErpTasks;
@@ -60,7 +80,7 @@ function harness(opts: { tasks?: Partial<ErpTasks>; enabled?: boolean; panelUrl?
 	const app = express();
 	app.use(express.json());
 	app.use("/v1/onec-chat", onecChatRouter({
-		workflow: null, tokens, erp, log: silent, version: "0.4.0",
+		workflow: null, tokens, erp, log: opts.log ?? silent, version: "0.4.0",
 		tasks: tasksStub, baseOrgs: baseOrgs as never,
 		panelUrl: opts.panelUrl ?? "https://aleppo.kz",
 		tasksWritePerMin: opts.writePerMin,
@@ -230,4 +250,113 @@ test("СВ9: чужой БИН не проходит и через инстру�
 	const alien = await runner.run(TOOLS_BY_NAME.get("list_tasks")!, {}, onecUser(OTHER_BIN));
 	assert.equal(alien.ok, false);
 	assert.equal(alien.ok === false ? alien.error?.code : "", "ORG_NOT_IN_BASE");
+});
+
+// ── СВ3. Заметку можно исправить и убрать ────────────────────────────────────
+
+test("СВ3: заметка правится и убирается из 1С — и то и другое под лимитом изменений", async () => {
+	const h = harness({ writePerMin: 2 });
+	try {
+		const edited = await h.call("PATCH", "/notes/n1", { bin: BIN, user: { name: "Бухгалтер" }, body: "исправленная" });
+		assert.equal(edited.status, 200);
+		assert.equal(edited.body.data.item.body, "исправленная");
+		assert.deepEqual(h.calls.at(-1)!.args.slice(1), ["n1", "исправленная"]);
+
+		const gone = await h.call("DELETE", "/notes/n1", { bin: BIN, user: { name: "Бухгалтер" } });
+		assert.equal(gone.status, 200);
+		assert.equal(gone.body.data.item.uuid, "n1");
+
+		// Третье изменение подряд упирается в тот же узкий лимит, что и создание задач.
+		const third = await h.call("PATCH", "/notes/n1", { bin: BIN, user: { name: "Бухгалтер" }, body: "ещё" });
+		assert.equal(third.status, 429);
+	} finally { h.close(); }
+});
+
+test("СВ3: пустой текст и чужой БИН до ERP не доходят", async () => {
+	const h = harness();
+	try {
+		const empty = await h.call("PATCH", "/notes/n1", { bin: BIN, user: { name: "Бухгалтер" }, body: "   " });
+		assert.equal(empty.status, 400);
+		assert.equal(empty.body.error!.code, "VALIDATION_ERROR");
+
+		const alien = await h.call("DELETE", "/notes/n1", { bin: OTHER_BIN, user: { name: "Бухгалтер" } });
+		assert.equal(alien.status, 403);
+		assert.equal(alien.body.error!.code, "ORG_NOT_IN_BASE");
+		assert.equal(h.calls.length, 0, "в ERP по чужому БИН не ходим даже ради отказа");
+	} finally { h.close(); }
+});
+
+// ── СВ7. Задача из документа ─────────────────────────────────────────────────
+
+const DOC = "9a000000-0000-4000-8000-000000000001";
+
+function taskRunner(created: Record<string, unknown>[]) {
+	return serverTools({
+		tasks: {
+			enabled: true,
+			createTask: async (_actor: unknown, t: Record<string, unknown>) => { created.push(t); return task(); },
+		} as never,
+		baseOrgs: { has: async () => true } as never,
+	});
+}
+
+test("СВ7: документ из диалога связывается с задачей — типом и подписью от 1С, а не со слов модели", async () => {
+	const created: Record<string, unknown>[] = [];
+	const ctx: ServerToolContext = { documents: { [DOC]: { type: "sale", label: "Реализация №12" } } };
+
+	const r = await taskRunner(created).run(TOOLS_BY_NAME.get("create_task")!, { name: "Проверить", documentId: DOC }, onecUser(), ctx);
+	assert.equal(r.ok, true);
+	// Приставка `1c:` — документ лежит В 1С: ссылка без неё открывала бы в панели карточку ERP,
+	// которой там нет, по чужому идентификатору.
+	assert.equal(created[0]!.sourceType, "1c:sale");
+	assert.equal(created[0]!.sourceUuid, DOC);
+	assert.equal(created[0]!.sourceLabel, "Реализация №12");
+	// Происхождение задачи ставит сама ERP: метку «из чата 1С» модель подделать не может.
+	assert.equal("origin" in created[0]!, false);
+});
+
+test("СВ7: документ, которого в диалоге не было, задачу не создаёт", async () => {
+	const created: Record<string, unknown>[] = [];
+	const r = await taskRunner(created).run(TOOLS_BY_NAME.get("create_task")!, { name: "Проверить", documentId: DOC }, onecUser(), { documents: {} });
+	assert.equal(r.ok, false);
+	assert.equal(r.ok === false ? r.error?.code : "", "UNKNOWN_DOCUMENT");
+	assert.equal(created.length, 0, "задача со ссылкой в никуда хуже задачи без ссылки");
+});
+
+test("СВ7: выдуманный идентификатор отсекается ещё на разборе вызова", () => {
+	const spec = TOOLS_BY_NAME.get("create_task")!;
+	const seen = new Set<string>([DOC]);
+	assert.equal(spec.buildPayload({ name: "раз", documentId: DOC }, { seenIds: seen }).documentId, DOC);
+	assert.equal("documentId" in spec.buildPayload({ name: "раз" }, { seenIds: seen }), false, "без документа — обычная задача");
+	assert.throws(
+		() => spec.buildPayload({ name: "раз", documentId: "11111111-0000-4000-8000-000000000009" }, { seenIds: seen }),
+		(e: unknown) => e instanceof ToolInputError,
+	);
+});
+
+// ── Журнал канала: метод логгера зовётся на объекте ──────────────────────────
+//
+// Живая проверка 22.09 упёрлась в это на первом же действии: форма отправила выписку и получила
+// «Внутренняя ошибка сервера», причём и на загрузке файла, и на ходе диалога. Middleware журнала стоит
+// перед всеми маршрутами канала, поэтому одна оторванная ссылка на метод положила канал целиком.
+
+test("журнал канала не роняет запрос: метод логгера вызывается на объекте", async () => {
+	const h = harness({ log: strictLogger() });
+	try {
+		const r = await h.call("GET", "/task-statuses");
+		assert.equal(r.status, 200, "строгий логгер повторяет pino: оторванный метод здесь дал бы 500");
+	} finally {
+		h.close();
+	}
+});
+
+test("журнал канала переживает и подробный режим: ход пишется через тот же логгер", async () => {
+	const h = harness({ log: strictLogger() });
+	try {
+		// POST /turn без чата отвечает 503 CHAT_DISABLED — важно, что это ответ маршрута, а не падение журнала.
+		const r = await h.call("POST", "/turn", { user: { id: USER, name: "Бухгалтер" }, text: "привет" });
+		assert.notEqual(r.status, 500, "пятисотка здесь означала бы, что журнал снова рвёт запрос");
+	} finally {
+		h.close();
+	}
 });

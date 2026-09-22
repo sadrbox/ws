@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>BuhProf AI ↔ 1С — архитектура на 22.09.2026</title>
+<style>
+	@page { size: A4 landscape; margin: 12mm; }
+
+	:root {
+		--ink: #16202b;
+		--muted: #5d6b7a;
+		--line: #c7d2dd;
+		--soft: #eef2f6;
+		--cloud: #1f5fa9;
+		--agent: #a8502a;
+		--onec: #24684f;
+		--erp: #6b4fa8;
+	}
+
+	* { box-sizing: border-box; }
+
+	body {
+		margin: 0;
+		color: var(--ink);
+		font: 10.5pt/1.45 "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+	}
+
+	section {
+		page-break-after: always;
+		break-after: page;
+		padding-bottom: 2mm;
+	}
+	section:last-of-type { page-break-after: auto; break-after: auto; }
+
+	.eyebrow {
+		font: 600 8pt/1 "Consolas", "Courier New", monospace;
+		letter-spacing: .14em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin-bottom: 3mm;
+	}
+
+	h1 {
+		font-size: 21pt;
+		line-height: 1.15;
+		margin: 0 0 2mm;
+		letter-spacing: -.01em;
+	}
+
+	h2 {
+		font-size: 15pt;
+		margin: 0 0 2mm;
+		letter-spacing: -.01em;
+	}
+
+	p.lead { margin: 0 0 4mm; max-width: 200mm; color: var(--muted); }
+	p { margin: 0 0 3mm; }
+
+	figure { margin: 0 0 3mm; }
+	svg { display: block; width: 100%; height: auto; color: var(--ink); }
+
+	/* Раздел с двумя таблицами под схемой: схема задаётся по высоте, иначе вся страница не сходится. */
+	svg.compact { width: auto; height: 78mm; margin: 0 auto; }
+	.compact-tables table { font-size: 8.8pt; }
+	.compact-tables th, .compact-tables td { padding: 1.1mm 2.5mm; }
+	.compact-tables h2 { font-size: 12pt; margin-bottom: 1.5mm; }
+
+	figcaption {
+		margin-top: 2mm;
+		padding-top: 2mm;
+		border-top: 1px solid var(--line);
+		color: var(--muted);
+		font-size: 9pt;
+	}
+
+	table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+	th, td { text-align: left; padding: 1.6mm 3mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+	thead th {
+		font: 600 8pt/1.2 "Consolas", "Courier New", monospace;
+		letter-spacing: .08em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	tbody tr:nth-child(even) { background: #f8fafc; }
+
+	code, .mono { font-family: "Consolas", "Courier New", monospace; font-size: 9pt; }
+
+	.cols { display: flex; gap: 8mm; }
+	.cols > * { flex: 1; }
+
+	ol.steps { margin: 0; padding-left: 6mm; }
+	ol.steps > li { margin-bottom: 2.4mm; }
+	ol.steps .hint { color: var(--muted); font-size: 9pt; display: block; }
+
+	.note {
+		border-left: 3px solid var(--agent);
+		background: var(--soft);
+		padding: 2.5mm 4mm;
+		margin: 3mm 0 0;
+		font-size: 9.5pt;
+	}
+	.note strong { color: var(--ink); }
+
+	.ok { color: var(--onec); font-weight: 600; }
+	.no { color: var(--agent); font-weight: 600; }
+	.wait { color: var(--muted); font-weight: 600; }
+
+	.foot {
+		margin-top: 3mm;
+		border-top: 1px solid var(--line);
+		padding-top: 2mm;
+		font-size: 8.5pt;
+		color: var(--muted);
+	}
+</style>
+</head>
+<body>
+
+<!-- 1. Общая карта -->
+<section>
+	<div class="eyebrow">BuhProf AI ↔ 1С · состояние на 22 сентября 2026</div>
+	<h1>Кто с кем разговаривает</h1>
+	<p class="lead">
+		Три участника на машине клиента, два в облаке и база ERP. Соединения всегда открывает сторона 1С или агент:
+		входящих подключений к машине с базой нет, портов открывать не нужно. Ключ модели в 1С не попадает никогда.
+	</p>
+
+	<figure>
+		<svg viewBox="0 0 1000 400" role="img" aria-label="Общая карта: машина с 1С, облако с AI-сервисом и моделью, база ERP с задачами и заметками">
+			<defs>
+				<marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+					<path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+				</marker>
+			</defs>
+
+			<rect x="8" y="40" width="440" height="348" rx="10" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="7 5"/>
+			<text x="24" y="62" font-size="11" font-weight="600" fill="var(--muted)" letter-spacing="1.2">МАШИНА С 1С (СЕРВЕР ИЛИ КОМПЬЮТЕР БУХГАЛТЕРА)</text>
+
+			<rect x="512" y="40" width="300" height="262" rx="10" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="7 5"/>
+			<text x="528" y="62" font-size="11" font-weight="600" fill="var(--muted)" letter-spacing="1.2">ОБЛАКО</text>
+
+			<rect x="28" y="78" width="400" height="104" rx="8" fill="#fff" stroke="var(--onec)" stroke-width="1.6"/>
+			<text x="228" y="104" font-size="13" font-weight="600" text-anchor="middle">База 1С · расширение buhprof_api 1.6.0</text>
+			<text x="228" y="126" font-size="11" text-anchor="middle" fill="var(--muted)">форма чата BPAPI_Чат · панель задач и заметок</text>
+			<text x="228" y="146" font-size="11" text-anchor="middle" fill="var(--muted)">BPAPI_Шлюз — одна точка входа для операций</text>
+			<text x="228" y="166" font-size="11" text-anchor="middle" fill="var(--muted)">HTTP-сервис для агента · 37 операций</text>
+
+			<rect x="28" y="214" width="190" height="72" rx="8" fill="#fff" stroke="var(--agent)" stroke-width="1.6"/>
+			<text x="123" y="240" font-size="12" font-weight="600" text-anchor="middle">Бизнес-агент 1С</text>
+			<text x="123" y="260" font-size="10" text-anchor="middle" fill="var(--muted)">служба Windows</text>
+			<text x="123" y="276" font-size="10" text-anchor="middle" fill="var(--muted)">HTTP или COM — на каждую базу</text>
+
+			<rect x="238" y="214" width="190" height="72" rx="8" fill="#fff" stroke="var(--agent)" stroke-width="1.6"/>
+			<text x="333" y="240" font-size="12" font-weight="600" text-anchor="middle">Админ-агент 1С</text>
+			<text x="333" y="260" font-size="10" text-anchor="middle" fill="var(--muted)">кластер через rac</text>
+			<text x="333" y="276" font-size="10" text-anchor="middle" fill="var(--muted)">внутрь базы — COM и ibcmd</text>
+
+			<rect x="28" y="316" width="400" height="56" rx="8" fill="var(--soft)" stroke="var(--line)" stroke-width="1.2"/>
+			<text x="228" y="340" font-size="11" text-anchor="middle" fill="var(--muted)">Расширение — канал БИЗНЕС-операций.</text>
+			<text x="228" y="358" font-size="11" text-anchor="middle" fill="var(--muted)">Администрирование идёт мимо него: rac, ibcmd, конфигуратор.</text>
+
+			<rect x="536" y="78" width="252" height="96" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="662" y="104" font-size="13" font-weight="600" text-anchor="middle">AI-сервис · ai.buhprof.kz</text>
+			<text x="662" y="126" font-size="11" text-anchor="middle" fill="var(--muted)">диалоги, белый список инструментов</text>
+			<text x="662" y="144" font-size="11" text-anchor="middle" fill="var(--muted)">карточки подтверждения, очередь команд</text>
+			<text x="662" y="162" font-size="11" text-anchor="middle" fill="var(--muted)">задачи и заметки — через ERP</text>
+
+			<rect x="536" y="210" width="252" height="66" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="662" y="236" font-size="12" font-weight="600" text-anchor="middle">Модель Claude</text>
+			<text x="662" y="258" font-size="10" text-anchor="middle" fill="var(--muted)">вызывается только сервисом</text>
+
+			<rect x="536" y="316" width="252" height="66" rx="8" fill="#fff" stroke="var(--erp)" stroke-width="1.6"/>
+			<text x="662" y="342" font-size="12" font-weight="600" text-anchor="middle">ERP BuhProf</text>
+			<text x="662" y="364" font-size="10" text-anchor="middle" fill="var(--muted)">задачи, заметки, организации</text>
+
+			<rect x="852" y="78" width="140" height="66" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="922" y="104" font-size="12" font-weight="600" text-anchor="middle">Панель и чат</text>
+			<text x="922" y="124" font-size="10" text-anchor="middle" fill="var(--muted)">браузер, телефон</text>
+
+			<line x1="430" y1="112" x2="534" y2="112" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+			<text x="482" y="104" font-size="10" text-anchor="middle" fill="var(--muted)">чат в 1С</text>
+
+			<polyline points="220,242 476,242 476,140 534,140" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+			<text x="330" y="234" font-size="10" fill="var(--muted)">опрашивает: есть команды?</text>
+
+			<polyline points="430,250 500,250 500,158 534,158" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+			<text x="436" y="268" font-size="10" fill="var(--muted)">то же — команды кластера</text>
+
+			<line x1="662" y1="176" x2="662" y2="208" stroke="currentColor" stroke-width="1.5" marker-start="url(#a1)" marker-end="url(#a1)"/>
+			<text x="672" y="196" font-size="10" fill="var(--muted)">вопрос / ответ</text>
+
+			<line x1="662" y1="278" x2="662" y2="314" stroke="currentColor" stroke-width="1.5" marker-start="url(#a1)" marker-end="url(#a1)"/>
+			<text x="672" y="300" font-size="10" fill="var(--muted)">задачи и заметки · /bpai</text>
+
+			<polyline points="922,146 922,180 790,180" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+			<text x="806" y="172" font-size="10" fill="var(--muted)">чат в ERP</text>
+		</svg>
+		<figcaption>
+			Стрелки показывают, кто открывает соединение. Из облака в 1С не звонит никто — поэтому белый IP, проброс портов
+			и веб-сервер на машине клиента не нужны.
+		</figcaption>
+	</figure>
+
+	<div class="note">
+		<strong>Важно о состоянии.</strong> Расширение <strong>не установлено ни в одной базе</strong>, включая стенд Dev_01:
+		оно в разработке. Всё, что описано дальше, написано и проверено статически, но ни одна операция не проходила путь
+		целиком в живой базе.
+	</div>
+</section>
+
+<!-- 2. Чат внутри 1С -->
+<section>
+	<div class="eyebrow">Канал 1</div>
+	<h1>Чат внутри 1С: команду выполняет сама 1С</h1>
+	<p class="lead">
+		Бухгалтер пишет в форме «БухПроф AI» в самой 1С. Сервис отвечает не текстом, а заданием: «выполни такие-то вызовы».
+		Форма выполняет их через шлюз расширения — в своём сеансе, с правами того, кто сидит в чате.
+		<strong>Бизнес-агент здесь не участвует.</strong>
+	</p>
+
+	<figure>
+		<svg class="compact" viewBox="0 0 1000 380" role="img" aria-label="Последовательность: форма 1С, шлюз расширения и AI-сервис обмениваются ходами и результатами вызовов">
+			<defs>
+				<marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+					<path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+				</marker>
+			</defs>
+
+			<rect x="30" y="16" width="200" height="56" rx="8" fill="#fff" stroke="var(--onec)" stroke-width="1.6"/>
+			<text x="130" y="40" font-size="12" font-weight="600" text-anchor="middle">Объекты базы</text>
+			<text x="130" y="60" font-size="10" text-anchor="middle" fill="var(--muted)">документы, справочники, регистры</text>
+
+			<rect x="390" y="16" width="220" height="56" rx="8" fill="#fff" stroke="var(--onec)" stroke-width="1.6"/>
+			<text x="500" y="40" font-size="12" font-weight="600" text-anchor="middle">Форма BPAPI_Чат</text>
+			<text x="500" y="60" font-size="10" text-anchor="middle" fill="var(--muted)">сеанс и права пользователя 1С</text>
+
+			<rect x="770" y="16" width="200" height="56" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="870" y="40" font-size="12" font-weight="600" text-anchor="middle">AI-сервис</text>
+			<text x="870" y="60" font-size="10" text-anchor="middle" fill="var(--muted)">и модель</text>
+
+			<line x1="130" y1="76" x2="130" y2="358" stroke="var(--line)" stroke-width="1.4" stroke-dasharray="4 5"/>
+			<line x1="500" y1="76" x2="500" y2="358" stroke="var(--line)" stroke-width="1.4" stroke-dasharray="4 5"/>
+			<line x1="870" y1="76" x2="870" y2="358" stroke="var(--line)" stroke-width="1.4" stroke-dasharray="4 5"/>
+
+			<text x="506" y="108" font-size="10.5" fill="var(--muted)">① ход: текст, организация, вложения (PDF), X-Base-Token</text>
+			<line x1="500" y1="118" x2="868" y2="118" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+			<rect x="150" y="140" width="820" height="176" rx="10" fill="none" stroke="var(--line)" stroke-width="1.2" stroke-dasharray="6 5"/>
+			<text x="962" y="134" font-size="10" text-anchor="end" fill="var(--muted)">цикл повторяется, пока модели нужны данные</text>
+
+			<text x="864" y="166" font-size="10.5" text-anchor="end" fill="var(--muted)">② TOOL_CALLS: выполни CREATE_SALE / GET_DEBTS / …</text>
+			<line x1="868" y1="176" x2="502" y2="176" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+			<text x="494" y="212" font-size="10.5" text-anchor="end" fill="var(--muted)">③ BPAPI_Шлюз.ВыполнитьКоманду — под правами пользователя</text>
+			<line x1="498" y1="222" x2="132" y2="222" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+			<text x="136" y="256" font-size="10.5" fill="var(--muted)">④ документ создан / данные прочитаны</text>
+			<line x1="130" y1="266" x2="498" y2="266" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+			<text x="506" y="296" font-size="10.5" fill="var(--muted)">⑤ toolResults — результат; файлы остаются в 1С, уходит только отметка</text>
+			<line x1="500" y1="306" x2="868" y2="306" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+			<text x="864" y="344" font-size="10.5" text-anchor="end" fill="var(--muted)">⑥ ответ человеку и ссылка на документ</text>
+			<line x1="868" y1="354" x2="502" y2="354" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+		</svg>
+		<figcaption>
+			Изменяющий вызов приходит форме только после карточки, которую пользователь подтвердил. Чего бухгалтер не может
+			руками в 1С, того не сделает и через чат: ограничения прав и доступа к записям действуют сами собой.
+		</figcaption>
+	</figure>
+
+	<div class="cols compact-tables">
+		<div>
+			<h2>Что нужно для работы</h2>
+			<table>
+				<tbody>
+					<tr><td>Расширение</td><td><code>buhprof_api</code> 1.6.0 в базе</td></tr>
+					<tr><td>Подключение</td><td>адрес сервиса и токен базы — «Подключение к BuhProf AI»</td></tr>
+					<tr><td>Опознание</td><td><code>X-Base-Token</code> + <code>X-1C-User-Id</code></td></tr>
+					<tr><td>Агент</td><td>не нужен</td></tr>
+				</tbody>
+			</table>
+		</div>
+		<div>
+			<h2>Что умеет канал сверх базового</h2>
+			<table>
+				<tbody>
+					<tr><td><code>uploads</code></td><td>вложение отдельным запросом, сырыми байтами вместо base64</td></tr>
+					<tr><td><code>idempotency</code></td><td><code>Idempotency-Key</code> на ходе: повтор не создаёт второе сообщение</td></tr>
+					<tr><td><code>token-rotation</code></td><td>смена токена базы сама, с перекрытием старого</td></tr>
+				</tbody>
+			</table>
+			<p class="foot">Список приходит в <code>GET /v1/onec-chat/ping</code> полем <code>features</code>: чего в нём нет — того у этой установки нет.</p>
+		</div>
+	</div>
+</section>
+
+<!-- 3. Чат в ERP -->
+<section>
+	<div class="eyebrow">Канал 2</div>
+	<h1>Чат в ERP: команду выполняет бизнес-агент</h1>
+	<p class="lead">
+		Человек пишет в панели BuhProf AI с браузера или телефона — 1С у него может быть закрыта. Сервис ставит команду
+		в очередь, агент забирает её своим опросом и выполняет в базе. У агента <strong>два транспорта</strong>, и выбор
+		задаётся на каждую базу отдельно.
+	</p>
+
+	<figure>
+		<svg viewBox="0 0 1000 340" role="img" aria-label="Путь команды: панель, очередь сервиса, бизнес-агент и два транспорта в базу — HTTP и COM">
+			<defs>
+				<marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+					<path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+				</marker>
+			</defs>
+
+			<rect x="20" y="96" width="170" height="80" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="105" y="128" font-size="12" font-weight="600" text-anchor="middle">Чат в ERP</text>
+			<text x="105" y="148" font-size="10" text-anchor="middle" fill="var(--muted)">браузер, телефон</text>
+			<text x="105" y="164" font-size="10" text-anchor="middle" fill="var(--muted)">1С может быть закрыта</text>
+
+			<rect x="250" y="96" width="190" height="80" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="345" y="124" font-size="12" font-weight="600" text-anchor="middle">AI-сервис</text>
+			<text x="345" y="144" font-size="10" text-anchor="middle" fill="var(--muted)">модель выбирает команду,</text>
+			<text x="345" y="160" font-size="10" text-anchor="middle" fill="var(--muted)">сервис ставит её в очередь</text>
+
+			<rect x="500" y="96" width="200" height="80" rx="8" fill="#fff" stroke="var(--agent)" stroke-width="1.8"/>
+			<text x="600" y="124" font-size="12" font-weight="600" text-anchor="middle">Бизнес-агент</text>
+			<text x="600" y="144" font-size="10" text-anchor="middle" fill="var(--muted)">служба, держит опрос ~25 с</text>
+			<text x="600" y="160" font-size="10" text-anchor="middle" fill="var(--muted)">Bearer + X-Agent-Id</text>
+
+			<rect x="770" y="40" width="210" height="88" rx="8" fill="#fff" stroke="var(--onec)" stroke-width="1.6"/>
+			<text x="875" y="68" font-size="12" font-weight="600" text-anchor="middle">HTTP-сервис расширения</text>
+			<text x="875" y="88" font-size="10" text-anchor="middle" fill="var(--muted)">опубликованная база</text>
+			<text x="875" y="106" font-size="10" text-anchor="middle" fill="var(--muted)">Basic + X-Authorization</text>
+
+			<rect x="770" y="152" width="210" height="88" rx="8" fill="#fff" stroke="var(--onec)" stroke-width="1.6"/>
+			<text x="875" y="180" font-size="12" font-weight="600" text-anchor="middle">COM-соединение</text>
+			<text x="875" y="200" font-size="10" text-anchor="middle" fill="var(--muted)">файловая или серверная база</text>
+			<text x="875" y="218" font-size="10" text-anchor="middle" fill="var(--muted)">веб-сервер не нужен</text>
+
+			<rect x="770" y="266" width="210" height="52" rx="8" fill="var(--soft)" stroke="var(--line)" stroke-width="1.2"/>
+			<text x="875" y="288" font-size="10.5" text-anchor="middle" fill="var(--muted)">оба пути ведут в один</text>
+			<text x="875" y="306" font-size="10.5" text-anchor="middle" font-weight="600">BPAPI_Шлюз</text>
+
+			<line x1="192" y1="126" x2="248" y2="126" stroke="currentColor" stroke-width="1.5" marker-end="url(#a3)"/>
+			<text x="220" y="116" font-size="10" text-anchor="middle" fill="var(--muted)">①</text>
+
+			<line x1="442" y1="126" x2="498" y2="126" stroke="currentColor" stroke-width="1.5" marker-end="url(#a3)"/>
+			<text x="470" y="116" font-size="10" text-anchor="middle" fill="var(--muted)">②</text>
+			<text x="470" y="148" font-size="9.5" text-anchor="middle" fill="var(--muted)">очередь</text>
+
+			<polyline points="600,178 600,206 498,206 498,150" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a3)"/>
+			<text x="512" y="224" font-size="9.5" fill="var(--muted)">③ агент сам спрашивает: есть работа?</text>
+
+			<line x1="702" y1="112" x2="768" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#a3)"/>
+			<text x="712" y="80" font-size="9.5" fill="var(--muted)">④ транспорт http</text>
+
+			<line x1="702" y1="160" x2="768" y2="184" stroke="currentColor" stroke-width="1.5" marker-end="url(#a3)"/>
+			<text x="712" y="206" font-size="9.5" fill="var(--muted)">④ транспорт com</text>
+
+			<polyline points="770,124 740,124 740,60 620,60 620,94" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a3)"/>
+			<text x="630" y="52" font-size="9.5" fill="var(--muted)">⑤ результат — агенту, дальше в сервис и в чат</text>
+		</svg>
+		<figcaption>
+			Выбор транспорта — свойство базы в таблице «Базы 1С» агента: HTTP там, где база опубликована; COM там, где база
+			файловая или доступна только через сервер 1С. Внутрь базы админ-агент ходит иначе — COM и ibcmd, мимо расширения.
+		</figcaption>
+	</figure>
+
+	<div class="note">
+		<strong>Сейчас этот канал не знает новых команд.</strong> В белом списке агента 65 команд (25 бизнес-операций,
+		14 кластерных, 17 внутрибазовых, 9 о самой службе), и двенадцати новых — <code>LIST_DOCUMENTS</code>,
+		<code>CREATE_COUNTERPARTY</code>, <code>GET_DEBTS</code>, <code>CREATE_CASH_ORDER</code>, <code>SELF_CHECK</code> и
+		прочих — среди них нет. До их добавления (задача РБ12) веб-чат ERP по этим командам, кнопка «Проверка BuhProf в базе»
+		и числа организации в панели ответят <code>UNKNOWN_COMMAND</code>. На чат внутри 1С это не влияет.
+	</div>
+</section>
+
+<!-- 4. Задачи и заметки -->
+<section>
+	<div class="eyebrow">Канал 3</div>
+	<h1>Задачи и заметки: 1С смотрит в ERP</h1>
+	<p class="lead">
+		Задачи и заметки по организации ведутся в ERP — там же, где их видит вся команда в панели. В 1С они
+		<strong>показываются и заводятся</strong>, но не хранятся: второй список разошёлся бы с первым в первый же день.
+	</p>
+
+	<figure>
+		<svg viewBox="0 0 1000 300" role="img" aria-label="Путь задач и заметок: форма 1С, AI-сервис, служебный канал bpai, база ERP">
+			<defs>
+				<marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+					<path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+				</marker>
+			</defs>
+
+			<rect x="20" y="80" width="220" height="96" rx="8" fill="#fff" stroke="var(--onec)" stroke-width="1.6"/>
+			<text x="130" y="110" font-size="12" font-weight="600" text-anchor="middle">Панель в форме чата</text>
+			<text x="130" y="132" font-size="10" text-anchor="middle" fill="var(--muted)">вкладки «Задачи» и «Заметки»</text>
+			<text x="130" y="150" font-size="10" text-anchor="middle" fill="var(--muted)">просрочка красным, кэш при обрыве</text>
+			<text x="130" y="168" font-size="10" text-anchor="middle" fill="var(--muted)">организация выбирается в чате</text>
+
+			<rect x="320" y="80" width="220" height="96" rx="8" fill="#fff" stroke="var(--cloud)" stroke-width="1.6"/>
+			<text x="430" y="110" font-size="12" font-weight="600" text-anchor="middle">AI-сервис</text>
+			<text x="430" y="132" font-size="10" text-anchor="middle" fill="var(--muted)">сверяет БИН со списком базы</text>
+			<text x="430" y="150" font-size="10" text-anchor="middle" fill="var(--muted)">даёт модели шесть инструментов</text>
+			<text x="430" y="168" font-size="10" text-anchor="middle" fill="var(--muted)">сводка задач — в контекст хода</text>
+
+			<rect x="620" y="80" width="200" height="96" rx="8" fill="#fff" stroke="var(--erp)" stroke-width="1.6"/>
+			<text x="720" y="110" font-size="12" font-weight="600" text-anchor="middle">Служебный канал ERP</text>
+			<text x="720" y="132" font-size="10" text-anchor="middle" font-family="Consolas, monospace">/bpai/tasks · /bpai/notes</text>
+			<text x="720" y="150" font-size="10" text-anchor="middle" fill="var(--muted)">ключ X-Api-Key</text>
+			<text x="720" y="168" font-size="10" text-anchor="middle" fill="var(--muted)">организация по БИН, автор по имени</text>
+
+			<rect x="870" y="80" width="110" height="96" rx="8" fill="#fff" stroke="var(--erp)" stroke-width="1.6"/>
+			<text x="925" y="118" font-size="12" font-weight="600" text-anchor="middle">ERP</text>
+			<text x="925" y="140" font-size="10" text-anchor="middle" fill="var(--muted)">todos</text>
+			<text x="925" y="158" font-size="10" text-anchor="middle" fill="var(--muted)">notes</text>
+
+			<line x1="242" y1="128" x2="318" y2="128" stroke="currentColor" stroke-width="1.5" marker-start="url(#a4)" marker-end="url(#a4)"/>
+			<text x="280" y="118" font-size="9.5" text-anchor="middle" fill="var(--muted)">токен базы</text>
+
+			<line x1="542" y1="128" x2="618" y2="128" stroke="currentColor" stroke-width="1.5" marker-start="url(#a4)" marker-end="url(#a4)"/>
+			<text x="580" y="118" font-size="9.5" text-anchor="middle" fill="var(--muted)">ключ</text>
+
+			<line x1="822" y1="128" x2="868" y2="128" stroke="currentColor" stroke-width="1.5" marker-start="url(#a4)" marker-end="url(#a4)"/>
+
+			<rect x="20" y="216" width="960" height="64" rx="8" fill="var(--soft)" stroke="var(--line)" stroke-width="1.2"/>
+			<text x="40" y="242" font-size="10.5" fill="var(--muted)">Автор задачи из 1С — настоящий пользователь ERP: ищется по имени, при отсутствии заводится (войти под ним нельзя).</text>
+			<text x="40" y="264" font-size="10.5" fill="var(--muted)">Происхождение (origin = «из чата в 1С») и ссылка на документ (sourceType / sourceUuid) — разные поля: задача может быть и тем, и другим.</text>
+		</svg>
+		<figcaption>
+			Без ключа <code>ERP_API_KEY</code> канал выключен: чат работает как прежде, а задачи и заметки отвечают внятным
+			отказом, и модель их инструментов не видит вовсе.
+		</figcaption>
+	</figure>
+
+	<table>
+		<thead>
+			<tr><th>Что делает человек в 1С</th><th>Что происходит</th></tr>
+		</thead>
+		<tbody>
+			<tr><td>Открывает чат</td><td>Панель грузится фоном; при обрыве связи показывает прошлый список с пометкой «сведения на 14:05»</td></tr>
+			<tr><td>Меняет организацию</td><td>Выбор запоминается лично пользователю; список перечитывается</td></tr>
+			<tr><td>«Новая задача» / «Новая заметка»</td><td>Форма задачи со сроком и исполнителем; запись уходит в ERP и видна в панели</td></tr>
+			<tr><td>Спрашивает помощника «что у нас по этому клиенту»</td><td>Модель уже видит сводку: открытые задачи со сроками и последние заметки</td></tr>
+			<tr><td>Просит «поставь задачу сдать отчёт до 5 октября»</td><td>Карточка подтверждения, затем задача в ERP с автором-пользователем 1С</td></tr>
+		</tbody>
+	</table>
+</section>
+
+<!-- 5. Что умеет расширение -->
+<section>
+	<div class="eyebrow">Расширение buhprof_api 1.6.0</div>
+	<h1>37 операций: что доступно помощнику</h1>
+	<p class="lead">
+		Все операции проходят через один шлюз — и когда их вызывает форма чата, и когда бизнес-агент. Сопоставление
+		«команда → операция» одно и то же, поэтому поведение не расходится между каналами.
+	</p>
+
+	<div class="cols">
+		<div>
+			<table>
+				<thead><tr><th>Группа</th><th>Операции</th></tr></thead>
+				<tbody>
+					<tr>
+						<td><strong>Документы</strong></td>
+						<td>реализация и поступление: создать, прочитать, провести, отменить проведение; счёт на оплату: создать, прочитать; акт сверки: создать<br><span class="mono">documents.list</span>, <span class="mono">documents.types</span> — <strong>списки с отбором</strong> по восьми видам</td>
+					</tr>
+					<tr>
+						<td><strong>Банк</strong></td>
+						<td>импорт выписки через типовой «Клиент-банк», проведение созданных документов, сверка со счётом 1030</td>
+					</tr>
+					<tr>
+						<td><strong>Справочники</strong></td>
+						<td>поиск номенклатуры, контрагентов, организаций, складов<br><strong>заведение</strong>: контрагент по БИН, номенклатура</td>
+					</tr>
+					<tr>
+						<td><strong>Касса</strong></td>
+						<td>приходный и расходный ордера: создать, прочитать, провести, отменить</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div>
+			<table>
+				<thead><tr><th>Группа</th><th>Операции</th></tr></thead>
+				<tbody>
+					<tr>
+						<td><strong>Аналитика</strong><br><span class="mono">числа, не файлы</span></td>
+						<td><span class="mono">analytics.debts</span> — кто должен нам и кому должны мы<br><span class="mono">analytics.balances</span> — остатки кассы, банка, расчётов<br><span class="mono">analytics.turnovers</span> — обороты по счёту за период</td>
+					</tr>
+					<tr>
+						<td><strong>Печать и отчёты</strong></td>
+						<td>печатные формы любого документа из белого списка; шесть штатных бухгалтерских отчётов файлом</td>
+					</tr>
+					<tr>
+						<td><strong>Служебное</strong></td>
+						<td><span class="mono">diagnostics</span> — самопроверка базы одним ответом<br><span class="mono">health</span>, настройка токена, стендовые операции</td>
+					</tr>
+				</tbody>
+			</table>
+			<div class="note">
+				<strong>Правило, на котором всё держится:</strong> разносит 1С, а не API. Каждая операция вызывает типовые
+				механизмы конфигурации — заполнение, проведение, расчёт НДС, загрузку выписки, — а не повторяет их правила
+				своим кодом. Поэтому обновление типовой не ломает расширение.
+			</div>
+		</div>
+	</div>
+
+	<p class="foot">
+		Модели доступны 40 инструментов: 34 идут в 1С (19 читающих, 8 изменяющих с подтверждением, 7 критических —
+		проведение и отмена) и 6 исполняет сам сервис — это задачи и заметки в ERP.
+	</p>
+</section>
+
+<!-- 6. Готовность -->
+<section>
+	<div class="eyebrow">Готовность на 22.09.2026</div>
+	<h1>Что написано, что проверено, что мешает</h1>
+	<p class="lead">
+		Ни одна операция не проходила путь целиком в живой базе. Это не оценка качества кода — это факт о том, где мы
+		находимся: расширение ещё не устанавливали.
+	</p>
+
+	<table>
+		<thead>
+			<tr><th style="width:16%">Часть</th><th style="width:30%">Сделано</th><th style="width:27%">Чем проверено</th><th style="width:27%">Что мешает / чего нет</th></tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td><strong>Расширение 1С</strong><br><span class="mono">buhprof_api 1.6.0</span></td>
+				<td>чат, задачи и заметки, списки документов, заведение справочников, аналитика, касса, самопроверка — 37 операций, 32 модуля</td>
+				<td><span class="wait">частично</span>: статический контроль; все тексты запросов и имена объектов выполнены на живой базе через COM</td>
+				<td><span class="no">не загружалось в базу</span>: разметку метаданных платформа ещё не разбирала</td>
+			</tr>
+			<tr>
+				<td><strong>AI-сервис</strong></td>
+				<td>канал 1С (ходы, вложения, идемпотентность, смена токена), задачи и заметки через ERP, 40 инструментов модели, правила промпта</td>
+				<td><span class="ok">тесты сервиса проходят</span></td>
+				<td><span class="wait">не работало с живой базой</span>: формат payload сверяется при первой проверке</td>
+			</tr>
+			<tr>
+				<td><strong>Панель</strong></td>
+				<td>самопроверка базы, вызовы чата, базы 1С в карточке организации, долги и остатки, источник задачи «из 1С»</td>
+				<td><span class="ok">тесты панели проходят</span></td>
+				<td><span class="no">зависит от агента</span>: самопроверка и числа идут командой через него</td>
+			</tr>
+			<tr>
+				<td><strong>Бизнес-агент</strong></td>
+				<td>65 команд, два транспорта, подключение по коду, опрос очереди</td>
+				<td><span class="ok">свои прогоны без 1С</span> (заглушка сервиса)</td>
+				<td><span class="no">не знает 12 новых команд</span> — задача РБ12</td>
+			</tr>
+			<tr>
+				<td><strong>Канал ERP</strong><br><span class="mono">/bpai</span></td>
+				<td>задачи и заметки: чтение, создание, изменение, закрытие; автор и организация заводятся сами</td>
+				<td><span class="ok">тесты бэкенда</span></td>
+				<td><span class="wait">нужен общий ключ</span> в двух файлах настроек</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<div class="note">
+		<strong>Порядок разумной проверки.</strong> Сначала чат внутри 1С — он не зависит от агента и проверяет почти всё:
+		шлюз, списки, аналитику, кассу, задачи и заметки. Затем белый список агента (РБ12) — и только после этого
+		веб-чат ERP, кнопки панели и числа организации.
+	</div>
+</section>
+
+<!-- 7. Чеклист -->
+<section>
+	<div class="eyebrow">Что сделать для первой проверки</div>
+	<h1>Чеклист</h1>
+
+	<div class="cols">
+		<div>
+			<ol class="steps">
+				<li>
+					<strong>Общий ключ служебного канала ERP.</strong>
+					<span class="hint">В <code>backend/.env</code> — <code>BPAPI_API_KEY=&lt;длинная строка&gt;</code>. В <code>ai/.env</code> — та же строка как <code>ERP_API_KEY</code>, плюс <code>ERP_API_URL=http://127.0.0.1:3000</code>. Без ключа задачи и заметки выключены.</span>
+				</li>
+				<li>
+					<strong>Перезапуск служб.</strong>
+					<span class="hint"><code>pm2 restart backend-node ai-service</code>, затем <code>pm2 logs ai-service --lines 50</code> — в логе должны примениться миграции.</span>
+				</li>
+				<li>
+					<strong>Проверить канал ERP без 1С.</strong>
+					<span class="hint"><code>curl -H "X-Api-Key: &lt;ключ&gt;" "http://127.0.0.1:3000/bpai/tasks?bin=&lt;БИН&gt;"</code> — ожидается <code>{"success":true,…}</code>. «Неверный ключ» означает, что значения в двух файлах разошлись.</span>
+				</li>
+				<li>
+					<strong>Загрузить расширение в Dev_01.</strong>
+					<span class="hint">Закрыть конфигуратор, выполнить <code>tools\load_extension.ps1</code>. Обе строки должны вернуть <code>exit=0</code> (загрузка и проверка модулей). Если база опубликована — затем <code>iisreset</code>. Ошибки разметки метаданных вылезут именно здесь.</span>
+				</li>
+				<li>
+					<strong>Настроить подключение в 1С.</strong>
+					<span class="hint">Раздел «БухПроф AI» → «Подключение к BuhProf AI»: адрес сервиса, организация по умолчанию, «Сохранить». Затем «Отправить заявку» → назвать код администратору → токен придёт в базу сам.</span>
+				</li>
+			</ol>
+		</div>
+		<div>
+			<ol class="steps" start="6">
+				<li>
+					<strong>Прогнать сценарии в чате 1С.</strong>
+					<span class="hint">Они проверяют почти всё и не требуют агента: задачи и заметки в панели формы; «покажи реализации за сентябрь»; «кто нам должен»; «остатки по кассе и банку»; завести контрагента по БИН; приходный кассовый ордер — карточка, создание, проведение.</span>
+				</li>
+				<li>
+					<strong>Самопроверка базы.</strong>
+					<span class="hint"><code>GET /hs/bpapi/v1/diagnostics</code> — одним ответом: токен, подключение к сервису, организации с БИН, права пользователя, объекты конфигурации. У каждой проверки — подсказка, что сделать.</span>
+				</li>
+				<li>
+					<strong>Проверить агента отдельно (по желанию).</strong>
+					<span class="hint">В <code>bpapi_agent</code>: <code>python tools\protocol_test.py</code> — поднимает заглушку сервиса и прогоняет протокол без 1С. <code>tools\e2e_test.py</code> — то же через живую базу с расширением.</span>
+				</li>
+			</ol>
+
+			<div class="note">
+				<strong>Если что-то не сходится.</strong> Журнал сервиса: <code>pm2 logs ai-service</code> — строки «ERP отказала»
+				и «ERP не ответила». Журнал ERP: <code>pm2 logs backend-node</code> — строки <code>[bpai]</code>. В 1С — журнал
+				регистрации по событию <code>чат.связь</code>.
+			</div>
+
+			<p class="foot">
+				До задачи РБ12 (белый список агента) остаются закрытыми: веб-чат ERP по новым командам, кнопка «Проверка BuhProf
+				в базе» и вкладка «Долги и остатки» в карточке организации.
+			</p>
+		</div>
+	</div>
+</section>
+
+</body>
+</html>
