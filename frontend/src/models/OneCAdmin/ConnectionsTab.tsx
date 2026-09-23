@@ -23,7 +23,8 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { disconnectConnection, fetchConnections, fetchLocks, type ClusterRow } from "src/services/onec/api";
-import { QueryError, VSplit, useOnecWrite } from "./shared";
+import { QueryError, useOnecWrite } from "./shared";
+import { SplitView } from "src/components/SplitPane";
 import { echoList } from "./clusterEcho";
 import styles from "./OneCAdmin.module.scss";
 
@@ -98,8 +99,8 @@ export const ConnectionsTab: FC = () => {
 
 	return (
 		<>
-			<VSplit
-				storageKey="connections"
+			<SplitView
+				storageKey="onec_vsplit_connections"
 				main={<><QueryError error={connections.error} noticeKey="connections" source={translate("onecTabConnections")} />
 				<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_connections", rows: connView.rows, columns: connCols, setColumns: setConnCols,
@@ -117,7 +118,7 @@ export const ConnectionsTab: FC = () => {
 					</Button>
 					: undefined,
 			})} /></>}
-				side={<><QueryError error={locks.error} noticeKey="locks" source={translate("onecTabConnections")} />
+				aside={<><QueryError error={locks.error} noticeKey="locks" source={translate("onecTabConnections")} />
 				<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_locks", rows: lockView.rows, columns: lockCols, setColumns: setLockCols,
 				sorting: lockView.sorting, search: lockView.search,

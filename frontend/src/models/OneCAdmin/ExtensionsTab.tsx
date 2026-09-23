@@ -32,7 +32,7 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { VSplitBar, useSplitResize } from "src/components/SplitPane";
+import { SplitView } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import {
@@ -82,13 +82,6 @@ export const ExtensionsTab: FC = () => {
 
 	// Ширина таблиц — тем же разделителем, что у «Пользователей баз» и списков с
 	// предпросмотром; пропорция своя и переживает закрытие вкладки.
-	const split = useSplitResize({
-		storageKey: "onec_ext_split",
-		side: "left",
-		defaultPercent: 50,
-		min: 25,
-		max: 75,
-	});
 
 	const summary = useQuery({ queryKey: ["onec", "ext-summary"], queryFn: fetchExtensionSummary });
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
@@ -248,15 +241,14 @@ export const ExtensionsTab: FC = () => {
 				</Button>
 			</div>
 
-			<div className={styles.PairBody} ref={split.containerRef}>
-				<div className={styles.NavPane} style={{ flexBasis: `${split.percent}%` }}>
-					{primary === "extensions" ? extsTable : basesTable}
-				</div>
-				<VSplitBar onPointerDown={split.startResize} onDoubleClick={split.reset} onNudge={split.nudge} />
-				<div className={styles.NavPane} style={{ flexBasis: `${100 - split.percent}%` }}>
-					{primary === "extensions" ? basesTable : extsTable}
-				</div>
-			</div>
+			<SplitView
+				storageKey="onec_ext_split"
+				defaultPercent={50}
+				min={25}
+				max={75}
+				main={primary === "extensions" ? extsTable : basesTable}
+				aside={primary === "extensions" ? basesTable : extsTable}
+			/>
 
 			<div className={styles.StatusBar}>
 				<span className={styles.StatusText}>{status}</span>

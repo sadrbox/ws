@@ -289,6 +289,13 @@ export const AgentsTab: FC = () => {
 								{ value: "cluster", label: translate("onecAgentKindCluster") },
 							]}
 							hint={translate(cluster ? "onecEnrollClusterHint" : "onecEnrollOrgHint")} />
+						{/*
+						 * К КАКОЙ ОРГАНИЗАЦИИ ПРИВЯЖЕТСЯ АГЕНТ — СКАЗАНО ЗАРАНЕЕ (С3.6 аудита 23.09). Организацию это окно
+						 * не спрашивает вовсе: бизнес-агент привязывается к АКТИВНОЙ организации того, кто его заводит, а
+						 * без неё сервис отвечает 409 ORGANIZATION_REQUIRED. Про это в окне не было ни слова, и отказ
+						 * выглядел поломкой, хотя чинится он выбором организации в шапке панели.
+						 */}
+						{!cluster && <div className={styles.Hint}>{translate("onecAgentCreateOrgHint")}</div>}
 						<div className={styles.Hint}>{translate("onecAgentCreateHint")}</div>
 					</div>
 				</Modal>

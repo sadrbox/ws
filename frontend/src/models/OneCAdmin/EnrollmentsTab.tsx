@@ -29,7 +29,7 @@ import {
 	approveEnrollment, fetchEnrollments, fetchErpOrganizations, rejectEnrollment,
 	type AgentEnrollment, type EnrollmentState,
 } from "src/services/onec/api";
-import { QueryError, useAgents } from "./shared";
+import { QueryError, SharedListForbidden, isSharedListForbidden, useAgents } from "./shared";
 import { registrationStateLabel, stateTone } from "./requestsView";
 import styles from "./OneCAdmin.module.scss";
 
@@ -95,6 +95,9 @@ export const EnrollmentsTab: FC = () => {
 	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
 	const pending = active?.state === "PENDING" && canDecide;
 
+	// Сводный список закрыт установкой (С3.4): одно объяснение вместо таблицы, которая может только отказать.
+	if (isSharedListForbidden(list.error)) return <SharedListForbidden />;
+
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecEnrollHint")}</div>
@@ -149,12 +152,21 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 	const [organizationUuid, setOrganizationUuid] = useState("");
 	const [name, setName] = useState(enr.name);
 	const [reuse, setReuse] = useState(!!enr.previousAgentId);
+	const [note, setNote] = useState("");
 	const orgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
 	const approve = useMutation({
 		mutationFn: () => approveEnrollment(enr.id, {
 			...(needsOrg ? { organizationUuid } : {}), name: name.trim() || undefined,
-			// Новый агент вместо прежнего — явно: сервис иначе отдаст той же службе её прежнего агента.
-			...(enr.previousAgentId && !reuse ? { agentId: null } : {}),
+			/*
+			 * ВЫБОР ИЗ СПИСКА ДОЛЖЕН ИСПОЛНЯТЬСЯ — ОБА (С3.1 аудита 23.09). «Новый агент» уходил явным `null`, а
+			 * «тот же агент» не уходил вовсе — и сервис в этом случае решает сам: прежнего агента он занимает только
+			 * по явному указанию, а если тот на связи, заводит НОВОГО (иначе имя компьютера из заявки позволяло бы
+			 * забрать токен живого агента). Выходило, что человек выбрал «тот же», а получил новый, и сказал об этом
+			 * только тост. Теперь оба варианта называются явно: «тот же» — идентификатором прежнего агента.
+			 */
+			...(enr.previousAgentId ? { agentId: reuse ? enr.previousAgentId : null } : {}),
+			// Причина решения остаётся в заявке и в журнале — как у отказа: «почему одобрили» спрашивают так же часто.
+			...(note.trim() ? { note: note.trim() } : {}),
 		}),
 		onSuccess: (d) => {
 			showToast(`${translate("onecReqApproved")}: ${enr.code}${d.created ? ` — ${translate("onecEnrollNewAgent")}` : ""}`, "success");
@@ -184,6 +196,8 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 							{ value: "new", label: translate("onecEnrollNewAgent") },
 						]} />
 				)}
+				<Field name="enr_note" label={translate("onecReqNote")} width={FIELD_WIDTH.lg} value={note}
+					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} />
 				<div className={styles.Hint}>{translate("onecEnrollApproveHint")}</div>
 			</div>
 		</Modal>

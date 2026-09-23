@@ -26,6 +26,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { withStableIds } from "src/utils/stableRowId";
 import { asText } from "src/utils/asText";
+import { getFormatDate } from "src/utils/datetime";
 import { fetchExtensionBases, fetchBases, fetchRegistrations } from "src/services/onec/api";
 import RegistrationsTab from "./RegistrationsTab";
 import BaseChatCalls from "src/models/OneCBases/BaseChatCalls";
@@ -46,6 +47,12 @@ const columns = (): TColumn[] => ([
 	{ identifier: "transportLabel", type: "string", width: "130px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "agentName", type: "string", width: "180px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "approvedAt", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	/*
+	 * «Последний обмен» — ОДНО число на две дороги (С2 аудита 23.09): срез агента и запрос из самой базы.
+	 * Базу без агента раньше нечем было показать, хотя чатом она работает каждый день. Срез агента остался
+	 * отдельной колонкой, скрытой: она отвечает на другой вопрос — что видит агент.
+	 */
+	{ identifier: "lastExchangeAt", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "seenAt", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: false, inlist: true },
 ] as unknown as TColumn[]);
 
@@ -60,27 +67,47 @@ const columns = (): TColumn[] => ([
  * ЧТО ИМЕННО ДАЁТ ЭТОТ ДОСТУП — чат внутри 1С и задачи с заметками, то есть канал «1С → сервис». Команды
  * помощника (документы, отчёты, долги) идут другим каналом, через агента, и токена базы не используют: отзыв
  * их не выключает. Название вкладки говорит про доступ, а не про расширение целиком, чтобы не обещать лишнего.
+ *
+ * ДВЕ ТАБЛИЦЫ ДЕЛЯТ ВЫСОТУ ПОПОЛАМ, А НЕ СКЛАДЫВАЮТСЯ. Каждая таблица панели требует места под строки
+ * (`min-height`), и две подряд перерастали вкладку: область тянулась вниз, а общий скролл уносил вместе с
+ * собой заголовок второй таблицы. Здесь высоту назначает вкладка (`fitHeight`), а строки прокручиваются
+ * внутри каждой таблицы — обе видны сразу, как их и читают: заявка сверху, выданный по ней токен снизу.
  */
 const AccessTab: FC = () => (
-	<>
-		<div className={styles.SectionTitle}>{translate("onecReqRegistrations")}</div>
-		<RegistrationsTab />
-		<div className={styles.SectionTitle}>{translate("onecExtTokens")}</div>
-		<BaseChatTokens />
-	</>
+	<div className={styles.SplitTabs}>
+		<section className={styles.SplitHalf}>
+			<div className={styles.SectionTitle}>{translate("onecReqRegistrations")}</div>
+			<RegistrationsTab fitHeight />
+		</section>
+		<section className={styles.SplitHalf}>
+			<div className={styles.SectionTitle}>{translate("onecExtTokens")}</div>
+			<BaseChatTokens fitHeight />
+		</section>
+	</div>
 );
 
 /**
  * «Базы с расширением» — парк одним списком: где стоит расширение, какой версии, открыт ли доступ AI, чем
  * база отвечает агенту (HTTP или COM) и когда её подключили.
  *
- * ДАННЫЕ — ТОЛЬКО ИЗ ИСТОЧНИКОВ РАСШИРЕНИЯ (заявки, токены, срез бизнес-агентов), сводку собирает сервис
+ * ДАННЫЕ — ТОЛЬКО ИЗ ИСТОЧНИКОВ РАСШИРЕНИЯ (заявки, токены, срез бизнес-агентов и запросы самой базы по
+ * каналу чата — С2 аудита 23.09: база без агента иначе оставалась без версии и без «последнего обмена»),
+ * сводку собирает сервис
  * (`GET /v1/onec/extension-bases`). Реестр кластера здесь не при чём: его ведёт админ-агент, панель сужает
  * его до выбранного кластера, и у клиента без админ-агента экран был пуст, хотя базы подключены (23.09).
  */
 const BasesTab: FC = () => {
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_extension_bases"));
-	const list = useQuery({ queryKey: ["onec", "extension-bases"], queryFn: fetchExtensionBases, staleTime: 60_000 });
+	/*
+	 * «Обновить» спрашивает срезы агентов заново (fresh), обычное открытие довольствуется кэшем сервиса:
+	 * иначе нажатие сразу после обновления расширения у клиента возвращало прежнюю версию (А2 аудита 23.09).
+	 */
+	const [fresh, setFresh] = useState(false);
+	const list = useQuery({
+		queryKey: ["onec", "extension-bases", fresh ? "fresh" : "cached"],
+		queryFn: () => fetchExtensionBases(fresh),
+		staleTime: 60_000,
+	});
 
 	const rows = useMemo(
 		() => withStableIds(extensionRows(list.data?.items ?? []), (r) => r.uuid),
@@ -109,14 +136,30 @@ const BasesTab: FC = () => {
 				sorting: view.sorting, search: view.search,
 				isLoading: list.isLoading,
 				reloading: list.isFetching && !list.isLoading,
-				onReload: () => void list.refetch(),
+				onReload: () => { setFresh(true); void list.refetch(); },
 				emptyText: translate("onecExtBasesNone"),
 				renderCell: (r, col) => {
 					if (col.identifier === "extVersion") {
 						const v = asText(r.extVersion);
 						if (!v) return <span className={main.Muted}>{translate("onecExtVersionUnknown")}</span>;
 						// Версия со слов заявки: база могла обновиться, а агент об этом ещё не сообщал.
-						return r.versionStale ? <span title={translate("onecExtVersionStale")}>{v} *</span> : <span>{v}</span>;
+						if (r.versionStale) return <span title={translate("onecExtVersionStale")}>{v} *</span>;
+						// Версию назвала сама база в запросе чата — живая, звёздочка не нужна; откуда она, говорит подсказка.
+						return <span title={r.versionFromChat ? translate("onecExtVersionFromChat") : undefined}>{v}</span>;
+					}
+					/*
+					 * ПУСТО ЗНАЧИТ «НИКТО НЕ СКАЗАЛ», а не «связи нет»: база без агента и без единого запроса из 1С
+					 * ничем себя не проявляла, и выдумывать за неё время нельзя. Откуда взято время — подсказкой:
+					 * срез агента и запрос из самой базы говорят о разном, и при разборе это первое, что спросят.
+					 */
+					if (col.identifier === "lastExchangeAt") {
+						const at = asText(r.lastExchangeAt);
+						if (!at) return <span className={main.Muted}>—</span>;
+						return (
+							<span title={translate(r.lastExchangeSource === "chat" ? "onecExtExchangeFromChat" : "onecExtExchangeFromAgent")}>
+								{getFormatDate(at)}
+							</span>
+						);
 					}
 					if (col.identifier === "accessLabel") {
 						const tone = asText(r.access);
@@ -155,6 +198,22 @@ export const OneCExtensionList: FC = () => {
 		return (
 			<div className={main.PaneFill}>
 				<ReadonlyNotice />
+			</div>
+		);
+	}
+
+	/*
+	 * РАЗДЕЛ ЦЕЛИКОМ ЗАКРЫТ — ГОВОРИМ ОБ ЭТОМ ОДИН РАЗ (Б3 аудита 23.09).
+	 *
+	 * Пункт меню показывается по праву «Администрирование 1С», а сводные списки сервиса при
+	 * `ONEC_SERVER_SCOPE=organizations` открыты только администратору BuhProf. Панель заранее знать этого не
+	 * может: настройка живёт на сервере. Поэтому узнаём по первому же ответу — счётчик заявок всё равно
+	 * спрашивается при открытии — и показываем одно понятное объяснение вместо трёх вкладок с ошибками.
+	 */
+	if ((pending.error as { code?: string } | null)?.code === "FORBIDDEN") {
+		return (
+			<div className={main.PaneFill}>
+				<div className={styles.Hint}>{translate("onecExtForbidden")}</div>
 			</div>
 		);
 	}

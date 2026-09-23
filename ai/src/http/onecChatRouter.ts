@@ -20,6 +20,7 @@ import type { ChatWorkflow, ChatReply, ChatUser, OnecOrganization, WorkflowState
 import { WorkflowError } from "../chat/workflow.ts";
 import { requireOnecUser, type BaseTokenResolver } from "../auth/index.ts";
 import type { BaseTokenStore } from "../bases/tokens.ts";
+import type { BaseChatExchangeStore } from "../bases/chatExchange.ts";
 import type { FileStore } from "../files/store.ts";
 import type { TurnKeyStore } from "../chat/turnKeys.ts";
 import type { Db } from "../db/pool.ts";
@@ -136,6 +137,11 @@ export function onecChatRouter(deps: {
 	 */
 	revoke?: Pick<BaseTokenStore, "revoke"> | null;
 	/**
+	 * Версия расширения и последний обмен — рядом с базой (С2 аудита 23.09). Без него канал работает как
+	 * раньше, а панель про базу без агента по-прежнему ничего не знает.
+	 */
+	exchange?: Pick<BaseChatExchangeStore, "note"> | null;
+	/**
 	 * Версия расширения, с которой оно умеет сохранять присланный токен. Смену получает только такое:
 	 * старое расширение новый токен проигнорирует, и через перекрытие база осталась бы без связи.
 	 */
@@ -164,6 +170,7 @@ export function onecChatRouter(deps: {
 	const maxAttachments = deps.maxAttachments ?? 20;
 	const rotation = deps.rotation ?? null;
 	const revoke = deps.revoke ?? null;
+	const exchange = deps.exchange ?? null;
 	const rotationMinExtVersion = deps.rotationMinExtVersion ?? "";
 	const minExtVersion = deps.minExtVersion ?? "";
 	const maxAttachmentBytes = deps.maxAttachmentBytes ?? 20 * 1048576;
@@ -187,6 +194,15 @@ export function onecChatRouter(deps: {
 		const requestId = requestIdOf(req);
 		if (requestId) res.setHeader("X-Request-Id", requestId);
 		const ext = extOf(req);
+		/*
+		 * ВЕРСИЯ И ПОСЛЕДНИЙ ОБМЕН — РЯДОМ С БАЗОЙ (С2 аудита 23.09). Пишем ДО проверки порога: база со старой
+		 * сборкой — ровно тот случай, когда версию и спрашивают, а отказ 426 тоже обмен, база на связи. Не ждём
+		 * ответа базы данных: показания в панели не стоят ни миллисекунды ответа человеку, а хранилище пишет не
+		 * чаще раза в минуту (форма опрашивает диалог раз в секунду).
+		 */
+		if (exchange) {
+			void exchange.note(req.onecUser!.baseId, ext).catch((e) => log.warn({ err: e, ...who(req) }, "не записан обмен с базой"));
+		}
 		if (minExtVersion && ext && !versionAtLeast(ext, minExtVersion)) {
 			res.status(426).json({ success: false, error: { code: "EXT_TOO_OLD", message: `Расширение ${ext} устарело: нужна версия ${minExtVersion} или новее — обновите BPAPI в базе` } });
 			return;

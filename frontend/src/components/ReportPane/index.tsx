@@ -33,7 +33,7 @@ import { Button } from "src/components/Button";
 import { Icon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
 import { DocViewport, DocSheet, DocStatus } from "src/components/DocViewport";
-import { VSplitBar, useSplitResize } from "src/components/SplitPane";
+import { SplitView } from "src/components/SplitPane";
 import { GroupCol } from "src/components/UI";
 import styles from "./ReportPane.module.scss";
 
@@ -145,22 +145,6 @@ const ReportPane: FC<ReportPaneProps> = ({
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const { print: printNode } = usePrintDocument();
 
-  // Ширина панели фильтров — общий механизм SplitPane (тот же, что делит список
-  // и предпросмотр). Ключ по названию файла отчёта: у разных отчётов разное
-  // число фильтров, и удобная ширина у каждого своя.
-  const {
-    percent: formWidth,
-    containerRef: paneRef,
-    startResize,
-    reset: resetFormWidth,
-  } = useSplitResize({
-    storageKey: `reportSplitWidth:${fileBaseName}`,
-    side: "left",
-    defaultPercent: 24,
-    min: 12,
-    max: 55,
-  });
-
   const canExport = !isLoading && !isEmpty;
 
   // ── Печать через изолированный iframe ────────────────────────────────────
@@ -225,32 +209,24 @@ const ReportPane: FC<ReportPaneProps> = ({
   );
 
   // ── Рендер ───────────────────────────────────────────────────────────────
-  return (
-    <div className={styles.ReportPane} ref={paneRef}>
-      {headerPortal}
-
-
-      {(form || onGenerate) && (
-        <>
-          <div className={styles.ReportForm} style={{ flexBasis: `${formWidth}%` }}>
-            {/* Поля отчёта — ОДНОЙ колонкой: раньше форма была row wrap, поля
-                растекались в строку, а кнопка «Сформировать» уезжала вправо от
-                них вместо того, чтобы стоять под ними. */}
-            {onGenerate && (
-              <div className={styles.ReportFormActions}>
-                <Button variant="primary" onClick={onGenerate} disabled={generateDisabled}>
-                  {translate("reportGenerate")}
-                </Button>
-              </div>
-            )}
-            <GroupCol className={styles.ReportFormFields}>{form}</GroupCol>
-
-          </div>
-          <VSplitBar onPointerDown={startResize} onDoubleClick={resetFormWidth} />
-        </>
+  const filters = (
+    <>
+      {/* Поля отчёта — ОДНОЙ колонкой: раньше форма была row wrap, поля
+          растекались в строку, а кнопка «Сформировать» уезжала вправо от
+          них вместо того, чтобы стоять под ними. */}
+      {onGenerate && (
+        <div className={styles.ReportFormActions}>
+          <Button variant="primary" onClick={onGenerate} disabled={generateDisabled}>
+            {translate("reportGenerate")}
+          </Button>
+        </div>
       )}
+      <GroupCol className={styles.ReportFormFields}>{form}</GroupCol>
+    </>
+  );
 
-      <DocViewport>
+  const report = (
+    <DocViewport>
         {isLoading ? (
           <DocStatus>{translate("loading")}</DocStatus>
         ) : isEmpty ? (
@@ -260,8 +236,44 @@ const ReportPane: FC<ReportPaneProps> = ({
             {layout}
           </DocSheet>
         )}
-      </DocViewport>
-    </div>
+    </DocViewport>
+  );
+
+  /*
+   * РАСКЛАДКА — ОБЩАЯ (`SplitView`, 23.09): контейнер, обе половины и зазор между ними те же,
+   * что у списка с предпросмотром и у пар таблиц в администрировании 1С. Своя копия этой
+   * вёрстки разошлась бы с ними при первой правке — так уже случилось с зазором.
+   *
+   * Отчёт БЕЗ фильтров делить нечего: тогда панель — это сам отчёт, и разделителю с пустой
+   * половиной там взяться неоткуда.
+   *
+   * Ключ ширины — по названию файла отчёта: у разных отчётов разное число фильтров, и
+   * удобная ширина у каждого своя.
+   */
+  if (!form && !onGenerate) {
+    return (
+      <div className={styles.ReportPane}>
+        {headerPortal}
+        {report}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {headerPortal}
+      <SplitView
+        className={styles.ReportPane}
+        storageKey={`reportSplitWidth:${fileBaseName}`}
+        side="left"
+        defaultPercent={24}
+        min={12}
+        max={55}
+        mainClassName={styles.ReportForm}
+        main={filters}
+        aside={report}
+      />
+    </>
   );
 };
 

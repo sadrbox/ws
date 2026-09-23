@@ -19,7 +19,8 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchLicenses, fetchProcesses, type ClusterRow } from "src/services/onec/api";
-import { QueryError, VSplit } from "./shared";
+import { QueryError } from "./shared";
+import { SplitView } from "src/components/SplitPane";
 
 /** Колонки задаёт rac; берём то, что есть в ответе, остальное скрыто настройкой таблицы. */
 const processColumns = (): TColumn[] => ([
@@ -56,8 +57,8 @@ export const ServerTab: FC = () => {
 	const licView = useStaticTableView(toRows(licenses.data?.items ?? []), { userName: "asc" });
 
 	return (
-		<VSplit
-			storageKey="server"
+		<SplitView
+			storageKey="onec_vsplit_server"
 			main={<><QueryError error={processes.error} noticeKey="server-processes" source={translate("onecTabServer")} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_processes", rows: procView.rows, columns: procCols, setColumns: setProcCols,
@@ -66,7 +67,7 @@ export const ServerTab: FC = () => {
 				reloading: processes.isFetching,
 				onReload: () => void processes.refetch(),
 			})} /></>}
-			side={<><QueryError error={licenses.error} noticeKey="licenses" source={translate("onecTabServer")} />
+			aside={<><QueryError error={licenses.error} noticeKey="licenses" source={translate("onecTabServer")} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_licenses", rows: licView.rows, columns: licCols, setColumns: setLicCols,
 				sorting: licView.sorting, search: licView.search,

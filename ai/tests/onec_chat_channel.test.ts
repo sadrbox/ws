@@ -89,7 +89,7 @@ function fakeTurnKeys() {
 
 type Owner = { rotateDue?: boolean; pending?: boolean; firstUse?: boolean };
 
-function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; revoke?: boolean; owner?: Owner; minExt?: string; rotateMinExt?: string; maxAttachments?: number } = {}) {
+function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; revoke?: boolean; exchange?: boolean; owner?: Owner; minExt?: string; rotateMinExt?: string; maxAttachments?: number } = {}) {
 	const wf = fakeWorkflow();
 	const files = fakeFiles();
 	const keys = fakeTurnKeys();
@@ -103,6 +103,9 @@ function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; re
 	/** Отзыв токена самой базой: кто и сколько раз его отозвал (контракт регистрации, «база отключается сама»). */
 	const revoked: { tokenId: string; by: string }[] = [];
 	const revoke = { revoke: async (tokenId: string, by: string) => { revoked.push({ tokenId, by }); return true; } };
+	/** Обмен с базой (С2): что канал сообщил хранилищу версии и последнего обмена. */
+	const exchanged: { baseId: string; ext: string | null | undefined }[] = [];
+	const exchange = { note: async (baseId: string, ext: string | null | undefined) => { exchanged.push({ baseId, ext }); return true; } };
 	const tokens = {
 		resolve: async (t: string) => t === TOKEN
 			? { tokenId: TOKEN_ID, baseId: BASE_ID, baseKey: "Dev_01", baseName: "Бухгалтерия (Dev_01)", organizationUuid: ORG, revoked: false, baseDisabled: false, ...opts.owner }
@@ -117,6 +120,7 @@ function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; re
 		turnKeys: opts.keys === false ? null : keys.store,
 		rotation: opts.rotation === false ? null : rotation,
 		revoke: opts.revoke === false ? null : revoke,
+		exchange: opts.exchange === false ? null : exchange,
 		rotationMinExtVersion: opts.rotateMinExt ?? "1.5.0",
 		minExtVersion: opts.minExt ?? "",
 		maxAttachmentBytes: 64 * 1024,
@@ -128,7 +132,7 @@ function harness(opts: { files?: boolean; keys?: boolean; rotation?: boolean; re
 	const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/onec-chat`;
 	const head = (user: string, extra: Record<string, string> = {}) => ({ "x-base-token": TOKEN, "x-1c-user-id": user, ...extra });
 	return {
-		wf, files, keys, rotated, used, revoked,
+		wf, files, keys, rotated, used, revoked, exchanged,
 		get: async (path: string, extra: Record<string, string> = {}, user = USER) => {
 			const r = await fetch(`${url}${path}`, { headers: head(user, extra) });
 			return { status: r.status, headers: r.headers, body: await r.json() as { success: boolean; data?: Record<string, any>; error?: { code: string; message: string } } };
@@ -316,6 +320,39 @@ test("§4: номер запроса возвращается в ответе, f
 		const ping = await h.get("/ping", { "x-request-id": id, "x-ext-version": "1.5.0" });
 		assert.equal(ping.headers.get("x-request-id"), id, "один номер в двух журналах — иначе разбор по крупицам");
 		assert.deepEqual(ping.body.data!.features, ["uploads", "idempotency", "token-rotation"]);
+	} finally { h.close(); }
+});
+
+/*
+ * С2: ВЕРСИЯ И ПОСЛЕДНИЙ ОБМЕН ДОЕЗЖАЮТ ДО ХРАНИЛИЩА.
+ *
+ * Заголовок читался только на месте — в журнал и на порог, — и база, работающая ТОЛЬКО чатом (агента нет),
+ * оставалась в панели без версии и без «последнего обмена». Отметка ставится на ЛЮБОМ запросе канала, а не
+ * только на ходе: `/ping` и опрос диалога — тоже доказательство, что база на связи.
+ */
+test("С2: обмен с базой отмечается на любом запросе канала, включая отказ по старой версии", async () => {
+	const h = harness({ minExt: "1.6.0" });
+	try {
+		await h.get("/ping", { "x-ext-version": "1.6.1" });
+		assert.deepEqual(h.exchanged, [{ baseId: BASE_ID, ext: "1.6.1" }]);
+
+		// Отказ 426 — тоже обмен: база на связи, и именно её сборку в этот момент и спрашивают в панели.
+		const old = await h.get("/ping", { "x-ext-version": "1.5.0" });
+		assert.equal(old.body.error!.code, "EXT_TOO_OLD");
+		assert.deepEqual(h.exchanged[1], { baseId: BASE_ID, ext: "1.5.0" });
+
+		// Версии в запросе нет — обмен всё равно был, а версию сохранять нечего.
+		await h.get("/ping");
+		assert.deepEqual(h.exchanged[2], { baseId: BASE_ID, ext: "" });
+	} finally { h.close(); }
+});
+
+test("С2: установка без хранилища обмена работает как раньше", async () => {
+	const h = harness({ exchange: false });
+	try {
+		const ping = await h.get("/ping", { "x-ext-version": "1.6.1" });
+		assert.equal(ping.status, 200);
+		assert.deepEqual(h.exchanged, []);
 	} finally { h.close(); }
 });
 

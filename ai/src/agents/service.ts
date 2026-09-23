@@ -333,7 +333,7 @@ export class AgentService {
 	 * нет базы с этим БИН): выбор остаётся прежним (pickOnline), а базу решит агент.
 	 */
 	async resolveBusiness(organizationUuid: string, want: { baseKey?: string | null; bin?: string | null; preferAgentId?: string | null }): Promise<
-		| { kind: "agent"; agent: AgentView; baseKey: string; alsoIn: string[]; baseStatus: string | null }
+		| { kind: "agent"; agent: AgentView; baseKey: string; alsoIn: string[]; baseStatus: string | null; baseBins: string[] }
 		| Extract<TargetDecision, { kind: "refused" }>
 		| { kind: "none" }
 	> {
@@ -350,7 +350,14 @@ export class AgentService {
 		);
 		if (decision.kind !== "base") return decision;
 		const agent = candidates.find((a) => a.id === decision.agentId);
-		return agent ? { kind: "agent", agent, baseKey: decision.baseKey, alsoIn: decision.alsoIn, baseStatus: decision.status } : { kind: "none" };
+		/*
+		 * БИНы ОРГАНИЗАЦИЙ ВЫБРАННОЙ БАЗЫ — из среза агента. Нужны вызывающему, чтобы понять, ЕСТЬ ЛИ в этой базе
+		 * организация, о которой он собирается говорить: подставлять в команду БИН, которого в базе нет, — верный
+		 * отказ 1С. Пустой список означает «агент про организации не сообщал», а не «их нет».
+		 */
+		const baseBins = (bases.get(decision.agentId) ?? [])
+			.find((b) => b.key === decision.baseKey)?.organizations?.map((o) => o.bin).filter((b): b is string => !!b) ?? [];
+		return agent ? { kind: "agent", agent, baseKey: decision.baseKey, alsoIn: decision.alsoIn, baseStatus: decision.status, baseBins } : { kind: "none" };
 	}
 
 	/** Ключи баз бизнес-агента в порядке его среза (C2): больше одной — команда без адреса не должна уходить. */

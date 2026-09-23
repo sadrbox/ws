@@ -46,7 +46,8 @@ import { clusterOptions, clusterRows, clusterSubtitle, pickCluster } from "./clu
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
-type ClusterTab = "bases" | "cluster" | "extensions" | "users" | "schedules" | "progress";
+type ClusterTab = "bases" | "sessions" | "connections" | "server" | "extensions" | "users"
+	| "schedules" | "progress" | "batches";
 /** Что показано в теле панели: данные выбранного кластера или реестр самих кластеров. */
 type PaneView = "data" | "registry";
 
@@ -56,40 +57,6 @@ const columns = (): TColumn[] => ([
 	{ identifier: "clusterBases", type: "number", width: "90px", minWidth: "70px", alignment: "right", visible: true, inlist: true },
 	{ identifier: "clusterAddress", type: "string", width: "260px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
-
-/**
- * «Кластер» — живое состояние сервера: сеансы, соединения, процессы и лицензии. Внутренние вкладки монтируются по
- * одной: каждая при открытии спрашивает кластер, и раздел стоил бы четырёх команд вместо одной нужной.
- */
-const ClusterSection: FC = () => {
-	const [inner, setInner] = useState<"sessions" | "connections" | "server">("sessions");
-	return (
-		<Tabs
-			activeTab={inner}
-			onTabChange={(id) => setInner(id as typeof inner)}
-			tabs={[
-				{ id: "sessions", label: translate("onecTabSessions"), component: inner === "sessions" ? <SessionsTab /> : null },
-				{ id: "connections", label: translate("onecTabConnections"), component: inner === "connections" ? <ConnectionsTab /> : null },
-				{ id: "server", label: translate("onecTabServer"), component: inner === "server" ? <ServerTab /> : null },
-			]}
-		/>
-	);
-};
-
-/** «Прогресс» кластера: операции панели и задания сервиса. Процессы агентов — в разделе «Агенты», они про службу. */
-const ProgressSection: FC<{ watch: ReturnType<typeof useBatchWatch> }> = ({ watch }) => {
-	const [inner, setInner] = useState<"ops" | "batches">("ops");
-	return (
-		<Tabs
-			activeTab={inner}
-			onTabChange={(id) => setInner(id as typeof inner)}
-			tabs={[
-				{ id: "ops", label: translate("onecTabProgress"), component: inner === "ops" ? <ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} /> : null },
-				{ id: "batches", label: translate("onecTabBatches"), component: inner === "batches" ? <BatchesTab /> : null },
-			]}
-		/>
-	);
-};
 
 export const OneCClustersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const qc = useQueryClient();
@@ -233,21 +200,37 @@ export const OneCClustersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 		</>
 	);
 
+	/*
+	 * ОДИН РЯД ВКЛАДОК, БЕЗ ВЛОЖЕННЫХ (23.09, по разбору с владельцем).
+	 *
+	 * Было два промежуточных узла: «Кластер» прятал «Сеансы», «Соединения» и «Сервер», а «Прогресс» —
+	 * «Задания». Узел, у которого нет своего содержимого, стоит человеку лишнего щелчка и лишней догадки:
+	 * открыв «Кластер», он видит не кластер, а ещё один ряд вкладок, и какая из них откроется первой —
+	 * помнит только код. Каждая вкладка теперь отвечает за своё и называется тем, что покажет.
+	 *
+	 * МОНТИРУЮТСЯ ПО ОДНОЙ — это осталось: каждая при открытии спрашивает кластер, и ряд из девяти сразу
+	 * стоил бы девяти команд вместо одной нужной.
+	 */
 	const data = (
 		<Tabs
 			activeTab={tab}
 			onTabChange={(id) => setTab(id as ClusterTab)}
 			tabs={[
 				{ id: "bases", label: translate("onecTabBases"), component: tab === "bases" ? <OneCBasesList /> : null },
-				{ id: "cluster", label: translate("onecTabCluster"), component: tab === "cluster" ? <ClusterSection /> : null },
+				// Живое состояние сервера — там же, где раньше стоял узел «Кластер».
+				{ id: "sessions", label: translate("onecTabSessions"), component: tab === "sessions" ? <SessionsTab /> : null },
+				{ id: "connections", label: translate("onecTabConnections"), component: tab === "connections" ? <ConnectionsTab /> : null },
+				{ id: "server", label: translate("onecTabServer"), component: tab === "server" ? <ServerTab /> : null },
 				{ id: "extensions", label: translate("onecTabExtensions"), component: tab === "extensions" ? <ExtensionsTab /> : null },
 				{ id: "users", label: translate("onecTabUsers"), component: tab === "users" ? <UsersTab /> : null },
 				{ id: "schedules", label: translate("onecTabSchedules"), component: tab === "schedules" ? <SchedulesTab /> : null },
 				{
 					id: "progress",
 					label: watch.running ? `${translate("onecTabProgress")} (${watch.running})` : translate("onecTabProgress"),
-					component: tab === "progress" ? <ProgressSection watch={watch} /> : null,
+					component: tab === "progress" ? <ProgressTab isLoading={watch.isFetching} onRefresh={watch.refresh} /> : null,
 				},
+				// «Задания» — сразу после прогресса: это следующий вопрос того же разговора, а не его часть.
+				{ id: "batches", label: translate("onecTabBatches"), component: tab === "batches" ? <BatchesTab /> : null },
 			]}
 		/>
 	);

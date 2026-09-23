@@ -39,6 +39,7 @@ import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
 import { onecChatRouter } from "./http/onecChatRouter.ts";
 import { BaseTokenStore } from "./bases/tokens.ts";
+import { BaseChatExchangeStore } from "./bases/chatExchange.ts";
 import { TurnKeyStore } from "./chat/turnKeys.ts";
 import { purgeOldData } from "./retention.ts";
 import { ScheduleStore } from "./onec/schedules.ts";
@@ -129,6 +130,9 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Токены баз: секрет нужен для закрытой копии преемника при смене токена (§3 канала 1С).
 	const baseTokens = new BaseTokenStore(db, cfg.JWT_SECRET, { rotateDays: cfg.BASE_TOKEN_ROTATE_DAYS, overlapHours: cfg.BASE_TOKEN_OVERLAP_HOURS });
 	const turnKeys = new TurnKeyStore(db, cfg.ONEC_TURN_KEY_TTL_HOURS);
+	// Версия расширения и последний обмен из канала чата (С2 аудита 23.09): одно хранилище на запись (канал)
+	// и на чтение (сводка панели).
+	const chatExchange = new BaseChatExchangeStore(db);
 	const registrations = new RegistrationStore(db);
 	// Задачи и заметки организации в чате 1С: хранит их ERP, сервис только посредничает
 	// (план docs/PLAN_1C_TASKS_NOTES_2026-09-22.md). Без ERP_API_KEY канал выключен.
@@ -249,6 +253,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
 		batches, registry: onecRegistry, credentials, schedules, agentBases: new AgentBasesStore(db), registrations, baseTokens, activation: new ActivationStore(db), enrollments, baseOrgs,
+		chatExchange,
 	}));
 	// Подключение агента по коду (СВ5) — до agentRouter: у агента, который просит подключение, токена ещё нет.
 	app.use("/agent/v1", agentEnrollRouter({ enrollments, agents, erp, audit, log }));
@@ -263,7 +268,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN,
 		// Вложение отдельным запросом, ключ хода и смена токена базы: каждая часть включается своей
 		// зависимостью, и GET /ping объявляет ровно то, что включено (features).
-		files, turnKeys, rotation: baseTokens, revoke: baseTokens,
+		files, turnKeys, rotation: baseTokens, revoke: baseTokens, exchange: chatExchange,
 		rotationMinExtVersion: cfg.ONEC_EXT_ROTATION_MIN, minExtVersion: cfg.ONEC_EXT_MIN_VERSION,
 		// Ссылки на задачи для 1С и отдельный лимит на изменяющие вызовы задач и заметок.
 		panelUrl: cfg.PUBLIC_PANEL_URL, tasksWritePerMin: cfg.RATE_LIMIT_TASKS_WRITE_PER_MIN,

@@ -38,6 +38,8 @@ interface Params {
 	highlightToken?: number;
 	/** Не рендерить панель управления Table (тулбар вынесен на уровень пейна). */
 	hideToolbar?: boolean;
+	/** Делить высоту с соседней таблицей, а не держать свой минимум (две таблицы в одной области). */
+	fitHeight?: boolean;
 	/** Отметки строк (групповые операции над выбранным). По умолчанию выключены. */
 	selectable?: boolean;
 	/** Отметки видны, но недоступны — на время операции над этими данными. */
@@ -99,6 +101,7 @@ export function buildStaticTableProps(p: Params) {
 		...(p.emptyText ? { emptyText: p.emptyText } : {}),
 		...(p.reloading ? { reloading: true } : {}),
 		hideToolbar: !!p.hideToolbar,
+		fitHeight: !!p.fitHeight,
 		readonly: true,
 		// read-only списки без массового выбора → без колонки-чекбокса; включается там,
 		// где над выбранными строками выполняются групповые операции.

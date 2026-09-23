@@ -30,7 +30,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	fetchBaseUsersCached, fetchBases, fetchUserOccurrences, fetchUserSummary, refreshBases,
 } from "src/services/onec/api";
-import { VSplitBar, useSplitResize } from "src/components/SplitPane";
+import { SplitView } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import {
@@ -82,13 +82,6 @@ export const UsersTab: FC = () => {
 	// Ширина таблиц — тем же разделителем, что в списках с предпросмотром и отчётах:
 	// у администратора свои пропорции (сто баз против десятка людей), и они должны
 	// пережить закрытие вкладки.
-	const split = useSplitResize({
-		storageKey: "onec_users_split",
-		side: "left",
-		defaultPercent: 50,
-		min: 25,
-		max: 75,
-	});
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	const summary = useQuery({ queryKey: ["onec", "user-summary"], queryFn: fetchUserSummary });
@@ -265,15 +258,14 @@ export const UsersTab: FC = () => {
 				</Button>
 			</div>
 
-			<div className={styles.PairBody} ref={split.containerRef}>
-				<div className={styles.NavPane} style={{ flexBasis: `${split.percent}%` }}>
-					{primary === "bases" ? basesTable : usersTable}
-				</div>
-				<VSplitBar onPointerDown={split.startResize} onDoubleClick={split.reset} onNudge={split.nudge} />
-				<div className={styles.NavPane} style={{ flexBasis: `${100 - split.percent}%` }}>
-					{primary === "bases" ? usersTable : basesTable}
-				</div>
-			</div>
+			<SplitView
+				storageKey="onec_users_split"
+				defaultPercent={50}
+				min={25}
+				max={75}
+				main={primary === "bases" ? basesTable : usersTable}
+				aside={primary === "bases" ? usersTable : basesTable}
+			/>
 
 			<div className={styles.StatusBar}>
 				<span className={styles.StatusText}>{status}</span>

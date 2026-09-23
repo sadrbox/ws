@@ -1,9 +1,9 @@
 /**
  * Вкладка «Базы с расширением»: подписи и итоги (23.09).
  *
- * Сводку теперь собирает сервис из источников САМОГО расширения — заявок, токенов и среза бизнес-агентов
- * (`GET /v1/onec/extension-bases`), поэтому здесь проверяется только то, что видит человек: как называется
- * состояние доступа, откуда взялась версия и кого показывать отстающим.
+ * Сводку теперь собирает сервис из источников САМОГО расширения — заявок, токенов, среза бизнес-агентов и
+ * запросов самой базы по каналу чата (`GET /v1/onec/extension-bases`), поэтому здесь проверяется только то, что
+ * видит человек: как называется состояние доступа, откуда взялась версия и кого показывать отстающим.
  */
 import { describe, expect, it } from "vitest";
 import { compareVersions, extensionRows, extensionSummary } from "src/models/OneCAdmin/extensionView";
@@ -13,6 +13,7 @@ const item = (over: Partial<ExtensionBase> = {}): ExtensionBase => ({
 	baseKey: "erp_main", name: "Бухгалтерия", organizationUuid: "org-1", organizationName: "ТОО Ромашка",
 	extVersion: "1.6.0", extVersionSource: "agent", access: "active", transport: "http",
 	agentId: "a1", agentName: "Бухгалтерия", approvedAt: "2026-09-20T10:00:00.000Z", seenAt: "2026-09-23T08:00:00.000Z",
+	chatSeenAt: null, lastExchangeAt: "2026-09-23T08:00:00.000Z", lastExchangeSource: "agent",
 	pending: false, ...over,
 });
 
@@ -34,6 +35,22 @@ describe("базы с расширением", () => {
 		expect(fresh.versionStale).toBe(false);
 		const [stale] = extensionRows([item({ extVersionSource: "registration", extVersion: "1.5.0" })]);
 		expect(stale.versionStale).toBe(true);
+	});
+
+	/*
+	 * С2: версия из канала чата — ЖИВАЯ, звёздочки не заслуживает. Пометка «*» означает «со слов заявки, могло
+	 * устареть»; база, назвавшая сборку в сегодняшнем запросе, под это не подходит, и путать эти два случая
+	 * нельзя: по звёздочке человек идёт проверять то, что уже проверено.
+	 */
+	it("версия из канала чата не помечается устаревшей, но названа своим источником", () => {
+		const [row] = extensionRows([item({
+			extVersionSource: "chat", extVersion: "1.6.1", agentName: null, seenAt: null,
+			chatSeenAt: "2026-09-23T09:00:00.000Z", lastExchangeAt: "2026-09-23T09:00:00.000Z", lastExchangeSource: "chat",
+		})]);
+		expect(row.versionStale).toBe(false);
+		expect(row.versionFromChat).toBe(true);
+		expect(row.lastExchangeAt).toBe("2026-09-23T09:00:00.000Z");
+		expect(row.lastExchangeSource).toBe("chat");
 	});
 
 	it("транспорт пуст — «агент не сообщал», а не «связи нет»", () => {

@@ -353,8 +353,11 @@ const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b
 	b.sessions_count, b.last_seen_at, b.disabled_at, b.created_at,
 	-- Расширения базы, как их последний раз читали (IB_LIST_EXTENSIONS). Именно счётчик,
 	-- а не флаг: колонка «Расширение» показывала «не установлено» всем базам подряд, хотя
-	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ — ext_version заполняет только heartbeat
-	-- бизнес-агента, и то лишь про своё расширение bpapi.
+	-- на деле мы про них просто НИЧЕГО НЕ ЗНАЛИ.
+	-- ОТКУДА ЗДЕСЬ ext_version (уточнено 23.09): из среза АДМИН-агента — реестр кластера ведёт он один
+	-- (СП4), а базы бизнес-агента живут в agent_bases. Админ-агент версию расширения не знает, поэтому
+	-- поле сегодня пусто и держится РЕЗЕРВОМ — на случай, если он научится её читать. Версию расширения
+	-- показывает не этот список, а сводка GET /extension-bases: там она собирается из всех источников.
 	b.infobase_id, b.published, b.publish_url, b.publish_seen_at, b.ib_unreachable_at,
 	b.ib_unreachable_reason, b.db_checked_at,
 	b.sessions_denied, b.sessions_denied_message, b.sessions_denied_from, b.sessions_denied_to,

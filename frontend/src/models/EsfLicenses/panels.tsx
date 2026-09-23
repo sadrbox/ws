@@ -13,7 +13,6 @@ import { reportError } from "src/services/errors/route";
 import apiClient from "src/services/api/client";
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
-import styles from "src/styles/main.module.scss";
 import installsColumnsJson from "./installs.columns.json";
 import logsColumnsJson from "./logs.columns.json";
 
@@ -136,8 +135,14 @@ const InstallsPanel: FC<PanelProps> = ({ licenseUuid }) => {
 
 	// Итог по лимиту: цифры видны админу даже когда отказ выключен (учёт без блокировки).
 	const overLimit = summary.limit > 0 && summary.activeCount > summary.limit;
+	/*
+	 * СПИСОК — БЕЗ `.FormWrapper` (23.09). Этот класс сделан для ФОРМЫ: он раскладывает группы полей В РЯД
+	 * (`flex-direction: row`) и несёт `container-type: size`. Вокруг таблицы он ставил сводку по лимиту слева
+	 * узкой колонкой, а таблице оставлял область, посчитанную без учёта содержимого. Как во всех списках,
+	 * таблица — прямой ребёнок вкладки: сводка над ней, высоту делит вкладка.
+	 */
 	return (
-		<div className={styles.FormWrapper}>
+		<>
 			<div style={{ padding: "4px 8px", display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
 				<span>
 					{translate("esfInstallsActive")}: <b style={{ color: overLimit ? "var(--danger)" : undefined }}>{summary.activeCount}</b>
@@ -148,7 +153,7 @@ const InstallsPanel: FC<PanelProps> = ({ licenseUuid }) => {
 			</div>
 			<Table {...(tableProps as unknown as TableProps)} />
 			<ConfirmModal {...confirmState} />
-		</div>
+		</>
 	);
 };
 InstallsPanel.displayName = "EsfLicenseInstallsPanel";
@@ -206,11 +211,8 @@ const LogPanel: FC<PanelProps> = ({ licenseUuid }) => {
 		[rows, columns, isLoading, load, renderCell],
 	);
 
-	return (
-		<div className={styles.FormWrapper}>
-			<Table {...(tableProps as unknown as TableProps)} />
-		</div>
-	);
+	// Журнал — тот же случай, что и «Установки»: список живёт во вкладке сам, без формовой обёртки.
+	return <Table {...(tableProps as unknown as TableProps)} />;
 };
 LogPanel.displayName = "EsfLicenseLogPanel";
 

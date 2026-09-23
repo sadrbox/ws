@@ -40,6 +40,15 @@ async function harness(opts: {
 	/** Способности бизнес-агента базы: `null` — агента нет вовсе (самопроверка базы). */
 	businessAgent?: string[] | null;
 	chatCalls?: Record<string, unknown>[];
+	/** Срез баз, который сообщает каждый бизнес-агент установки. */
+	slices?: { key: string; status: string | null; transport: "http" | "com" | null; extVersion: string | null; seenAt: string | null }[];
+	/** Заявки и токены для сводки «Базы с расширением». */
+	registrations?: Record<string, unknown>[];
+	tokens?: Record<string, unknown>[];
+	/** Что база сказала о себе сама по каналу чата (С2): версия расширения и последний обмен. */
+	chat?: { baseKey: string; extVersion: string | null; seenAt: string | null }[];
+	/** Отключён ли бизнес-агент установки: его срез не должен попадать ни в одну витрину. */
+	businessDisabled?: boolean;
 	/** Серверы, где есть каждая база реестра (C9–C11); нет — один сервер srv-1. */
 	servers?: { id: string; name: string; organizationUuid: string }[];
 	scope?: "all" | "organizations";
@@ -55,7 +64,8 @@ async function harness(opts: {
 			const b = known.find((x) => x.key === key);
 			return b ? { id: `id-${key}`, key, serverName: "SERVER", disabled: !!b.disabled, clusterStatus: b.clusterStatus, status: b.clusterStatus } : null;
 		},
-		listAll: async () => known.map((b) => ({ key: b.key, clusterStatus: b.clusterStatus })),
+		// Как в жизни: реестр ведёт админ-агент и версию расширения чаще всего не знает — её даёт срез.
+		listAll: async () => known.map((b) => ({ key: b.key, clusterStatus: b.clusterStatus, extVersion: null })),
 		sync: async () => { journal.push("sync"); },
 		applyPublications: async () => { journal.push("applyPublications"); return { marked: 1, cleared: 0, matched: 1 }; },
 		staleDbCheck: async () => opts.staleKeys ?? [],
@@ -79,9 +89,13 @@ async function harness(opts: {
 		id: "adm", organizationUuid: "org-1", role: "admin", disabled: false, online: true, serverId: "srv-1",
 		capabilities: ["cluster.admin", "ib.admin", "agent.procs"], version: "2026-09-17",
 	};
+	const business = {
+		id: "biz", organizationUuid: "org-1", role: "business", disabled: !!opts.businessDisabled, online: true, serverId: null,
+		name: "Бухгалтерия", capabilities: [], version: "2026-09-22",
+	};
 	const agents = {
 		pickAdminAgent: async () => admin,
-		listAll: async () => [admin],
+		listAll: async () => [admin, business],
 		create: async (organizationUuid: string, name: string) => { journal.push(`create:${organizationUuid || "-"}:${name}`); return { agent: { id: "new", name, organizationUuid }, token: "bpa_x" }; },
 		rename: async (id: string, name: string) => { journal.push(`rename:${id}:${name}`); return true; },
 		setDisabled: async (id: string, disabled: boolean) => { journal.push(`setDisabled:${id}:${disabled}`); return true; },
@@ -105,7 +119,11 @@ async function harness(opts: {
 		key, pos, status: "ONLINE", transport, extVersion: "1.4.0", overLimit: null, seenAt: null,
 		organizations: [{ id: `o-${key}`, name: key, bin: `00000000000${pos}` }],
 	});
-	const agentBases = { list: async () => [agentBase("Б1", 0, "com"), agentBase("Б2", 1, "com"), agentBase("Б3", 2, "http")], listMany: async () => new Map() };
+	const agentBases = {
+		list: async () => [agentBase("Б1", 0, "com"), agentBase("Б2", 1, "com"), agentBase("Б3", 2, "http")],
+		// Срез бизнес-агента: по нему список баз и сводка расширения берут версию (Б1/Б2 аудита 23.09).
+		listMany: async (ids: readonly string[]) => new Map(ids.map((id) => [id, opts.slices ?? []])),
+	};
 	const audit = {
 		write: async () => { journal.push("audit"); },
 		listChatCalls: async (o: { baseId?: string | null }) => { journal.push(`chatCalls:${o.baseId ?? "-"}`); return opts.chatCalls ?? []; },
@@ -120,6 +138,9 @@ async function harness(opts: {
 		agents, bases, queue, audit,
 		batches: { ownerOf: async () => ({ organizationUuid: "org-1", userUuid: null }) },
 		registry: { userSummary: async (ids: unknown) => { journal.push(`userSummary:${JSON.stringify(ids)}`); return []; }, extensionSummary: async () => [] },
+		registrations: { list: async () => opts.registrations ?? [], get: async () => null },
+		baseTokens: { list: async () => opts.tokens ?? [] },
+		chatExchange: { list: async () => opts.chat ?? [] },
 		credentials: { usersByBaseKeys: async () => new Map() }, schedules: {}, agentBases,
 		enrollments: {
 			get: async (id: string) => (id === "enr-adm"
@@ -452,5 +473,71 @@ test("журнал вызовов чата: отбор по базе доход�
 		assert.equal(r.status, 200);
 		assert.equal((r.body as unknown as { data: { items: unknown[] } }).data.items.length, 1);
 		assert.ok(h.journal.includes("chatCalls:bbbbbbbb-0000-4000-8000-000000000001"), "база передана в отбор");
+	} finally { h.close(); }
+});
+
+// ── Базы с расширением: шов между маршрутом и правилами слияния (Б5 аудита 23.09) ──
+
+test("сводка собирает базу из заявки и токена — без всякого кластера", async () => {
+	const h = await harness({
+		registrations: [{ baseKey: "erp_main", baseName: "Бухгалтерия", state: "APPROVED", organizationUuid: "org-1", decidedAt: new Date("2026-09-20T10:00:00Z"), body: { base: { extensionVersion: "1.5.0" } } }],
+		tokens: [{ baseKey: "erp_main", organizationUuid: "org-1", createdAt: new Date(), revokedAt: null, replacedBy: null, acceptedUntil: null }],
+		slices: [],
+	});
+	try {
+		const r = await h.call("GET", "/extension-bases");
+		assert.equal(r.status, 200);
+		const items = (r.body as unknown as { data: { items: Record<string, unknown>[] } }).data.items;
+		assert.equal(items.length, 1);
+		assert.equal(items[0]!.baseKey, "erp_main");
+		assert.equal(items[0]!.access, "active");
+		// Версия со слов заявки, пока агент не сказал своё: источник назван честно.
+		assert.equal(items[0]!.extVersionSource, "registration");
+	} finally { h.close(); }
+});
+
+test("версию расширения показывает сводка, а список баз — нет", async () => {
+	/*
+	 * Колонку «Расширение» из списка баз сняли 23.09: реестр кластера ведёт админ-агент, версии он не
+	 * знает, и у большинства клиентов колонка стояла пустой — а пустая колонка читается как «расширения
+	 * нет». Версия осталась там, где собирается из всех источников, и подмешивать её в список незачем.
+	 */
+	const slices = [{ key: "_transition", status: "ONLINE", transport: "http" as const, extVersion: "1.6.0", seenAt: "2026-09-23T08:00:00.000Z" }];
+	const h = await harness({ slices, registrations: [], tokens: [] });
+	try {
+		const bases = await h.call("GET", "/bases");
+		const first = (bases.body as unknown as { data: { items: { key: string; extVersion: string | null }[] } }).data.items[0]!;
+		assert.equal(first.extVersion, null, "в списке баз — только то, что знает сам реестр");
+
+		const summary = await h.call("GET", "/extension-bases");
+		const row = (summary.body as unknown as { data: { items: Record<string, unknown>[] } }).data.items[0]!;
+		assert.equal(row.extVersion, "1.6.0", "а версию расширения спрашивают у сводки");
+		assert.equal(row.extVersionSource, "agent");
+	} finally { h.close(); }
+});
+
+test("С2: база без агента — версию и последний обмен даёт канал чата", async () => {
+	const h = await harness({
+		slices: [], registrations: [], businessAgent: null,
+		tokens: [{ baseKey: "erp_main", organizationUuid: "org-1", createdAt: new Date(), revokedAt: null, replacedBy: null, acceptedUntil: null }],
+		chat: [{ baseKey: "erp_main", extVersion: "1.6.1", seenAt: "2026-09-23T09:00:00.000Z" }],
+	});
+	try {
+		const r = await h.call("GET", "/extension-bases");
+		const row = (r.body as unknown as { data: { items: Record<string, unknown>[] } }).data.items[0]!;
+		assert.equal(row.extVersion, "1.6.1");
+		assert.equal(row.extVersionSource, "chat", "так и говорим: версию назвала сама база");
+		assert.equal(row.lastExchangeAt, "2026-09-23T09:00:00.000Z");
+		assert.equal(row.lastExchangeSource, "chat");
+	} finally { h.close(); }
+});
+
+test("отключённый бизнес-агент в сводке молчит", async () => {
+	const slices = [{ key: "_transition", status: "ONLINE", transport: "http" as const, extVersion: "1.6.0", seenAt: "2026-09-23T08:00:00.000Z" }];
+	const h = await harness({ slices, businessDisabled: true, registrations: [], tokens: [] });
+	try {
+		const summary = await h.call("GET", "/extension-bases");
+		assert.deepEqual((summary.body as unknown as { data: { items: unknown[] } }).data.items, [],
+			"агенту, которого отключили, больше не верим: его базы в сводке нет");
 	} finally { h.close(); }
 });

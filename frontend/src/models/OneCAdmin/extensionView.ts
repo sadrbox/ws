@@ -4,7 +4,8 @@
  * ИСТОЧНИК — САМО РАСШИРЕНИЕ, А НЕ КЛАСТЕР (23.09). Первая версия брала список из реестра баз, который ведёт
  * админ-агент и который панель сужает до выбранного кластера: у клиента без админ-агента экран оставался
  * пустым, хотя заявки одобрены и токены выданы. Теперь сервис отдаёт готовую сводку по заявкам, токенам и
- * срезу бизнес-агентов (`GET /v1/onec/extension-bases`), а здесь — только подписи и итоги для человека.
+ * срезу бизнес-агентов и запросам самой базы по каналу чата (`GET /v1/onec/extension-bases`), а здесь —
+ * только подписи и итоги для человека.
  */
 import { translate } from "src/i18";
 import type { ExtensionBase } from "src/services/onec/api";
@@ -17,12 +18,21 @@ export type ExtensionRow = {
 	extVersion: string;
 	/** Версия со слов заявки, а не от агента: база могла обновиться, и мы об этом не знаем. */
 	versionStale: boolean;
+	/** Версию назвала сама база в запросе канала чата (агента у неё может не быть вовсе). */
+	versionFromChat: boolean;
 	accessLabel: string;
 	access: ExtensionBase["access"];
 	transportLabel: string;
 	agentName: string;
 	approvedAt: string | null;
 	seenAt: string | null;
+	/**
+	 * ПОСЛЕДНИЙ ОБМЕН — позднее из «видел агент» и «база обратилась сама». Тем же числом его считает у себя
+	 * расширение, и показывает по нему ступень состояния: пока панель брала только срез агента, два окна об
+	 * одной базе отвечали по-разному (С2 аудита 23.09).
+	 */
+	lastExchangeAt: string | null;
+	lastExchangeSource: "agent" | "chat" | "none";
 	pending: boolean;
 };
 
@@ -40,6 +50,7 @@ export function extensionRows(items: readonly ExtensionBase[]): ExtensionRow[] {
 		organizationName: b.organizationName || "—",
 		extVersion: b.extVersion,
 		versionStale: b.extVersionSource === "registration",
+		versionFromChat: b.extVersionSource === "chat",
 		access: b.access,
 		accessLabel: accessLabelOf(b.access),
 		// Транспорт знает только агент: пусто — «не сообщал», а не «связи нет».
@@ -47,6 +58,8 @@ export function extensionRows(items: readonly ExtensionBase[]): ExtensionRow[] {
 		agentName: b.agentName || "—",
 		approvedAt: b.approvedAt,
 		seenAt: b.seenAt,
+		lastExchangeAt: b.lastExchangeAt,
+		lastExchangeSource: b.lastExchangeSource,
 		pending: b.pending,
 	}));
 }

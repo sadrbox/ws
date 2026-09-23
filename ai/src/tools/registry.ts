@@ -630,13 +630,13 @@ export const TOOLS: ToolSpec[] = [
 		name: "create_counterparty",
 		description:
 			"Завести контрагента в 1С. Вызывай ТОЛЬКО когда search_counterparties ничего не нашёл И пользователь подтвердил, что контрагента нужно создать: дубль в справочнике дороже лишнего вопроса. "
-			+ "БИН/ИИН обязателен — 12 цифр; по нему 1С и ищет существующего, чтобы не плодить двойников.",
+			+ "БИН/ИИН обязателен — 12 цифр; по нему 1С и ищет существующего, чтобы не плодить двойников. "
+			+ "Покупатель он или поставщик — не поле карточки: в типовой это решает вид договора, и определится при первом документе.",
 		inputSchema: {
 			type: "object",
 			properties: {
 				name: { type: "string", description: "наименование как в документах контрагента" },
 				bin: { type: "string", description: "БИН или ИИН, 12 цифр" },
-				kind: { type: "string", enum: ["buyer", "supplier", "both"], description: "покупатель, поставщик или и то и другое (по умолчанию both)" },
 				fullName: { type: "string", description: "полное юридическое наименование, если известно" },
 				comment: { type: "string" },
 			},
@@ -646,10 +646,16 @@ export const TOOLS: ToolSpec[] = [
 		operation: "WRITE",
 		commandType: "CREATE_COUNTERPARTY",
 		mutating: true,
+		/*
+		 * `kind` УБРАН (решение владельца 23.09, сверка контрактов со стороны 1С). Сервис слал им РОЛЬ
+		 * (`buyer`/`supplier`/`both`), а расширение читало тем же именем ВИД ЛИЦА (`legal`/`individual`):
+		 * поле совпало, смысл — нет. Роль не доезжала никуда и доехать не может — в типовой её задаёт вид
+		 * договора, а не карточка контрагента. Вид лица расширение определяет само (`entityKind`), и модели
+		 * его знать неоткуда: по БИН он выводится надёжнее, чем по разговору.
+		 */
 		buildPayload: (i) => ({
 			name: str(i.name, "name").slice(0, 200),
 			bin: bin12(i.bin, "bin"),
-			kind: typeof i.kind === "string" && ["buyer", "supplier", "both"].includes(i.kind) ? i.kind : "both",
 			...(typeof i.fullName === "string" && i.fullName.trim() ? { fullName: i.fullName.trim().slice(0, 500) } : {}),
 			comment: typeof i.comment === "string" && i.comment ? i.comment : "Создано BuhProf AI",
 		}),

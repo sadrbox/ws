@@ -649,10 +649,29 @@ export class ChatWorkflow {
 		// База — в каждой бизнес-команде многобазового агента; в 1С `baseKey` не уходит, агент его снимает.
 		if (target.kind === "agent") {
 			prep.payload = { ...prep.payload, baseKey: target.baseKey };
-			// База выбрана по БИН организации ERP (C7) — он же говорит 1С, какая из организаций базы имеется в виду.
+			/*
+			 * КАКАЯ ОРГАНИЗАЦИЯ БАЗЫ ИМЕЕТСЯ В ВИДУ — ГОВОРИМ ВСЕГДА, КОГДА ИНСТРУМЕНТ ЭТО ПРИНИМАЕТ.
+			 *
+			 * Раньше БИН уезжал только в одном случае: когда база и была НАЙДЕНА по БИН организации ERP (C7).
+			 * Но базу чаще опознают по объектам вызова — `counterpartyId` кассового ордера пришёл из неё же, —
+			 * и тогда организация не называлась вовсе. В базе одной фирмы это ничего не меняло, в многофирменной
+			 * 1С отвечала `409 ORGANIZATION_REQUIRED`: она не вправе гадать, чьи это деньги. Модель БИН подставить
+			 * не могла — в веб-чате она его попросту не знает, пока не спросит get_organizations.
+			 *
+			 * Теперь правило одно с каналом 1С (withOrganization): организация, в которой человек работает,
+			 * едет во ВСЕ инструменты, где для неё есть поле. Выбор модели при этом главнее — `organizationBin`
+			 * или `organizationId` из вызова не перезаписываются: если она спросила организации и назвала одну,
+			 * значит про эту и речь.
+			 */
 			const props = (spec.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
-			if (target.viaErpBin && "organizationBin" in props && !prep.payload.organizationBin && !prep.payload.organizationId) {
-				prep.payload = { ...prep.payload, organizationBin: target.viaErpBin };
+			if ("organizationBin" in props && !prep.payload.organizationBin && !prep.payload.organizationId) {
+				// Базу нашли ПО ЭТОМУ БИН — он в ней заведомо есть. Иначе БИН организации ERP годится только если
+				// агент сообщил, что такая организация в базе есть: чужой БИН 1С отвергнет, и хуже того — в базе
+				// одной фирмы, где всё работало без него, вызов начал бы отказывать.
+				const bin = target.viaErpBin ?? await this.erpBin(conv, user);
+				if (bin && (target.viaErpBin === bin || target.baseBins.includes(bin))) {
+					prep.payload = { ...prep.payload, organizationBin: bin };
+				}
 			}
 		}
 
@@ -709,26 +728,34 @@ export class ChatWorkflow {
 		const callBin = typeof payload.organizationBin === "string" ? payload.organizationBin.trim() : "";
 		let bin: string | null = callBin || null;
 		let viaErpBin: string | null = null;
-		// БИН организации ERP — только когда вызов сам базу и организацию не назвал: иначе он проверял бы чужую.
-		if (!bin && !baseKey && !OVERVIEW_COMMANDS.has(spec.commandType) && this.d.orgBin) {
-			const cached = conv.context.erpBin?.org === user.organizationUuid ? conv.context.erpBin : null;
-			if (cached) bin = cached.bin;
-			else {
-				let failed = false;
-				bin = await this.d.orgBin(user.organizationUuid).catch((e: unknown) => {
-					failed = true;
-					this.d.log.warn({ err: e instanceof Error ? e.message : String(e) }, "chat: БИН организации ERP не прочитан");
-					return null;
-				});
-				// Сбой чтения не запоминаем: в следующем вызове ERP спросим снова.
-				if (!failed) conv.context.erpBin = { org: user.organizationUuid, bin };
-			}
+		// БИН организации ERP — только когда вызов сам базу и организацию не назвал: иначе он ИСКАЛ БЫ чужую базу.
+		if (!bin && !baseKey && !OVERVIEW_COMMANDS.has(spec.commandType)) {
+			bin = await this.erpBin(conv, user);
 			viaErpBin = bin;
 		}
 		if (!baseKey && !bin) return { kind: "none" };
 		const preferAgentId = baseKey ? conv.context.baseAgents?.[baseKey] ?? null : null;
 		const r = await this.d.agents.resolveBusiness(user.organizationUuid, { baseKey, bin, preferAgentId });
 		return r.kind === "agent" ? { ...r, viaErpBin } : r;
+	}
+
+	/**
+	 * БИН ОРГАНИЗАЦИИ ERP — один раз на диалог. Читается из ERP, запоминается в контексте: организация человека
+	 * в пределах разговора не меняется, а спрашивать её у ERP на каждый вызов значило бы платить запросом за то,
+	 * что уже известно. Сбой чтения не запоминаем — в следующем вызове спросим снова.
+	 */
+	private async erpBin(conv: Conversation, user: ChatUser): Promise<string | null> {
+		if (!this.d.orgBin) return null;
+		const cached = conv.context.erpBin?.org === user.organizationUuid ? conv.context.erpBin : null;
+		if (cached) return cached.bin;
+		let failed = false;
+		const bin = await this.d.orgBin(user.organizationUuid).catch((e: unknown) => {
+			failed = true;
+			this.d.log.warn({ err: e instanceof Error ? e.message : String(e) }, "chat: БИН организации ERP не прочитан");
+			return null;
+		});
+		if (!failed) conv.context.erpBin = { org: user.organizationUuid, bin };
+		return bin;
 	}
 
 	/**
@@ -898,12 +925,11 @@ export class ChatWorkflow {
 		 * лишний контрагент в справочнике живёт вечно и всплывает в сверках годами.
 		 */
 		if (spec.name === "create_counterparty") {
-			const kind = String(payload.kind ?? "both");
+			// «Вида» в карточке больше нет (23.09): роль контрагента в типовой задаёт вид договора, а не карточка.
 			return [
 				"Новый контрагент в 1С",
 				`Наименование: ${String(payload.name)}`,
 				`БИН/ИИН: ${String(payload.bin)}`,
-				`Вид: ${kind === "buyer" ? "покупатель" : kind === "supplier" ? "поставщик" : "покупатель и поставщик"}`,
 				payload.fullName ? `Полное наименование: ${String(payload.fullName)}` : null,
 				"1С поищет по БИН существующего: если он есть, двойник не появится.",
 			].filter(Boolean).join("\n");

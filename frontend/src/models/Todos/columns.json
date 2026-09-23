@@ -21,31 +21,13 @@
 	},
 	{
 		"identifier": "status",
-		"type": "select",
+		"type": "string",
 		"width": "120px",
 		"minWidth": "80px",
 		"alignment": "center",
-		"hint": "Статус задачи",
+		"hint": "Статус задачи: подпись берётся из справочника статусов (renderCell списка)",
 		"visible": true,
-		"inlist": true,
-		"options": [
-			{
-				"value": "new",
-				"label": "Новая"
-			},
-			{
-				"value": "in_progress",
-				"label": "В работе"
-			},
-			{
-				"value": "done",
-				"label": "Выполнена"
-			},
-			{
-				"value": "cancelled",
-				"label": "Отменена"
-			}
-		]
+		"inlist": true
 	},
 	{
 		"identifier": "curator.fullName",

@@ -24,7 +24,7 @@ import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { Button } from "src/components/Button";
 
 // 7. Стили
-import { VSplitBar, useSplitResize } from "src/components/SplitPane";
+import { SplitView } from "src/components/SplitPane";
 import { isUnsavedRow } from "src/components/SubTable/rowModel";
 import styles from "./ModelList.module.scss";
 
@@ -282,21 +282,6 @@ const ModelList: FC<ModelListProps> = ({
     setSelectedRows(all.filter((r) => selected.has(Number(r.id))));
   }, []);
 
-  // Ширина панели предпросмотра (% от split-контейнера) — общий механизм
-  // SplitPane, тот же, что у панели фильтров в формах отчётов.
-  const {
-    percent: previewWidth,
-    containerRef: splitViewRef,
-    startResize,
-    reset: resetPreviewWidth,
-  } = useSplitResize({
-    storageKey: `listSplitWidth:${componentName}`,
-    side: "right",
-    defaultPercent: 38,
-    min: 20,
-    max: 70,
-  });
-
   useEffect(() => {
     const onToggle = (e: Event) => {
       if ((e as CustomEvent).detail !== componentName) return;
@@ -466,11 +451,18 @@ const ModelList: FC<ModelListProps> = ({
   if (!splitActive) return table;
 
   const previewColumns = (columnsJson as TColumn[] | undefined) ?? [];
+  // Ширина предпросмотра запоминается по списку; раскладка — общая (SplitView), та же, что
+  // у пар таблиц в администрировании 1С: второго набора классов на одно и то же не держим.
   return (
-    <div className={styles.splitView} ref={splitViewRef}>
-      <div className={styles.splitList}>{table}</div>
-      <VSplitBar onPointerDown={startResize} onDoubleClick={resetPreviewWidth} />
-      <div className={styles.splitPreview} style={{ flexBasis: `${previewWidth}%` }}>
+    <SplitView
+      storageKey={`listSplitWidth:${componentName}`}
+      side="right"
+      defaultPercent={38}
+      min={20}
+      max={70}
+      asideClassName={styles.splitPreview}
+      main={table}
+      aside={(
         <ListPreview
           row={previewRow}
           columns={previewColumns}
@@ -478,8 +470,8 @@ const ModelList: FC<ModelListProps> = ({
           renderPreviewValue={renderPreviewValue}
           onOpen={() => previewRow && openModelForm({ data: previewRow })}
         />
-      </div>
-    </div>
+      )}
+    />
   );
 };
 

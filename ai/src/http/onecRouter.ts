@@ -25,10 +25,11 @@ import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAl
 import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
 import { agentBuild, buildOutdated, missingFeatures } from "../agents/features.ts";
 import { mergeDurationStats } from "../agents/commandStats.ts";
-import { extensionBaseRows } from "../onec/extensionBases.ts";
+import { collectBusinessSlices, extensionBaseRows } from "../onec/extensionBases.ts";
 import { describeAgentBases, parseLimit, type AgentBasesStore } from "../agents/agentBases.ts";
 import type { RegistrationRow, RegistrationState, RegistrationStore } from "../bases/registrations.ts";
 import type { BaseOrganizationsStore } from "../bases/organizations.ts";
+import type { BaseChatExchangeStore } from "../bases/chatExchange.ts";
 import type { BaseTokenStore } from "../bases/tokens.ts";
 import type { ActivationState, ActivationStore } from "../agents/activation.ts";
 import type { EnrollmentState, EnrollmentStore } from "../agents/enrollments.ts";
@@ -70,6 +71,11 @@ type Deps = {
 	/** Заявки на подключение баз и токены баз (СВ4). */
 	registrations: RegistrationStore;
 	baseTokens: Pick<BaseTokenStore, "list" | "revoke" | "rotate">;
+	/**
+	 * Что база сказала о себе сама по каналу чата: версия расширения и последний обмен (С2 аудита 23.09).
+	 * Без него сводка отвечает как раньше — о базе без агента не знает ничего.
+	 */
+	chatExchange?: Pick<BaseChatExchangeStore, "list"> | null;
 	/** Запросы активации БИНов (СВ4, часть 2). */
 	activation: ActivationStore;
 	/** Организации базы (задачи и заметки чата 1С): их БИНы база вправе называть. */
@@ -98,6 +104,7 @@ const CAP_BASE_AUTH = "ib.auth";
 export function onecRouter(deps: Deps) {
 	const { erp, cfg, log, agents, bases, queue, audit, batches, registry, credentials, schedules, agentBases, registrations, baseTokens, activation, enrollments } = deps;
 	const baseOrgs = deps.baseOrgs ?? null;
+	const chatExchange = deps.chatExchange ?? null;
 	/*
 	 * СТРОГИЙ ПУТЬ (аудит 21.09). Гейты прав (onec/access.ts, onec/permissions.ts) сравнивают `req.path`
 	 * регулярками с якорем конца, а нестрогий роутер express считает `/bases/acme/lock/` тем же маршрутом, что
@@ -591,6 +598,18 @@ export function onecRouter(deps: Deps) {
 		const chosen = serverOf(req);
 		const items = (await bases.listAll())
 			.filter((b) => (!allowed || allowed.has(b.serverId)) && (!chosen || b.serverId === chosen));
+		/*
+		 * ВЕРСИИ РАСШИРЕНИЯ ЗДЕСЬ НЕТ, И ЭТО НАМЕРЕННО (23.09, по разбору с владельцем).
+		 *
+		 * Колонка «Расширение» в списке баз показывала «не видели» почти всегда: реестр кластера наполняет
+		 * АДМИН-агент, а версию расширения знает БИЗНЕС-агент. Подмешивание её из среза (А1 того же дня)
+		 * лечило симптом лишь там, где на клиенте работают оба агента и оба видят одну базу; в остальных
+		 * установках колонка так и оставалась пустой — а пустая колонка читается как «расширения нет».
+		 *
+		 * Версия живёт там, где собирается из всех источников и всегда осмысленна: `GET /extension-bases`
+		 * («Расширение БухПроф-AI» → «Базы с расширением»). Поле `extVersion` в ответе остаётся — оно из
+		 * реестра и держится резервом под админ-агента, если тот когда-нибудь научится читать версию.
+		 */
 		res.json({ success: true, data: { items } });
 	});
 
@@ -1130,13 +1149,14 @@ export function onecRouter(deps: Deps) {
 	 */
 	r.get("/extension-bases", async (req, res) => {
 		if (!sharedListsAllowed(req)) { send(res, fail(403, "FORBIDDEN", "Этот список открыт администратору BuhProf")); return; }
-		const business = (await agents.listAll()).filter((a) => a.role === "business");
-		const slicesByAgent = await agentBases.listMany(business.map((a) => a.id), { cached: true });
-		const names = new Map(business.map((a) => [a.id, a.name]));
-		const slices = [...slicesByAgent.entries()].flatMap(([agentId, list]) => list.map((b) => ({
-			agentId, agentName: names.get(agentId) ?? null,
-			key: b.key, status: b.status, transport: b.transport, extVersion: b.extVersion, seenAt: b.seenAt,
-		})));
+		/*
+		 * «ОБНОВИТЬ» ЗНАЧИТ «СПРОСИ ЗАНОВО» (А2 аудита 23.09). Срезы кэшируются на 15 секунд, и нажатие сразу
+		 * после того, как клиент обновил расширение, возвращало прежнюю версию: человек либо ждал вслепую,
+		 * либо решал, что обновление не дошло. Кнопка панели шлёт `fresh=1` и читает мимо кэша; обычное
+		 * открытие раздела кэш использует — там он и нужен.
+		 */
+		const fresh = String((req.query as Record<string, unknown>).fresh ?? "") === "1";
+		const slices = await collectBusinessSlices(agents, agentBases, { fresh });
 		const rows = extensionBaseRows({
 			registrations: (await registrations.list({ limit: 500 })).map((r) => ({
 				baseKey: r.baseKey, baseName: r.baseName, state: r.state, organizationUuid: r.organizationUuid,
@@ -1147,6 +1167,8 @@ export function onecRouter(deps: Deps) {
 				createdAt: t.createdAt, revokedAt: t.revokedAt, replacedBy: t.replacedBy, acceptedUntil: t.acceptedUntil,
 			})),
 			slices,
+			// Чем отвечает база, у которой агента нет вовсе: её собственные запросы (С2 аудита 23.09).
+			chat: chatExchange ? await chatExchange.list() : [],
 		});
 		// Организацию показываем именем: uuid ничего не говорит тому, кто читает список.
 		const orgs = [...new Set(rows.map((r) => r.organizationUuid).filter((x): x is string => !!x))];

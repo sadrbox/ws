@@ -121,6 +121,7 @@ function setup(steps: Step[], opts: { limits?: AgentLimits; erpBin?: string | nu
 		SEARCH_COUNTERPARTIES: { items: [{ id: CUSTOMER, name: "Физули ТОО" }] },
 		SEARCH_PRODUCTS: { items: [{ id: PRODUCT, name: "Услуга", isService: true }] },
 		CREATE_SALE: { id: "e0000000-0000-4000-8000-000000000001", number: "0000124" },
+		CREATE_CASH_ORDER: { id: "f0000000-0000-4000-8000-000000000001", number: "0000007", direction: "in" },
 	};
 	const workflow = new ChatWorkflow({
 		db: mem.db, log: silent, llm,
@@ -130,7 +131,12 @@ function setup(steps: Step[], opts: { limits?: AgentLimits; erpBin?: string | nu
 			basesOf: async () => bases.map((b) => b.key),
 			resolveBusiness: async (_org: string, want: { baseKey?: string | null; bin?: string | null }) => {
 				const d = resolveTarget([{ agentId: agent.id, online: true, bases, limits: agent.limits }], want);
-				return d.kind === "base" ? { kind: "agent", agent, baseKey: d.baseKey, alsoIn: d.alsoIn, baseStatus: d.status } : d;
+				// БИНы организаций выбранной базы — как их отдаёт живой AgentService: по ним решается, можно ли
+				// назвать 1С организацию ERP (см. «организация базы» ниже).
+				const baseBins = d.kind === "base"
+					? (bases.find((b) => b.key === d.baseKey)?.organizations ?? []).map((o) => o.bin)
+					: [];
+				return d.kind === "base" ? { kind: "agent", agent, baseKey: d.baseKey, alsoIn: d.alsoIn, baseStatus: d.status, baseBins } : d;
 			},
 		} as never,
 		queue: {
@@ -307,4 +313,64 @@ test("C18: БИН организации ERP читается один раз н
 	await h.workflow.handle(h.user, r.conversationId, "ещё раз");
 	assert.equal(h.erpReads.n, 1);
 	assert.deepEqual(h.enqueued.map((e) => e.baseKey), ["Альфа", "Альфа", "Альфа"]);
+});
+
+/*
+ * ОРГАНИЗАЦИЯ БАЗЫ В КОМАНДАХ, КОТОРЫЕ ЕЁ ПРИНИМАЮТ (по письму со стороны 1С от 23.09).
+ *
+ * Кассовый ордер в многофирменной базе фактически требует `organizationBin`: без него 1С отвечает
+ * `409 ORGANIZATION_REQUIRED` — чьи это деньги, она гадать не вправе. Модель в веб-чате БИН знать не может,
+ * пока не спросит get_organizations, а базу вызов чаще называет не БИНом, а объектами: `counterpartyId`
+ * кассового ордера пришёл из неё же. Раньше БИН уезжал ТОЛЬКО когда по нему и искали базу — то есть в этом
+ * случае не уезжал вовсе.
+ *
+ * Правило теперь одно с каналом 1С: организация, в которой работает человек, едет во все инструменты, где для
+ * неё есть поле. Но только если агент сообщил, что такая организация в базе ЕСТЬ: чужой БИН 1С отвергнет, а в
+ * базе одной фирмы, где всё работало без него, вызов начал бы отказывать.
+ */
+test("касса: БИН организации ERP уезжает и тогда, когда базу назвал объект вызова, а не БИН", async () => {
+	const h = setup([
+		() => ({ toolCalls: [call("tu_c", "search_counterparties", { q: "физули" })] }),
+		() => ({ toolCalls: [call("tu_k", "create_cash_order", { direction: "in", counterpartyId: CUSTOMER, amount: 5000, purpose: "оплата по счёту" })] }),
+		() => ({ text: "Создан приходный ордер." }),
+	]);
+	const r1 = await h.workflow.handle(h.user, null, "прими 5000 от физули");
+	assert.equal(r1.state, "WAITING_CONFIRMATION");
+	const r2 = await h.workflow.handle(h.user, r1.conversationId, "да");
+	assert.equal(r2.state, "COMPLETED");
+	const order = h.enqueued.at(-1)!;
+	assert.equal(order.type, "CREATE_CASH_ORDER");
+	// База — по контрагенту из предыдущего вызова (Альфа), организация — активная организация ERP.
+	assert.equal(order.payload.baseKey, "Альфа");
+	assert.equal(order.payload.organizationBin, BIN_A);
+});
+
+test("касса: организации ERP в этой базе нет — БИН не подставляем, иначе сломали бы работавший вызов", async () => {
+	const h = setup([
+		// Организации — чтобы `organizationId` стал адресом базы, как это и происходит в жизни.
+		() => ({ toolCalls: [call("tu_o", "get_organizations", {})] }),
+		// Поиск с адресом: контрагент найден в базе «Бета» (организация BIN_B), а организация ERP — BIN_A.
+		() => ({ toolCalls: [call("tu_c", "search_counterparties", { q: "физули", organizationId: ORG_B })] }),
+		() => ({ toolCalls: [call("tu_k", "create_cash_order", { direction: "in", counterpartyId: CUSTOMER, amount: 5000 })] }),
+		() => ({ text: "Создан приходный ордер." }),
+	]);
+	const r1 = await h.workflow.handle(h.user, null, "прими 5000 от физули из Беты");
+	const r2 = await h.workflow.handle(h.user, r1.conversationId, "да");
+	assert.equal(r2.state, "COMPLETED");
+	const order = h.enqueued.at(-1)!;
+	assert.equal(order.payload.baseKey, "Бета");
+	assert.equal(order.payload.organizationBin, undefined, "в «Бете» организации BIN_A нет — называть её значило бы получить отказ 1С");
+});
+
+test("касса: организацию назвала модель — её выбор главнее активной организации ERP", async () => {
+	const h = setup([
+		() => ({ toolCalls: [call("tu_o", "get_organizations", {})] }),
+		() => ({ toolCalls: [call("tu_c", "search_counterparties", { q: "физули", organizationId: ORG_B })] }),
+		() => ({ toolCalls: [call("tu_k", "create_cash_order", { direction: "in", counterpartyId: CUSTOMER, amount: 5000, organizationBin: BIN_B })] }),
+		() => ({ text: "Создан приходный ордер." }),
+	]);
+	const r1 = await h.workflow.handle(h.user, null, "прими 5000 от физули по Бете");
+	const r2 = await h.workflow.handle(h.user, r1.conversationId, "да");
+	assert.equal(r2.state, "COMPLETED");
+	assert.equal(h.enqueued.at(-1)!.payload.organizationBin, BIN_B);
 });

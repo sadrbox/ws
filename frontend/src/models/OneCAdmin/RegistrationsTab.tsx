@@ -54,7 +54,11 @@ const columns = (): TColumn[] => ([
 	{ identifier: "reqRepeats", type: "string", width: "160px", minWidth: "100px", alignment: "left", visible: false, inlist: true },
 ] as unknown as TColumn[]);
 
-export const RegistrationsTab: FC = () => {
+/**
+ * `fitHeight` — вкладка ставит эту таблицу рядом со второй и делит высоту между ними («Доступ AI»);
+ * сама по себе таблица по-прежнему занимает всё место.
+ */
+export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => {
 	const qc = useQueryClient();
 	const [state, setState] = useState<RegistrationState | "">("PENDING");
 	const list = useQuery({
@@ -111,7 +115,7 @@ export const RegistrationsTab: FC = () => {
 			<QueryError error={list.error} noticeKey="onec-registrations" source={translate("onecReqRegistrations")} />
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_registrations", rows: view.rows, columns: cols, setColumns: setCols,
-				sorting: view.sorting, search: view.search,
+				sorting: view.sorting, search: view.search, fitHeight,
 				isLoading: list.isLoading, reloading: list.isFetching && !list.isLoading,
 				onReload: () => void list.refetch(),
 				emptyText: translate("onecReqNone"),

@@ -13,6 +13,10 @@
  * общий `Table`, как во всех списках панели: сортировка, поиск, настройка колонок, действия над активной
  * строкой. Строки НЕ переносятся — список читают глазами сверху вниз, и прыгающая высота строк этому мешает.
  *
+ * БЕЗ ОБЁРТКИ ВОКРУГ ТАБЛИЦЫ (23.09) — по той же причине, что и в «Вызовах чата»: класс `.Instances` создан
+ * для строк-плашек и несёт `container-type: size`, то есть меряет себя, не глядя на содержимое. Таблица
+ * внутри получала нулевую область и показывала свой минимум вместо того, чтобы занять вкладку.
+ *
  * ОТКАЗОВ ЧАТА ЗДЕСЬ БОЛЬШЕ НЕТ: их показывает вкладка «Вызовы чата» — и по одной базе, и по всем сразу,
  * вместе с успешными вызовами. Две таблицы об одном событии расходились бы в подробностях.
  */
@@ -62,7 +66,7 @@ const stateOf = (t: BaseToken): { text: string; tone: "ok" | "off" } => {
  * отозванного» — а в панели токены лежали только в карточке КОНКРЕТНОЙ базы. Чтобы дойти до них, нужно было
  * заранее знать, какая база, то есть ответ требовался раньше самого вопроса.
  */
-export const BaseChatTokens: FC<{ baseId?: string; baseKey?: string }> = ({ baseId, baseKey }) => {
+export const BaseChatTokens: FC<{ baseId?: string; baseKey?: string; fitHeight?: boolean }> = ({ baseId, baseKey, fitHeight }) => {
 	const all = !baseId;
 	const qc = useQueryClient();
 	const queryKey = ["onec", "base-tokens", baseId ?? "all"];
@@ -99,13 +103,13 @@ export const BaseChatTokens: FC<{ baseId?: string; baseKey?: string }> = ({ base
 	const live = !!active && !active.revokedAt && !active.replacedBy && !!q.data?.canRevoke;
 
 	return (
-		<div className={admin.Instances}>
+		<>
 			<div className={admin.Hint}>{translate("onecTokensHint")}</div>
 			<QueryError error={q.error} noticeKey={`base-tokens-${baseId ?? "all"}`} source={translate("onecTabBaseToken")} />
 			<Table {...buildStaticTableProps({
 				componentName: all ? "OneCBases_tokens_all" : "OneCBases_tokens",
 				rows: view.rows, columns: cols, setColumns: setCols,
-				sorting: view.sorting, search: view.search,
+				sorting: view.sorting, search: view.search, fitHeight,
 				isLoading: q.isLoading,
 				reloading: q.isFetching && !q.isLoading,
 				onReload: () => void q.refetch(),
@@ -137,7 +141,7 @@ export const BaseChatTokens: FC<{ baseId?: string; baseKey?: string }> = ({ base
 					</div>
 				</Modal>
 			)}
-		</div>
+		</>
 	);
 };
 

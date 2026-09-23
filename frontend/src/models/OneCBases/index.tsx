@@ -411,7 +411,7 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 /** Запись реестра → строка карточки. Один код на открытие и на обновление после команд. */
 const baseToRow = (b: OnecBase): TDataItem => ({
 	baseKey: b.key, name: b.name, status: b.status, clusterStatus: b.clusterStatus ?? b.status, serverName: b.serverName,
-	onecVersion: b.onecVersion, extVersion: b.extVersion, extensionsCount: b.extensionsCount,
+	onecVersion: b.onecVersion, extensionsCount: b.extensionsCount,
 	published: b.published, publishUrl: b.publishUrl,
 	publishUrlPublic: b.publishUrlPublic, publishSeenAt: b.publishSeenAt,
 	ibUnreachableAt: b.ibUnreachableAt, ibUnreachableReason: b.ibUnreachableReason,
@@ -1016,18 +1016,6 @@ export const OneCBasesList: FC<{
 			// «—» читалось бы как «версии нет»; версия есть всегда, её просто не сообщили.
 			if (col.identifier === "onecVersion") {
 				return <span>{asText(row.onecVersion) || platform || translate("onecPlatformUnknown")}</span>;
-			}
-			/*
-			 * ВЕРСИЯ РАСШИРЕНИЯ BuhProf (ПН7). Ею определяется, что база вообще умеет: списки документов,
-			 * аналитику и кассу знает не всякая сборка, и вопрос «почему у этой базы нет списков» без
-			 * колонки выяснялся руками. Пусто — расширение ни разу не отзывалось: это не «старое», а
-			 * «не видели», и подменять одно другим нельзя.
-			 */
-			if (col.identifier === "extVersion") {
-				const v = asText(row.extVersion);
-				return v
-					? <span title={translate("onecExtVersionHint")}>{v}</span>
-					: <span className={main.Muted} title={translate("onecExtVersionUnknownHint")}>{translate("onecExtVersionUnknown")}</span>;
 			}
 			/*
 			 * Адрес публикации — тоже скрыт по умолчанию: он длинный, а нужен точечно.

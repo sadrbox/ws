@@ -30,7 +30,7 @@ import {
 	approveActivation, fetchActivationRequests, fixAllActiveBins, rejectActivation,
 	type ActivationRequest, type ActivationState,
 } from "src/services/onec/api";
-import { QueryError } from "./shared";
+import { QueryError, SharedListForbidden, isSharedListForbidden } from "./shared";
 import { activationStateLabel, stateTone } from "./requestsView";
 import styles from "./OneCAdmin.module.scss";
 
@@ -110,6 +110,9 @@ export const ActivationRequestsTab: FC<{ agentId?: string }> = ({ agentId }) => 
 	})), (r) => r.uuid), [items]);
 	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
 	const pending = active?.state === "PENDING" && canDecide;
+
+	// Сводный список закрыт установкой (С3.4): одно объяснение вместо таблицы, которая может только отказать.
+	if (isSharedListForbidden(list.error)) return <SharedListForbidden />;
 
 	return (
 		<>

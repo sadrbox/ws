@@ -17,6 +17,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { translate } from "src/i18";
+import { cx } from "src/utils/cx";
 import styles from "./SplitPane.module.scss";
 
 export interface UseSplitResizeOptions {
@@ -233,9 +234,12 @@ export interface VSplitBarProps {
  * Полоска-разделитель: одна на все раздвоенные области приложения.
  *
  * `orientation` — как СТОЯТ ОБЛАСТИ, а не сама полоса: "vertical" делит экран на левую и
- * правую (полоса вертикальная), "horizontal" — на верхнюю и нижнюю. Зазор вокруг полосы
- * задаёт она сама (см. SplitPane.module.scss): области к ней не прилипают и своих отступов
- * не держат.
+ * правую (полоса вертикальная), "horizontal" — на верхнюю и нижнюю.
+ *
+ * Зазор вокруг полосы задаёт РАСКЛАДКА — `SplitView` ниже, одним `gap` на всех. Сама по себе
+ * полоса голая: поставленная руками в чужую вёрстку (рабочее пространство), она прилипнет к
+ * соседям, и это видно сразу. Раньше воздух добавляло каждое место по-своему, и «Соединения»
+ * с «Сервером» остались без него вовсе — разделитель там выглядел другим элементом (23.09).
  */
 export const VSplitBar: FC<VSplitBarProps> = ({
   onPointerDown, onDoubleClick, title, onNudge, orientation = "vertical",
@@ -262,5 +266,66 @@ export const VSplitBar: FC<VSplitBarProps> = ({
 );
 
 VSplitBar.displayName = "VSplitBar";
+
+export interface SplitViewProps {
+  /** Ключ localStorage: своя пропорция у каждой вкладки и каждого списка. */
+  storageKey: string;
+  /**
+   * Какой половиной управляют проценты: "left" — левой (две равные таблицы, форма отчёта),
+   * "right" — правой (список с предпросмотром). Видно это только при первом открытии и в
+   * пределах min/max — но путать местами нельзя, иначе сохранённая ширина зеркалится.
+   */
+  side?: "left" | "right";
+  /** Доля управляемой половины при первом открытии и её пределы. */
+  defaultPercent?: number;
+  min?: number;
+  max?: number;
+  /** Минимум ОБЕИХ половин в пикселях: 25 % узкого окна — полоска, в которую не влезет кнопка. */
+  minPx?: number;
+  main: React.ReactNode;
+  aside: React.ReactNode;
+  /** Довесок к классу половины: списку с предпросмотром нужен свой скролл, остальным — нет. */
+  mainClassName?: string;
+  asideClassName?: string;
+  /** Довесок к классу контейнера: форме отчётов нужен свой адаптив по ширине панели. */
+  className?: string;
+}
+
+/**
+ * SplitView — РАСКЛАДКА из двух областей с перетаскиваемой границей: контейнер, две половины
+ * и полоса между ними.
+ *
+ * ЗАЧЕМ ОТДЕЛЬНО ОТ `VSplitBar`. Полоса была общей давно, а вёрстку вокруг неё каждое место
+ * писало заново: свой контейнер, свои две половины с `flexBasis`, свой `gap` — и три набора
+ * классов на одно и то же (`.VSplit*` в админке 1С, `.PairBody`/`.NavPane` там же второй
+ * копией, `.splitView`/`.splitList` в списке с предпросмотром). Разъехались они предсказуемо:
+ * у «Соединений» и «Сервера» зазор потеряли совсем, и разделитель читался как другой элемент
+ * управления. Теперь раскладка одна, и правится она в одном месте (23.09).
+ *
+ * ИСКЛЮЧЕНИЕ — рабочее пространство (Dock). Там области не равноправны: пейны и «Технические
+ * сообщения» умеют стоять и столбцом, размер пишется в CSS-переменную мимо React, а полоса
+ * появляется и исчезает вместе со свёрнутой областью. Оно пользуется `VSplitBar` и
+ * `useSplitResize` напрямую — и это осознанно, а не недоделка.
+ */
+export const SplitView: FC<SplitViewProps> = ({
+  storageKey, side = "left", defaultPercent = 50, min = 20, max = 80, minPx,
+  main, aside, mainClassName, asideClassName, className,
+}) => {
+  const { percent, containerRef, startResize, reset, nudge } = useSplitResize({
+    storageKey, side, defaultPercent, min, max, ...(minPx ? { minPx } : {}),
+  });
+  // Проценты всегда про УПРАВЛЯЕМУЮ половину; первой в разметке стоит левая, кто бы ни управлял.
+  const mainPercent = side === "right" ? 100 - percent : percent;
+
+  return (
+    <div className={cx(styles.SplitView, className)} ref={containerRef}>
+      <div className={cx(styles.SplitViewPane, mainClassName)} style={{ flexBasis: `${mainPercent}%` }}>{main}</div>
+      <VSplitBar onPointerDown={startResize} onDoubleClick={reset} onNudge={nudge} />
+      <div className={cx(styles.SplitViewPane, asideClassName)} style={{ flexBasis: `${100 - mainPercent}%` }}>{aside}</div>
+    </div>
+  );
+};
+
+SplitView.displayName = "SplitView";
 
 export default VSplitBar;

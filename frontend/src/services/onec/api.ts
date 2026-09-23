@@ -1212,8 +1212,11 @@ export type ExtensionBase = {
 	organizationUuid: string | null;
 	organizationName: string | null;
 	extVersion: string;
-	/** Откуда версия: `agent` — сообщает агент сейчас, `registration` — со слов заявки, `none` — не знаем. */
-	extVersionSource: "agent" | "registration" | "none";
+	/**
+	 * Откуда версия: `agent` — сообщает агент сейчас, `chat` — база назвала её сама в запросе канала чата,
+	 * `registration` — со слов заявки, `none` — не знаем.
+	 */
+	extVersionSource: "agent" | "chat" | "registration" | "none";
 	/** Доступ к чату 1С: действует, сменён (идёт перекрытие), отозван, не выдавался. */
 	access: "active" | "rotating" | "revoked" | "none";
 	transport: "http" | "com" | null;
@@ -1221,12 +1224,18 @@ export type ExtensionBase = {
 	agentName: string | null;
 	approvedAt: string | null;
 	seenAt: string | null;
+	/** Когда база сама обращалась к сервису по каналу чата (С2 аудита 23.09). */
+	chatSeenAt: string | null;
+	/** Последний обмен — позднее из «видел агент» и «обратилась сама»: тем же числом его считает расширение. */
+	lastExchangeAt: string | null;
+	lastExchangeSource: "agent" | "chat" | "none";
 	/** Заявка подана, решения нет: база просится, доступа пока нет. */
 	pending: boolean;
 };
 
-export const fetchExtensionBases = () =>
-	aiFetch<{ items: ExtensionBase[] }>("/v1/onec/extension-bases");
+/** `fresh` — по кнопке «Обновить»: читать срезы агентов мимо кэша (обычное открытие обходится кэшем). */
+export const fetchExtensionBases = (fresh = false) =>
+	aiFetch<{ items: ExtensionBase[] }>(`/v1/onec/extension-bases${fresh ? "?fresh=1" : ""}`);
 
 export const fetchChatCalls = (baseId?: string, limit = 200) =>
 	aiFetch<{ items: ChatCall[] }>(`/v1/onec/chat-calls?limit=${limit}${baseId ? `&baseId=${encodeURIComponent(baseId)}` : ""}`);

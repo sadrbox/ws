@@ -248,6 +248,15 @@ const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
    * Prisma в `not` строки со значением NULL не возвращает (проверено на живой базе), и «не из 1С»
    * так не выразить.
    */
+  /*
+   * СТАТУС В СПИСКЕ — ИЗ СПРАВОЧНИКА (С3.3 аудита 23.09). Подписи статусов были перечислены в columns.json
+   * («new» → «Новая» и так далее), тогда как форма и сервис давно работают со справочником `TodoStatus`:
+   * добавленный статус в списке было не увидеть. Хуже того, тип колонки `select` таблица не умеет вовсе —
+   * ячейка выходила ПУСТОЙ, а не с сырым кодом. Подпись берём там же, где её берёт форма; неизвестный код
+   * показываем как есть: пустая ячейка не отличима от «статуса нет».
+   */
+  const { statuses } = useTodoStatuses();
+  const statusLabels = useMemo(() => new Map(statuses.map((s) => [s.code, s.name])), [statuses]);
   const [origin, setOrigin] = useState("");
   const originFilter = origin === ONEC_CHAT_SOURCE
     ? { origin: ONEC_CHAT_SOURCE }
@@ -260,7 +269,14 @@ const TodosList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) 
       variant={variant} onSelectItem={onSelectItem} ownerUuid={ownerUuid} ownerField={ownerField}
       extraQueryParams={extraQueryParams} defaultSort={{ id: "desc" }}
       extraFilter={originFilter}
-      renderCell={(row, col) => (col.identifier === "sourceLabel" ? sourceCellText(row) : undefined)}
+      renderCell={(row, col) => {
+        if (col.identifier === "sourceLabel") return sourceCellText(row);
+        if (col.identifier === "status") {
+          const code = asText(row.status);
+          return <span>{statusLabels.get(code) ?? code}</span>;
+        }
+        return undefined;
+      }}
       extraButtons={(
         <FieldSelect name="todos_origin" label={translate("origin")} size="sm" value={origin}
           onChange={(e) => setOrigin(e.target.value)}

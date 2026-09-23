@@ -4,7 +4,6 @@
 	{ "identifier": "status", "type": "string", "width": "140px", "minWidth": "90px", "alignment": "left", "visible": true, "inlist": true },
 	{ "identifier": "serverName", "type": "string", "width": "180px", "minWidth": "110px", "alignment": "left", "visible": true, "inlist": true },
 	{ "identifier": "onecVersion", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "left", "visible": true, "inlist": true },
-	{ "identifier": "extVersion", "type": "string", "width": "150px", "minWidth": "100px", "alignment": "left", "visible": true, "inlist": true },
 	{ "identifier": "published", "type": "string", "width": "150px", "minWidth": "100px", "alignment": "left", "visible": true, "inlist": true },
 	{ "identifier": "scheduledJobsDenied", "type": "string", "width": "180px", "minWidth": "120px", "alignment": "left", "visible": true, "inlist": true },
 	{ "identifier": "publishUrl", "type": "string", "width": "280px", "minWidth": "160px", "alignment": "left", "visible": false, "inlist": true },

@@ -12,7 +12,6 @@ import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppContext } from "src/app/context";
 import { buildOnecPermissions, type OnecPermissions } from "./onecPermissions";
 import type { NoticeItem } from "src/components/Notice";
-import { VSplitBar, useSplitResize } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import {
 	fetchBaseExtensions, fetchBaseUsers, fetchAgents, fetchServers, hasCapability,
@@ -580,6 +579,22 @@ export const QueryError: FC<{ error: unknown; source?: string; noticeKey?: strin
 };
 
 /**
+ * СВОДНЫЙ СПИСОК, ЗАКРЫТЫЙ УСТАНОВКОЙ — ОДНО ОБЪЯСНЕНИЕ ВМЕСТО ПУСТОЙ ТАБЛИЦЫ С ОШИБКОЙ (С3.4 аудита 23.09).
+ *
+ * Вкладки разделов 1С открываются по праву «Администрирование 1С» (agentsAllow), а СВОДНЫЕ списки сервиса — заявки,
+ * токены, БИНы, базы с расширением — при `ONEC_SERVER_SCOPE=organizations` отдаются только администратору BuhProf.
+ * Ворота разные и оба законные: право панели говорит о кластерах и агентах СВОЕЙ организации, а сводка по всем
+ * клиентам установки — про чужие. Панель заранее знать этого не может: настройка живёт на сервере, поэтому узнаём
+ * по первому же ответу. Без этого человек с правом на агентов видел раздел, а внутри — 403 в каждой таблице.
+ */
+export const isSharedListForbidden = (error: unknown): boolean =>
+	(error as { code?: string } | null)?.code === "FORBIDDEN";
+
+export const SharedListForbidden: FC = () => (
+	<div className={styles.Hint}>{translate("onecSharedListsForbidden")}</div>
+);
+
+/**
  * Прогон чтения по нескольким базам — прямыми запросами, без задания.
  *
  * Задание (command_batches) существует для ИЗМЕНЯЮЩИХ операций: их результат по каждой
@@ -617,45 +632,3 @@ export async function checkBases(
 	return { ok, failed };
 }
 
-/**
- * Вертикальное разделение вкладки: список слева, зависимые строки справа, с перетаскиваемой
- * границей.
- *
- * Механика перетаскивания — общая (`useSplitResize` + `VSplitBar`), та же, что у списка с
- * предпросмотром и у форм отчётов: своя копия с ручным pointermove, клампом и персистом
- * разошлась бы с ними при первой же правке, а разделитель выглядел бы «похожим», но другим.
- *
- * Ширина запоминается по ключу вкладки: у «Расширений» и «Сеансов» разная осмысленная
- * пропорция, и общая настройка заставляла бы подгонять её при каждом переходе.
- *
- * Заголовков разделов здесь нет намеренно: каждая половина — таблица со своей командной
- * панелью, и лишняя строка текста над ней только съедала высоту.
- */
-export const VSplit: FC<{
-	/** Ключ для запоминания ширины: своя пропорция у каждой вкладки. */
-	storageKey: string;
-	main: React.ReactNode;
-	side: React.ReactNode;
-	/** Доля левой половины при первом открытии и её пределы: у списка-указателя она уже, чем у равных таблиц. */
-	defaultPercent?: number;
-	min?: number;
-	max?: number;
-}> = ({ storageKey, main, side, defaultPercent = 50, min = 20, max = 80 }) => {
-	// side: "left" — управляем левой (главной) половиной; границы 20–80%: узкая колонка
-	// бесполезна, а «схлопнуть» половину случайным движением мыши — потерять таблицу.
-	const { percent, containerRef, startResize, reset, nudge } = useSplitResize({
-		storageKey: `onec_vsplit_${storageKey}`,
-		side: "left",
-		defaultPercent,
-		min,
-		max,
-	});
-
-	return (
-		<div className={styles.VSplit} ref={containerRef}>
-			<div className={styles.VSplitMain} style={{ flexBasis: `${percent}%` }}>{main}</div>
-			<VSplitBar onPointerDown={startResize} onDoubleClick={reset} onNudge={nudge} />
-			<div className={styles.VSplitSide} style={{ flexBasis: `${100 - percent}%` }}>{side}</div>
-		</div>
-	);
-};

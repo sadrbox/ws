@@ -138,6 +138,10 @@ export interface TableProps {
    *  пейнов, где тулбар вынесен на уровень панели (usePaneToolbar). По умолчанию
    *  false — на все существующие таблицы не влияет (референс pane-toolbar). */
   hideToolbar?: boolean;
+  /** Если true — делить высоту с соседями, а не держать свой минимум: для областей, где
+   *  таблиц две и вместе они перерастают отведённое место (раздел «Расширение БухПроф-AI»
+   *  → «Доступ AI»). Строки прокручиваются внутри таблицы. По умолчанию false. */
+  fitHeight?: boolean;
   /** Раскрытые строки (expand) */
   expandedRowIds?: Set<string>;
   /** Рендер содержимого раскрытой строки */
@@ -407,6 +411,7 @@ const Table: FC<TableProps> = memo((props) => {
     reloadTitle,
     reloading = false,
     hideToolbar = false,
+    fitHeight = false,
     expandedRowIds,
     renderExpandedRow,
     childRows,
@@ -1080,7 +1085,7 @@ const Table: FC<TableProps> = memo((props) => {
         />
       )}
 
-      <div className={styles.TableWrapper}>
+      <div className={fitHeight ? `${styles.TableWrapper} ${styles.TableWrapperFit}` : styles.TableWrapper}>
         {!hideToolbar && <TableControlPanel
           variant={variant}
           componentName={componentName}
