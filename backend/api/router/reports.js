@@ -1,10 +1,48 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, canAccessModel } from "../../utils/auth.js";
+import { reportSubject } from "../../utils/routeSubjects.js";
 import { resolveCostingMethod } from "../../services/accountingPosting.js";
 import { replayProductCosting } from "../../services/costingReplay.js";
 
 const router = express.Router();
+
+/**
+ * ОТЧЁТ ТРЕБУЕТ ПРАВА НА СВОЙ ПРЕДМЕТ (П2 разбора `docs/DESIGN_PREINSTALL_AUDIT_2026-09-24.md`).
+ *
+ * Отчёты фильтровали по организации и больше ничего не спрашивали, а в меню были закрыты
+ * правами — то есть запрет существовал ТОЛЬКО в интерфейсе. Прямой запрос к
+ * `/api/v1/reports/sales-by-product` отдавал выручку сотруднику, которому продажи не открывали.
+ *
+ * Предмет каждого отчёта описан в `utils/routeSubjects.js`. Неописанный отчёт (новый, забыли
+ * внести) в режиме наблюдения пропускается с записью в журнал — иначе правка гасила бы то, чего
+ * не видела; в режиме `deny` закрывается.
+ *
+ * ⚠ ПРОВЕРИТЬ ПОТОМ: после раздачи профилей (О2) включить `ACCESS_UNKNOWN_ROUTES=deny` и
+ * убедиться, что у бухгалтера и руководителя отчёты на месте, а у кладовщика — нет.
+ */
+const seenUndescribedReports = new Set();
+function requireReportAccess(name) {
+	return async (req, res, next) => {
+		const model = reportSubject(name);
+		if (!model) {
+			if (process.env.ACCESS_UNKNOWN_ROUTES === "deny") {
+				return res.status(403).json({ success: false, code: "REPORT_NOT_DESCRIBED", message: "Отчёт не описан в реестре прав" });
+			}
+			if (!seenUndescribedReports.has(name)) {
+				seenUndescribedReports.add(name);
+				console.warn(`[access] отчёт /reports/${name} не описан в REPORT_SUBJECTS — пропущен без проверки прав`);
+			}
+			return next();
+		}
+		if (await canAccessModel(req, model)) return next();
+		return res.status(403).json({
+			success: false,
+			code: "FORBIDDEN",
+			message: "Нет доступа к данным этого отчёта",
+		});
+	};
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,7 +80,7 @@ function buildDocWhere(req, { dateFrom, dateTo, organizationUuid } = {}) {
 
 // ─── GET /reports/sales-by-product ───────────────────────────────────────────
 // Params: dateFrom, dateTo, organizationUuid, counterpartyUuid
-router.get("/reports/sales-by-product", async (req, res) => {
+router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
 
@@ -216,7 +254,7 @@ function enumerateMonths(fromYm, toYm) {
 	}
 	return out;
 }
-router.get("/reports/sales-by-product-xyz", async (req, res) => {
+router.get("/reports/sales-by-product-xyz", requireReportAccess("sales-by-product-xyz"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
 
@@ -316,7 +354,7 @@ router.get("/reports/sales-by-product-xyz", async (req, res) => {
 //   Прибыль      = Сумма продажи − Себестоимость проданного
 //
 // Params: dateFrom, dateTo, organizationUuid, warehouseUuid
-router.get("/reports/material-statement", async (req, res) => {
+router.get("/reports/material-statement", requireReportAccess("material-statement"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, warehouseUuid } = req.query;
 
@@ -432,7 +470,7 @@ router.get("/reports/material-statement", async (req, res) => {
 // в точности как fifoCost (services/accountingPosting.js), поэтому разбивка
 // согласована с ФИФО-себестоимостью списания.
 // Params: organizationUuid, warehouseUuid, productUuid, dateTo.
-router.get("/reports/inventory-batches", async (req, res) => {
+router.get("/reports/inventory-batches", requireReportAccess("inventory-batches"), async (req, res) => {
 	try {
 		const { organizationUuid, warehouseUuid, productUuid, dateTo } = req.query;
 		const where = { ...tenantFilter(req) };
@@ -517,7 +555,7 @@ router.get("/reports/inventory-batches", async (req, res) => {
 // ─── GET /reports/product-movements ──────────────────────────────────────────
 // Детализация приход/расход по конкретному товару (только проведённые).
 // Params: productUuid, dateFrom, dateTo, organizationUuid
-router.get("/reports/product-movements", async (req, res) => {
+router.get("/reports/product-movements", requireReportAccess("product-movements"), async (req, res) => {
 	try {
 		const { productUuid, dateFrom, dateTo, organizationUuid } = req.query;
 		if (!productUuid) return res.status(400).json({ success: false, message: "productUuid обязателен" });
@@ -616,7 +654,7 @@ router.get("/reports/product-movements", async (req, res) => {
 // Продажи по менеджерам (аналитика учёта «Manager»). Только проведённые
 // документы. Реализация — оборот продаж, возврат от покупателя — уменьшает.
 // Params: dateFrom, dateTo, organizationUuid.
-router.get("/reports/sales-by-manager", async (req, res) => {
+router.get("/reports/sales-by-manager", requireReportAccess("sales-by-manager"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid } = req.query;
 		const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -731,7 +769,7 @@ function allowedOrgArray(req) {
 	return []; // ни активной, ни разрешённых — не видит ничего
 }
 
-router.get("/reports/user-performance", async (req, res) => {
+router.get("/reports/user-performance", requireReportAccess("user-performance"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid } = req.query;
 		const from = dateFrom ? new Date(dateFrom) : null;

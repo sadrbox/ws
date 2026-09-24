@@ -181,6 +181,12 @@ export const AUTH_ACTIONS = {
 	PASSWORD_CHANGED: "password_changed",
 	TWO_FACTOR_ENABLED: "2fa_enabled",
 	TWO_FACTOR_DISABLED: "2fa_disabled",
+	// Вход отклонён не из-за пароля: учётная запись верна, но работать не с чем (О6).
+	// Отдельное событие, а не login_failed: подбор пароля и «нет организаций» — разные
+	// поводы для тревоги, и смешивать их в одном счётчике значит потерять оба.
+	LOGIN_DENIED: "login_denied",
+	ORG_REGISTERED: "org_registered",
+	ORG_JOINED: "org_joined",
 };
 
 /**

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { login, registerOrganization, joinOrganization } from "src/services/auth";
+import { login, registerOrganization, joinOrganization, fetchInstallation } from "src/services/auth";
 import { translate } from "src/i18";
 import styles from "./LoginForm.module.scss";
 
@@ -22,15 +22,31 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [twoFaRequired, setTwoFaRequired] = useState(false);
   const [code, setCode] = useState("");
+  /*
+   * ВХОД ЕСТЬ, ОРГАНИЗАЦИЙ НЕТ (О6 плана PLAN_INSTALL_MODES_2026-09-24.md). Пароль верный, но
+   * работать не с чем: показываем не красную строку «ошибка авторизации», а следующий шаг —
+   * код приглашения. Иначе человек решит, что ошибся паролем, и будет вводить его заново.
+   */
+  const [noOrganizations, setNoOrganizations] = useState(false);
+  /* null — сервер не сказал (старая сборка, нет связи, режим не выбран): ведём себя как раньше. */
+  const [selfRegistration, setSelfRegistration] = useState<boolean | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     firstFieldRef.current?.focus();
   }, [mode]);
 
+  // Режим установки решает, показывать ли вкладку регистрации: рисовать её там, где сервер
+  // ответит отказом, — значит обещать несуществующее.
+  useEffect(() => {
+    let alive = true;
+    void fetchInstallation().then((i) => { if (alive) setSelfRegistration(i.selfRegistration); });
+    return () => { alive = false; };
+  }, []);
+
   const resetFields = useCallback(() => {
     setUsername(""); setPassword(""); setEmail(""); setBin(""); setOrgName(""); setInviteCode("");
-    setError(null); setInviteResult(null);
+    setError(null); setInviteResult(null); setNoOrganizations(false);
   }, []);
 
   const switchMode = useCallback((m: AuthMode) => {
@@ -47,6 +63,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
     try {
       const result = await login(trimmed, password || undefined, code || undefined);
       if (result.success) onLoginSuccess();
+      else if (result.code === "NO_ORGANIZATIONS") {
+        // Дальше — вкладка «По приглашению»; имя пользователя не сбрасываем, оно верное.
+        setNoOrganizations(true);
+        setError(null);
+      }
       else if (result.twoFactorRequired) {
         setTwoFaRequired(true);
         // Ошибку показываем только если код уже вводился (повторная неверная попытка).
@@ -103,7 +124,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         {/* ── Переключатель режимов ── */}
         <div className={styles.modeTabs}>
           <button type="button" className={mode === "login" ? styles.modeActive : ""} onClick={() => switchMode("login")}>{translate("signin")}</button>
-          <button type="button" className={mode === "register" ? styles.modeActive : ""} onClick={() => switchMode("register")}>{translate("signup")}</button>
+          {selfRegistration !== false && (
+            <button type="button" className={mode === "register" ? styles.modeActive : ""} onClick={() => switchMode("register")}>{translate("signup")}</button>
+          )}
           <button type="button" className={mode === "join" ? styles.modeActive : ""} onClick={() => switchMode("join")}>{translate("byInvite")}</button>
         </div>
 
@@ -111,6 +134,17 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
           {mode === "login" ? translate("loginTitle") : mode === "register" ? translate("registerOrgTitle") : translate("joinOrgTitle")}
         </h2>
 
+        {noOrganizations && (
+          <div className={styles.notice}>
+            <strong>{translate("noOrganizationsTitle")}</strong>
+            <br />
+            {translate("noOrganizationsHint")}
+            <br />
+            <button type="button" className={styles.linkButton} onClick={() => switchMode("join")}>
+              {translate("byInvite")}
+            </button>
+          </div>
+        )}
         {error && <div className={styles.error}>{error}</div>}
         {inviteResult && <div className={styles.success}>{translate("inviteResultLabel")} <strong>{inviteResult}</strong><br />{translate("inviteResultHint")}</div>}
 

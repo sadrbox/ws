@@ -1,6 +1,7 @@
 import express from "express";
 import { idSearchCondition } from "../../utils/searchId.js";
 import { prisma } from "../../prisma/prisma-client.js";
+import { getQuotas, exceeds } from "../../services/quotas.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -234,6 +235,31 @@ router.post("/users", async (req, res) => {
 			return res
 				.status(400)
 				.json({ success: false, message: "Логин обязателен" });
+		}
+
+		/*
+		 * КВОТА ПОЛЬЗОВАТЕЛЕЙ (И3 плана INSTALL_MODES).
+		 *
+		 * На общем сервере арендаторы делят один процесс и одну базу, и число учётных записей —
+		 * самый простой способ съесть чужое. Предел назначается осознанно (0 или пусто — без
+		 * предела), поэтому на своей установке клиента ничего не меняется.
+		 *
+		 * Считаем по ЧЛЕНСТВАМ в организации, а не по всем пользователям базы: в режиме группы
+		 * один человек состоит в нескольких организациях, и общий счётчик врал бы каждой.
+		 */
+		const quotaOrg = req.user?.organizationUuid ?? null;
+		if (quotaOrg) {
+			const { users: limit } = await getQuotas(quotaOrg);
+			if (limit) {
+				const current = await prisma.accessRight.count({ where: { organizationUuid: quotaOrg } });
+				if (exceeds(current, limit, 1)) {
+					return res.status(409).json({
+						success: false,
+						code: "QUOTA_EXCEEDED",
+						message: `Достигнут предел числа пользователей организации (${limit})`,
+					});
+				}
+			}
 		}
 
 		const item = await prisma.user.create({

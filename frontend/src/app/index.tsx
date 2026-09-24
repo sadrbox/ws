@@ -13,6 +13,7 @@ import { clearOfflineDb } from "src/services/offlineDb";
 import { registerServiceWorker } from "src/services/registerSW";
 
 import { translate, getTranslation } from "src/i18";
+import { MODULE_ONEC } from "src/config/buildModules";
 import { onLiveEvent } from "src/services/liveEvents";
 import { showToast } from "src/components/UIToast";
 import { Navbar, NavList, ErrorBoundary, Screen, LoadingSpinner, Container } from "../components/UI";
@@ -240,6 +241,10 @@ const App: React.FC = () => {
   }, [promotePane]);
 
   // Навбар (можно вынести в отдельный хук / компонент позже)
+  // Идентификатор раздела «Управление 1С» берём безусловно: состав сборки не должен менять
+  // порядок вызова хуков — иначе клиентская поставка падала бы на правилах React.
+  const onecNavId = useUID();
+
   const initialNavbar: TypeNavbarProps[] =
     [
       // «Все разделы» — полное меню одним списком: пользователю, который не помнит, в
@@ -250,9 +255,18 @@ const App: React.FC = () => {
       { id: useUID(), isActive: false, title: translate("accounting"), component: <NavList label="Accounting" /> },
       { id: useUID(), isActive: false, title: translate("hr"), component: <NavList label="HR" /> },
       { id: useUID(), isActive: false, title: translate("crm"), component: <NavList label="CRM" /> },
-      // Администрирование: серверы 1С (кластеры) и службы-агенты. Отдельный раздел — это про наше
-      // хозяйство, а не про учёт, и искать его среди документов и справочников неоткуда.
-      { id: useUID(), isActive: false, title: translate("administration"), component: <NavList label="Administration" /> },
+      /*
+       * УПРАВЛЕНИЕ 1С — серверы 1С (кластеры), службы-агенты и расширение в базах. Отдельный
+       * раздел: это про наше хозяйство, а не про учёт, и искать его среди документов неоткуда.
+       * Переименован из «Администрирования» 24.09: под прежним названием ждали пользователей и
+       * права, а они живут в «Настройках».
+       *
+       * МОДУЛЬ ПОСТАВКИ: на установке клиента его нет вовсе (VITE_MODULE_ONEC=0) — управление
+       * серверами 1С ведёт консалтинговая компания у себя. См. src/config/buildModules.ts.
+       */
+      ...(MODULE_ONEC
+        ? [{ id: onecNavId, isActive: false, title: translate("onecManagement"), component: <NavList label="Administration" /> }]
+        : []),
       { id: useUID(), isActive: false, title: translate("settings"), component: <NavList label="Settings" /> },
     ]
 

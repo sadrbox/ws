@@ -63,10 +63,24 @@ export async function auditMiddleware(req, res, next) {
 		// Не нашли/не смогли — журналируем то, что есть.
 	}
 
+	/*
+	 * СЛЕД «ПО ОБСЛУЖИВАНИЮ» (К5 плана PLAN_INSTALL_MODES_2026-09-24.md).
+	 *
+	 * Когда сотрудник обслуживающей фирмы работает в учёте клиента, запись в журнале обязана
+	 * говорить об этом: чьими руками сделано и по какой связи. Без такого следа у клиента нет
+	 * оснований доверять аутсорсеру, а при разборе — ответа на вопрос «кто это провёл».
+	 *
+	 * Определяем по тому, ЧЬЯ организация затронута: своя она пользователю по членству или
+	 * досталась назначением. Пометка появляется только во втором случае.
+	 */
+	const servicedOrg = req.user?.serviceContext?.get?.(req.user?.organizationUuid);
 	const ctx = {
 		host: req.hostname ?? null,
 		ip: req.ip ?? null,
 		user: req.user,
+		...(servicedOrg
+			? { props: { viaService: true, linkUuid: servicedOrg.linkUuid, profile: servicedOrg.profile } }
+			: {}),
 	};
 
 	const originalJson = res.json.bind(res);

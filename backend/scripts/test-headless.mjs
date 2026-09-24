@@ -15,8 +15,9 @@ const FILES = [
 	"auditLog", "bankImport", "barcodeUniqueness", "costing-avg", "costing-return",
 	"costingReplay", "depreciation", "documentNumbering", "esfClassification",
 	"esfErrorHandling", "esfInboundToPurchase", "esfInvoiceMapper", "esfLicense",
-	"esfResolver", "fiscalProvider", "govMappers", "importLandedCost", "listUtils",
+	"esfResolver", "fiscalProvider", "govMappers", "importLandedCost", "installAccessRules", "listUtils",
 	"openapi", "orgFieldValidation", "parse1cDate", "parseUploadErrors", "periodLock",
+	"permissionProfiles", "routeSubjects", "moduleRoutes", "recordScope", "supportMode", "isolationAudit", "quotas", "bin", "serviceLinks",
 	"recomputeCosting", "scheduler", "sortOrder", "twoFactor", "waConversations", "waResolve", "waWebhook",
 ].map((n) => path.join("__tests__", `${n}.test.js`));
 

@@ -1,11 +1,14 @@
-import { FC, useMemo, useCallback, useRef } from "react";
+import { FC, useMemo, useCallback, useRef, useState } from "react";
 import { useAppContext } from "src/app/context";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
 import type { TPane } from "src/app/types";
 import columnsJson from "./columns.json";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { fetchPermissionProfiles, applyPermissionProfile } from "src/services/permissionProfiles";
+import { showToast } from "src/components/UIToast";
+import { reportError } from "src/services/errors/route";
 import { FieldSelect } from "src/components/Field";
 import { Group, GroupCol } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
@@ -385,7 +388,9 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
   }, [userUuid, organizationUuid, getFirstUnused]);
 
   return (
-    <SubTable
+    <>
+      <ProfilePicker userUuid={userUuid} organizationUuid={organizationUuid} />
+      <SubTable
       model={ENDPOINT}
       componentName={SUBTABLE_COMPONENT_NAME}
       columnsJson={columnsJson}
@@ -411,9 +416,69 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
       disableAdd={disableAddProp ?? false}
       extraQueryParams={organizationUuid ? { organizationUuid } : undefined}
       filterRows={filterRows}
-    />
+      />
+    </>
   );
 };
 AccessPermissionsTable.displayName = "AccessPermissionsTable";
+
+/**
+ * ВЫДАТЬ ПРАВА ОДНИМ ДЕЙСТВИЕМ (О2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+ *
+ * Право — строка «пользователь × модель», и моделей шестьдесят две. Завести бухгалтера значило
+ * проставить их руками, и так на каждого сотрудника и на каждой установке. Профиль раскладывает
+ * весь набор разом; дальше права правятся точечно в таблице ниже — профиль это ШАБЛОН, а не
+ * живая роль, и поправленное им больше не управляется.
+ *
+ * Показываем только когда известны и пользователь, и организация: права выдаются в организации,
+ * а не «вообще». У несохранённого пользователя выдавать нечему.
+ */
+const ProfilePicker: FC<{ userUuid?: string; organizationUuid?: string }> = ({ userUuid, organizationUuid }) => {
+  const queryClient = useQueryClient();
+  const [code, setCode] = useState("");
+  const profiles = useQuery({
+    queryKey: ["permission-profiles"],
+    queryFn: fetchPermissionProfiles,
+    staleTime: 5 * 60_000,
+    enabled: !!userUuid && !!organizationUuid,
+  });
+  const apply = useMutation({
+    mutationFn: () => applyPermissionProfile({ userUuid: userUuid!, organizationUuid: organizationUuid!, profile: code }),
+    onSuccess: (r) => {
+      showToast(`${translate("permProfileApplied")}: ${r.applied ?? ""}`.trim(), "success");
+      void queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+    },
+    onError: (e) => reportError(e, { source: translate("permProfileTitle") }),
+  });
+
+  if (!userUuid || !organizationUuid) return null;
+  const chosen = profiles.data?.find((p) => p.code === code);
+
+  return (
+    <Group>
+      <FieldSelect
+        name="perm_profile"
+        label={translate("permProfileTitle")}
+        size="sm"
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        options={[
+          { value: "", label: translate("permProfileNotChosen") },
+          ...(profiles.data ?? []).map((p) => ({ value: p.code, label: p.name })),
+        ]}
+      />
+      <Button
+        variant="secondary"
+        disabled={!code || apply.isPending}
+        // Предупреждаем ДО действия: назначение стирает то, что человек правил руками.
+        title={chosen?.description ?? translate("permProfileHint")}
+        onClick={() => { if (window.confirm(translate("permProfileConfirm"))) apply.mutate(); }}
+      >
+        {translate("permProfileApply")}
+      </Button>
+    </Group>
+  );
+};
+ProfilePicker.displayName = "AccessPermissionsProfilePicker";
 
 export { AccessPermissionsForm, AccessPermissionsList, AccessPermissionsTable };

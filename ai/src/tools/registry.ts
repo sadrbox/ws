@@ -419,6 +419,101 @@ export const TOOLS: ToolSpec[] = [
 		mutating: true,
 		buildPayload: (i, ctx) => ({ documentId: known(ctx, "documentId", i.documentId) }),
 	},
+	/*
+	 * ПЕРВИЧКА ПОСТАВЩИКА ИЗ PDF (И2, docs/TASK_SERVICE_PURCHASE_FROM_PDF_2026-09-24.md). Два шага, а не
+	 * один вызов с dryRun: сопоставление читает, создание пишет — у них разные права, подтверждения и
+	 * идемпотентность. Поля документа модель не передаёт вовсе: payload для 1С сервис собирает из
+	 * сохранённого разбора по purchaseDocumentId, как у выписки.
+	 */
+	{
+		name: "match_purchase_document",
+		description:
+			"Сопоставить строки распознанного документа поставщика (purchaseDocumentId из сообщения о вложении) со справочниками 1С. Только чтение — ничего не создаёт. "
+			+ "Ответ: поставщик (found/ambiguous/new) и по каждой строке index — status matched/ambiguous/new, productId, matchedBy (article/history/name/translit), candidates. "
+			+ "Обязателен перед create_purchase_from_document.",
+		inputSchema: { type: "object", properties: { purchaseDocumentId: { type: "string", description: "id распознанного документа из сообщения о вложении" } }, required: ["purchaseDocumentId"], additionalProperties: false },
+		operation: "READ",
+		commandType: "MATCH_PURCHASE_DOCUMENT",
+		mutating: false,
+		buildPayload: (i, ctx) => ({ purchaseDocumentId: known(ctx, "purchaseDocumentId", i.purchaseDocumentId) }),
+	},
+	{
+		name: "create_purchase_from_document",
+		description:
+			"Создать в 1С НЕ проведённое поступление по распознанному документу поставщика — только после match_purchase_document этого же документа. "
+			+ "resolution — решение по КАЖДОЙ строке документа (по index, каждая ровно один раз): productId из ответа сопоставления (для ambiguous — кандидат, которого выбрал человек) "
+			+ "ИЛИ createProduct — только если человек явно согласился завести новую номенклатуру. Спорные и новые строки решает человек, а не ты. "
+			+ "warehouseId (get_warehouses) — для товаров; contractId — если 1С попросит выбрать договор.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				purchaseDocumentId: { type: "string", description: "id распознанного документа" },
+				resolution: {
+					type: "array",
+					minItems: 1,
+					items: {
+						type: "object",
+						properties: {
+							index: { type: "integer", minimum: 1, description: "index строки документа" },
+							productId: { type: "string", description: "id номенклатуры из ответа match_purchase_document" },
+							createProduct: {
+								type: "object",
+								description: "новая номенклатура — только с согласия человека",
+								properties: {
+									name: { type: "string" },
+									kind: { type: "string", enum: ["goods", "service"] },
+									unit: { type: "string" },
+									article: { type: "string" },
+								},
+								required: ["name", "kind"],
+								additionalProperties: false,
+							},
+						},
+						required: ["index"],
+						additionalProperties: false,
+					},
+				},
+				warehouseId: { type: "string", description: "id склада из get_warehouses (для товаров)" },
+				contractId: { type: "string", description: "id договора из кандидатов, если 1С попросила выбрать" },
+			},
+			required: ["purchaseDocumentId", "resolution"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "CREATE_PURCHASE_FROM_DOCUMENT",
+		mutating: true,
+		buildPayload: (i, ctx) => {
+			const rows = Array.isArray(i.resolution) ? (i.resolution as Record<string, unknown>[]) : [];
+			if (!rows.length) throw new ToolInputError("resolution", "resolution: нужно решение хотя бы по одной строке");
+			const seen = new Set<number>();
+			const resolution = rows.map((r, n) => {
+				const index = Math.trunc(num(r?.index, NaN, `resolution[${n}].index`));
+				if (!(index > 0)) throw new ToolInputError(`resolution[${n}].index`, `resolution[${n}].index: номер строки документа с 1`);
+				if (seen.has(index)) throw new ToolInputError(`resolution[${n}].index`, `resolution: строка ${index} указана дважды`);
+				seen.add(index);
+				const cp = r.createProduct as Record<string, unknown> | undefined;
+				if (r.productId !== undefined && cp !== undefined) throw new ToolInputError(`resolution[${n}]`, `resolution[${n}]: либо productId, либо createProduct — не оба`);
+				if (r.productId !== undefined) return { index, productId: known(ctx, `resolution[${n}].productId`, r.productId) };
+				if (!cp || typeof cp !== "object") throw new ToolInputError(`resolution[${n}]`, `resolution[${n}]: нужен productId из сопоставления или createProduct`);
+				const kind = str(cp.kind, `resolution[${n}].createProduct.kind`);
+				if (kind !== "goods" && kind !== "service") throw new ToolInputError(`resolution[${n}].createProduct.kind`, "createProduct.kind: goods или service");
+				return {
+					index,
+					createProduct: {
+						name: str(cp.name, `resolution[${n}].createProduct.name`).slice(0, 200), kind,
+						...(typeof cp.unit === "string" && cp.unit.trim() ? { unit: cp.unit.trim().slice(0, 50) } : {}),
+						...(typeof cp.article === "string" && cp.article.trim() ? { article: cp.article.trim().slice(0, 100) } : {}),
+					},
+				};
+			});
+			return {
+				purchaseDocumentId: known(ctx, "purchaseDocumentId", i.purchaseDocumentId),
+				resolution: resolution.sort((a, b) => a.index - b.index),
+				...(i.warehouseId ? { warehouseId: known(ctx, "warehouseId", i.warehouseId) } : {}),
+				...(i.contractId ? { contractId: known(ctx, "contractId", i.contractId) } : {}),
+			};
+		},
+	},
 	{
 		name: "create_reconciliation_act",
 		description:

@@ -27,6 +27,8 @@ model User {
   updatedAt                    DateTime              @default(now()) @updatedAt
   deletedAt                    DateTime?
   accessPermissions            AccessPermission[]
+  /// Клиенты, которых этот сотрудник ведёт по договору обслуживания (К2).
+  serviceAssignments           ServiceAssignment[]   @relation("UserServiceAssignments")
   curatorTodos                 Todo[]                @relation("TodoCurator")
   executorTodos                Todo[]                @relation("TodoExecutor")
   employee                     Employee?             @relation(fields: [employeeUuid], references: [uuid], onDelete: SetNull)
@@ -193,9 +195,78 @@ model Organization {
   pipeActivities PipeActivity[] @relation("OrgPipeActivities")
   chatMessages   ChatMessage[]  @relation("OrgChatMessages")
 
+  /// Вид организации (К1, 24.09): "client" — обычная, "service" — обслуживающая (аутсорсинг).
+  /// Обслуживающая — такая же организация со своим БИН и своим учётом; связь с клиентами
+  /// выражена ОТНОШЕНИЕМ (service_links), а не вложенностью: клиент, уходящий к другому
+  /// бухгалтеру, должен уходить без переноса данных.
+  kind           String         @default("client")
+  servicesGiven  ServiceLink[]  @relation("ServiceProviderLinks")
+  servicesTaken  ServiceLink[]  @relation("ServiceClientLinks")
+
   @@unique([externalSource, externalId])
   @@index([updatedAt])
   @@map("organizations")
+}
+
+/// СВЯЗЬ ОБСЛУЖИВАНИЯ: фирма ведёт учёт клиента (К1 плана PLAN_INSTALL_MODES_2026-09-24.md).
+///
+/// Отношение, а не вложенность. Иерархия «фирма — родитель клиентов» немедленно потребовала бы
+/// наследования прав, модулей и настроек учёта вниз, а расторжение договора превратилось бы в
+/// перенос данных.
+model ServiceLink {
+  id       Int    @id @default(autoincrement())
+  uuid     String @unique @default(uuid())
+  /// Обслуживающая организация (kind = "service").
+  serviceOrgUuid String
+  /// Обслуживаемый клиент.
+  clientOrgUuid  String
+  /// requested — фирма предложена, клиент ещё не подтвердил; active — работает;
+  /// suspended — приостановлено; revoked — прекращено. Отозванную связь не удаляем:
+  /// след «кто вёл учёт в таком-то году» нужен и клиенту, и при разборе.
+  state    String @default("requested")
+  /// Кто и когда подтвердил СО СТОРОНЫ КЛИЕНТА: доступ к чужому учёту без следа недопустим.
+  confirmedByUuid String?
+  confirmedAt     DateTime?
+  /// Срок договора: доступ прекращается сам, а не «когда вспомнят».
+  validUntil      DateTime?
+  /// Профиль прав, с которым сотрудники фирмы работают у клиента (services/permissionProfiles.js).
+  profile         String   @default("service_accountant")
+  /// Ключи модулей клиента, открытые фирме (пусто — все установленные у клиента).
+  modules         String?
+  note            String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  serviceOrg Organization @relation("ServiceProviderLinks", fields: [serviceOrgUuid], references: [uuid], onDelete: Cascade)
+  clientOrg  Organization @relation("ServiceClientLinks", fields: [clientOrgUuid], references: [uuid], onDelete: Cascade)
+  staff      ServiceAssignment[]
+
+  @@unique([serviceOrgUuid, clientOrgUuid])
+  @@index([clientOrgUuid])
+  @@index([state])
+  @@map("service_links")
+}
+
+/// НАЗНАЧЕНИЕ СОТРУДНИКА ФИРМЫ НА КЛИЕНТА (К2).
+///
+/// Доступ выдаётся через связь, а не копированием членства каждому: при 20 бухгалтерах и 200
+/// клиентах это 4000 записей, а отзыв доступа уволенному превращается в перебор двухсот
+/// организаций, где один пропуск — утечка чужого учёта.
+model ServiceAssignment {
+  id       Int    @id @default(autoincrement())
+  uuid     String @unique @default(uuid())
+  linkUuid String
+  userUuid String
+  /// Роль внутри обслуживания: "lead" — ведёт клиента, "assistant" — помогает.
+  role     String @default("lead")
+  createdAt DateTime @default(now())
+
+  link ServiceLink @relation(fields: [linkUuid], references: [uuid], onDelete: Cascade)
+  user User        @relation("UserServiceAssignments", fields: [userUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([linkUuid, userUuid])
+  @@index([userUuid])
+  @@map("service_assignments")
 }
 
 model Counterparty {

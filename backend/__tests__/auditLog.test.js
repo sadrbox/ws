@@ -107,7 +107,20 @@ test("shouldPrune: троттлинг раз в сутки", () => {
 });
 
 test("AUTH_ACTIONS покрывают события безопасности", () => {
+	/*
+	 * Список закреплён целиком намеренно: новое событие безопасности обязано быть осознанным
+	 * решением, а не побочным следствием правки. 24.09 добавлены три — вход отклонён не по
+	 * паролю (О6), регистрация организации и присоединение по приглашению (О1): по ним
+	 * восстанавливается, откуда в установке взялась организация и кто её завёл.
+	 */
 	assert.deepEqual(Object.values(AUTH_ACTIONS).sort(), [
-		"2fa_disabled", "2fa_enabled", "login", "login_failed", "password_changed",
+		"2fa_disabled", "2fa_enabled", "login", "login_denied", "login_failed",
+		"org_joined", "org_registered", "password_changed",
 	]);
+});
+
+test("LOGIN_DENIED отделён от LOGIN_FAILED", () => {
+	// Подбор пароля и «учётная запись верна, но организаций нет» — разные поводы для тревоги.
+	// Слитые в один счётчик, они теряют оба: всплеск отказов перестаёт что-либо значить.
+	assert.notEqual(AUTH_ACTIONS.LOGIN_DENIED, AUTH_ACTIONS.LOGIN_FAILED);
 });

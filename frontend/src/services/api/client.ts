@@ -4,32 +4,56 @@ import axios, {
 	type AxiosError,
 } from "axios";
 import { getOnecServer } from "src/services/onec/serverScope";
+import { isGroupScope } from "src/services/orgScope";
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "../auth";
 import { isNetworkError as isNetworkLikeError } from "../networkUtils";
 import { notify } from "src/components/TechMessages/store";
 import { translate } from "src/i18";
 
-// Локальный API для разработки по LAN/IP. Хост конфигурируется через env
-// (VITE_LOCAL_API_URL), чтобы не хардкодить конкретный адрес рабочей станции;
-// фолбэк оставлен для совместимости с прежним окружением.
+/*
+ * АДРЕС API — ИЗ НАСТРОЙКИ УСТАНОВКИ, А НЕ ИЗ ДОГАДКИ (У2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+ *
+ * Раньше адрес ВЫВОДИЛСЯ из имени хоста браузера: «192.168.* или localhost → локальный, иначе →
+ * api.aleppo.kz». На нашем единственном сервере это работало, на чужом домене угадывает неверно
+ * — и фронт клиента стучится к нам. Это не настройка, а совпадение.
+ *
+ * Теперь по убыванию явности:
+ *   1. VITE_API_URL — адрес, заданный при сборке установки. Единственный правильный способ;
+ *   2. тот же источник, что и страница (`/api/v1`), когда фронт и бэкенд за одним прокси, —
+ *      типовая установка за nginx или туннелем;
+ *   3. прежнее угадывание — только для нашей исторической раскладки (фронт 5173, бэкенд 3000)
+ *      и для Tauri, где страница грузится с tauri.localhost и об установке ничего не говорит.
+ *
+ * ⚠ ПРОВЕРИТЬ ПОТОМ: на каждой новой установке задавать VITE_API_URL при сборке; шаг 3 — костыль
+ * совместимости и должен уйти, когда установщик начнёт писать .env сам.
+ */
+const CONFIGURED_API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || "";
 const LOCAL_API_URL = (import.meta.env.VITE_LOCAL_API_URL as string | undefined) || "http://192.168.1.112:3000/api/v1";
-const REMOTE_API_URL = "https://api.aleppo.kz/api/v1";
+const REMOTE_API_URL = (import.meta.env.VITE_REMOTE_API_URL as string | undefined) || "https://api.aleppo.kz/api/v1";
+/** Порт исторической раскладки: фронт отдаётся отдельно от бэкенда. */
+const LEGACY_SPLIT_PORTS = ["5173", "4173"];
 
 /** Десктоп-клиент (Tauri): фронт зашит в бинарник, страница грузится с tauri.localhost. */
 const isTauri = (): boolean =>
 	typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 function getApiUrl(): string {
+	if (CONFIGURED_API_URL) return CONFIGURED_API_URL;
+
 	// В Tauri сервер API — всегда удалённый: локального dev-хоста рядом нет, а полагаться
 	// на hostname нельзя (там tauri.localhost — совпадение, а не намерение).
 	if (isTauri()) return REMOTE_API_URL;
 
-	const { hostname } = window.location;
+	const { hostname, port, origin } = window.location;
 	const isLocal =
 		hostname.includes("192.168.") ||
 		hostname === "localhost" ||
 		hostname === "127.0.0.1";
-	return isLocal ? LOCAL_API_URL : REMOTE_API_URL;
+	// Историческая раскладка «фронт на своём порту»: бэкенд рядом не живёт. Сюда же — любой
+	// dev-сервер Vite: /api он не проксирует, а через туннель (aleppo.kz) порта в адресе нет.
+	if (import.meta.env.DEV || LEGACY_SPLIT_PORTS.includes(port)) return isLocal ? LOCAL_API_URL : REMOTE_API_URL;
+	// Обычная установка: фронт и API за одним адресом.
+	return `${origin}/api/v1`;
 }
 
 /** Базовый URL API (…/api/v1). Нужен для EventSource (SSE): axios его не обслуживает. */
@@ -96,6 +120,13 @@ apiClient.interceptors.request.use((config) => {
 	// Только прокси-эндпойнты панели 1С: лишний заголовок в остальных запросах — лишняя предварительная проверка.
 	if (onecServer && typeof config.url === "string" && /(^|\/)onec-/.test(config.url)) {
 		config.headers["X-Onec-Server"] = onecServer;
+	}
+
+	// Сводный вид по группе организаций (Г2): выбор зрителя, а не свойство запроса, — поэтому
+	// заголовком, как и выбранный сервер 1С. Сервер сам ограничит сводку доступными орг.
+	if (isGroupScope()) {
+		config.headers = config.headers ?? {};
+		config.headers["X-Org-Scope"] = "group";
 	}
 
 	return config;

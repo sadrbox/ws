@@ -2,6 +2,7 @@
 // Sub-таблица товара: GET (по productUuid) / POST / PUT / DELETE / batch.
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { checkOwnership } from "../../utils/auth.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { findBarcodeOwner } from "../../utils/barcodeUniqueness.js";
@@ -17,6 +18,24 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const { productUuid } = req.query;
 		if (!productUuid)
 			return res.status(400).json({ success: false, message: "Параметр productUuid обязателен" });
+
+		/*
+		 * ЧЕЙ ЭТО ТОВАР (И2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+		 *
+		 * Штрих-коды выбирались по одному лишь `productUuid`: зная идентификатор чужого товара,
+		 * можно было прочитать его коды, а по ним — найти сам товар в любой другой системе. На
+		 * общем сервере арендаторы друг другу посторонние, и «нужно знать uuid» защитой не
+		 * является: uuid попадает в ссылки, выгрузки и журналы.
+		 *
+		 * 404, а не 403: существование чужой записи — тоже сведение о ней.
+		 */
+		const owner = await prisma.product.findUnique({
+			where: { uuid: String(productUuid) },
+			select: { organizationUuid: true },
+		});
+		if (!checkOwnership(owner, req)) {
+			return res.status(404).json({ success: false, message: "Товар не найден" });
+		}
 
 		// Сортировка валидируется по схеме — неизвестные поля не улетают в Prisma.
 		const orderBy = buildOrderBy(MODEL, req.query.sort);

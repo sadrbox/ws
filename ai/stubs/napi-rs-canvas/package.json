@@ -1,0 +1,7 @@
+{
+  "name": "@napi-rs/canvas",
+  "version": "0.0.0-stub",
+  "description": "Заглушка: pdf.js нужен сервису только для извлечения текста. Настоящий @napi-rs/canvas собран с AVX и роняет Node на процессоре сервера (i7 920, без AVX) сигналом SIGILL.",
+  "main": "index.js",
+  "private": true
+}

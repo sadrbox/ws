@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { prisma } from "../../prisma/prisma-client.js";
+import { getQuotas } from "../../services/quotas.js";
 
 const router = express.Router();
 
@@ -91,6 +92,30 @@ router.post("/files", uploadFields, async (req, res) => {
 				success: false,
 				message: "ownerType, ownerUuid и file обязательны",
 			});
+		}
+
+		/*
+		 * КВОТА НА РАЗМЕР ОДНОГО ФАЙЛА (И3 плана INSTALL_MODES).
+		 *
+		 * Общий предел multer (50 МБ) одинаков для всех; на общем сервере арендатору можно
+		 * назначить свой, более строгий. Ноль или пусто — предел только общий, и тогда здесь
+		 * ничего не меняется.
+		 *
+		 * СУММАРНОГО ХРАНИЛИЩА ОРГАНИЗАЦИИ ЗДЕСЬ НЕТ, и это не забывчивость: у `AttachedFile`
+		 * нет поля организации — файл привязан к владельцу (`ownerType`+`ownerUuid`), и чтобы
+		 * сложить объём по организации, пришлось бы обойти все виды владельцев. Пока предел
+		 * один — на файл; суммарный появится вместе с полем организации у вложения.
+		 */
+		const quotaOrg = req.user?.organizationUuid ?? null;
+		if (quotaOrg) {
+			const { fileMb } = await getQuotas(quotaOrg);
+			if (fileMb && req.file.size > fileMb * 1024 * 1024) {
+				return res.status(413).json({
+					success: false,
+					code: "QUOTA_EXCEEDED",
+					message: `Файл больше разрешённого размера (${fileMb} МБ)`,
+				});
+			}
 		}
 
 		// Корректная обработка кириллических имён файлов

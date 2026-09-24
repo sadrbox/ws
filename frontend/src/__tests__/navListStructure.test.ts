@@ -87,9 +87,23 @@ it("Администрирование: кластеры, агенты и рас
 	expect(admin.match(/can\("OneCAdmin"\)/g)?.length).toBe(3);
 });
 
-it("раздел «Администрирование» есть в навбаре и отвечает на свой label", () => {
+it("раздел «Управление 1С» есть в навбаре и отвечает на свой label", () => {
+	/*
+	 * Переименован из «Администрирования» 24.09: под прежним названием ждали пользователей и
+	 * права, а они живут в «Настройках». Внутренний label остался `Administration` — менять его
+	 * значило бы потерять панели, восстановленные из localStorage по прежнему имени.
+	 */
 	expect(SRC).toContain('"Administration".toLocaleLowerCase()');
 	const app = readFileSync(resolve(__dirname, "../app/index.tsx"), "utf-8");
 	expect(app).toContain('<NavList label="Administration" />');
-	expect(app).toContain('translate("administration")');
+	expect(app).toContain('translate("onecManagement")');
+});
+
+it("раздел «Управление 1С» — модуль поставки и может отсутствовать в сборке", () => {
+	// На установке клиента раздела нет ни в меню, ни в сборке: серверами 1С управляет
+	// консалтинговая компания у себя (решение владельца 24.09).
+	const app = readFileSync(resolve(__dirname, "../app/index.tsx"), "utf-8");
+	expect(app).toContain("MODULE_ONEC");
+	// Идентификатор берётся безусловно: состав сборки не должен менять порядок вызова хуков.
+	expect(app).toContain("const onecNavId = useUID();");
 });

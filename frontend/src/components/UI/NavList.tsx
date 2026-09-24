@@ -373,7 +373,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
   );
 
   /**
-   * АДМИНИСТРИРОВАНИЕ — про наше хозяйство, а не про учёт: серверы 1С, службы и расширение в базах.
+   * УПРАВЛЕНИЕ 1С — про наше хозяйство, а не про учёт: серверы 1С, службы и расширение в базах.
    * Разделено по ПРЕДМЕТУ, а не по виду экрана: «Кластеры 1С» — сервер и его базы, «Агенты 1С» — службы, их
    * подключение и настройки, «Расширение БухПроф-AI» — то, что стоит внутри баз: заявки баз, версии, чат.
    * Право одно (OneCAdmin); что именно внутри доступно, решают вложенные разрешения (onecPermissions).
@@ -507,7 +507,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
   if (label.toLocaleLowerCase() === "Administration".toLocaleLowerCase()) {
     return (
       <div className={styles.NavListWrapper}>
-        <h1>{translate("administration")}</h1>
+        <h1>{translate("onecManagement")}</h1>
         <div className={styles.NavSection}>
           <AdministrationGroups />
         </div>

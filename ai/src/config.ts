@@ -124,6 +124,18 @@ const schema = z.object({
 	// Модель для чтения PDF выписок; по умолчанию — основная. Извлечение таблиц из многостраничных
 	// PDF — задача, где точность важнее цены, поэтому отдельная переменная, а не «что подешевле».
 	BANK_EXTRACT_MODEL: z.string().default(""),
+	/*
+	 * Что модель получает при чтении документа: auto — текст, извлечённый кодом (PDF с текстовым слоем, XLSX),
+	 * а без текста — сам PDF; file — всегда PDF целиком, как до 24.09. Переключатель отката: если путь через
+	 * текст начнёт ошибаться, `EXTRACT_INPUT=file` и перезапуск возвращают прежнее поведение без правки кода.
+	 */
+	EXTRACT_INPUT: z.enum(["auto", "file"]).default("auto"),
+	/*
+	 * Автоповтор: если документ, прочитанный по тексту, не сошёлся арифметически (итоги выписки, суммы строк
+	 * счёта), он перечитывается из PDF целиком и берётся результат с меньшим числом расхождений. Платится
+	 * второй вызов модели — только за такие документы.
+	 */
+	EXTRACT_RETRY_FILE: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
 	// Предел размера вложения PDF в чате (МБ). Anthropic принимает до 32 МБ и 100 страниц.
 	CHAT_ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(30).default(20),
 	/*
@@ -201,7 +213,7 @@ export function describe(cfg: Config): Record<string, unknown> {
 		env: cfg.NODE_ENV,
 		database: maskUrl(cfg.DATABASE_URL),
 		erpDatabase: maskUrl(cfg.ERP_DATABASE_URL),
-		llm: `${cfg.LLM_PROVIDER}/${cfg.LLM_MODEL} effort=${cfg.LLM_EFFORT} confirmWrite=${cfg.CONFIRM_WRITE} bankExtract=${cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL}`,
+		llm: `${cfg.LLM_PROVIDER}/${cfg.LLM_MODEL} effort=${cfg.LLM_EFFORT} confirmWrite=${cfg.CONFIRM_WRITE} bankExtract=${cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL} extractInput=${cfg.EXTRACT_INPUT}${cfg.EXTRACT_INPUT === "auto" && cfg.EXTRACT_RETRY_FILE ? "+retry" : ""}`,
 		anthropicKey: cfg.ANTHROPIC_API_KEY ? "задан" : "ПУСТО",
 		openaiKey: cfg.OPENAI_API_KEY ? "задан" : "ПУСТО",
 		openaiBaseUrl: cfg.OPENAI_BASE_URL || "(api.openai.com)",

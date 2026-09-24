@@ -1,7 +1,7 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
-import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership, directoryScope } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { findBarcodeOwner } from "../../utils/barcodeUniqueness.js";
 import { idSearchCondition } from "../../utils/searchId.js";
@@ -116,7 +116,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...(await directoryScope(req, "Product")) };
 		// Поиск по ВЛОЖЕННЫМ таблицам товара: «[штрихкод: 333]» ищет и в основном
 		// штрихкоде, и в дополнительных (отдельная таблица product_barcodes).
 		const nestedConds = buildNestedItemsConditions(MODEL, req.query.nested);

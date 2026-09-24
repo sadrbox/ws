@@ -7,8 +7,32 @@ import { isNetworkError } from "./networkUtils";
  * Помимо обычного message несёт признак twoFactorRequired из тела ответа.
  */
 interface AuthRequestError {
-	response?: { data?: { message?: string; twoFactorRequired?: boolean } };
+	response?: { data?: { message?: string; twoFactorRequired?: boolean; code?: string } };
 	message?: string;
+}
+
+/**
+ * Сведения об установке для экрана входа (О4). Читаются ДО входа: панель не должна рисовать
+ * вкладку регистрации там, где сервер ответит отказом.
+ *
+ * `selfRegistration: null` — режим установки не выбран: поведение остаётся прежним (вкладка
+ * показывается). Закрывать её на работающей установке только потому, что её никто не
+ * настраивал, нельзя.
+ */
+export interface InstallationInfo {
+	name: string | null;
+	mode: "service" | "isolated" | "group" | null;
+	selfRegistration: boolean | null;
+}
+
+export async function fetchInstallation(): Promise<InstallationInfo> {
+	try {
+		const res = await apiClient.get<{ success: boolean; data: InstallationInfo }>("/auth/installation");
+		return res.data?.data ?? { name: null, mode: null, selfRegistration: null };
+	} catch {
+		// Нет связи или старый сервер без этого маршрута — ведём себя как раньше.
+		return { name: null, mode: null, selfRegistration: null };
+	}
 }
 
 export interface OrgEntry {
@@ -115,7 +139,7 @@ export async function login(
 	username: string,
 	password?: string,
 	code?: string,
-): Promise<{ success: boolean; user?: AuthUser; message?: string; offline?: boolean; twoFactorRequired?: boolean }> {
+): Promise<{ success: boolean; user?: AuthUser; message?: string; offline?: boolean; twoFactorRequired?: boolean; code?: string }> {
 	try {
 		const res = await apiClient.post<LoginResponse>("/auth/login", {
 			username,
@@ -136,6 +160,18 @@ export async function login(
 
 		return { success: false, message: data.message || "Ошибка авторизации" };
 	} catch (err: unknown) {
+		/*
+		 * К УЧЁТНОЙ ЗАПИСИ НЕ ПРИКРЕПЛЕНА ОРГАНИЗАЦИЯ (О6) — не ошибка входа, а следующий шаг.
+		 * Пароль верен; человеку нужен код приглашения, и форма показывает его отдельным
+		 * экраном, а не красной строкой «ошибка авторизации».
+		 */
+		if ((err as AuthRequestError).response?.data?.code === "NO_ORGANIZATIONS") {
+			return {
+				success: false,
+				code: "NO_ORGANIZATIONS",
+				message: (err as AuthRequestError).response?.data?.message || "",
+			};
+		}
 		// Требуется код 2FA — сообщаем форме, чтобы показать поле ввода кода.
 		if ((err as AuthRequestError).response?.data?.twoFactorRequired) {
 			return { success: false, twoFactorRequired: true, message: (err as AuthRequestError).response?.data?.message || "Введите код двухфакторной аутентификации" };

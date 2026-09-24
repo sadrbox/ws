@@ -8,7 +8,7 @@
 		"build": "tsc -b && vite build",
 		"lint": "eslint .",
 		"lint:ratchet": "node scripts/eslint-ratchet.mjs",
-		"verify": "tsc -b && node scripts/eslint-ratchet.mjs && node scripts/css-modules-lint.mjs && vitest run",
+		"verify": "node ../scripts/check-native-modules.mjs && tsc -b && node scripts/eslint-ratchet.mjs && node scripts/css-modules-lint.mjs && vitest run",
 		"preview": "vite preview",
 		"test": "vitest",
 		"i18:lint": "node scripts/i18-lint.mjs",
@@ -63,5 +63,8 @@
 		"typescript-eslint": "^8.15.0",
 		"vite": "^6.0.1",
 		"vitest": "^4.1.5"
+	},
+	"overrides": {
+		"@napi-rs/canvas": "file:./stubs/napi-rs-canvas"
 	}
 }

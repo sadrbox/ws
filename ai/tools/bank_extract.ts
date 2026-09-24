@@ -1,13 +1,14 @@
-// Прогон извлечения выписки на PDF-файлах без сервиса и без 1С.
+// Прогон извлечения выписки или первички поставщика (И2) на PDF-файлах без сервиса и без 1С.
 //
 //   node --experimental-strip-types --env-file=.env tools/bank_extract.ts samples/bank/*.pdf [--json out_dir]
 //
-// Печатает сводку, сверку и первые строки; с --json пишет полный Statement рядом с PDF.
+// Печатает сводку, сверку и первые строки; с --json пишет полный Statement (или документ поставщика) в out_dir.
 
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BankExtractor } from "../src/bank/extract.ts";
+import { BankExtractor, isPurchase } from "../src/bank/extract.ts";
 import { summarize, fmt } from "../src/bank/schema.ts";
+import { summarizePurchase, purchaseLinesText } from "../src/purchase/schema.ts";
 
 async function main() {
 	const args = process.argv.slice(2);
@@ -31,6 +32,14 @@ async function main() {
 		process.stdout.write(`\n=== ${f} ===\n`);
 		try {
 			const r = await extractor.extract(await readFile(f), path.basename(f));
+			if (isPurchase(r)) {
+				console.log(summarizePurchase(r.document, r.check));
+				console.log(`модель ${r.model}, токены in=${r.usage.inputTokens} out=${r.usage.outputTokens}, ${((Date.now() - started) / 1000).toFixed(1)} с`);
+				console.log(purchaseLinesText(r.document, 20));
+				if (!r.check.ok) { console.log("ПРОБЛЕМЫ:"); for (const p of r.check.problems) console.log("  - " + p); }
+				if (outDir) await writeFile(path.join(outDir, path.basename(f, ".pdf") + ".json"), JSON.stringify({ document: r.document, check: r.check }, null, 2), "utf8");
+				continue;
+			}
 			console.log(summarize(r.statement, r.reconciliation));
 			console.log(`модель ${r.model}, токены in=${r.usage.inputTokens} out=${r.usage.outputTokens}, ${((Date.now() - started) / 1000).toFixed(1)} с`);
 			for (const [i, l] of r.statement.lines.entries()) {

@@ -13,7 +13,7 @@
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"tests/**/*.test.ts\"",
     "e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/e2e.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "tsc --noEmit && node tools/check_imports.mjs",
+    "verify": "node ../scripts/check-native-modules.mjs && tsc --noEmit && node tools/check_imports.mjs",
     "chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/chat_e2e.ts",
     "onec-chat-e2e": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env --env-file=.env.local tools/onec_chat_e2e.ts",
     "base-token": "node --experimental-strip-types --no-warnings=ExperimentalWarning --env-file=.env tools/base_token.ts",
@@ -26,6 +26,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "openai": "^7.8.0",
+    "pdfjs-dist": "6.3.289",
     "pg": "^8.16.3",
     "pino": "^9.7.0",
     "zod": "^4.3.5"
@@ -36,5 +37,8 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.4",
     "typescript": "^5.8.0"
+  },
+  "overrides": {
+    "@napi-rs/canvas": "file:./stubs/napi-rs-canvas"
   }
 }

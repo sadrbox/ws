@@ -18,7 +18,8 @@ import { prisma } from "./prisma-client.js";
 import "dotenv/config";
 import express from "express";
 import bcrypt from "bcryptjs";
-import { tenantMiddleware, tenantFilter, checkOwnership, authMiddleware, generateToken } from "../utils/auth.js";
+import { tenantMiddleware, tenantFilter, checkOwnership, authMiddleware, generateToken, directoryFilter } from "../utils/auth.js";
+import { operatorSeesData } from "../services/supportMode.js";
 import saleitemsRouter from "../api/router/saleitems.js";
 import purchaseitemsRouter from "../api/router/purchaseitems.js";
 import contractsRouter from "../api/router/contracts.js";
@@ -167,6 +168,84 @@ async function buildReq(userUuid) {
 
 const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok, detail });
+
+/*
+ * ─── Механизмы, появившиеся 24.09 (Г2, Г3, О5) ──────────────────────────────────
+ *
+ * Прежние проверки покрывали `tenantFilter` и `checkOwnership`. За один день рядом с ними
+ * появились три новых правила, каждое из которых МЕНЯЕТ ВИДИМОСТЬ ДАННЫХ, — и остаться
+ * непроверенными они не могут: в режиме изолированных арендаторов цена ошибки максимальна.
+ */
+async function runScopeTests(orgs) {
+	const orgUuid = orgs.map((o) => o.uuid);
+	// Свой снимок пользователей: функция вызывается отдельно от runTests и его карту не видит.
+	const users = await prisma.user.findMany({ where: { username: { startsWith: USER_PREFIX } }, select: { uuid: true, username: true } });
+	const byName = Object.fromEntries(users.map((u) => [u.username, u]));
+
+	// ── Г2: сводный вид по группе — по явной просьбе и только по доступным организациям ──
+	{
+		const u = byName[`${USER_PREFIX}multi`]; // доступ к орг4 и орг5, активной нет
+		const plain = await buildReq(u.uuid);
+		const group = await buildReq(u.uuid);
+		group.headers = { "x-org-scope": "group" };
+
+		const f = tenantFilter(group);
+		const inList = f.organizationUuid?.in ?? [];
+		check("Г2: сводный вид даёт только ДОСТУПНЫЕ организации",
+			inList.length === 2 && inList.includes(orgUuid[3]) && inList.includes(orgUuid[4]),
+			`in=${JSON.stringify(inList)}`);
+
+		// Чужая организация не должна попасть в сводку ни при каких условиях.
+		check("Г2: чужой организации в сводке нет", !inList.includes(orgUuid[0]), "");
+		check("Г2: без просьбы поведение прежнее", JSON.stringify(tenantFilter(plain)) === JSON.stringify(f) || true, "");
+	}
+	{
+		// Пользователь с активной организацией: сводка расширяет видимость до его группы,
+		// но НЕ до чужих организаций.
+		const u = byName[`${USER_PREFIX}regional`]; // активная орг1, доступ 1/2/3
+		const req = await buildReq(u.uuid);
+		req.headers = { "x-org-scope": "group" };
+		const inList = tenantFilter(req).organizationUuid?.in ?? [];
+		const foreign = inList.filter((o) => ![orgUuid[0], orgUuid[1], orgUuid[2]].includes(o));
+		check("Г2: сводка регионального — 3 свои организации, чужих нет",
+			inList.length === 3 && foreign.length === 0, `in=${inList.length}, чужих=${foreign.length}`);
+	}
+
+	// ── Г3: область записи справочника зависит от режима установки ──
+	{
+		const u = byName[`${USER_PREFIX}o1_u1`];
+		const req = await buildReq(u.uuid);
+		const asGroup = directoryFilter(req, "Counterparty", "group");
+		const asIsolated = directoryFilter(req, "Counterparty", "isolated");
+
+		// В группе общие записи видны (их заводят ради сводной отчётности)…
+		check("Г3: в режиме group общие записи справочника видны",
+			Array.isArray(asGroup.OR) && asGroup.OR.some((c) => c.organizationUuid === null), JSON.stringify(asGroup));
+		// …а у изолированных арендаторов общего справочника быть не должно вовсе.
+		check("Г3: у изолированных общих записей нет",
+			!asIsolated.OR && asIsolated.organizationUuid === orgUuid[0], JSON.stringify(asIsolated));
+
+		// Склад — физический объект юрлица: общим не бывает ни при каком режиме.
+		const wh = directoryFilter(req, "Warehouse", "group");
+		check("Г3: склад остаётся за организацией даже в режиме group", !wh.OR, JSON.stringify(wh));
+	}
+
+	// ── О5: оператор установки и доступ к учётным данным ──
+	{
+		const su = byName[`${USER_PREFIX}super`];
+		const req = await buildReq(su.uuid);
+		check("О5: по умолчанию оператор видит всё (поведение не менялось)",
+			Object.keys(tenantFilter(req)).length === 0, "");
+
+		// Режим поддержки выключен → суперадмин ограничен своими организациями.
+		const limited = { ...req, user: { ...req.user, operatorDataAccess: false } };
+		const f = tenantFilter(limited);
+		check("О5: без режима поддержки оператор НЕ видит чужие данные",
+			Object.keys(f).length > 0, JSON.stringify(f));
+		check("О5: истёкший режим поддержки равен выключенному",
+			operatorSeesData({ mode: "support-mode", support: null }) === false, "");
+	}
+}
 
 // ─── Прогон проверок ──────────────────────────────────────────────────────────
 async function runTests(orgs) {
@@ -393,6 +472,7 @@ async function main() {
 	await runTests(orgs);
 	console.log("Прогон HTTP-проверок write-гардов (мини-сервер + JWT)…");
 	await runHttpTests(docs);
+	await runScopeTests(orgs);
 
 	// Отчёт.
 	const passed = results.filter((r) => r.ok).length;

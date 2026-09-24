@@ -2,7 +2,10 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "../../prisma/prisma-client.js";
-import { generateToken, authMiddleware } from "../../utils/auth.js";
+import { generateToken, authMiddleware, devUnrestrictedAdmin } from "../../utils/auth.js";
+import { grantMembership, OWNER_ROLE, isInstallationOperator, canSignIn } from "../../services/orgMembership.js";
+import { getInstallation } from "../../services/installation.js";
+import { isValidBin } from "../../utils/bin.js";
 import { generateSecret, verifyTotp, otpauthUrl } from "../../services/twoFactor.js";
 import { recordAuthEvent, AUTH_ACTIONS } from "../../services/auditLog.js";
 
@@ -165,7 +168,9 @@ router.post("/auth/login", async (req, res) => {
 		const isDev = process.env.NODE_ENV !== "production";
 
 		if (!hasPassword) {
-			if (isDev) {
+			// Вход без пароля — тоже только по явному рубильнику разработки: на установке,
+			// поднятой без APP_MODE=production, это был вход в чужую учётную запись (П3).
+			if (isDev && process.env.DEV_UNRESTRICTED_ADMIN === "1") {
 				console.warn(`[DEV] Вход без пароля: ${user.username}`);
 			} else {
 				return res.status(401).json({
@@ -221,13 +226,38 @@ router.post("/auth/login", async (req, res) => {
 			}
 		}
 
+		/*
+		 * ВХОД — ТОЛЬКО ТОМУ, У КОГО ЕСТЬ ОРГАНИЗАЦИЯ (О6).
+		 *
+		 * Человек без единой организации не видит ни строки данных: пустить его внутрь значит
+		 * показать пустую систему и оставить гадать, что сломалось. Исключение — оператор
+		 * установки: организаций у него нет и быть не должно, а войти обязан, иначе чинить
+		 * систему после сбоя будет некому.
+		 *
+		 * Код `NO_ORGANIZATIONS` панель показывает экраном с полем для кода приглашения —
+		 * это не ошибка входа, а следующий шаг.
+		 */
+		const gate = canSignIn({
+			isOperator: isInstallationOperator(user),
+			membershipCount: (user.accessRights || []).length,
+		});
+		if (!gate.allowed) {
+			void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN_DENIED, user, req, props: { reason: gate.reason } });
+			return res.status(403).json({
+				success: false,
+				code: gate.reason,
+				message: "К учётной записи не прикреплена ни одна организация. Попросите код приглашения у администратора",
+			});
+		}
+
 		// Генерируем JWT-токен
 		const token = generateToken(user);
 		void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN, user, req });
 
 		// Определяем Разрешения пользователей
-		const isSuperOrDevAdmin =
-			user.isSuperAdmin || (isDev && trimmedUsername.toLowerCase() === "admin");
+		// Полный набор прав — суперадмину; «admin» получает его только при явно включённом
+		// DEV_UNRESTRICTED_ADMIN в разработке (П3), иначе правила те же, что у всех.
+		const isSuperOrDevAdmin = user.isSuperAdmin || devUnrestrictedAdmin(trimmedUsername);
 		const rights = isSuperOrDevAdmin
 			? generateFullAccessPermissions()
 			: accessPermissions;
@@ -481,18 +511,78 @@ router.post("/auth/2fa/disable", authMiddleware, async (req, res) => {
 // POST /auth/register — Регистрация организации
 // Создаёт организацию + первого пользователя (admin) + сотрудника + invite-код
 // ============================================
+/**
+ * Сведения об установке для ЭКРАНА ВХОДА — публично и намеренно скупо (О4).
+ *
+ * Панели нужно знать до входа ровно две вещи: как установка называется (чтобы человек видел,
+ * куда он попал) и открыта ли самостоятельная регистрация — иначе она рисует вкладку, которая
+ * ответит отказом. Идентификатор установки сюда НЕ отдаём: он служебный, и посторонним его
+ * знать незачем.
+ */
+router.get("/auth/installation", async (_req, res) => {
+	try {
+		const inst = await getInstallation();
+		return res.json({
+			success: true,
+			data: {
+				name: inst.name,
+				mode: inst.mode,
+				// null — режим не выбран: панель оставляет прежнее поведение (форма открыта).
+				selfRegistration: inst.selfRegistration,
+			},
+		});
+	} catch (error) {
+		console.error("GET /auth/installation error:", error);
+		// Экран входа обязан открыться даже когда настройки недоступны.
+		return res.json({ success: true, data: { name: null, mode: null, selfRegistration: null } });
+	}
+});
+
 router.post("/auth/register", async (req, res) => {
 	try {
+		/*
+		 * САМОСТОЯТЕЛЬНАЯ РЕГИСТРАЦИЯ — ПО РЕЖИМУ УСТАНОВКИ (О4).
+		 *
+		 * Открыта только у изолированных арендаторов: там организации приходят сами. У
+		 * консалтинга клиентов заводит фирма, у группы — администратор, и открытая форма
+		 * означала бы, что посторонний заводит организацию на чужом сервере.
+		 *
+		 * `null` (режим не выбран) — НЕ запрет: на работающей установке, которую никто не
+		 * настраивал, форма должна остаться открытой, иначе правка закроет вход.
+		 */
+		const inst = await getInstallation();
+		if (inst.selfRegistration === false) {
+			return res.status(403).json({
+				success: false,
+				code: "SELF_REGISTRATION_CLOSED",
+				message: "Регистрация организаций на этом сервере выполняется администратором",
+			});
+		}
+
 		const { bin, name, legalName, username, password } = req.body;
 
-		// Валидация
-		if (!bin || typeof bin !== "string" || !/^\d{12}$/.test(bin.trim())) {
-			return res
-				.status(400)
-				.json({
-					success: false,
-					message: "БИН должен состоять ровно из 12 цифр",
-				});
+		/*
+		 * БИН ПРОВЕРЯЕТСЯ ПО КОНТРОЛЬНОМУ РАЗРЯДУ (И1).
+		 *
+		 * На экране входа БИН — не реквизит, а ИМЯ АРЕНДАТОРА: он уникален в установке, и кто
+		 * первый его занял, тот им и владеет. Опечатка в одной цифре означает занятый чужой
+		 * номер, который потом освобождают руками.
+		 *
+		 * Строгость — только здесь, где номер вводит человек. Данные, приходящие ИЗВНЕ (из 1С,
+		 * из гос-систем, из старых записей), проверяются мягко: ужесточать их задним числом
+		 * значит отказывать в работе с тем, что уже живёт в учёте.
+		 *
+		 * `REGISTRATION_STRICT_BIN=0` снимает строгость — для стендов, где БИН выдуманные.
+		 */
+		const strictBin = process.env.REGISTRATION_STRICT_BIN !== "0";
+		if (!bin || typeof bin !== "string" || !isValidBin(bin, { strict: strictBin })) {
+			return res.status(400).json({
+				success: false,
+				code: "INVALID_BIN",
+				message: strictBin
+					? "БИН указан неверно: проверьте 12 цифр и контрольный разряд"
+					: "БИН должен состоять ровно из 12 цифр",
+			});
 		}
 		const trimmedBin = bin.trim();
 		const trimmedUsername = (username || "").trim();
@@ -570,7 +660,21 @@ router.post("/auth/register", async (req, res) => {
 				include: { employee: { include: { organization: true } } },
 			});
 
+			// 4. ЧЛЕНСТВО — в той же транзакции, что и пользователь.
+			//
+			// Без него создатель организации оставался БЕЗ НЕЁ: `tenantMiddleware` строит
+			// `allowedOrgUuids` по этой связи и, не найдя в списке активную организацию,
+			// обнуляет её как чужую. То есть зарегистрировался — и ничего не можешь.
+			await grantMembership(tx, { userUuid: user.uuid, organizationUuid: org.uuid, role: OWNER_ROLE });
+
 			return { org, user };
+		});
+
+		void recordAuthEvent({
+			actionType: AUTH_ACTIONS.ORG_REGISTERED,
+			user: { uuid: result.user.uuid, username: result.user.username, organizationUuid: result.org.uuid },
+			req,
+			props: { bin: trimmedBin, role: OWNER_ROLE },
 		});
 
 		const token = generateToken(result.user);
@@ -670,7 +774,20 @@ router.post("/auth/join", async (req, res) => {
 				include: { employee: { include: { organization: true } } },
 			});
 
+			// 3. Членство — по той же причине, что и при регистрации (см. выше). Роль —
+			// участник: код приглашения один на организацию и не несёт роли, поэтому
+			// раздавать им права администратора нельзя. Адресные приглашения с ролью —
+			// задача О4.
+			await grantMembership(tx, { userUuid: user.uuid, organizationUuid: org.uuid });
+
 			return user;
+		});
+
+		void recordAuthEvent({
+			actionType: AUTH_ACTIONS.ORG_JOINED,
+			user: { uuid: result.uuid, username: result.username, organizationUuid: org.uuid },
+			req,
+			props: { via: "invite_code" },
 		});
 
 		const token = generateToken(result);

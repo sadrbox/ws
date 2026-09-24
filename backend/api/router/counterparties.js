@@ -4,7 +4,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { idSearchCondition } from "../../utils/searchId.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { directoryScope } from "../../utils/auth.js";
 const router = express.Router();
 
 // Валидация БИН.
@@ -272,7 +272,7 @@ router.get("/counterparties", async (req, res) => {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
-			...tenantFilter(req),
+			...(await directoryScope(req, "Counterparty")),
 		};
 
 		// ── Курсорная пагинация ───────────────────────────────────────────────

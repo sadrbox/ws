@@ -4,6 +4,7 @@ import {
 	handleDelete,
 	handleBatchDelete,
 } from "../../utils/checkReferences.js";
+import { tenantFilter, orgIsAccessible } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -76,13 +77,31 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const where = {};
 		if (!includeHistory) where.deletedAt = null;
 
-		// Фильтр по organizationUuid (если не передан — все организации;
-		// "null"/"NULL" — глобальные)
+		/*
+		 * ИЗОЛЯЦИЯ АРЕНДАТОРА (И2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+		 *
+		 * Было: без параметра `organizationUuid` — настройки ВСЕХ организаций, с параметром —
+		 * любой, какой назовут. На общем сервере это значило, что арендатор читает учётную
+		 * политику соседа: метод себестоимости, ставки, счета учёта. Настройки учёта — не
+		 * секрет первой величины, но и не то, что показывают посторонним.
+		 *
+		 * Стало: свои организации плюс ГЛОБАЛЬНЫЕ (organizationUuid = null) — они умолчание
+		 * для всех и без них форма не покажет, откуда берётся значение. Явно запрошенная
+		 * чужая организация отсекается, а не подменяется молча: тихая подмена спрячет ошибку
+		 * вызывающего.
+		 */
+		const scope = tenantFilter(req);
 		if (req.query.organizationUuid !== undefined) {
 			const v = String(req.query.organizationUuid);
-			if (v === "null" || v === "NULL" || v === "")
+			if (v === "null" || v === "NULL" || v === "") {
 				where.organizationUuid = null;
-			else where.organizationUuid = v;
+			} else if (!orgIsAccessible(req, v)) {
+				return res.status(403).json({ success: false, message: "Организация недоступна" });
+			} else {
+				where.organizationUuid = v;
+			}
+		} else if (Object.keys(scope).length) {
+			where.OR = [scope, { organizationUuid: null }];
 		}
 
 		const searchWords = search ? search.split(/\s+/).filter(Boolean) : [];
@@ -143,10 +162,19 @@ router.get(`/${ROUTE}/usage-stats`, async (req, res) => {
 				? orgQ
 				: null;
 
-		// Условие на родительскую продажу: posted=true. Если organizationUuid
-		// задан — фильтр по организации; иначе глобально (без фильтра).
+		/*
+		 * Та же изоляция, что и в списке (И2): «глобально, без фильтра» на общем сервере
+		 * означало бы подсчёт по чужим продажам. Организация не названа — считаем по своим.
+		 */
 		const saleWhere = { posted: true };
-		if (orgUuid) saleWhere.organizationUuid = orgUuid;
+		if (orgUuid) {
+			if (!orgIsAccessible(req, orgUuid)) {
+				return res.status(403).json({ success: false, message: "Организация недоступна" });
+			}
+			saleWhere.organizationUuid = orgUuid;
+		} else {
+			Object.assign(saleWhere, tenantFilter(req));
+		}
 
 		const [vatItem, discountItem, exciseItem] = await Promise.all([
 			prisma.saleItem.findFirst({

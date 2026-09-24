@@ -12,6 +12,7 @@ import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppContext } from "src/app/context";
 import { switchOrganization, type OrgEntry } from "src/services/auth";
+import { getOrgScope, setOrgScope, type OrgScope } from "src/services/orgScope";
 import { translate } from "src/i18";
 import styles from "./OrgSwitcher.module.scss";
 
@@ -24,6 +25,17 @@ const OrgSwitcher: FC = () => {
   const { auth } = useAppContext();
   const user = auth.user;
   const [open, setOpen] = useState(false);
+  /*
+   * СВОДНЫЙ ВИД ПО ГРУППЕ (Г2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+   *
+   * Раньше «все мои организации» показывались лишь тогда, когда активной не было вовсе:
+   * сводка получалась из отсутствия выбора, и объяснить это было нечем. Теперь её просят
+   * явно — и видно, в каком режиме человек смотрит.
+   *
+   * Запись в сводном режиме сервер отклоняет (`SCOPE_READ_ONLY`): документ принадлежит
+   * конкретному юрлицу, и «создать в группе» — ошибка, которую находят при сверке.
+   */
+  const [scope, setScope] = useState<OrgScope>(getOrgScope());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Координаты для портала (dropdown рендерится в body, чтобы не обрезался
@@ -96,6 +108,17 @@ const OrgSwitcher: FC = () => {
   // Нет организаций — не рендерим компонент (после всех хуков)
   if (!user || orgs.length === 0) return null;
 
+  // Сводка осмысленна только когда организаций больше одной.
+  const canGroup = orgs.length > 1;
+  const applyScope = (next: OrgScope) => {
+    setOrgScope(next);
+    setScope(next);
+    setOpen(false);
+    // Перечитывать всё открытое по одному — долго и ненадёжно: область данных меняется
+    // целиком, и проще начать с чистого экрана.
+    window.location.reload();
+  };
+
   const activeOrg = orgs.find((o) => o.organizationUuid === user.organizationUuid);
   const activeLabel =
     activeOrg?.organization?.name ||
@@ -112,8 +135,10 @@ const OrgSwitcher: FC = () => {
         title={translate("switchOrganization")}
         type="button"
       >
-        <span className={styles.OrgIcon}>🏢</span>
-        <span className={styles.OrgName}>{loading ? "…" : activeLabel}</span>
+        <span className={styles.OrgIcon}>{scope === "group" ? "🏢🏢" : "🏢"}</span>
+        <span className={styles.OrgName}>
+          {loading ? "…" : scope === "group" ? translate("orgScopeGroup") : activeLabel}
+        </span>
         <span className={styles.OrgChevron}>{open ? "▴" : "▾"}</span>
       </button>
 
@@ -150,6 +175,22 @@ const OrgSwitcher: FC = () => {
               </button>
             );
           })}
+
+          {canGroup && (
+            <>
+              <div className={styles.OrgDropdownHeader}>{translate("orgScopeTitle")}</div>
+              <button
+                className={[styles.OrgDropdownItem, scope === "group" ? styles.Active : ""].filter(Boolean).join(" ")}
+                onClick={() => applyScope(scope === "group" ? "organization" : "group")}
+                disabled={loading}
+                type="button"
+                title={translate("orgScopeHint")}
+              >
+                <span className={styles.OrgItemName}>{translate("orgScopeGroup")}</span>
+                {scope === "group" && <span className={styles.OrgActiveCheck}>✓</span>}
+              </button>
+            </>
+          )}
 
           {error && <div className={styles.OrgError}>{error}</div>}
         </div>,

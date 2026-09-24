@@ -12,8 +12,20 @@ import { getOnecServer } from "src/services/onec/serverScope";
 const LOCAL_AI_URL = (import.meta.env.VITE_LOCAL_AI_URL as string | undefined) || "http://192.168.1.112:3100";
 const REMOTE_AI_URL = (import.meta.env.VITE_AI_URL as string | undefined) || "https://ai.buhprof.kz";
 
-/** Локальная сеть — локальный сервис; десктоп (Tauri) и внешний доступ — публичный. */
+/*
+ * АДРЕС СЕРВИСА — ИЗ НАСТРОЙКИ УСТАНОВКИ (У2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+ *
+ * `VITE_AI_SERVICE_URL` задаётся при сборке установки и главнее всего остального: у клиента свой
+ * сервис (или его нет вовсе), и выводить адрес из имени хоста браузера — значит отправлять его
+ * запросы к нам. Прежнее угадывание оставлено для нашей раскладки и для Tauri.
+ *
+ * ⚠ ПРОВЕРИТЬ ПОТОМ: установщик должен записывать VITE_AI_SERVICE_URL (или оставлять пустым,
+ * когда помощник в поставку не входит — тогда разделы AI прячутся).
+ */
+const CONFIGURED_AI_URL = (import.meta.env.VITE_AI_SERVICE_URL as string | undefined)?.trim() || "";
+
 export function getAiUrl(): string {
+	if (CONFIGURED_AI_URL) return CONFIGURED_AI_URL;
 	if (typeof window === "undefined") return REMOTE_AI_URL;
 	if ("__TAURI_INTERNALS__" in window) return REMOTE_AI_URL;
 	const { hostname } = window.location;

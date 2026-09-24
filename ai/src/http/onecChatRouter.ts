@@ -42,6 +42,9 @@ export const onecOwnerUuid = (baseId: string, userId: string): string => `1c:${b
  * base64, не существует — защищать совместимость не перед кем. Ход с `content` не молчит: отказ называет
  * причину, иначе разбираться пришлось бы по раздутому телу неизвестного происхождения.
  */
+/** XLSX от поставщиков и банков: содержимое читает код без ИИ (src/extract). */
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 const attachmentSchema = z.object({
 	fileName: z.string().trim().min(1).max(200),
 	mimeType: z.string().trim().max(100).default("application/pdf"),
@@ -289,7 +292,7 @@ export function onecChatRouter(deps: {
 		max: deps.attachmentsPerMin ?? 6, windowMs: 60_000, key: pairKey,
 		message: "Слишком много вложений подряд — подождите минуту",
 	});
-	const rawUpload = express.raw({ type: ["application/pdf", "application/octet-stream"], limit: `${Math.ceil(maxAttachmentBytes / 1048576)}mb` });
+	const rawUpload = express.raw({ type: ["application/pdf", "application/octet-stream", XLSX_MIME], limit: `${Math.ceil(maxAttachmentBytes / 1048576)}mb` });
 	const tooLarge = (res: Response) =>
 		res.status(413).json({ success: false, error: { code: "FILE_TOO_LARGE", message: `Файл больше ${Math.round(maxAttachmentBytes / 1048576)} МБ` } });
 

@@ -77,6 +77,33 @@
 	line-height: 1.5;
 }
 
+/*
+ * «Организаций нет» — не ошибка и не успех, а следующий шаг (О6). Красным его красить нельзя:
+ * человек введёт пароль заново, хотя пароль верен. Спокойный тон плюс ссылка на вкладку с
+ * кодом приглашения — весь смысл этой плашки в том, чтобы показать дорогу.
+ */
+.notice {
+	padding: 10px 14px;
+	background: var(--c-blue-96, #eef4ff);
+	color: var(--c-blue-34, #1d3c78);
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+// Кнопка, выглядящая ссылкой: переключение вкладки — не действие формы, и обычная кнопка
+// спорила бы с «Войти» за внимание.
+.linkButton {
+	margin-top: 6px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
 .field {
 	display: flex;
 	flex-direction: column;

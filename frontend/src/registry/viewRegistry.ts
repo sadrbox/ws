@@ -16,6 +16,7 @@
  */
 import React from "react";
 import { asText } from "src/utils/asText";
+import { MODULE_ONEC } from "src/config/buildModules";
 
 /** Сбой загрузки динамического чанка (устаревший модуль после перезапуска Vite-dev
  * или деплоя прод-сборки, пока вкладка открыта). Сообщение зависит от браузера. */
@@ -53,6 +54,22 @@ function retryImport<T>(loader: () => Promise<T>, name: string): Promise<T> {
 	return attempt(3);
 }
 
+/**
+ * Заглушка отсутствующего в сборке модуля.
+ *
+ * Панель, открытая на прежней сборке, лежит в localStorage и после обновления попробует
+ * восстановиться. Без заглушки это была бы ошибка загрузки чанка и экран «Что-то пошло не так»;
+ * с ней человек читает, что раздела в этой установке нет, и закрывает вкладку.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function moduleAbsentView(name: string): React.FC<any> {
+	const render = () => React.createElement("div", { style: { padding: 16, opacity: 0.75 } }, "Раздел не входит в эту установку");
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const C = render as React.FC<any> & { displayName?: string };
+	C.displayName = name;
+	return C;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazyView(name: string, loader: () => Promise<{ default: React.ComponentType<any> }>): React.FC<any> {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,12 +94,30 @@ export const UserPerformanceList = lazyView("UserPerformanceList", () => import(
 export const ChatList = lazyView("ChatList", () => import('src/models/Chat').then(m => ({ default: m.ChatList })));
 export const CommunicationsPanel = lazyView("CommunicationsPanel", () => import('src/models/Communications').then(m => ({ default: m.CommunicationsPanel })));
 export const AiAssistantList = lazyView("AiAssistantList", () => import('src/models/AiAssistant').then(m => ({ default: m.AiAssistantList })));
-// Администрирование: кластеры 1С и агенты — два раздела меню (см. models/OneCAdmin/index.tsx).
-export const OneCClustersList = lazyView("OneCClustersList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCClustersList })));
-export const OneCAgentsList = lazyView("OneCAgentsList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAgentsList })));
-export const OneCExtensionList = lazyView("OneCExtensionList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCExtensionList })));
+/*
+ * УПРАВЛЕНИЕ 1С — МОДУЛЬ ПОСТАВКИ (см. src/config/buildModules.ts).
+ *
+ * Кластеры, агенты и расширение в базах — хозяйство консалтинговой компании; на установке
+ * клиента их нет вовсе. Тернарник с константой сборки — не стилистика: только так Vite видит,
+ * что ветка мертва, и не тянет чанк `models/OneCAdmin` в сборку. Любая косвенность (переменная,
+ * таблица имён) вернула бы его молча.
+ *
+ * Заглушка нужна, чтобы восстановление панелей после перезагрузки не падало: в localStorage у
+ * человека могла остаться вкладка, открытая на прежней сборке.
+ */
+export const OneCClustersList = MODULE_ONEC
+	? lazyView("OneCClustersList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCClustersList })))
+	: moduleAbsentView("OneCClustersList");
+export const OneCAgentsList = MODULE_ONEC
+	? lazyView("OneCAgentsList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAgentsList })))
+	: moduleAbsentView("OneCAgentsList");
+export const OneCExtensionList = MODULE_ONEC
+	? lazyView("OneCExtensionList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCExtensionList })))
+	: moduleAbsentView("OneCExtensionList");
 /** Прежний объединённый раздел: имя остаётся ради восстановления панелей после перезагрузки. */
-export const OneCAdminList = lazyView("OneCAdminList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAdminList })));
+export const OneCAdminList = MODULE_ONEC
+	? lazyView("OneCAdminList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAdminList })))
+	: moduleAbsentView("OneCAdminList");
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
 export const CashboxesList = lazyView("CashboxesList", () => import('src/models/Cashboxes').then(m => ({ default: m.CashboxesList })));

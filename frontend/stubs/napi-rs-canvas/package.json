@@ -1,0 +1,7 @@
+{
+  "name": "@napi-rs/canvas",
+  "version": "0.0.0-stub",
+  "description": "Заглушка: pdf.js во frontend рисует штатным canvas браузера, нативный @napi-rs/canvas нужен ему только внутри Node. Его сборка требует AVX и роняет Node на процессоре сервера (i7 920) сигналом SIGILL — например, в тестах, импортирующих просмотр PDF.",
+  "main": "index.js",
+  "private": true
+}

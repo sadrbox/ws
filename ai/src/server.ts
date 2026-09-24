@@ -50,8 +50,10 @@ import { OpenAIBankExtractor } from "./bank/extract_openai.ts";
 import type { StatementExtractor } from "./bank/extract.ts";
 import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
-import { BankExtractor } from "./bank/extract.ts";
+import { BankExtractor, RetryingExtractor } from "./bank/extract.ts";
 import { StatementStore } from "./bank/store.ts";
+import { PurchaseDocumentStore } from "./purchase/store.ts";
+import { createContentReader } from "./extract/index.ts";
 import { FileStore } from "./files/store.ts";
 
 export const VERSION = "0.4.0";
@@ -90,15 +92,22 @@ function openaiModel(cfg: Config, model: string, log: Logger): string {
 	return model;
 }
 
-/** Экстрактор PDF выписок по провайдеру; null — вложения в чате отключены. */
+/** Экстрактор документов (выписки, первичка) по провайдеру; null — вложения в чате отключены. */
 function createExtractor(cfg: Config, log: Logger): StatementExtractor | null {
-	if (cfg.LLM_PROVIDER === "openai" && cfg.OPENAI_API_KEY) {
-		return new OpenAIBankExtractor({ apiKey: cfg.OPENAI_API_KEY, model: openaiModel(cfg, cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL, log), baseURL: cfg.OPENAI_BASE_URL || undefined });
-	}
-	if (cfg.ANTHROPIC_API_KEY) {
-		return new BankExtractor({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL });
-	}
-	return null;
+	// Содержимое файла сначала достаёт код (PDF с текстом, XLSX) — модель получает текст, а не картинки страниц.
+	// EXTRACT_INPUT=file — откат на прежний путь (PDF целиком) без правки кода.
+	const readContent = createContentReader();
+	const make = (mode: "auto" | "file"): StatementExtractor | null => {
+		if (cfg.LLM_PROVIDER === "openai" && cfg.OPENAI_API_KEY) {
+			return new OpenAIBankExtractor({ apiKey: cfg.OPENAI_API_KEY, model: openaiModel(cfg, cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL, log), baseURL: cfg.OPENAI_BASE_URL || undefined, readContent, mode });
+		}
+		if (cfg.ANTHROPIC_API_KEY) return new BankExtractor({ apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.BANK_EXTRACT_MODEL || cfg.LLM_MODEL, readContent, mode });
+		return null;
+	};
+	const primary = make(cfg.EXTRACT_INPUT);
+	if (!primary || cfg.EXTRACT_INPUT === "file" || !cfg.EXTRACT_RETRY_FILE) return primary;
+	// Несошедшийся по тексту документ перечитывается из PDF (RetryingExtractor).
+	return new RetryingExtractor(primary, make("file")!);
 }
 
 export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; agents: AgentService; workflow: ChatWorkflow | null } {
@@ -144,10 +153,12 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// провайдеру); без ключа вложения в чате отключены, остальной чат работает.
 	const extractor = deps.bank !== undefined ? null : createExtractor(cfg, log);
 	const bank = deps.bank !== undefined ? deps.bank : extractor ? { extractor, store: new StatementStore(db) } : null;
+	// Первичка поставщиков (И2) распознаётся тем же экстрактором: нет экстрактора — нет и её.
+	const purchases = bank ? new PurchaseDocumentStore(db) : null;
 	const files = new FileStore(db, cfg.FILE_TTL_DAYS);
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,
-			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, files,
+			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, purchases, files,
 			serverTools: serverTools({ tasks: erpTasks, baseOrgs }),
 			orgBin: async (uuid) => {
 				const r = await erp.query<{ bin: string | null }>(`SELECT bin FROM organizations WHERE uuid = $1`, [uuid]);
@@ -164,7 +175,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	setInterval(purge, 3_600_000).unref();
 	// Старые диалоги, выписки и команды — при старте и раз в сутки.
 	const retention = () => purgeOldData(db, cfg.CONVERSATION_TTL_DAYS)
-		.then((r) => { if (r.conversations || r.statements || r.commands || r.audit) log.info(r, "удалены данные старше срока хранения"); })
+		.then((r) => { if (r.conversations || r.statements || r.purchases || r.commands || r.audit) log.info(r, "удалены данные старше срока хранения"); })
 		// Экземпляры агента копятся по строке на каждый перезапуск службы. Раньше их
 		// чистило «когда повезёт» — попутно с чужим запросом; теперь это часть той же
 		// суточной уборки, что и всё остальное.

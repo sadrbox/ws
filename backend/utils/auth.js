@@ -1,5 +1,11 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../prisma/prisma-client.js";
+import { ROUTE_TO_MODEL } from "./routeModels.js";
+import { subjectOf } from "./routeSubjects.js";
+import { listIncludesShared } from "../services/recordScope.js";
+import { getInstallation } from "../services/installation.js";
+import { operatorAccessMode, operatorSeesData, getSupportMode } from "../services/supportMode.js";
+import { servicedOrgsFor } from "../services/serviceLinks.js";
 
 // JWT_SECRET загружается из .env через dotenv (в server.js)
 // Если переменная не задана — сервер не запустится (проверка в server.js)
@@ -68,6 +74,7 @@ export async function tenantMiddleware(req, res, next) {
 		const dbUser = await prisma.user.findUnique({
 			where: { uuid: req.user.uuid },
 			select: {
+				uuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
 				accessRights: {
@@ -78,14 +85,49 @@ export async function tenantMiddleware(req, res, next) {
 
 		if (dbUser) {
 			req.user.isSuperAdmin = dbUser.isSuperAdmin || false;
+			/*
+			 * ОПЕРАТОР УСТАНОВКИ ≠ ДОСТУП К УЧЁТУ (О5).
+			 *
+			 * Обслуживать установку и читать чужую выручку — разные полномочия. При
+			 * `OPERATOR_DATA_ACCESS=support-mode` данные открыты оператору только на время
+			 * включённого режима поддержки; администрирование (агенты, модули, бэкапы) работает
+			 * всегда, потому что оно опирается на `isSuperAdmin`, а не на этот признак.
+			 */
+			if (req.user.isSuperAdmin && operatorAccessMode() === "support-mode") {
+				req.user.operatorDataAccess = operatorSeesData({ support: await getSupportMode() });
+			} else {
+				req.user.operatorDataAccess = true;
+			}
 			req.user.organizationUuid = dbUser.organizationUuid || null;
 
 			// Список UUID организаций, доступных пользователю
-			req.user.allowedOrgUuids = dbUser.accessRights.map(
-				(uo) => uo.organizationUuid,
-			);
+			const ownOrgs = dbUser.accessRights.map((uo) => uo.organizationUuid);
 
-			// Роль в активной организации
+			/*
+			 * ОРГАНИЗАЦИИ ПО ОБСЛУЖИВАНИЮ (К2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+			 *
+			 * Сотрудник обслуживающей фирмы работает в учёте клиента не по членству, а по
+			 * НАЗНАЧЕНИЮ: связь фирма→клиент плюс «этот бухгалтер ведёт этого клиента».
+			 * Поэтому доступные организации — свои плюс назначенные, а не копии членств:
+			 * при 200 клиентах копии сделали бы отзыв доступа уволенному перебором двухсот
+			 * организаций, где один пропуск — утечка чужого учёта.
+			 *
+			 * Связь учитывается только ЖИВАЯ: подтверждённая клиентом и с неистёкшим сроком.
+			 *
+			 * Цена — один запрос на запрос пользователя. Если станет заметно, кэшировать
+			 * назначения по пользователю (меняются они редко), но не раньше: преждевременный
+			 * кэш прав опаснее лишнего запроса.
+			 */
+			const serviced = await servicedOrgsFor(dbUser.uuid ?? req.user.uuid);
+			req.user.serviceContext = new Map(serviced.map((s) => [s.organizationUuid, s]));
+			req.user.servicedOrgUuids = serviced.map((s) => s.organizationUuid);
+			req.user.allowedOrgUuids = [...new Set([...ownOrgs, ...req.user.servicedOrgUuids])];
+
+			/*
+			 * Роль в активной организации — ТОЛЬКО по членству. Обслуживание учёт ведёт, но
+			 * доступом клиента не распоряжается: иначе бухгалтер фирмы смог бы раздавать
+			 * права в чужой организации (К2, профиль `service_accountant`).
+			 */
 			const activeOrgEntry = dbUser.accessRights.find(
 				(uo) => uo.organizationUuid === dbUser.organizationUuid,
 			);
@@ -122,7 +164,24 @@ export async function tenantMiddleware(req, res, next) {
  */
 export function tenantFilter(req, field = "organizationUuid") {
 	if (!req.user) return {};
-	if (req.user.isSuperAdmin) return {}; // суперадмин видит все данные
+	// Суперадмин видит все данные — если ему это сейчас открыто (О5: режим поддержки).
+	if (req.user.isSuperAdmin && req.user.operatorDataAccess !== false) return {};
+
+	/*
+	 * СВОДНЫЙ ВИД ПО ГРУППЕ — ОСОЗНАННЫЙ ВЫБОР, А НЕ ПОБОЧНЫЙ ЭФФЕКТ (Г2).
+	 *
+	 * Раньше «все мои организации» показывались ТОЛЬКО когда активной организации нет вовсе:
+	 * то есть сводка получалась из отсутствия выбора, и человек не понимал, почему иногда
+	 * видит три организации, а иногда одну. Теперь её просят явно — `?scope=group`, — и она
+	 * ограничена теми организациями, к которым есть доступ.
+	 *
+	 * Создавать документы в сводном режиме нельзя (проверяется при записи): документ
+	 * принадлежит конкретному юрлицу, и «создать в группе» — это дорогая ошибка учёта.
+	 */
+	if (groupScopeRequested(req) && req.user.allowedOrgUuids?.length) {
+		return { [field]: { in: req.user.allowedOrgUuids } };
+	}
+
 	if (!req.user.organizationUuid) {
 		// нет активной орг — показываем данные всех разрешённых организаций
 		if (req.user.allowedOrgUuids?.length) {
@@ -131,6 +190,93 @@ export function tenantFilter(req, field = "organizationUuid") {
 		return { [field]: null }; // нет ни активной, ни разрешённых — ничего не видит
 	}
 	return { [field]: req.user.organizationUuid };
+}
+
+/**
+ * Готовый фильтр списка справочника: сам берёт режим установки.
+ *
+ * Роутерам не нужно знать про режимы — им нужно «покажи то, что положено этому предмету».
+ * Режим кэшируется на 30 секунд, так что лишнего обращения к базе тут нет.
+ */
+export async function directoryScope(req, model, field = "organizationUuid") {
+	const { mode } = await getInstallation();
+	return directoryFilter(req, model, mode, field);
+}
+
+/**
+ * ЧТО АРЕНДАТОР ВИДИТ ОБ УСТАНОВКЕ (И4 плана PLAN_INSTALL_MODES_2026-09-24.md).
+ *
+ * На общем сервере (`isolated`) организации друг другу посторонние, а разделы УСТАНОВКИ —
+ * агенты 1С, реестр лицензий, состав модулей, бэкапы, журналы — рассказывают о ней целиком:
+ * сколько там организаций, какие у них агенты, что установлено. Арендатору этого знать
+ * незачем, даже если ему по недосмотру выдали право администрирования 1С.
+ *
+ * Правило узкое и опирается на уже существующий реестр предметов: закрываем ровно то, что там
+ * помечено как `operator`. В остальных режимах (`group`, `service`, режим не выбран) поведение
+ * не меняется — там администратор организации и есть тот, кто установку обслуживает.
+ */
+export async function installationScopeGuard(req, res, next) {
+	try {
+		if (req.user?.isSuperAdmin) return next();
+		const { modeEffective } = await getInstallation();
+		if (modeEffective !== "isolated") return next();
+
+		const segment = req.path.replace(/^\/+/, "").split("/")[0];
+		if (subjectOf(segment)?.kind !== "operator") return next();
+
+		return res.status(403).json({
+			success: false,
+			code: "INSTALLATION_SCOPE",
+			message: "Раздел относится к управлению сервером и доступен только его оператору",
+		});
+	} catch {
+		// Настройки недоступны — не запираем работу: изоляцию данных обеспечивает tenantFilter.
+		return next();
+	}
+}
+
+/**
+ * СВОДНЫЙ ВИД — ТОЛЬКО ДЛЯ ЧТЕНИЯ (Г2).
+ *
+ * В сводном режиме показаны организации ГРУППЫ сразу, и «создать здесь» не имеет ответа: в
+ * какой именно организации? Молча подставить активную — значит завести документ не в том
+ * юрлице, а это одна из самых дорогих ошибок учёта: находят её при сверке, через месяц.
+ *
+ * Поэтому запись в сводном режиме отклоняется сразу и с объяснением.
+ */
+export function groupScopeReadOnly(req, res, next) {
+	if (req.method === "GET" || req.method === "OPTIONS" || req.method === "HEAD") return next();
+	if (!groupScopeRequested(req)) return next();
+	return res.status(400).json({
+		success: false,
+		code: "SCOPE_READ_ONLY",
+		message: "В сводном виде по группе организаций запись невозможна — выберите организацию",
+	});
+}
+
+/** Просил ли клиент сводный вид по группе: `?scope=group` или заголовок `X-Org-Scope: group`. */
+export function groupScopeRequested(req) {
+	const q = typeof req.query?.scope === "string" ? req.query.scope : null;
+	const h = req.headers?.["x-org-scope"];
+	return q === "group" || h === "group";
+}
+
+/**
+ * Фильтр списка СПРАВОЧНИКА с учётом общих записей (Г3).
+ *
+ * Общая запись (`organizationUuid = null`) видна всем организациям установки — но только там,
+ * где режим и предмет это допускают (`services/recordScope.js`). Правило одно на все витрины:
+ * раньше список общие записи не показывал, а лукап в документе показывал, и один и тот же
+ * контрагент существовал или нет в зависимости от того, откуда на него смотрят.
+ *
+ * @param {string} model — предмет (Counterparty, Product, …)
+ * @param {string|null} mode — режим установки; null — не выбран
+ */
+export function directoryFilter(req, model, mode, field = "organizationUuid") {
+	const base = tenantFilter(req, field);
+	if (!listIncludesShared(model, mode)) return base;
+	if (!Object.keys(base).length) return base; // суперадмин и так видит всё
+	return { OR: [base, { [field]: null }] };
 }
 
 /**
@@ -211,84 +357,10 @@ export async function checkFkOwnership(req, tx, checks) {
 	}
 	return null;
 }
+// Карта «сегмент пути → модель прав» вынесена в `routeModels.js`: её читают профили прав
+// (services/permissionProfiles.js), которым Prisma не нужна, а этот модуль её тянет.
+export { ROUTE_TO_MODEL } from "./routeModels.js";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Маппинг URL-путей → имя модели в AccessPermission (PascalCase из ALL_MODEL_NAMES)
-// ═══════════════════════════════════════════════════════════════════════════
-export const ROUTE_TO_MODEL = {
-	organizations: "Organization",
-	counterparties: "Counterparty",
-	contracts: "Contract",
-	"contract-files": "AttachedFile",
-	contacts: "Contact",
-	contactpersons: "ContactPerson",
-	bankaccounts: "BankAccount",
-	activityhistories: "ActivityHistory",
-	// Входящие события 1С — тот же журнал, только внешний источник: право общее.
-	pipeactivities: "ActivityHistory",
-	// Ввод остатков серий/партий меняет учётные данные товара → право номенклатуры.
-	"opening-balance": "Product",
-	todos: "Todo",
-	deals: "Deal",
-	// Справочник статусов задач — КОНФИГУРАЦИЯ, а не пользовательский контент:
-	// переименование/удаление статуса влияет на все задачи организации, поэтому
-	// требует того же права, что и сами задачи (фронт гейтит меню так же).
-	"todo-statuses": "Todo",
-	warehouses: "Warehouse",
-	cashboxes: "Cashbox",
-	sales: "Sale",
-	"sale-returns": "SaleReturn",
-	"sale-return-items": "SaleReturnItem",
-	purchases: "Purchase",
-	"purchase-returns": "PurchaseReturn",
-	"purchase-return-items": "PurchaseReturnItem",
-	"outgoing-invoices": "OutgoingInvoice",
-	"incoming-invoices": "IncomingInvoice",
-	"payment-invoices": "PaymentInvoice",
-	"purchase-requisitions": "PurchaseRequisition",
-	"purchase-requisition-items": "PurchaseRequisitionItem",
-	"commercial-offers": "CommercialOffer",
-	"commercial-offer-items": "CommercialOfferItem",
-	"sales-orders": "SalesOrder",
-	"sales-order-items": "SalesOrderItem",
-	"reservations": "Reservation",
-	"reservation-items": "ReservationItem",
-	"purchase-orders": "PurchaseOrder",
-	"purchase-order-items": "PurchaseOrderItem",
-	importdeclarations: "ImportDeclaration",
-	importdeclarationitems: "ImportDeclarationItem",
-	writeoffs: "WriteOff",
-	writeoffitems: "WriteOffItem",
-	goodsreceipts: "GoodsReceipt",
-	goodsreceiptitems: "GoodsReceiptItem",
-	stockcounts: "StockCount",
-	stockcountitems: "StockCountItem",
-	serialnumbers: "SerialNumber",
-	productbatches: "ProductBatch",
-	"bank-statements": "BankStatement",
-	"scheduled-tasks": "ScheduledTask",
-	"inventory-transfers": "InventoryTransfer",
-	"cash-receipt-orders": "CashReceiptOrder",
-	"cash-expense-orders": "CashExpenseOrder",
-	brands: "Brand",
-	products: "Product",
-	productbarcodes: "Product",
-	saleitems: "SaleItem",
-	employees: "Employee",
-	positions: "Position",
-	"employee-histories": "EmployeeHistory",
-	"access-permissions": "AccessPermission",
-	currencies: "Currency",
-	"unit-of-measures": "UnitOfMeasure",
-	"vat-rates": "VatRate",
-	"payroll-calculations": "PayrollCalculation",
-	"payroll-payments": "PayrollPayment",
-	"chart-of-accounts": "ChartOfAccount",
-	"subkonto-types": "SubkontoType",
-	accounting: "AccountingEntry",
-	users: "User",
-	files: "AttachedFile",
-};
 
 /**
  * Middleware проверки прав доступа.
@@ -311,8 +383,24 @@ export const ROUTE_TO_MODEL = {
 export function hasUnconditionalAccess(req) {
 	if (req.user?.isSuperAdmin) return true;
 	if (req.user?.isOrgAdmin || req.user?.isAnyOrgAdmin) return true;
-	const isDev = process.env.NODE_ENV !== "production";
-	return Boolean(isDev && req.user?.username?.toLowerCase() === "admin");
+	return devUnrestrictedAdmin(req.user?.username);
+}
+
+/**
+ * ВСЕВЛАСТИЕ ПО ИМЕНИ — БОЛЬШЕ НЕ ПО УМОЛЧАНИЮ (П3 разбора 24.09).
+ *
+ * Раньше любой пользователь с именем `admin` получал полный доступ мимо прав, если
+ * `NODE_ENV !== "production"`. А `ecosystem.config.js` без `APP_MODE=production` поднимает
+ * ровно `development` — то есть на обычно запущенной установке существовал вечный суперадмин
+ * по имени, даже когда флаг `isSuperAdmin` у него сняли.
+ *
+ * Теперь это включается ЯВНО и только в разработке: `DEV_UNRESTRICTED_ADMIN=1`. В production
+ * переменная не действует вовсе — включить её там нельзя даже по ошибке.
+ */
+export function devUnrestrictedAdmin(username) {
+	if (process.env.NODE_ENV === "production") return false;
+	if (process.env.DEV_UNRESTRICTED_ADMIN !== "1") return false;
+	return String(username ?? "").toLowerCase() === "admin";
 }
 
 /**
@@ -364,6 +452,42 @@ export function orgIsAccessible(req, organizationUuid) {
 	return allowed.includes(organizationUuid);
 }
 
+/**
+ * ЗАПРЕТ ПО УМОЛЧАНИЮ — НО НЕ ОДНИМ ДНЁМ (О3).
+ *
+ * Маршрут, которого нет в карте моделей, сейчас проходит без проверки прав. Перевернуть это
+ * умолчание разом нельзя: вместе с дырой погаснет работающее — восемнадцать сегментов живут
+ * именно так, и часть из них проверяет доступ внутри себя (см. `utils/routeSubjects.js`).
+ *
+ * Поэтому рубильник `ACCESS_UNKNOWN_ROUTES`:
+ *   observe (по умолчанию) — пропускаем, но пишем в журнал каждый НЕОПИСАННЫЙ сегмент. Описанные
+ *                            в реестре предметов молчат: про них уже известно, почему они так;
+ *   deny                   — 403. Включать ПОСЛЕ того, как журнал наблюдения замолчит, а профили
+ *                            прав розданы (О2).
+ *
+ * ⚠ ПРОВЕРИТЬ ПОТОМ: перевести в `deny` на стенде, прогнать основные сценарии, затем в проде.
+ */
+function noteUnknownRoute(req, res, next, segment) {
+	const subject = subjectOf(segment);
+	// Описан и объяснён — пропускаем молча: право проверяется внутри роутера либо не нужно.
+	if (subject) return next();
+
+	if (process.env.ACCESS_UNKNOWN_ROUTES === "deny") {
+		return res.status(403).json({
+			success: false,
+			code: "ROUTE_NOT_DESCRIBED",
+			message: "Маршрут не описан в реестре прав доступа",
+		});
+	}
+	// Один раз на сегмент за процесс: иначе журнал зальёт одной и той же строкой.
+	if (!seenUnknownRoutes.has(segment)) {
+		seenUnknownRoutes.add(segment);
+		console.warn(`[access] маршрут /${segment} не описан ни в ROUTE_TO_MODEL, ни в ROUTE_SUBJECTS — пропущен без проверки прав`);
+	}
+	return next();
+}
+const seenUnknownRoutes = new Set();
+
 export async function accessPermissionMiddleware(req, res, next) {
 	if (req.method === "OPTIONS") return next();
 
@@ -376,7 +500,7 @@ export async function accessPermissionMiddleware(req, res, next) {
 	const routeSegment = pathSegments[0];
 
 	const modelName = ROUTE_TO_MODEL[routeSegment];
-	if (!modelName) return next();
+	if (!modelName) return noteUnknownRoute(req, res, next, routeSegment);
 
 	try {
 		// Ищем права с учётом активной организации пользователя.

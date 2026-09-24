@@ -33,6 +33,7 @@ Node ≥ 22.6 (TypeScript исполняется без сборки, синта
 | `ANTHROPIC_API_KEY`, `LLM_MODEL`, `LLM_EFFORT` | Claude (`claude-opus-5`, effort `medium`) |
 | `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI (`LLM_MODEL=gpt-5`, `BANK_EXTRACT_MODEL=gpt-5`); ключ платформы, не подписка ChatGPT; BASE_URL — для OpenAI-совместимых API |
 | `AGENT_ADMIN_KEY` | заголовок `X-Admin-Key` для admin API |
+| `EXTRACT_INPUT`, `EXTRACT_RETRY_FILE` | чтение документов: `auto` — модели текст, извлечённый кодом, `file` — PDF целиком (откат); автоповтор из PDF, если суммы не сошлись |
 | `CONFIRM_WRITE` | `true` — карточка подтверждения перед созданием документа (§17) |
 | `ALLOWED_ORIGINS` | origins браузерных клиентов для CORS (`/v1/*`) |
 | `PUBLIC_URL` | адрес сервиса для агентов |

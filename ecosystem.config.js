@@ -13,10 +13,18 @@
 // раздачи. А объявленный здесь кластер на четыре воркера (под него и считался пул Prisma:
 // 4 × 17 = 68 < 100 соединений) фактически не включался.
 //
+// ПРОД — УМОЛЧАНИЕ (У3, 24.09). Раньше умолчанием была разработка, и установка, поднятая
+// «как обычно», получала dev-сервер Vite с sourcemaps наружу и `NODE_ENV=development`, а с ним
+// — всевластного пользователя `admin` (П3). На чужом сервере это не настройка, а дыра: тот,
+// кто ставит систему, не обязан знать про APP_MODE. Теперь наоборот: разработка включается
+// явно, `APP_MODE=development`.
+//
 // Порядок выкладки прода:
 //   cd frontend && npm run build
-//   APP_MODE=production pm2 start ecosystem.config.js
-const PRODUCTION = process.env.APP_MODE === "production";
+//   pm2 start ecosystem.config.js
+// Разработка:
+//   APP_MODE=development pm2 start ecosystem.config.js
+const PRODUCTION = process.env.APP_MODE !== "development";
 const NODE_ENV = PRODUCTION ? "production" : "development";
 
 module.exports = {

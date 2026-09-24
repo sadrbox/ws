@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { directoryScope } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { idSearchCondition } from "../../utils/searchId.js";
 
@@ -78,7 +78,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			}
 		}
 
-		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
+		const baseWhere = { ...searchWhere, ...filterWhere, ...(await directoryScope(req, "Brand")) };
 		const opts = { take: limitNumber, where: baseWhere, orderBy };
 		if (cursorNumber !== null) {
 			opts.cursor = { id: cursorNumber };

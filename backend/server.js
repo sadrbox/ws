@@ -19,6 +19,9 @@ import {
 	authMiddleware,
 	tenantMiddleware,
 	accessPermissionMiddleware,
+	groupScopeReadOnly,
+	installationScopeGuard,
+
 } from "./utils/auth.js";
 
 // ── Роутеры ─────────────────────────────────────────────────────────────
@@ -129,6 +132,8 @@ import waWebhookRouter from "./api/router/waWebhook.js";
 import waRouter from "./api/router/wa.js";
 import onecRouter from "./api/router/onec.js";
 import { moduleGuardMiddleware } from "./services/moduleAccess.js";
+import permissionProfilesRouter from "./api/router/permissionProfiles.js";
+import serviceLinksRouter from "./api/router/serviceLinks.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
 import subkontoTypesRouter from "./api/router/subkontotypes.js";
@@ -140,10 +145,24 @@ import productPricesRouter from "./api/router/productprices.js";
 
 const app = express();
 
-// За cloudflared (отдельный хост 192.168.1.113) доверяем X-Forwarded-For, иначе все
-// клиенты идут под одним IP и rate-limit/аудит ломаются. БЕЗОПАСНОСТЬ: порт 3000
-// должен приниматься ТОЛЬКО с 192.168.1.113 (firewall) — иначе заголовок подделать.
-app.set("trust proxy", "192.168.1.113");
+/*
+ * КОМУ ВЕРИМ НА СЛОВО ПРО IP КЛИЕНТА (У2 плана PLAN_INSTALL_MODES_2026-09-24.md).
+ *
+ * За обратным прокси (у нас — cloudflared на отдельном хосте) заголовок X-Forwarded-For надо
+ * принимать, иначе все клиенты идут под одним адресом и rate-limit с аудитом теряют смысл. Но
+ * АДРЕС ПРОКСИ У КАЖДОЙ УСТАНОВКИ СВОЙ: зашитый в код, он на чужом сервере не совпадёт ни с чем,
+ * и там сломается ровно то, ради чего он был нужен.
+ *
+ * Берём из `TRUSTED_PROXY_IPS` (список через запятую) — та же переменная, что уже описана в
+ * .env.example и используется сетевым гардом ниже. Пусто — доверяем только петле: установка без
+ * прокси видит настоящий адрес клиента сама.
+ *
+ * БЕЗОПАСНОСТЬ: порт приложения должен быть доступен ТОЛЬКО с этих адресов (firewall или гард
+ * ниже) — иначе заголовок подделает кто угодно.
+ */
+const TRUSTED_PROXIES = (process.env.TRUSTED_PROXY_IPS || "")
+	.split(",").map((s) => s.trim()).filter(Boolean);
+app.set("trust proxy", TRUSTED_PROXIES.length ? TRUSTED_PROXIES : "loopback");
 
 // Сетевой гард уровня приложения — замена OS-файрвола (на этом хосте его нет).
 // req.socket.remoteAddress = реальный TCP-источник, подделать нельзя (в отличие от
@@ -293,6 +312,27 @@ const authLimiter = rateLimit({
 });
 app.use("/api/v1/auth/login", authLimiter);
 
+/*
+ * РЕГИСТРАЦИЯ И ПРИСОЕДИНЕНИЕ — СВОЙ, БОЛЕЕ ЖЁСТКИЙ ПРЕДЕЛ (И1 плана INSTALL_MODES).
+ *
+ * В режиме изолированных арендаторов форма регистрации открыта посторонним. Без предела один
+ * скрипт за минуту заведёт сотню организаций, займёт чужие БИН (они уникальны) и забьёт список,
+ * а разбирать это придётся руками. Предел ниже, чем у входа: регистрируются РЕДКО, и пять
+ * попыток за четверть часа — с запасом для человека, который ошибся в БИН.
+ *
+ * Код приглашения — там же: его подбор по восьми шестнадцатеричным знакам иначе ничем не
+ * ограничен, а успешный подбор даёт доступ к чужой организации.
+ */
+const registerLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000,
+	max: 5,
+	standardHeaders: true,
+	legacyHeaders: false,
+	message: { success: false, message: "Слишком много попыток регистрации, попробуйте позже" },
+});
+app.use("/api/v1/auth/register", registerLimiter);
+app.use("/api/v1/auth/join", registerLimiter);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. ПАРСИНГ ТЕЛА ЗАПРОСА
 // ═══════════════════════════════════════════════════════════════════════════
@@ -371,10 +411,31 @@ app.use("/api/v1", auditMiddleware);
 // E11: гард модулей — 403 на создание документа отключённого для организации
 // модуля. Безопасен по умолчанию (не-POST/неизвестный путь/нет org → пропуск).
 app.use("/api/v1", moduleGuardMiddleware);
+// Сводный вид по группе организаций — только чтение (Г2): см. groupScopeReadOnly.
+app.use("/api/v1", groupScopeReadOnly);
+// Разделы уровня установки — не для арендатора общего сервера (И4): см. installationScopeGuard.
+app.use("/api/v1", installationScopeGuard);
 
 app.use("/api/v1", waRouter);
-app.use("/api/v1", onecRouter);
+/*
+ * УПРАВЛЕНИЕ 1С — МОДУЛЬ ПОСТАВКИ (24.09, по решению владельца).
+ *
+ * Кластеры, агенты и расширение в базах — хозяйство консалтинговой компании БухПроф: серверами
+ * 1С клиентов управляет она у себя. На установке клиента раздела нет ни в меню, ни в сборке
+ * фронта (VITE_MODULE_ONEC=0), и маршрут тоже не монтируется — иначе «нет в интерфейсе» осталось
+ * бы только видимостью, а сам прокси отвечал бы по-прежнему.
+ *
+ * Немонтированный путь даёт честный 404: это и есть отсутствие, а не запрет.
+ */
+if (process.env.MODULE_ONEC !== "0") {
+	app.use("/api/v1", onecRouter);
+}
 app.use("/api/v1", modulesRouter);
+// Профили прав (О2): список и назначение. После гардов — назначение доступно только тем,
+// кто и так распоряжается доступом (проверка внутри роутера).
+app.use("/api/v1", permissionProfilesRouter);
+// Обслуживание клиентов консалтинговой фирмой (К1–К5): кабинет фирмы и согласие клиента.
+app.use("/api/v1", serviceLinksRouter);
 app.use("/api/v1", dealsRouter);
 app.use("/api/v1", backupRouter);
 app.use("/api/v1", apiv1);
