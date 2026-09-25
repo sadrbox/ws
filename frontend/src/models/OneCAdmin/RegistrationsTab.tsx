@@ -8,11 +8,17 @@
  *
  * ТАБЛИЦА, КАК ВЕЗДЕ В ПАНЕЛИ: сортировка, поиск, настройка колонок; действия — над активной строкой в тулбаре,
  * двойной щелчок по нерешённой заявке открывает одобрение. Решают только администраторы BuhProf.
+ *
+ * ОТБОР ПО СОСТОЯНИЮ — плашками состояний над командной панелью таблицы, а не выпадающим списком: вариантов пять,
+ * их переключают часто, и все должны быть на виду; у «Ждут решения» — число (его ждут у телефона). Отбор — над
+ * панелью, а не в ней: в панели остаются только действия над заявкой (одобрить, отклонить), и отбор с действиями не
+ * смешивается.
  */
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
+import { SegmentedControl, type SegmentOption } from "src/components/SegmentedControl";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import { FieldTextarea } from "src/components/Field/FieldTextarea";
@@ -38,6 +44,17 @@ import styles from "./OneCAdmin.module.scss";
 
 const TONE_CLASS = { wait: styles.ReqWait, ok: styles.ReqOk, bad: styles.ReqBad, off: styles.ReqOff };
 
+type StateFilter = RegistrationState | "";
+
+/** Варианты отбора: нерешённые — первыми (ради них вкладку и открывают), «Все» — последним. */
+const STATE_FILTERS: readonly { value: StateFilter; labelKey: string; tone?: SegmentOption<StateFilter>["tone"] }[] = [
+	{ value: "PENDING", labelKey: "onecReqFilterPending", tone: "wait" },
+	{ value: "APPROVED", labelKey: "onecReqFilterApproved", tone: "ok" },
+	{ value: "REJECTED", labelKey: "onecReqFilterRejected", tone: "bad" },
+	{ value: "EXPIRED", labelKey: "onecReqFilterExpired", tone: "off" },
+	{ value: "", labelKey: "onecReqAll", tone: "all" },
+];
+
 const columns = (): TColumn[] => ([
 	{ identifier: "reqCode", type: "string", width: "110px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "reqState", type: "string", width: "130px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
@@ -60,14 +77,34 @@ const columns = (): TColumn[] => ([
  */
 export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => {
 	const qc = useQueryClient();
-	const [state, setState] = useState<RegistrationState | "">("PENDING");
+	// По умолчанию — все заявки (26.09): нерешённые видны и так — сервис отдаёт их первыми, а число у «Ждут решения»
+	// говорит, сколько их.
+	const [state, setState] = useState<StateFilter>("");
 	const list = useQuery({
 		queryKey: ["onec", "registrations", state, ""],
 		queryFn: () => fetchRegistrations({ state }),
 		// Заявка приходит без предупреждения, а человек у телефона ждёт — список обновляется сам.
 		refetchInterval: 15_000,
 	});
+	/*
+	 * Сколько ждут решения — числом у варианта, при любом отборе. При «Все» — по уже загруженному списку: сервис
+	 * отдаёт нерешённые первыми, так что предел списка их не обрезает. При другом отборе — отдельным запросом; его
+	 * ключ общий со списком «Ждут решения» и со счётчиком на вкладке, так что лишнего обращения к сервису нет.
+	 */
+	const pendingList = useQuery({
+		queryKey: ["onec", "registrations", "PENDING", ""],
+		queryFn: () => fetchRegistrations({ state: "PENDING" }),
+		refetchInterval: 15_000,
+		enabled: state !== "",
+	});
 	const items = useMemo(() => list.data?.items ?? [], [list.data]);
+	const pendingCount = state === ""
+		? items.filter((r) => r.state === "PENDING").length
+		: pendingList.data?.items.length ?? 0;
+	const filterOptions = useMemo<SegmentOption<StateFilter>[]>(() => STATE_FILTERS.map((f) => ({
+		value: f.value, label: translate(f.labelKey), tone: f.tone,
+		count: f.value === "PENDING" ? pendingCount : null,
+	})), [pendingCount]);
 	const canDecide = !!list.data?.canDecide;
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_registrations"));
 	const [activeId, setActiveId] = useState<string | null>(null);
@@ -101,16 +138,9 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecReqRegHint")}</div>
-			<div className={styles.BasesLimits}>
-				<FieldSelect name="reg_state" label={translate("status")} size="sm" value={state}
-					onChange={(e) => setState(e.target.value as RegistrationState | "")}
-					options={[
-						{ value: "PENDING", label: translate("onecReqPending") },
-						{ value: "", label: translate("onecReqAll") },
-						{ value: "APPROVED", label: translate("onecReqApproved") },
-						{ value: "REJECTED", label: translate("onecReqRejected") },
-						{ value: "EXPIRED", label: translate("onecReqExpired") },
-					]} />
+			<div className={styles.StatusFilter}>
+				<SegmentedControl name="reg_state" label={translate("status")} value={state} options={filterOptions}
+					onChange={(v) => { setState(v); setActiveId(null); }} />
 			</div>
 			<QueryError error={list.error} noticeKey="onec-registrations" source={translate("onecReqRegistrations")} />
 			<Table {...buildStaticTableProps({

@@ -581,6 +581,16 @@
 	padding: 0 6px;
 }
 
+// Отбор заявок по состоянию — плашками над командной панелью таблицы («Доступ AI → Подключение баз»). Отступы
+// отделяют отбор от подсказки над ним и от действий над заявкой под ним.
+.StatusFilter {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 12px;
+	padding: 4px 6px 6px;
+}
+
 .BasesTable {
 	td {
 		vertical-align: top;

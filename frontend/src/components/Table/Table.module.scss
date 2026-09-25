@@ -39,6 +39,13 @@
 	tr:hover:not([data-active]) .TableBodyCell {
 		background: var(--sv-accentBlueHover);
 	}
+
+	// Отмеченная строка (галочкой или протягиванием мыши) — видно, что попадёт в групповую операцию. Доля цвета
+	// активной строки: слабее её, чтобы активная оставалась курсором, и та же в тёмной теме. После наведения —
+	// под курсором отметка не пропадает.
+	tr[data-selected]:not([data-active]) .TableBodyCell {
+		background: color-mix(in srgb, #{$color2} 45%, transparent);
+	}
 }
 
 
@@ -80,10 +87,14 @@ tr[data-loading] {
 
 /* Ячейка «Дата» журнала документа: иконка документа + признак проведения */
 .DocDateCell {
-	display: inline-flex;
+	display: flex;
 	align-items: center;
 	gap: 6px;
+	padding-left: 0 !important;
 }
+
+// .TableBodyCell:has(.DocDateCell) {
+// }
 
 .DocDateIcon {
 	position: relative;
@@ -100,6 +111,7 @@ tr[data-loading] {
 }
 
 .DocDateIcon.docPosted {
+	// opacity: 0.5;
 	color: $color81;
 }
 
@@ -107,9 +119,9 @@ tr[data-loading] {
 	position: absolute;
 	right: -1px;
 	bottom: 1px;
-	color: $successText;
+	color: $success;
 	// border: 1px solid $color6;
-	background: $color60;
+	background: $successBorder;
 	border-radius: 50%;
 	// zoom: ;
 }
@@ -224,6 +236,7 @@ tr[data-loading] {
 		}
 	}
 }
+
 /*
  * ── ТАБЛИЦА В ОБЛАСТИ-СПУТНИКЕ ───────────────────────────────────────────────
  *

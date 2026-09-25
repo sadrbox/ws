@@ -694,6 +694,57 @@ export function toggleRowSelection(
 }
 
 /**
+ * Строки списка между двумя строками, включительно, в порядке списка — диапазон протягивания мышью. Какой-то из
+ * концов пропал из списка (перезагрузили, отфильтровали) — пусто: диапазон без конца не определён.
+ */
+export function rowIdsBetween(rows: readonly { id: number | string }[], fromId: number, toId: number): number[] {
+	let from = -1;
+	let to = -1;
+	for (let i = 0; i < rows.length; i++) {
+		const id = Number(rows[i].id);
+		if (id === fromId) from = i;
+		if (id === toId) to = i;
+	}
+	if (from < 0 || to < 0) return [];
+	const out: number[] = [];
+	for (let i = Math.min(from, to); i <= Math.max(from, to); i++) out.push(Number(rows[i].id));
+	return out;
+}
+
+/**
+ * Отметки после протягивания мышью по строкам: от строки, где нажали, до строки под курсором.
+ *
+ * Без Ctrl (⌘) диапазон ЗАМЕНЯЕТ выбор, с Ctrl — добавляется к тому, что было отмечено до начала протягивания.
+ * Правила — те же, что у галочки (выше): скрытое поиском не трогаем (на суженном списке замена касается только
+ * видимых строк), режим «выбраны все» — только на несуженном списке, где отмечено всё видимое.
+ */
+export function dragSelection(
+	base: SelectionState, rangeIds: readonly number[], additive: boolean, visibleIds: readonly number[], narrowed: boolean,
+): SelectionState {
+	const range = new Set(rangeIds);
+	let next: SelectionState;
+	if (!additive && !narrowed) {
+		// Весь список виден — диапазон и есть новый выбор целиком.
+		next = { selected: new Set(range), allMode: false, excluded: new Set() };
+	} else if (base.allMode) {
+		const excluded = new Set(base.excluded);
+		if (!additive) for (const id of visibleIds) if (!range.has(id)) excluded.add(id);
+		for (const id of range) excluded.delete(id);
+		next = { selected: new Set(), allMode: true, excluded };
+	} else {
+		const selected = new Set(base.selected);
+		if (!additive) for (const id of visibleIds) if (!range.has(id)) selected.delete(id);
+		for (const id of range) selected.add(id);
+		next = { selected, allMode: false, excluded: new Set() };
+	}
+	if (!narrowed && visibleIds.length > 0) {
+		if (!next.allMode && visibleIds.every((id) => next.selected.has(id))) return { selected: new Set(), allMode: true, excluded: new Set() };
+		if (next.allMode && visibleIds.every((id) => next.excluded.has(id))) return { selected: new Set(), allMode: false, excluded: new Set() };
+	}
+	return next;
+}
+
+/**
  * «Выбрать все» в шапке. Щелчок при частичном или полном выборе снимает, при пустом — отмечает (как и раньше).
  *
  * Суженный список: «все» — это ВИДИМЫЕ строки, отметки скрытых остаются как были (правило 1), и решение «снять или

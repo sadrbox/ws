@@ -2,6 +2,7 @@ import styles from './Table.module.scss';
 import { TableConfigModalForm } from './TableConfigModalForm';
 import { DateRangeBar, FieldDateRangeModal, FieldFastSearchInternal } from './TableToolbarControls';
 import { TableArea } from './TableArea';
+import { useRowDragSelect } from './useRowDragSelect';
 import { ROW_HEIGHT } from './constants';
 
 import {
@@ -757,6 +758,25 @@ const Table: FC<TableProps> = memo((props) => {
       },
     };
   }, [childRows, onChildToggle, rows]);
+
+  /*
+   * ВЫДЕЛЕНИЕ ПРОТЯГИВАНИЕМ (useRowDragSelect): нажать на строке и вести мышью — отмечается диапазон строк.
+   * Действует там же, где отметка галочкой: колонка отметок видна, выбирать есть зачем (удаление или владелец
+   * слушает отметки) и отметки не заблокированы операцией. У групповой таблицы отметки живут в данных вложенных
+   * строк — протягивание их не трогает.
+   */
+  const dragSelectEnabledRef = useRef(false);
+  dragSelectEnabledRef.current = variant !== 'select' && selectable && (!!onDelete || !!onSelectionChange)
+    && !groupSelection && !selectionLocked && !isLoading;
+  const applyDragSelection = useCallback((next: SelectionState) => {
+    setIsAllSelectedMode(next.allMode);
+    setSelectedRows(next.selected);
+    setExcludedRows(next.excluded);
+  }, []);
+  useRowDragSelect({
+    scrollRef, enabledRef: dragSelectEnabledRef, rowsRef, selectionRef, visibleIdsRef, narrowedRef,
+    apply: applyDragSelection, setActiveRow,
+  });
 
   const contextValue = useMemo<TableContextProps>(
     () => ({

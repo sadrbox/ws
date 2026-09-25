@@ -2,7 +2,8 @@
 // шапка говорит о видимых строках; режим «выбраны все» не включается на суженном списке.
 import { describe, it, expect } from 'vitest';
 import {
-  isNarrowedView, isRowSelected, selectionIndicator, toggleRowSelection, toggleAllSelection, type SelectionState,
+  dragSelection, isNarrowedView, isRowSelected, rowIdsBetween, selectionIndicator, toggleRowSelection, toggleAllSelection,
+  type SelectionState,
 } from 'src/components/Table/services';
 
 const st = (selected: number[] = [], allMode = false, excluded: number[] = []): SelectionState =>
@@ -114,5 +115,42 @@ describe('toggleAllSelection — полный список', () => {
   it('что-то отмечено — снимает всё', () => {
     expect(toggleAllSelection(st([2]), ALL, false)).toEqual(st());
     expect(toggleAllSelection(st([], true, [3]), ALL, false)).toEqual(st());
+  });
+});
+
+describe('протягивание мышью: диапазон строк', () => {
+  const rows = [{ id: 10 }, { id: 20 }, { id: 30 }, { id: 40 }, { id: 50 }];
+  it('от строки до строки включительно, в порядке списка — вниз и вверх одинаково', () => {
+    expect(rowIdsBetween(rows, 20, 40)).toEqual([20, 30, 40]);
+    expect(rowIdsBetween(rows, 40, 20)).toEqual([20, 30, 40]);
+    expect(rowIdsBetween(rows, 30, 30)).toEqual([30]);
+  });
+  it('конец пропал из списка (перезагрузка, поиск) — диапазона нет', () => {
+    expect(rowIdsBetween(rows, 20, 99)).toEqual([]);
+    expect(rowIdsBetween([], 1, 1)).toEqual([]);
+  });
+});
+
+describe('протягивание мышью: отметки', () => {
+  it('без Ctrl диапазон заменяет выбор', () => {
+    expect(picked(dragSelection(st([1, 5]), [2, 3], false, ALL, false), ALL)).toEqual([2, 3]);
+  });
+  it('с Ctrl добавляется к отмеченному до протягивания', () => {
+    expect(picked(dragSelection(st([1, 5]), [2, 3], true, ALL, false), ALL)).toEqual([1, 2, 3, 5]);
+  });
+  it('протянули через все строки несуженного списка — режим «выбраны все», как у галочек', () => {
+    expect(dragSelection(st(), ALL, false, ALL, false)).toEqual(st([], true));
+  });
+  it('в режиме «выбраны все» без Ctrl — ровно диапазон, с Ctrl — диапазон возвращается из исключённых', () => {
+    expect(picked(dragSelection(st([], true, [2]), [3, 4], false, ALL, false), ALL)).toEqual([3, 4]);
+    expect(picked(dragSelection(st([], true, [2, 3]), [3], true, ALL, false), ALL)).toEqual([1, 3, 4, 5]);
+  });
+  it('на суженном списке скрытое поиском не трогаем: замена касается только видимых строк', () => {
+    const visible = [2, 3, 4];
+    expect(picked(dragSelection(st([1, 2]), [3, 4], false, visible, true), ALL)).toEqual([1, 3, 4]);
+    // «Выбраны все» при поиске: видимое вне диапазона уходит в исключения, скрытое остаётся отмеченным.
+    expect(picked(dragSelection(st([], true), [3], false, visible, true), ALL)).toEqual([1, 3, 5]);
+    // И режим «выбраны все» на суженном списке не включается, даже если отмечено всё видимое.
+    expect(dragSelection(st(), visible, false, visible, true)).toEqual(st(visible));
   });
 });
