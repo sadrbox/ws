@@ -193,6 +193,34 @@ const schema = z.object({
 	PUBLIC_PANEL_URL: z.string().default(""),
 	// Изменяющие вызовы задач и заметок на пару «база + пользователь» в минуту. 0 — без лимита.
 	RATE_LIMIT_TASKS_WRITE_PER_MIN: z.coerce.number().int().min(0).max(600).default(20),
+	// ── Ночные проверки учёта в базах клиентов (E17, СК2.2; docs/TASK_EXTENSION_ACCOUNTING_CHECKS_2026-09-25.md) ──
+	/**
+	 * Плановый прогон раз в сутки. Выключатель только РАСПИСАНИЯ: ручной запуск из панели работает и при `false` —
+	 * так проверки обкатывают на одной базе, не включая ночной прогон по всем клиентам.
+	 */
+	ACCOUNTING_CHECKS_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+	/** Время запуска «ЧЧ:ММ» по часам сервера (как у расписания обслуживания). */
+	ACCOUNTING_CHECKS_AT: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "время ЧЧ:ММ, например 02:30").default("02:30"),
+	/**
+	 * Сколько баз проверять одновременно. Внутри базы проверки идут строго по одной: каждая занимает сеанс и
+	 * лицензию клиента, а две тяжёлые проверки разом в одной базе — это вдвое дольше каждая, а не вдвое быстрее.
+	 */
+	ACCOUNTING_CHECKS_PARALLEL: z.coerce.number().int().min(1).max(8).default(2),
+	/** Предел одной команды проверки, секунды: столько же, сколько у самого агента на обычную команду. */
+	ACCOUNTING_CHECKS_COMMAND_TIMEOUT_SECS: z.coerce.number().int().min(30).max(3600).default(600),
+	/** Сколько находок одной проверки просить у 1С (`limit`; предел расширения — 1000). */
+	ACCOUNTING_CHECKS_LIMIT: z.coerce.number().int().min(1).max(1000).default(1000),
+	// ── Проверка ответа клиенту моделью (E17, СК7.1; POST /v1/quality/review-answer) ──
+	/**
+	 * Проверок в минуту на пользователя ERP. Каждая — вызов модели с текстом до 20 000 знаков, а экран зовёт её по
+	 * кнопке, а не на каждый ввод: десяти хватает с запасом, а случайный цикл в панели не сожжёт бюджет. 0 — без лимита.
+	 */
+	RATE_LIMIT_QUALITY_REVIEW_PER_MIN: z.coerce.number().int().min(0).max(600).default(10),
+	/**
+	 * Сколько ждать модель, секунды, — вместе с повтором разбора. Прокси по дороге (cloudflared) держит запрос около
+	 * 100 с: ждать дольше значит получить обрыв без заголовков CORS вместо внятного 504 «повторите».
+	 */
+	QUALITY_REVIEW_TIMEOUT_SECS: z.coerce.number().int().min(10).max(300).default(90),
 });
 
 export type Config = z.infer<typeof schema>;
@@ -221,7 +249,10 @@ export function describe(cfg: Config): Record<string, unknown> {
 		allowedOrigins: cfg.ALLOWED_ORIGINS,
 		agentOrgBinding: cfg.AGENT_ORG_BINDING,
 		retention: `files ${cfg.FILE_TTL_DAYS}d, conversations ${cfg.CONVERSATION_TTL_DAYS}d`,
-		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на кластер`,
+		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на кластер, проверка ответа клиенту ${cfg.RATE_LIMIT_QUALITY_REVIEW_PER_MIN}/min (до ${cfg.QUALITY_REVIEW_TIMEOUT_SECS} с)`,
+		accountingChecks: cfg.ACCOUNTING_CHECKS_ENABLED
+			? `в ${cfg.ACCOUNTING_CHECKS_AT}, баз одновременно ${cfg.ACCOUNTING_CHECKS_PARALLEL}, команда до ${cfg.ACCOUNTING_CHECKS_COMMAND_TIMEOUT_SECS} с, находок до ${cfg.ACCOUNTING_CHECKS_LIMIT}`
+			: "расписание выключено",
 	};
 }
 

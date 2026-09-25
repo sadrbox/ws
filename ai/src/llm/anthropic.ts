@@ -58,7 +58,8 @@ export class AnthropicProvider implements LLMProvider {
 				model: this.model,
 				max_tokens: req.maxTokens ?? 4096,
 				system,
-				tools,
+				// Вызов без инструментов (проверка ответа клиенту: текст → JSON) — без поля вовсе, как и у OpenAI.
+				...(tools.length ? { tools } : {}),
 				messages: req.messages.map(toParam),
 				thinking: { type: "adaptive" },
 				output_config: { effort: this.effort },

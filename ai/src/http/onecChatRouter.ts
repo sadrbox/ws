@@ -718,7 +718,7 @@ export function onecChatRouter(deps: {
 		if (!actor) return void needActor(res);
 		const b = req.body as {
 			name?: string; description?: string; deadline?: string | null; executorName?: string | null;
-			sourceType?: string | null; sourceUuid?: string | null; sourceLabel?: string | null;
+			sourceType?: string | null; sourceUuid?: string | null; sourceLabel?: string | null; kind?: unknown;
 		};
 		try {
 			const item = await tasks.createTask(actor, {
@@ -727,6 +727,8 @@ export function onecChatRouter(deps: {
 				// на созданный в 1С документ, и метку «пришла из чата» это стирать не должно.
 				originLabel: `Чат в 1С — ${req.onecUser!.baseName}`,
 				sourceType: b.sourceType ?? null, sourceUuid: b.sourceUuid ?? null, sourceLabel: b.sourceLabel ?? null,
+				// Вид задачи (E17, СК1.1): только известные значения; прочее — не передаём, ERP поставит `task`.
+				...(b.kind === "client_request" || b.kind === "task" ? { kind: b.kind } : {}),
 			});
 			res.status(201).json({ success: true, data: { item: withUrl(item) } });
 		} catch (e) {
@@ -740,10 +742,16 @@ export function onecChatRouter(deps: {
 		if (!bin) return;
 		const actor = actorOf(req, bin);
 		if (!actor) return void needActor(res);
-		const b = req.body as { name?: string; description?: string; deadline?: string | null; status?: string; close?: boolean };
+		const b = req.body as { name?: string; description?: string; deadline?: string | null; status?: string; close?: boolean; result?: unknown };
 		try {
 			const item = await tasks.updateTask(actor, String(req.params.uuid), {
 				name: b.name, description: b.description, deadline: b.deadline, status: b.status, close: b.close,
+				/*
+				 * ЧТО СДЕЛАНО (E17, СК1.2). С 25.09 ERP не закрывает задачу без результата, а этот маршрут пропускал
+				 * только перечисленные поля — и кнопка «Закрыть» в форме 1С отказывала бы всегда, даже с заполненным
+				 * результатом. Пустое не передаём: «нет результата» решает ERP, а не пустая строка.
+				 */
+				...(typeof b.result === "string" && b.result.trim() ? { result: b.result.trim() } : {}),
 			});
 			res.json({ success: true, data: { item: withUrl(item) } });
 		} catch (e) {

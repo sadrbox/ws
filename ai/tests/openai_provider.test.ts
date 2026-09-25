@@ -53,6 +53,8 @@ test("не-reasoning модель не получает reasoning_effort; обр
 	assert.equal(res.text, "Готово");
 	assert.equal(res.stopReason, "end_turn");
 	assert.equal(captured.p!.reasoning_effort, undefined);
+	// Без инструментов поля нет вовсе: пустой массив OpenAI отвергает с 400 (вызов проверки ответа клиенту).
+	assert.equal("tools" in captured.p!, false);
 	assert.deepEqual(parseArguments("{\"a\":1,\"b\":"), {});
 	assert.equal(isReasoningModel("o3-mini"), true);
 	assert.equal(isReasoningModel("gpt-4.1"), false);

@@ -37,6 +37,9 @@ Node ≥ 22.6 (TypeScript исполняется без сборки, синта
 | `CONFIRM_WRITE` | `true` — карточка подтверждения перед созданием документа (§17) |
 | `ALLOWED_ORIGINS` | origins браузерных клиентов для CORS (`/v1/*`) |
 | `PUBLIC_URL` | адрес сервиса для агентов |
+| `ERP_API_URL`, `ERP_API_KEY` | служебный канал ERP (`/bpai`): задачи и заметки чата 1С, результаты ночных проверок учёта |
+| `ACCOUNTING_CHECKS_*` | ночной прогон проверок учёта по базам клиентов (E17): включение расписания, время, базы одновременно, пределы — см. `.env.example` |
+| `RATE_LIMIT_QUALITY_REVIEW_PER_MIN`, `QUALITY_REVIEW_TIMEOUT_SECS` | проверка ответа клиенту моделью (E17): проверок в минуту на пользователя (10) и срок ожидания модели (90 с) |
 
 ## API
 
@@ -59,6 +62,18 @@ Node ≥ 22.6 (TypeScript исполняется без сборки, синта
 форма 1С: ход отвечает `TOOL_CALLS` с `calls` (те же `commandType`/`payload`, что ушли бы агенту; `requestId` —
 только у изменяющих), форма присылает `toolResults`. Подтверждение — `decision: {accepted}`. Токены баз —
 `npm run base-token -- issue --base <ключ базы>` (показывается один раз), `revoke --id …`, `list`.
+
+**Проверки учёта в базах клиентов** (JWT ERP, право «Администрирование 1С»; E17): `GET /v1/onec/accounting-checks/runs` —
+журнал прогонов и идущий; `POST /v1/onec/accounting-checks/run` `{baseKey?}` → 202 `{runId}` — запуск сейчас (нужен
+полный доступ). Результаты прогона уходят в ERP: `POST /bpai/checks/results`, посылка на организацию. Проверяются
+организации, которые обслуживает фирма (клиенты групп сотрудников и действующих связей обслуживания), а пока их нет —
+все, известные ERP. База без каталога проверок или агент без команд проверок — посылка «база не проверена»
+(`catalog: null`, одна строка `_catalog` с причиной).
+
+**Проверка ответа клиенту** (JWT ERP, любой пользователь; E17, пп. 24–25 стандарта): `POST /v1/quality/review-answer`
+`{text, question?, date?}` → `{verdict, score, checks, suggestions, rewrite, model, date}` — модель чата оценивает
+вывод, рекомендацию, ссылку на НПА, актуальность, краткость и уверенность; верна ли сама норма, модель не решает.
+Текст не хранится; отказы — `400`, `429`, `503 LLM_DISABLED`, `502 LLM_ERROR`/`LLM_BAD_OUTPUT`, `422`, `504`.
 
 **Агенты** (`Authorization: Bearer <agent token>` + `X-Agent-Id`): `POST /agent/v1/register`,
 `POST /agent/v1/heartbeat`, `GET /agent/v1/commands?wait=N`, `POST /agent/v1/commands/:id/result`.

@@ -44,6 +44,9 @@ import { TurnKeyStore } from "./chat/turnKeys.ts";
 import { purgeOldData } from "./retention.ts";
 import { ScheduleStore } from "./onec/schedules.ts";
 import { runDueSchedules } from "./onec/maintenanceRunner.ts";
+import { AccountingCheckRunStore, AccountingChecksRunner } from "./onec/accountingChecksRunner.ts";
+import { accountingChecksRouter } from "./http/accountingChecksRouter.ts";
+import { qualityRouter } from "./http/qualityRouter.ts";
 import { AnthropicProvider } from "./llm/anthropic.ts";
 import { OpenAIProvider } from "./llm/openai.ts";
 import { OpenAIBankExtractor } from "./bank/extract_openai.ts";
@@ -194,6 +197,23 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		.catch((e) => log.warn({ err: e }, "расписание обслуживания"));
 	setInterval(maintenance, 60_000).unref();
 
+	// ── Ночные проверки учёта в базах клиентов (E17, СК2.2) ──────────────────
+	// Тот же шаг в минуту, что у обслуживания: решение «пора» и защита от второго прогона за ночь — в самом
+	// прогонщике (onec/accountingChecksRunner.ts). Тик короткий: прогон идёт фоном, часами, и пока он идёт,
+	// тик ничего не делает. Результаты уходят в ERP тем же служебным каналом, что задачи и заметки.
+	const checkRuns = new AccountingCheckRunStore(db);
+	const accountingChecks = new AccountingChecksRunner(
+		{ agents, agentBases: new AgentBasesStore(db), erp, queue, sink: erpTasks, store: checkRuns, log },
+		{
+			enabled: cfg.ACCOUNTING_CHECKS_ENABLED, at: cfg.ACCOUNTING_CHECKS_AT, parallel: cfg.ACCOUNTING_CHECKS_PARALLEL,
+			commandTimeoutSecs: cfg.ACCOUNTING_CHECKS_COMMAND_TIMEOUT_SECS, limit: cfg.ACCOUNTING_CHECKS_LIMIT,
+		},
+	);
+	const checksTick = () => accountingChecks.tick()
+		.then((r) => { if (r === "started") log.info({ at: cfg.ACCOUNTING_CHECKS_AT }, "проверки учёта: плановый прогон запущен"); })
+		.catch((e) => log.warn({ err: e }, "проверки учёта: тик"));
+	setInterval(checksTick, 60_000).unref();
+
 	/*
 	 * ПОСЛЕДНЯЯ СЕТКА ПОД ПРОМИСАМИ (аудит 21.09). Маршруты обёрнуты, но отказ может прийти из таймера или из
 	 * фоновой задачи; по умолчанию Node роняет процесс, обрывая long-poll агентов и ожидание результатов. Пишем в
@@ -260,6 +280,8 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		next();
 	});
 
+	// Проверки учёта (E17): запуск и журнал — до onecRouter, на его префиксе; права те же (см. роутер).
+	app.use("/v1/onec/accounting-checks", accountingChecksRouter({ erp, cfg, runner: accountingChecks, store: checkRuns, audit, log }));
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
@@ -284,6 +306,8 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		// Ссылки на задачи для 1С и отдельный лимит на изменяющие вызовы задач и заметок.
 		panelUrl: cfg.PUBLIC_PANEL_URL, tasksWritePerMin: cfg.RATE_LIMIT_TASKS_WRITE_PER_MIN,
 	}));
+	// Стандарт качества (E17, СК7.1): проверка ответа клиенту моделью — до userRouter, иначе JWT проверялся бы дважды.
+	app.use("/v1/quality", qualityRouter({ erp, cfg, llm, audit, log }));
 	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db), db,
 		// Числа из 1С в карточке организации (ПН9): команда агенту и запись о ней в журнал.
 		queue, audit }));

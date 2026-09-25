@@ -1,4 +1,5 @@
-// Клиент служебного канала ERP (/bpai): задачи и заметки организации.
+// Клиент служебного канала ERP (/bpai): задачи и заметки организации, а с E17 — ещё и результаты ночных
+// проверок учёта в базах 1С (sendCheckResults).
 //
 // ПОЧЕМУ HTTP, А НЕ SQL. Сервис читает базу ERP напрямую (организации, пользователи), но здесь
 // этого мало: у задачи есть правила ERP — резолв автора и организации, статусы-справочник,
@@ -29,7 +30,60 @@ export type ErpTask = {
 	/** Происхождение задачи и его подпись: «из чата в 1С — Dev_01». Отдельно от ссылки. */
 	origin?: string | null;
 	originLabel?: string | null;
+	/*
+	 * СТАНДАРТ КАЧЕСТВА (E17, СК1). Поля приходят от ERP, начиная с доработки 25.09; ERP старше их не шлёт,
+	 * поэтому все необязательные, и «поля нет» значит «ERP не знает», а не «ноль».
+	 */
+	/** Вид задачи: `client_request` — обращение клиента (у него свой срок реакции), `task` — обычная. */
+	kind?: string | null;
+	/** Что сделано — конкретный результат (СК1.2): без него ERP задачу не закроет. */
+	result?: string | null;
+	/** Сколько раз клиент напоминал о задаче (СК1.3): второе и следующее — кандидат в нарушение п. 2. */
+	reminderCount?: number | null;
+	/** Оценка клиента 1–5 (СК7.2); null — не оценивали. */
+	clientRating?: number | null;
 };
+
+/** Вид задачи при создании: обращение клиента или обычная задача (по умолчанию ERP ставит `task`). */
+export type ErpTaskKind = "client_request" | "task";
+
+/**
+ * РЕЗУЛЬТАТЫ НОЧНЫХ ПРОВЕРОК УЧЁТА ОДНОЙ ОРГАНИЗАЦИИ (E17, СК2.2) — тело `POST /bpai/checks/results`.
+ *
+ * Форму задаёт ERP (она превращает находки в задачи и закрывает их, когда находка исчезла), сервис лишь
+ * собирает то, что ответила 1С: каталог базы, прогон каждой проверки и снимки. `request` — ровно тот payload,
+ * что ушёл в 1С: по нему ERP видит период и предел, с которыми получена находка. `data` — ответ 1С как есть.
+ */
+export type ErpCheckOutcome =
+	| { ok: true; data: unknown }
+	| { ok: false; error: { code: string; message: string } };
+
+export type ErpCheckRun = { check: string; scope: "organization" | "base"; request: Record<string, unknown> } & ErpCheckOutcome;
+export type ErpSnapshotRun = { snapshot: string; request: Record<string, unknown> } & ErpCheckOutcome;
+
+export type ErpCheckResults = {
+	/** БИН организации ERP, которой адресованы результаты. */
+	bin: string;
+	baseKey: string;
+	agentId: string;
+	startedAt: string;
+	finishedAt: string;
+	/**
+	 * Каталог базы (LIST_ACCOUNTING_CHECKS) — как его вернула 1С: версии проверок, доступность, параметры.
+	 * `null` — «база не проверена» (п. 21 реестра E17): каталог не получен или сборка агента не умеет проверки.
+	 * Тогда в `runs` ровно одна строка `_catalog` с `ok: false` и причиной, а `snapshots` пуст.
+	 */
+	catalog: { apiVersion: string | null; checks: unknown[]; snapshots: unknown[] } | null;
+	runs: ErpCheckRun[];
+	snapshots: ErpSnapshotRun[];
+};
+
+/**
+ * Сколько ждать ERP с результатами проверок. Обычные вызовы канала — строка задачи, им хватает
+ * ERP_API_TIMEOUT_MS (15 с); здесь ERP разбирает до тысячи находок на проверку и заводит по ним задачи, и
+ * оборвать её на середине значит потерять ночной прогон организации.
+ */
+const CHECK_RESULTS_TIMEOUT_MS = 120_000;
 
 export type ErpNote = {
 	uuid: string;
@@ -83,12 +137,46 @@ export class ErpTasks {
 		originLabel?: string | null;
 		/** Ссылка на объект 1С: пара «тип + uuid» целиком или ничего (СВ7). */
 		sourceType?: string | null; sourceUuid?: string | null; sourceLabel?: string | null;
+		/** Вид задачи (СК1.1); не задан — ERP ставит `task`. */
+		kind?: ErpTaskKind;
 	}): Promise<ErpTask> {
 		return (await this.call<{ item: ErpTask }>("POST", "/bpai/tasks", { ...actor, ...task })).item;
 	}
 
-	async updateTask(actor: ErpActor, uuid: string, patch: { name?: string; description?: string; deadline?: string | null; status?: string; close?: boolean }): Promise<ErpTask> {
+	/**
+	 * Правка и закрытие. `result` — что сделано (СК1.2): закрытие (`close` или завершающий статус) без результата —
+	 * уже записанного или присланного здесь — ERP отвергает с 400 «Нужен результат: что сделано».
+	 */
+	async updateTask(actor: ErpActor, uuid: string, patch: { name?: string; description?: string; deadline?: string | null; status?: string; close?: boolean; result?: string }): Promise<ErpTask> {
 		return (await this.call<{ item: ErpTask }>("PATCH", `/bpai/tasks/${encodeURIComponent(uuid)}`, { ...actor, ...patch })).item;
+	}
+
+	/**
+	 * НАПОМИНАНИЕ КЛИЕНТА (СК1.3). Не правка задачи, а отдельное событие: ERP считает напоминания (`reminderCount`),
+	 * и второе по той же задаче — кандидат в нарушение п. 2 стандарта («клиент не должен контролировать бухгалтера»).
+	 */
+	async remindTask(actor: ErpActor, uuid: string, note?: string): Promise<ErpTask> {
+		return (await this.call<{ item: ErpTask }>("POST", `/bpai/tasks/${encodeURIComponent(uuid)}/remind`, {
+			...actor, ...(note ? { note } : {}),
+		})).item;
+	}
+
+	/** Оценка выполненной задачи клиентом: 1–5 и, если сказал, комментарий (СК7.2). */
+	async rateTask(actor: ErpActor, uuid: string, rating: number, comment?: string): Promise<ErpTask> {
+		return (await this.call<{ item: ErpTask }>("POST", `/bpai/tasks/${encodeURIComponent(uuid)}/rate`, {
+			...actor, rating, ...(comment ? { comment } : {}),
+		})).item;
+	}
+
+	/**
+	 * Результаты ночных проверок учёта одной организации (E17, СК2.2). Отвечает ERP счётчиками — что она сделала с
+	 * находками; сервис их только пишет в журнал. Канал не настроен — отказ своими словами: «задачи недоступны»
+	 * здесь сбивало бы с толку.
+	 */
+	async sendCheckResults(body: ErpCheckResults): Promise<Record<string, unknown>> {
+		if (!this.enabled) throw new ErpRefused(503, "Результаты проверок учёта некуда отправить: служебный канал ERP не настроен (ERP_API_KEY)");
+		const r = await this.call<{ data?: Record<string, unknown> }>("POST", "/bpai/checks/results", body, Math.max(this.timeoutMs, CHECK_RESULTS_TIMEOUT_MS));
+		return r.data ?? {};
 	}
 
 	async listNotes(bin: string, opts: { limit?: number } = {}): Promise<ErpNote[]> {
@@ -117,10 +205,10 @@ export class ErpTasks {
 		return (await this.call<{ items: ErpTaskStatus[] }>("GET", "/bpai/task-statuses")).items;
 	}
 
-	private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
+	private async call<T>(method: string, path: string, body?: unknown, timeoutMs = this.timeoutMs): Promise<T> {
 		if (!this.enabled) throw new ErpRefused(503, "Задачи и заметки недоступны: служебный канал ERP не настроен");
 		const ctrl = new AbortController();
-		const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+		const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 		let res: Response;
 		try {
 			res = await fetch(`${this.base}${path}`, {

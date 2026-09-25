@@ -44,6 +44,7 @@ import type { PurchaseDocumentStore } from "../purchase/store.ts";
 import { summarizePurchase, purchaseLinesText, purchasePayload, clean, fmt as fmtQty, KIND_LABEL, type PurchaseDocument } from "../purchase/schema.ts";
 import type { FileStore, FileRef } from "../files/store.ts";
 import { extractOrgBases, referencedBases, rememberIdBases } from "./orgBases.ts";
+import { serverToolCard, serverToolQuestion } from "./serverTools.ts";
 
 export type Attachment = { fileName: string; mimeType: string; content: Buffer };
 
@@ -178,8 +179,11 @@ export type ServerToolRunner = {
 	/** Доступен ли инструмент этому пользователю: организация хода известна и канал настроен. */
 	available: (user: ChatUser) => boolean;
 	run: (spec: ToolSpec, payload: Record<string, unknown>, user: ChatUser, ctx?: ServerToolContext) => Promise<Outcome>;
-	/** Короткий контекст организации для промпта (задачи и заметки); null — нечего показать. */
-	summary?: (user: ChatUser) => Promise<string | null>;
+	/**
+	 * Короткий контекст организации для промпта (задачи и заметки); null — нечего показать. `ids` — объекты,
+	 * названные в тексте (задачи): на них модель вправе ссылаться, как на пришедшие из инструментов.
+	 */
+	summary?: (user: ChatUser) => Promise<{ text: string; ids: string[] } | null>;
 };
 
 // Границу слова  здесь использовать нельзя: в JS она знает только латиницу, и «да» не
@@ -334,9 +338,13 @@ export class ChatWorkflow {
 		 * сводку не подмешиваем.
 		 */
 		const serverRunner = this.d.serverTools;
-		const systemExtra = startRound === 0 && serverRunner?.summary && serverRunner.available(user)
-			? (await serverRunner.summary(user).catch(() => null)) ?? undefined
-			: undefined;
+		const summary = startRound === 0 && serverRunner?.summary && serverRunner.available(user)
+			? await serverRunner.summary(user).catch(() => null)
+			: null;
+		const systemExtra = summary?.text || undefined;
+		// Задачи из сводки — «виденные» (25.09): сводка сама предлагает их taskId для update_task и complete_task.
+		// Контекст сохранится со следующей сменой состояния хода.
+		if (summary?.ids.length) conv.context.seenIds = [...new Set([...conv.context.seenIds, ...summary.ids])];
 
 		for (let round = startRound; round < this.d.maxToolRounds; round++) {
 			if (client) conv.context.rounds = round + 1;
@@ -917,6 +925,11 @@ export class ChatWorkflow {
 	private card(spec: ToolSpec, payload: Record<string, unknown>, ctx: Context): string {
 		const names = this.namesFromHistory(ctx);
 		const nameOf = (id: unknown) => (typeof id === "string" && names.get(id)) || String(id ?? "");
+		// Задачи и заметки ERP (E17): своя карточка — общая ветка ниже говорит о «документе 1С».
+		if (spec.runsOnServer) {
+			const card = serverToolCard(spec.name, payload, { nameOf, docs: ctx.docs ?? {} });
+			if (card) return card;
+		}
 		if (spec.name === "create_sale") {
 			const items = (payload.items as { productId: string; quantity: number; price: number }[]) ?? [];
 			const lines = items.map((it) => `• ${nameOf(it.productId)} — ${it.quantity} × ${it.price} ₸`);
@@ -1030,7 +1043,8 @@ export class ChatWorkflow {
 	private question(tool: string, operation: string): string {
 		if (operation === "CRITICAL") return "Подтвердите операцию.";
 		if (tool === "import_bank_statement") return "Загрузить выписку в 1С?";
-		return "Создать документ?";
+		// Задача и заметка — не документ 1С: «Создать документ?» под закрытием задачи сбивало с толку.
+		return serverToolQuestion(tool) ?? "Создать документ?";
 	}
 
 	/** Распознаёт PDF-вложения (параллельно) и дописывает к сообщению пользователя сводку каждой выписки. */
@@ -1178,6 +1192,8 @@ ${purchaseLinesText(r.document)}]`, file };
 			if (Array.isArray(v)) { v.forEach(walk); return; }
 			const o = v as Record<string, unknown>;
 			if (typeof o.id === "string" && (typeof o.name === "string" || typeof o.number === "string")) m.set(o.id, String(o.name ?? o.number));
+			// Задачи ERP приходят с `taskId` (serverTools): карточка закрытия и напоминания называет задачу по имени.
+			if (typeof o.taskId === "string" && typeof o.name === "string") m.set(o.taskId, o.name);
 			Object.values(o).forEach(walk);
 		};
 		walk(ctx.lastResult);

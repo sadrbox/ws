@@ -231,9 +231,10 @@ test("СВ9: канал выключен — модель не видит инс
 test("СВ9: закрыть задачу, которой в диалоге не было, нельзя", () => {
 	const spec = TOOLS_BY_NAME.get("complete_task")!;
 	const seen = new Set<string>([TASK]);
-	assert.deepEqual(spec.buildPayload({ taskId: TASK }, { seenIds: seen }), { taskId: TASK, close: true });
+	// С 25.09 (E17, СК1.2) закрытие несёт обязательный результат — см. tasks_quality_standard.test.ts.
+	assert.deepEqual(spec.buildPayload({ taskId: TASK, result: "Отчёт сдан" }, { seenIds: seen }), { taskId: TASK, result: "Отчёт сдан", close: true });
 	assert.throws(
-		() => spec.buildPayload({ taskId: "11111111-0000-4000-8000-000000000009" }, { seenIds: seen }),
+		() => spec.buildPayload({ taskId: "11111111-0000-4000-8000-000000000009", result: "Отчёт сдан" }, { seenIds: seen }),
 		(e: unknown) => e instanceof ToolInputError,
 		"выдуманный id закрыл бы чужую задачу",
 	);

@@ -71,7 +71,9 @@ export class OpenAIProvider implements LLMProvider {
 				model: this.model,
 				// Контекст организации — частью системного сообщения: у Chat Completions нет блоков.
 				messages: toMessages(req.systemExtra ? `${req.system}\n\n${req.systemExtra}` : req.system, req.messages),
-				tools,
+				// Пустой список инструментов OpenAI отвергает (400 «empty array»), а вызов без них бывает: проверка
+				// ответа клиенту (quality/review.ts) — один ход «текст → JSON». Нет инструментов — нет и поля.
+				...(tools.length ? { tools } : {}),
 				max_completion_tokens: req.maxTokens ?? 4096,
 				...(isReasoningModel(this.model) ? { reasoning_effort: reasoningEffort(this.effort) } : {}),
 			});

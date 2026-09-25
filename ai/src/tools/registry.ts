@@ -957,7 +957,8 @@ export const TOOLS: ToolSpec[] = [
 		name: "list_tasks",
 		description:
 			"Задачи по организации из BuhProf AI (те же, что в панели). По умолчанию — только незакрытые. "
-			+ "Вызывай, когда спрашивают про задачи, поручения, что нужно сделать, какие сроки.",
+			+ "Вызывай, когда спрашивают про задачи, поручения, что нужно сделать, какие сроки. "
+			+ "Вопрос «как дела с моей задачей» — это list_tasks и ответ по статусу, а не напоминание (remind_task).",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -978,7 +979,10 @@ export const TOOLS: ToolSpec[] = [
 		description:
 			"Поставить задачу по организации в BuhProf AI. Автор — пользователь 1С. Исполнителя указывай, только "
 			+ "если человек назвал его по имени. Срок — ISO-дата (2026-10-01). Если задача про документ, который "
-			+ "создавали или читали в этом диалоге, укажи documentId — задача будет связана с ним.",
+			+ "создавали или читали в этом диалоге, укажи documentId — задача будет связана с ним. "
+			+ "clientRequest: true — когда пользователь 1С просит бухгалтерию что-то сделать для него («подготовьте», "
+			+ "«пришлите», «проверьте», «сдайте»): это обращение клиента, у него свой срок реакции. Для собственных "
+			+ "дел бухгалтера и записей «себе на память» clientRequest не ставь.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -987,6 +991,7 @@ export const TOOLS: ToolSpec[] = [
 				deadline: { type: "string", description: "Срок, ISO-дата" },
 				executorName: { type: "string", description: "Имя исполнителя, если он назван" },
 				documentId: { type: "string", description: "uuid документа 1С из этого диалога, если задача о нём" },
+				clientRequest: { type: "boolean", description: "true — обращение клиента к бухгалтерии (просьба сделать что-то для него)" },
 			},
 			required: ["name"],
 			additionalProperties: false,
@@ -1003,11 +1008,24 @@ export const TOOLS: ToolSpec[] = [
 			// Документ называется ТОЛЬКО идентификатором, и тот обязан встретиться в диалоге: тип и
 			// подпись сервис возьмёт из результата вызова 1С, а не со слов модели (СВ7).
 			...(i.documentId === undefined ? {} : { documentId: known(ctx, "documentId", i.documentId) }),
+			/*
+			 * ОБРАЩЕНИЕ КЛИЕНТА (СК1.1). У такой задачи в ERP свой срок реакции, и непринятое вовремя обращение —
+			 * кандидат в нарушение п. 3 стандарта. Решает модель по словам человека: «сделайте для нас» — обращение,
+			 * «запиши себе» — нет. Не отмечено — поле не едет вовсе, и ERP ставит обычную задачу.
+			 *
+			 * КТО АВТОР — РЕШАЕТ ERP (25.09). В базе клиента работают и его сотрудники, и бухгалтер BuhProf, а сервис
+			 * видит только имя пользователя ИБ. Поэтому признак модели — лишь подсказка: ERP (POST /bpai/tasks) сама
+			 * сверяет автора — не сотрудник фирмы (нет ни группы, ни членства в фирме) → обращение всегда; сотрудник →
+			 * по этому признаку («запиши себе» — задача, «клиент просит» — обращение).
+			 */
+			...(i.clientRequest === true ? { kind: "client_request" } : {}),
 		}),
 	},
 	{
 		name: "update_task",
-		description: "Изменить задачу: заголовок, подробности, срок или статус. taskId — из list_tasks этого диалога.",
+		description:
+			"Изменить задачу: заголовок, подробности, срок или статус. taskId — из list_tasks этого диалога. "
+			+ "Перевод в завершающий статус требует result — что конкретно сделано; просто закрыть задачу — complete_task.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -1016,6 +1034,7 @@ export const TOOLS: ToolSpec[] = [
 				description: { type: "string" },
 				deadline: { type: "string", description: "Срок, ISO-дата; пустая строка — снять срок" },
 				status: { type: "string", description: "Код статуса из списка задач" },
+				result: { type: "string", description: "Что сделано — конкретный результат; обязателен при переводе в завершающий статус" },
 			},
 			required: ["taskId"],
 			additionalProperties: false,
@@ -1030,22 +1049,89 @@ export const TOOLS: ToolSpec[] = [
 			...(typeof i.description === "string" ? { description: i.description.trim() } : {}),
 			...(typeof i.deadline === "string" ? { deadline: i.deadline.trim() } : {}),
 			...(typeof i.status === "string" && i.status.trim() ? { status: i.status.trim() } : {}),
+			...(typeof i.result === "string" && i.result.trim() ? { result: taskResult(i.result) } : {}),
 		}),
 	},
 	{
 		name: "complete_task",
-		description: "Закрыть задачу (перевести в завершающий статус). taskId — из list_tasks этого диалога.",
+		description:
+			"Закрыть задачу (перевести в завершающий статус). taskId — из list_tasks этого диалога. "
+			+ "result обязателен: что конкретно сделано и чем кончилось («сдана форма 200.00 за 3 квартал, квитанция в 1С», "
+			+ "«акт сверки с ТОО Альфа подписан, расхождений нет»). «Передала», «написала», «позвонила», «не ответили» — "
+			+ "не результат: закрывать задачу можно только с конкретным результатом. Если пользователь не сказал, что "
+			+ "сделано, — спроси его, не придумывай.",
 		inputSchema: {
 			type: "object",
-			properties: { taskId: { type: "string", description: "uuid задачи из list_tasks" } },
-			required: ["taskId"],
+			properties: {
+				taskId: { type: "string", description: "uuid задачи из list_tasks" },
+				result: { type: "string", description: "Что сделано — конкретный результат, а не «передала/написала»" },
+			},
+			required: ["taskId", "result"],
 			additionalProperties: false,
 		},
 		operation: "WRITE",
 		commandType: "TASKS_COMPLETE",
 		mutating: true,
 		runsOnServer: true,
-		buildPayload: (i, ctx) => ({ taskId: known(ctx, "taskId", i.taskId), close: true }),
+		// Результат проверяется ДО карточки: человек не должен подтверждать закрытие, которое ERP отвергнет.
+		buildPayload: (i, ctx) => ({ taskId: known(ctx, "taskId", i.taskId), result: taskResult(i.result), close: true }),
+	},
+	/*
+	 * НАПОМИНАНИЕ И ОЦЕНКА (E17, СК1.3, СК7.2). Изменяющие, но безобидные: ничего не удаляют и чужого не правят —
+	 * поэтому класс тот же, что у add_note (WRITE, карточка при CONFIRM_WRITE). Карточка здесь не формальность:
+	 * напоминание в ERP считается, и второе по той же задаче — кандидат в нарушение стандарта у бухгалтера.
+	 * Отправлять его «по догадке» модели, без явной просьбы человека, нельзя.
+	 */
+	{
+		name: "remind_task",
+		description:
+			"Напомнить исполнителю о задаче от имени пользователя 1С: клиент ждёт результата и просит поторопить. "
+			+ "Только когда пользователь прямо просит напомнить или поторопить; вопрос «как дела с задачей» — это list_tasks. "
+			+ "Если задача о том же уже есть — напомни о ней, а не ставь новую. taskId — из list_tasks этого диалога. "
+			+ "note — что клиент хочет добавить или уточнить, если он это сказал.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				taskId: { type: "string", description: "uuid задачи из list_tasks" },
+				note: { type: "string", description: "Что клиент добавляет к напоминанию, если сказал" },
+			},
+			required: ["taskId"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "TASKS_REMIND",
+		mutating: true,
+		runsOnServer: true,
+		buildPayload: (i, ctx) => ({
+			taskId: known(ctx, "taskId", i.taskId),
+			...(typeof i.note === "string" && i.note.trim() ? { note: i.note.trim() } : {}),
+		}),
+	},
+	{
+		name: "rate_task",
+		description:
+			"Оценить выполненную задачу от имени пользователя 1С: rating от 1 до 5 (5 — отлично) и, если сказал, "
+			+ "комментарий. Только когда пользователь сам назвал оценку — не предлагай её за него и не ставь по догадке. "
+			+ "taskId — из list_tasks этого диалога.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				taskId: { type: "string", description: "uuid задачи из list_tasks" },
+				rating: { type: "integer", minimum: 1, maximum: 5, description: "Оценка 1–5" },
+				comment: { type: "string", description: "Комментарий к оценке, если он есть" },
+			},
+			required: ["taskId", "rating"],
+			additionalProperties: false,
+		},
+		operation: "WRITE",
+		commandType: "TASKS_RATE",
+		mutating: true,
+		runsOnServer: true,
+		buildPayload: (i, ctx) => ({
+			taskId: known(ctx, "taskId", i.taskId),
+			rating: taskRating(i.rating),
+			...(typeof i.comment === "string" && i.comment.trim() ? { comment: i.comment.trim() } : {}),
+		}),
 	},
 	{
 		name: "list_notes",
@@ -1118,6 +1204,16 @@ export function toolDefinitions(opts: { serverTools?: boolean } = {}): ToolDefin
 	});
 }
 
+/**
+ * КЛЮЧИ, ПОД КОТОРЫМИ В РЕЗУЛЬТАТАХ ЛЕЖАТ ИДЕНТИФИКАТОРЫ ОБЪЕКТОВ.
+ *
+ * `id` — объекты 1С. `taskId` — задачи ERP: серверные инструменты (list_tasks, create_task…) отдают их модели
+ * этим именем, а собирался только `id` — и update_task/complete_task отвергали задачу, которую модель только что
+ * получила списком: «этот идентификатор не встречался в диалоге» (найдено 25.09). Список закрытый, а не «всё, что
+ * кончается на Id»: в ответах 1С бывают и эхо присланного, и выдуманное моделью так «отмывать» нельзя.
+ */
+const ID_KEYS = new Set(["id", "taskId"]);
+
 /** Собирает все id из результата 1С — чтобы модель могла ссылаться на них дальше. */
 export function collectIds(value: unknown, into: Set<string>): void {
 	if (!value || typeof value !== "object") return;
@@ -1126,9 +1222,41 @@ export function collectIds(value: unknown, into: Set<string>): void {
 		return;
 	}
 	for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-		if (k === "id" && typeof v === "string" && uuid.safeParse(v).success) into.add(v);
+		if (ID_KEYS.has(k) && typeof v === "string" && uuid.safeParse(v).success) into.add(v);
 		else collectIds(v, into);
 	}
+}
+
+/**
+ * «НЕ РЕЗУЛЬТАТ» ПО СТАНДАРТУ (п. 1): «Написала», «позвонила», «передала», «не ответили», «программа не
+ * работает» — прямо перечислены как то, что результатом не считается. Отвергаем, только когда результат
+ * СОСТОИТ из такого слова целиком: «передала акт сверки клиенту, подписан 20.09» — уже результат.
+ *
+ * «Сделано», «готово», «выполнено», «ок» — сверх стандарта (решено 25.09): они так же ничего не говорят о том,
+ * что сделано. Перечень повторён в ERP (backend services/quality/taskRules.js — главный) и в панели — править
+ * вместе.
+ */
+const NOT_A_RESULT = /^(?:я\s+)?(?:уже\s+)?(?:передал[аи]?|написал[аи]?|позвонил[аи]?|отправил[аи]?|сообщил[аи]?|не\s+ответил[аи]?|программа\s+не\s+работает|сделано|готово|выполнено|ок|ok|done)[\s.!]*$/i;
+
+/** Результат задачи: непустой и не одно из «не результатов» стандарта. */
+function taskResult(v: unknown): string {
+	const r = str(v, "result");
+	if (NOT_A_RESULT.test(r)) {
+		throw new ToolInputError("result", `result: «${r}» — не результат. Нужно, что конкретно сделано и чем закончилось; спросите пользователя`);
+	}
+	// Тот же порог, что в ERP (backend/services/quality/taskRules.js, MIN_RESULT_LENGTH): иначе человек подтвердил бы
+	// карточку, которую ERP затем отвергнет.
+	if (r.length < 10) {
+		throw new ToolInputError("result", `result: «${r}» — слишком коротко. Опишите, что сделано (не меньше 10 знаков); спросите пользователя`);
+	}
+	return r;
+}
+
+/** Оценка задачи — целое от 1 до 5. */
+function taskRating(v: unknown): number {
+	const n = num(v, NaN, "rating");
+	if (!Number.isInteger(n) || n < 1 || n > 5) throw new ToolInputError("rating", "rating: целое число от 1 до 5");
+	return n;
 }
 
 function str(v: unknown, field: string): string {

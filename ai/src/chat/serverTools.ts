@@ -26,6 +26,12 @@ const taskView = (t: ErpTask) => ({
 	author: t.curatorName,
 	// Связанный документ — одной подписью: модели незачем знать ни типа, ни идентификатора.
 	...(t.sourceLabel ? { document: t.sourceLabel } : {}),
+	// Поля стандарта качества (E17) — только когда они что-то говорят: обычная задача без напоминаний и оценки
+	// не должна стоить модели лишних токенов на каждом списке.
+	...(t.kind && t.kind !== "task" ? { kind: t.kind } : {}),
+	...(t.result ? { result: t.result } : {}),
+	...(t.reminderCount ? { reminderCount: t.reminderCount } : {}),
+	...(t.clientRating ? { clientRating: t.clientRating } : {}),
 });
 
 const noteView = (n: ErpNote) => ({ noteId: n.uuid, body: n.body, author: n.authorName, at: n.createdAt });
@@ -48,11 +54,21 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 		 * Контекст хода: открытые задачи и последние заметки организации. Он идёт в изменчивую часть
 		 * системного промпта, поэтому короткий — десять задач и пять заметок. Сбой ERP контекст не
 		 * рушит: диалог продолжается без него, а модель при надобности спросит инструментом.
+		 *
+		 * `ids` — задачи, показанные в сводке: сервис кладёт их в «виденные» идентификаторы диалога. Сводка прямо
+		 * предлагает taskId для update_task и complete_task, а проверка `known` пропускала только пришедшее из
+		 * результатов инструментов — и первая же попытка закрыть задачу из сводки кончалась отказом (25.09).
 		 */
 		async summary(user) {
 			const bin = binOf(user);
 			if (!bin || !tasks.enabled) return null;
 			try {
+				/*
+				 * ЧУЖОЙ БИН — БЕЗ СВОДКИ (25.09). Организацию хода присылает форма, и run() её сверяет со списком
+				 * организаций базы, а сводка — нет: база с действующим токеном, назвав чужой БИН, получала в
+				 * контексте модели открытые задачи и заметки чужой организации. Проверка та же, что в run().
+				 */
+				if (baseOrgs && user.onec && !(await baseOrgs.has(user.onec.baseId, bin))) return null;
 				const [openTasks, notes] = await Promise.all([
 					tasks.listTasks(bin, { state: "open", limit: 10 }),
 					tasks.listNotes(bin, { limit: 5 }),
@@ -72,7 +88,7 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 					for (const n of notes) lines.push(`- ${String(n.createdAt).slice(0, 10)} ${n.authorName ?? ""}: ${n.body.slice(0, 300)}`);
 				}
 				lines.push("", "Это снимок на начало хода. За свежим списком — list_tasks и list_notes.");
-				return lines.join("\n");
+				return { text: lines.join("\n"), ids: openTasks.map((t) => t.uuid) };
 			} catch {
 				return null;
 			}
@@ -116,6 +132,8 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 							deadline: typeof payload.deadline === "string" ? payload.deadline : undefined,
 							executorName: typeof payload.executorName === "string" ? payload.executorName : undefined,
 							...(doc ? { sourceType: `1c:${doc.type}`, sourceUuid: documentId, sourceLabel: doc.label } : {}),
+							// Обращение клиента (СК1.1); иначе поле не едет, и ERP ставит обычную задачу.
+							...(payload.kind === "client_request" ? { kind: "client_request" as const } : {}),
 						});
 						return { ok: true, data: taskView(item) };
 					}
@@ -128,7 +146,18 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 							deadline: typeof payload.deadline === "string" ? (payload.deadline.trim() || null) : undefined,
 							status: typeof payload.status === "string" ? payload.status : undefined,
 							close: payload.close === true,
+							// Что сделано (СК1.2): без него закрытие ERP отвергнет — и её текст дойдёт до модели как есть.
+							result: typeof payload.result === "string" && payload.result.trim() ? payload.result.trim() : undefined,
 						});
+						return { ok: true, data: taskView(item) };
+					}
+					case "TASKS_REMIND": {
+						const item = await tasks.remindTask(actor, String(payload.taskId), typeof payload.note === "string" ? payload.note : undefined);
+						return { ok: true, data: taskView(item) };
+					}
+					case "TASKS_RATE": {
+						const item = await tasks.rateTask(actor, String(payload.taskId), Number(payload.rating),
+							typeof payload.comment === "string" ? payload.comment : undefined);
 						return { ok: true, data: taskView(item) };
 					}
 					case "NOTES_LIST": {
@@ -151,4 +180,90 @@ export function serverTools(deps: { tasks: ErpTasks; baseOrgs?: BaseOrganization
 			}
 		},
 	};
+}
+
+// ── Карточки подтверждения задач и заметок ─────────────────────────────────────
+
+/** Что карточке известно о диалоге: подписи объектов по идентификатору и документы 1С (СВ7). */
+export type ServerCardNames = {
+	/** Имя объекта по id из результатов диалога; не нашлось — сам id. */
+	nameOf: (id: unknown) => string;
+	docs?: Record<string, { type: string; label: string }>;
+};
+
+/** Текст из вызова модели — в карточку: одной строкой и не длиннее предела, чтобы карточка оставалась карточкой. */
+const clip = (v: unknown, max = 300): string => {
+	const s = String(v ?? "").replace(/\s+/g, " ").trim();
+	return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+};
+
+/**
+ * КАРТОЧКА ПОДТВЕРЖДЕНИЯ ДЛЯ ЗАДАЧ И ЗАМЕТОК (E17). Раньше эти инструменты попадали в общую ветку карточки
+ * документа 1С, и человек видел «create_task: документ » и вопрос «Создать документ?» — подтверждать было нечего
+ * читать. Теперь карточка говорит, ЧТО именно уйдёт в ERP: какую задачу закрываем и с каким результатом, о чём
+ * напоминаем, какую оценку ставим. `null` — инструмент не из этого набора.
+ */
+export function serverToolCard(tool: string, payload: Record<string, unknown>, names: ServerCardNames): string | null {
+	// Задачу называем по имени из списка задач этого диалога; не нашли — идентификатором: он хотя бы честен.
+	const task = () => {
+		const id = String(payload.taskId ?? "");
+		const name = names.nameOf(id);
+		return name && name !== id ? `«${clip(name, 150)}»` : id;
+	};
+	switch (tool) {
+		case "create_task": {
+			const doc = typeof payload.documentId === "string" ? names.docs?.[payload.documentId] : undefined;
+			return [
+				payload.kind === "client_request" ? "Новое обращение в BuhProf AI" : "Новая задача в BuhProf AI",
+				`Задача: ${clip(payload.name, 200)}`,
+				payload.description ? `Подробности: ${clip(payload.description)}` : null,
+				payload.deadline ? `Срок: ${clip(payload.deadline, 40)}` : null,
+				payload.executorName ? `Исполнитель: ${clip(payload.executorName, 100)}` : null,
+				doc ? `Документ: ${clip(doc.label, 150)}` : null,
+				payload.kind === "client_request" ? "Обращение клиента: бухгалтерия должна принять его в работу в срок реакции." : null,
+			].filter(Boolean).join("\n");
+		}
+		case "update_task":
+			return [
+				`Изменить задачу ${task()}`,
+				payload.name !== undefined ? `Заголовок: ${clip(payload.name, 200) || "—"}` : null,
+				payload.description !== undefined ? `Подробности: ${clip(payload.description) || "—"}` : null,
+				payload.deadline !== undefined ? (String(payload.deadline).trim() ? `Срок: ${clip(payload.deadline, 40)}` : "Срок: снять") : null,
+				payload.status ? `Статус: ${clip(payload.status, 60)}` : null,
+				payload.result ? `Результат: ${clip(payload.result, 500)}` : null,
+			].filter(Boolean).join("\n");
+		case "complete_task":
+			return [
+				`Закрыть задачу ${task()}`,
+				`Результат: ${clip(payload.result, 500)}`,
+			].join("\n");
+		case "remind_task":
+			return [
+				`Напомнить о задаче ${task()}`,
+				payload.note ? `Комментарий: ${clip(payload.note, 500)}` : null,
+				"Исполнитель получит напоминание от вашего имени.",
+			].filter(Boolean).join("\n");
+		case "rate_task":
+			return [
+				`Оценка задачи ${task()}: ${String(payload.rating)} из 5`,
+				payload.comment ? `Комментарий: ${clip(payload.comment, 500)}` : null,
+			].filter(Boolean).join("\n");
+		case "add_note":
+			return `Заметка по организации:\n${clip(payload.body, 800)}`;
+		default:
+			return null;
+	}
+}
+
+/** Вопрос под карточкой задач и заметок; `null` — не наш инструмент, вопрос выберет общий код. */
+export function serverToolQuestion(tool: string): string | null {
+	const q: Record<string, string> = {
+		create_task: "Поставить задачу?",
+		update_task: "Изменить задачу?",
+		complete_task: "Закрыть задачу?",
+		remind_task: "Отправить напоминание?",
+		rate_task: "Сохранить оценку?",
+		add_note: "Записать заметку?",
+	};
+	return q[tool] ?? null;
 }
