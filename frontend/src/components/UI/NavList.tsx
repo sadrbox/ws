@@ -8,6 +8,7 @@ import { useChatUnread } from "src/hooks/useChatUnread";
 
 import { getAccessLevel } from 'src/hooks/useAccessPermission';
 import { useDisabledModules } from "src/hooks/useDisabledModules";
+import { useQualityMe } from "src/hooks/useQualityMe";
 import {
   ContractsList,
   ActivityHistoriesList,
@@ -110,6 +111,25 @@ import {
   SearchReplaceRefsForm,
   OpeningBalanceForm,
   OrphanRefsForm,
+  // E17 «Стандарт качества»
+  StandardViolationsList,
+  StandardItemsList,
+  StaffGroupsList,
+  ErrorTypesList,
+  QualityBonusView,
+  QualitySettingsView,
+  QualityNotificationsList,
+  ConsultationCheckView,
+  CheckFindingsList,
+  CheckRunsList,
+  ChecklistTemplatesList,
+  ChecklistRunsList,
+  KnStatementsList,
+  QualityChiefDashboard,
+  QualityManagerDashboard,
+  AttendanceMyDay,
+  AttendanceJournal,
+  WorkCalendarView,
 } from "src/registry/viewRegistry";
 
 type TypeNavListProps = {
@@ -180,6 +200,9 @@ export const NavList = ({ label }: TypeNavListProps) => {
   // По умолчанию (нет настроек) — набор пуст, всё видно как раньше.
   const disabledModules = useDisabledModules();
   const moduleOn = (key: string) => !disabledModules.has(key);
+
+  // E17: роль в учёте качества задают группы сотрудников, а не права на модели (см. useQualityMe).
+  const { me: qualityMe, isController: qualityController, canManage: qualityCanManage } = useQualityMe();
 
   const TradeGroups = () => (
     <>
@@ -373,6 +396,55 @@ export const NavList = ({ label }: TypeNavListProps) => {
   );
 
   /**
+   * КАЧЕСТВО (E17, docs/PLAN_QUALITY_STANDARD_2026-09-25.md) — стандарт качества, ответственности и
+   * дисциплины: личное (уведомления, мой день, мои нарушения), контроль (панели, посещаемость — главбуху,
+   * руководителю, администратору) и справочники. Что показывать — по роли в группах сотрудников
+   * (useQualityMe), а каждое действие всё равно проверяет сервер.
+   */
+  const QualityGroups = () => (
+    <>
+      <div className={styles.NavGroup}>
+        <h3>{translate("qualitySection")}</h3>
+        <ul className={styles.NavList}>
+          <NavItem onClick={() => addPane({ component: QualityNotificationsList, label: translate("QualityNotificationsList") })}>
+            {translate("QualityNotificationsList")}
+            {(qualityMe?.unreadNotifications ?? 0) > 0 && (
+              <span className={styles.NavBadge}>{(qualityMe?.unreadNotifications ?? 0) > 99 ? "99+" : qualityMe?.unreadNotifications}</span>
+            )}
+          </NavItem>
+          <NavItem onClick={() => addPane({ component: AttendanceMyDay, label: translate("AttendanceMyDay") })}>{translate("AttendanceMyDay")}</NavItem>
+          <NavItem onClick={() => addPane({ component: StandardViolationsList, label: translate("StandardViolationsList") })}>{translate("StandardViolationsList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: QualityBonusView, label: translate("QualityBonusView") })}>{translate("QualityBonusView")}</NavItem>
+          <NavItem onClick={() => addPane({ component: CheckFindingsList, label: translate("CheckFindingsList") })}>{translate("CheckFindingsList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: ChecklistRunsList, label: translate("ChecklistRunsList") })}>{translate("ChecklistRunsList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: KnStatementsList, label: translate("KnStatementsList") })}>{translate("KnStatementsList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: ConsultationCheckView, label: translate("ConsultationCheckView") })}>{translate("ConsultationCheckView")}</NavItem>
+        </ul>
+      </div>
+      {qualityController && <div className={styles.NavGroup}>
+        <h3>{translate("qualityControlGroup")}</h3>
+        <ul className={styles.NavList}>
+          <NavItem onClick={() => addPane({ component: QualityChiefDashboard, label: translate("QualityChiefDashboard") })}>{translate("QualityChiefDashboard")}</NavItem>
+          <NavItem onClick={() => addPane({ component: QualityManagerDashboard, label: translate("QualityManagerDashboard") })}>{translate("QualityManagerDashboard")}</NavItem>
+          <NavItem onClick={() => addPane({ component: AttendanceJournal, label: translate("AttendanceJournal") })}>{translate("AttendanceJournal")}</NavItem>
+          <NavItem onClick={() => addPane({ component: CheckRunsList, label: translate("CheckRunsList") })}>{translate("CheckRunsList")}</NavItem>
+        </ul>
+      </div>}
+      <div className={styles.NavGroup}>
+        <h3>{translate("qualityDirectoriesGroup")}</h3>
+        <ul className={styles.NavList}>
+          <NavItem onClick={() => addPane({ component: StandardItemsList, label: translate("StandardItemsList") })}>{translate("StandardItemsList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: StaffGroupsList, label: translate("StaffGroupsList") })}>{translate("StaffGroupsList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: ErrorTypesList, label: translate("ErrorTypesList") })}>{translate("ErrorTypesList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: ChecklistTemplatesList, label: translate("ChecklistTemplatesList") })}>{translate("ChecklistTemplatesList")}</NavItem>
+          <NavItem onClick={() => addPane({ component: WorkCalendarView, label: translate("WorkCalendarView") })}>{translate("WorkCalendarView")}</NavItem>
+          {qualityCanManage && <NavItem onClick={() => addPane({ component: QualitySettingsView, label: translate("QualitySettingsView") })}>{translate("QualitySettingsView")}</NavItem>}
+        </ul>
+      </div>
+    </>
+  );
+
+  /**
    * УПРАВЛЕНИЕ 1С — про наше хозяйство, а не про учёт: серверы 1С, службы и расширение в базах.
    * Разделено по ПРЕДМЕТУ, а не по виду экрана: «Кластеры 1С» — сервер и его базы, «Агенты 1С» — службы, их
    * подключение и настройки, «Расширение БухПроф-AI» — то, что стоит внутри баз: заявки баз, версии, чат.
@@ -453,6 +525,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
           <AccountingGroups />
           {moduleOn("hr") && <HRGroups />}
           <CRMGroups />
+          <QualityGroups />
           <AdministrationGroups />
           <SettingsGroups />
         </div>
@@ -499,6 +572,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
         <h1>{translate("crm")}</h1>
         <div className={styles.NavSection}>
           <CRMGroups />
+          <QualityGroups />
         </div>
       </div>
     );

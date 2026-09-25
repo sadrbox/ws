@@ -107,3 +107,17 @@ it("раздел «Управление 1С» — модуль поставки 
 	// Идентификатор берётся безусловно: состав сборки не должен менять порядок вызова хуков.
 	expect(app).toContain("const onecNavId = useUID();");
 });
+
+it("«Качество» (E17): блок в CRM и во «Все разделы», контроль — только контролёрам", () => {
+	// Стандарт качества — рядом с управлением задачами: те же поручения и сроки, но про людей.
+	const all = SRC.slice(SRC.indexOf('"All".toLocaleLowerCase()'));
+	expect(all).toContain("<QualityGroups />");
+	const crm = SRC.slice(SRC.indexOf('"CRM".toLocaleLowerCase()'), SRC.indexOf('"Administration".toLocaleLowerCase()'));
+	expect(crm).toContain("<QualityGroups />");
+	const quality = groupsOf("Quality");
+	// Личное видно всем: уведомления, мой день, мои нарушения.
+	for (const v of ["QualityNotificationsList", "AttendanceMyDay", "StandardViolationsList"]) expect(quality).toContain(v);
+	// Панели — по роли в группах сотрудников, а не по правам на модели.
+	expect(quality).toContain("qualityController &&");
+	expect(quality).toContain("qualityCanManage &&");
+});

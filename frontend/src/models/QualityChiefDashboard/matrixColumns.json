@@ -1,0 +1,17 @@
+[
+	{ "identifier": "chiefClient", "type": "string", "width": "240px", "minWidth": "140px", "alignment": "left", "hint": "Клиент группы", "visible": true, "inlist": true },
+	{ "identifier": "chiefGroup", "type": "string", "width": "150px", "minWidth": "100px", "alignment": "left", "hint": "Группа сотрудников", "visible": true, "inlist": true },
+	{ "identifier": "chiefResponsible", "type": "string", "width": "170px", "minWidth": "100px", "alignment": "left", "hint": "Ответственный бухгалтер клиента", "visible": true, "inlist": true },
+	{ "identifier": "chiefLastRun", "type": "datetime", "width": "160px", "minWidth": "110px", "alignment": "left", "hint": "Проверки учёта в базе 1С клиента: дата последнего успешного прогона или почему база не проверена", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaReconciliation", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Акты сверки (пп. 7, 8)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaDebts", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Дебиторская и кредиторская задолженность (п. 9)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaBank", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Банк и касса (пп. 12, 18)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaDocuments", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Документы (пп. 12, 14)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaCatalogs", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Справочники и аналитика (пп. 10, 13)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaTaxes", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Налоги: ЭСФ и сверка с лицевым счётом КН (пп. 11, 15)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaStock", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "ТМЗ (пп. 12, 16)", "visible": true, "inlist": true },
+	{ "identifier": "qualityAreaFixedAssets", "type": "number", "width": "96px", "minWidth": "80px", "alignment": "left", "hint": "Основные средства (п. 17)", "visible": true, "inlist": true },
+	{ "identifier": "chiefRequests", "type": "number", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "Обращения клиента: открыто / не принято / просрочена реакция", "visible": true, "inlist": true },
+	{ "identifier": "chiefDeadlines", "type": "number", "width": "110px", "minWidth": "90px", "alignment": "left", "hint": "Просроченные задачи клиента", "visible": true, "inlist": true },
+	{ "identifier": "chiefPrimaryDocs", "type": "number", "width": "130px", "minWidth": "100px", "alignment": "left", "hint": "Первичка за прошлый месяц: отметка о получении", "visible": true, "inlist": true }
+]

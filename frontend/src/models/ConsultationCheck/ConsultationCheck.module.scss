@@ -1,0 +1,75 @@
+// «Проверка ответа клиенту» (E17 СК7.1): текст ответа и результат проверки одной колонкой.
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	max-width: 820px;
+	padding: 12px 16px 24px;
+	overflow: auto;
+}
+
+.Summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+
+// Пункты проверки: метка «есть / нет» и что проверялось.
+.Checklist {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.Check {
+	display: grid;
+	grid-template-columns: 110px 1fr;
+	column-gap: 10px;
+	align-items: center;
+	font-size: $fontsize;
+}
+
+.Suggestions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.SuggestionList {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+	padding-left: 18px;
+	font-size: $fontsize;
+}
+
+// Пункт разбора моделью: подпись и её пояснение под ней.
+.ModelCheck {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+// Краткий вариант ответа от модели: как текст письма, с сохранением абзацев.
+.Rewrite {
+	white-space: pre-wrap;
+	padding: 8px 10px;
+	border: 1px solid $color33;
+	border-radius: 6px;
+	background: $gray50;
+	color: $color6;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.RewriteActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}

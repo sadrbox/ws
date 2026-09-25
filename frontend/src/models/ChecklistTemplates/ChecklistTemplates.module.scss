@@ -1,0 +1,58 @@
+// Шаблон чек-листа: редактор пунктов (текст, привязка к проверке, пункт стандарта).
+
+.Editor {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+	max-width: 1100px;
+	overflow: auto;
+	padding-bottom: 8px;
+}
+
+// Строка редактора и строка заголовков — одна сетка, чтобы колонки совпадали.
+.Row {
+	display: grid;
+	grid-template-columns: 32px minmax(260px, 1fr) 260px 220px auto;
+	gap: 6px;
+	align-items: center;
+}
+
+.Head {
+	font-size: 12px;
+	color: $color51;
+	font-weight: 600;
+	padding-bottom: 2px;
+	border-bottom: 1px solid $color33;
+}
+
+.Num {
+	text-align: right;
+	color: $color51;
+	font-variant-numeric: tabular-nums;
+	font-size: 13px;
+}
+
+.RowActions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.Empty {
+	color: $gray400;
+	font-size: 13px;
+	padding: 8px 0;
+}
+
+.Footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 4px;
+}
+
+.Hint {
+	font-size: 12px;
+	color: $color51;
+}

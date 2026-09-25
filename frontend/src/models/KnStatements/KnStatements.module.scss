@@ -1,0 +1,86 @@
+// Сверка с лицевым счётом КН: редактор строк выписки и таблица сравнения с 1С.
+
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	height: 100%;
+	min-height: 0;
+}
+
+.Header {
+	flex: 0 0 auto;
+}
+
+// Редактор строк: КБК — наименование — сальдо — удалить.
+.Editor {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 900px;
+	overflow: auto;
+	padding-bottom: 8px;
+}
+
+.Row {
+	display: grid;
+	grid-template-columns: 32px 140px minmax(220px, 1fr) 180px auto;
+	gap: 6px;
+	align-items: center;
+}
+
+.Head {
+	font-size: 12px;
+	color: $color51;
+	font-weight: 600;
+	padding-bottom: 2px;
+	border-bottom: 1px solid $color33;
+}
+
+.Num {
+	text-align: right;
+	color: $color51;
+	font-variant-numeric: tabular-nums;
+	font-size: 13px;
+}
+
+.Toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+// Скрытый выбор файла: открывается кнопкой «Загрузить из файла».
+.FileInput {
+	display: none;
+}
+
+.Empty {
+	color: $gray400;
+	font-size: 13px;
+	padding: 6px 0;
+}
+
+// Итоги сравнения под таблицей.
+.Summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+	font-size: 13px;
+	color: $color6;
+	flex: 0 0 auto;
+}
+
+.SummaryLabel {
+	color: $color51;
+}
+
+// Таблица сравнения занимает остаток высоты вкладки.
+.TableArea {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}

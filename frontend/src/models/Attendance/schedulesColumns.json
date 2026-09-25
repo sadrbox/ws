@@ -1,0 +1,8 @@
+[
+	{ "identifier": "attEmployee", "type": "string", "width": "240px", "minWidth": "120px", "alignment": "left", "hint": "Сотрудник", "visible": true, "inlist": true },
+	{ "identifier": "workScheduleStart", "type": "string", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "Начало рабочего дня", "visible": true, "inlist": true },
+	{ "identifier": "workScheduleEnd", "type": "string", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "Конец рабочего дня", "visible": true, "inlist": true },
+	{ "identifier": "workScheduleDays", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Рабочие дни недели", "visible": true, "inlist": true },
+	{ "identifier": "workScheduleGrace", "type": "number", "width": "140px", "minWidth": "90px", "alignment": "right", "hint": "Допуск опоздания, минут", "visible": true, "inlist": true },
+	{ "identifier": "isActive", "type": "boolean", "width": "100px", "minWidth": "80px", "alignment": "center", "hint": "График действует", "visible": true, "inlist": true }
+]

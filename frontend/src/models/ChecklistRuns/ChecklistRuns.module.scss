@@ -1,0 +1,133 @@
+// Чек-лист самопроверки: шапка, пункты с отметками «ок / н/п / проблема», окно создания.
+
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 2px 2px 12px;
+	max-width: 1100px;
+}
+
+.Chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.Items {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+// Пункт: полоса слева — цвет отметки (как у метки: цвет подсказывает, слово говорит).
+.Item {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 10px;
+	border: 1px solid $color33;
+	border-left: 3px solid $color34;
+	border-radius: $radius3;
+	background: $color60;
+}
+
+.ItemOk {
+	border-left-color: $success;
+}
+
+.ItemProblem {
+	border-left-color: $attention;
+}
+
+.ItemNa {
+	border-left-color: $silver;
+}
+
+.ItemHead {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.ItemNum {
+	min-width: 22px;
+	text-align: right;
+	color: $color51;
+	font-variant-numeric: tabular-nums;
+	font-size: 13px;
+}
+
+.ItemText {
+	flex: 1 1 320px;
+	font-size: 13px;
+	color: $color6;
+}
+
+// Привязка к проверке: ссылка на находки этой проверки у клиента.
+.CheckLink {
+	border: 1px solid $accentBlueBorder;
+	border-radius: 10px;
+	background: $accentBlueSoft;
+	color: $colorPrimaryDark;
+	font: inherit;
+	font-size: 12px;
+	padding: 1px 8px;
+	cursor: pointer;
+
+	&:hover {
+		text-decoration: underline;
+	}
+}
+
+.ItemControls {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding-left: 30px;
+}
+
+// Три кнопки отметки — одной группой.
+.Marks {
+	display: flex;
+	gap: 2px;
+	flex: 0 0 auto;
+}
+
+.Comment {
+	flex: 1 1 320px;
+	min-width: 220px;
+}
+
+.ItemMeta {
+	padding-left: 30px;
+	font-size: 12px;
+	color: $color51;
+}
+
+.ItemNotice {
+	padding-left: 30px;
+}
+
+.Empty {
+	color: $gray400;
+	font-size: 13px;
+}
+
+// Окно создания чек-листа.
+.ModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 440px;
+}
+
+// Пояснение под полем выбора (у поля-лукапа нет своей подсказки).
+.FieldNote {
+	margin: -6px 0 0;
+	font-size: 12px;
+	color: $color51;
+}

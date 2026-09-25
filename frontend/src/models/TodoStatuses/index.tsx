@@ -18,6 +18,10 @@ const { Form: TodoStatusesForm, List: TodoStatusesList } = createSimpleModel({
     { key: "code", label: "Код (латиницей, задаётся один раз)" },
     { key: "sortOrder", label: "Порядок колонки на доске" },
     { key: "isFinal", label: "Завершающий (задача не считается просроченной)", type: "toggle" },
+    // E17: «ждём клиента/контрагента» — не финальный, но требует даты следующего контроля.
+    { key: "isWaiting", label: "Ожидание (нужна дата следующего контроля)", type: "toggle" },
+    // E17: отмена — финальный статус без результата; признак, чтобы свой статус отмены работал как «Отменена».
+    { key: "isCancel", label: "Отмена (закрывает без результата; только для завершающего)", type: "toggle" },
   ],
   buildPaneLabel: (saved: LabelSource) =>
     makePaneLabel("TodoStatusesList", "Статусы задач", saved, (saved?.name as string | undefined) || undefined),

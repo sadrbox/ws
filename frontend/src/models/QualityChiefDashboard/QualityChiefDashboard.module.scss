@@ -1,0 +1,185 @@
+// Панель главбуха: матрица «клиенты × участки» (светофор), выборка консультаций, первичка.
+
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+// Легенда цветов и сводка над матрицей.
+.Legend {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 14px;
+	font-size: 12px;
+	color: $color51;
+	flex: 0 0 auto;
+}
+
+.LegendItem {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.Summary {
+	font-weight: 600;
+	color: $color6;
+}
+
+// Матрица и выборка делят высоту: матрица больше.
+.Matrix {
+	display: flex;
+	flex-direction: column;
+	flex: 3 1 0;
+	min-height: 0;
+}
+
+.Consultations {
+	display: flex;
+	flex-direction: column;
+	flex: 2 1 0;
+	min-height: 0;
+	gap: 4px;
+}
+
+.SectionTitle {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: $color51;
+	flex: 0 0 auto;
+}
+
+// Точка светофора.
+.Dot {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+	background: $color34;
+}
+
+.red {
+	background: $attention;
+}
+
+.yellow {
+	background: $warning;
+}
+
+.green {
+	background: $success;
+}
+
+.grey {
+	background: $color34;
+}
+
+// Ячейка участка — кнопка: щелчок открывает находки клиента по участку.
+.Cell {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 1px 4px;
+	border: 1px solid transparent;
+	border-radius: $radius3;
+	background: transparent;
+	color: $color6;
+	font: inherit;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+
+	&:hover {
+		border-color: $color33;
+		background: $accentBlueHover;
+	}
+}
+
+// Ячейка без действия (обращения, сроки) — та же разметка, без курсора.
+.CellStatic {
+	cursor: default;
+
+	&:hover {
+		border-color: transparent;
+		background: transparent;
+	}
+}
+
+// Просрочки — красная метка рядом с числами.
+.Overdue {
+	padding: 0 4px;
+	border-radius: 8px;
+	background: $attentionBg;
+	color: $attentionText;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.Muted {
+	color: $gray400;
+}
+
+// ── Окно «Первичка» ──────────────────────────────────────────────────────────
+.ModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 560px;
+	max-width: 720px;
+}
+
+.Facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	font-size: 13px;
+	color: $color6;
+}
+
+.FactLabel {
+	color: $color51;
+}
+
+.List {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 220px;
+	overflow: auto;
+	border: 1px solid $color33;
+	border-radius: $radius3;
+	padding: 6px 8px;
+}
+
+.ListRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 13px;
+	color: $color6;
+}
+
+.ListDate {
+	min-width: 130px;
+	color: $color51;
+	font-variant-numeric: tabular-nums;
+}
+
+.ListGrow {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.MarkForm {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+}

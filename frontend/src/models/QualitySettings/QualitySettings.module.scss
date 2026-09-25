@@ -1,0 +1,77 @@
+// Настройки учёта качества (E17): разделы-области одной колонкой, прокрутка внутри пейна.
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	max-width: 860px;
+	padding: 12px 16px 24px;
+	overflow: auto;
+}
+
+// Поля раздела — рядом, с переносом: по приоритету (4 поля) или по смыслу (2–3 поля).
+.Fields {
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+// Кнопка рядом с полем выбора — по нижнему краю поля, а не подписи.
+.AlignEnd {
+	display: flex;
+	align-self: flex-end;
+}
+
+// Ссылка на бота: сама ссылка и подсказка под ней.
+.TelegramLink {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	word-break: break-all;
+}
+
+// Рабочая неделя фирмы: дни чипами в строку с переносом.
+.Days {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.DaysLabel {
+	font-size: 12px;
+	color: $color51;
+	margin-right: 4px;
+}
+
+// Подсказка организации-фирмы: кандидаты с кнопкой «Назначить».
+.Candidates {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 10px;
+	border: 1px dashed $accentBlueBorder;
+	border-radius: 6px;
+	background: $accentBlueSoft;
+}
+
+.CandidatesTitle {
+	font-size: 12px;
+	font-weight: 600;
+	color: $color51;
+}
+
+.Candidate {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+}
+
+.CandidateName {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	color: $color6;
+}

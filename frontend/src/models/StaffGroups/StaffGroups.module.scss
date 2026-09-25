@@ -1,0 +1,54 @@
+// Группы сотрудников (E17 СК0.2): редакторы состава группы.
+
+.Editor {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.Rows {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+// Участник: имя и кнопка «убрать» справа.
+.Row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 2px 6px;
+	border-bottom: 1px solid $color33;
+	font-size: $fontsize;
+}
+
+// Клиент: имя, ответственный, кнопка «убрать».
+.ClientRow {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	padding: 2px 6px 6px;
+	border-bottom: 1px solid $color33;
+	font-size: $fontsize;
+}
+
+.RowName {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	align-self: center;
+}
+
+// Пояснение ролей группы — абзацем над полями ролей.
+.RolesHint {
+	margin: 0;
+	color: $gray500;
+	font-size: 12px;
+	line-height: 1.45;
+}

@@ -1,0 +1,114 @@
+// «Итоги месяца» (E17 СК5.5): таблица сотрудников, раскрытие нарушений, меры руководителя.
+
+// Роль сотрудника после имени — мелко и приглушённо.
+.Role {
+	color: $gray500;
+	font-size: $fontsize - 1px;
+}
+
+// Сводка нарушений в ячейке — кнопка раскрытия списка под строкой.
+.ExpandButton {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: $colorPrimaryDark;
+	font: inherit;
+	cursor: pointer;
+
+	&:hover {
+		color: $colorPrimaryLight;
+	}
+
+	&:focus-visible {
+		outline: 2px solid $colorPrimaryLight;
+		outline-offset: 1px;
+	}
+}
+
+.Caret {
+	flex: 0 0 auto;
+	transition: transform 0.15s ease;
+}
+
+.CaretOpen {
+	flex: 0 0 auto;
+	transform: rotate(180deg);
+	transition: transform 0.15s ease;
+}
+
+// Раскрытый список подтверждённых нарушений сотрудника.
+.Violations {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+	padding: 4px 8px 6px 24px;
+	list-style: none;
+}
+
+.ViolationItem {
+	display: grid;
+	grid-template-columns: 90px 90px 1fr;
+	column-gap: 12px;
+	align-items: baseline;
+	font-size: $fontsize;
+}
+
+.ViolationDate {
+	color: $gray500;
+	font-variant-numeric: tabular-nums;
+}
+
+.ViolationText {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+// Окно мер руководителя.
+.MeasuresModal {
+	width: min(640px, 92vw);
+}
+
+.Measures {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-height: 260px;
+	margin: 0;
+	padding: 0;
+	overflow: auto;
+	list-style: none;
+}
+
+.Measure {
+	display: grid;
+	grid-template-columns: 90px 120px 1fr auto;
+	column-gap: 10px;
+	align-items: baseline;
+	padding-bottom: 4px;
+	border-bottom: 1px solid $color33;
+	font-size: $fontsize;
+}
+
+.MeasureDate {
+	color: $gray500;
+	font-variant-numeric: tabular-nums;
+}
+
+.MeasureKind {
+	font-weight: 600;
+}
+
+.MeasureNote {
+	min-width: 0;
+	white-space: pre-wrap;
+}
+
+.MeasureAuthor {
+	color: $gray500;
+}

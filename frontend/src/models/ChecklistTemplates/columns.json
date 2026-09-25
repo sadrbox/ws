@@ -1,0 +1,7 @@
+[
+	{ "identifier": "name", "type": "string", "width": "320px", "minWidth": "140px", "alignment": "left", "hint": "Название чек-листа", "visible": true, "inlist": true },
+	{ "identifier": "periodicity", "type": "string", "width": "140px", "minWidth": "100px", "alignment": "left", "hint": "Как часто проходят чек-лист", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "itemsCount", "type": "number", "width": "100px", "minWidth": "80px", "alignment": "right", "hint": "Сколько пунктов в шаблоне", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "isActive", "type": "boolean", "width": "100px", "minWidth": "80px", "alignment": "center", "hint": "Шаблон предлагается при создании чек-листа", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "description", "type": "string", "width": "360px", "minWidth": "140px", "alignment": "left", "hint": "Описание", "visible": true, "inlist": true, "sortable": false }
+]

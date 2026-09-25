@@ -30,6 +30,26 @@
 		"inlist": true
 	},
 	{
+		"identifier": "kind",
+		"type": "string",
+		"width": "150px",
+		"minWidth": "90px",
+		"alignment": "left",
+		"hint": "Вид задачи (E17): задача, обращение клиента, ошибка, поручение руководителя… Подпись — renderCell списка",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "priority",
+		"type": "string",
+		"width": "110px",
+		"minWidth": "80px",
+		"alignment": "center",
+		"hint": "Приоритет (E17): от него срок реакции на обращение клиента. Подпись — renderCell списка",
+		"visible": false,
+		"inlist": true
+	},
+	{
 		"identifier": "curator.fullName",
 		"type": "string",
 		"width": "180px",
@@ -77,6 +97,16 @@
 		"alignment": "left",
 		"hint": "Источник",
 		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "result",
+		"type": "string",
+		"width": "260px",
+		"minWidth": "100px",
+		"alignment": "left",
+		"hint": "Результат (E17): что сделано — без него задачу не закрыть",
+		"visible": false,
 		"inlist": true
 	},
 	{

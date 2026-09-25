@@ -1,0 +1,96 @@
+// «Мои уведомления» (E17): лента, непрочитанные выделены точкой и жирным заголовком.
+.List {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	margin: 0;
+	padding: 6px 12px 12px;
+	overflow: auto;
+	list-style: none;
+}
+
+// Слово «Не прочитано» для экранного диктора: глазами это видно по точке и жирному заголовку.
+.VisuallyHidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+// Уведомление — строка-кнопка: щелчок отмечает прочитанным и открывает запись.
+.Item {
+	position: relative;
+	display: grid;
+	grid-template-columns: 10px 1fr auto;
+	column-gap: 10px;
+	align-items: start;
+	width: 100%;
+	padding: 8px 6px;
+	border: 0;
+	border-bottom: 1px solid $color33;
+	background: none;
+	color: $color6;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+
+	&:hover {
+		background: $accentBlueHover;
+	}
+
+	&:focus-visible {
+		outline: 2px solid $colorPrimaryLight;
+		outline-offset: -2px;
+	}
+}
+
+.Dot {
+	width: 8px;
+	height: 8px;
+	margin-top: 5px;
+	border-radius: 50%;
+	background: transparent;
+}
+
+.Main {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.Title {
+	font-size: $fontsize;
+	color: $color51;
+}
+
+.Text {
+	color: $gray500;
+	font-size: $fontsize - 1px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.Time {
+	color: $gray500;
+	font-size: $fontsize - 1px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+// Непрочитанное: точка цвета акцента и заголовок жирнее и темнее.
+.Unread {
+	.Dot {
+		background: $primary;
+	}
+
+	.Title {
+		color: $color6;
+		font-weight: 700;
+	}
+}

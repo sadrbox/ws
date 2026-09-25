@@ -1,0 +1,87 @@
+// Задача (E17 «Стандарт качества»): строки «Откуда/Источник», сроки контроля, приоритет в списке,
+// диалоги действий и вкладка «История». Цвета — токены темы var(--token, #hex): есть тёмная тема.
+
+// «Откуда: Из 1С — Dev_01», «Источник: Реализация № 12» — подпись и значение в строку.
+.InlineRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-6, 6px);
+}
+
+.InlineLabel {
+  font-size: 12px;
+  color: var(--sv-color51, #666);
+}
+
+// Срок реакции прошёл, а обращение не принято (п. 3) — видно сразу, без чтения дат.
+.Overdue {
+  color: var(--danger, #d32f2f);
+  font-weight: 600;
+}
+
+// ── Список: приоритет ────────────────────────────────────────────────────────
+.PriorityHigh {
+  color: var(--warning, #b35900);
+  font-weight: 600;
+}
+
+.PriorityUrgent {
+  color: var(--danger, #d32f2f);
+  font-weight: 700;
+}
+
+// ── Диалоги действий («Клиент напомнил», «Вернуть», «Нужна помощь», «Оценка») ─
+.Dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.DialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12, 12px);
+}
+
+.DialogHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary, #444a52);
+}
+
+// ── Вкладка «История» ────────────────────────────────────────────────────────
+.HistoryPane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: var(--space-12, 12px);
+  height: 100%;
+  min-height: 0;
+}
+
+.Watchers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6, 6px);
+  font-size: 13px;
+}
+
+.WatchersLabel {
+  color: var(--sv-color51, #666);
+}
+
+.WatcherChip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line, var(--n-88, #e0e0e0));
+  background: var(--surface-muted, #f5f5f5);
+  color: var(--text-secondary, #444a52);
+}
+
+.HistoryTable {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

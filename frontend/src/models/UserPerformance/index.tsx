@@ -12,15 +12,19 @@
  *
  * Графики — Recharts (charts.tsx), внутри этой lazy-панели → в отдельном чанке,
  * цвета/тема — из CSS-токенов.
+ *
+ * E17 «Стандарт качества» (СК1.8): к активности добавлено КАЧЕСТВО работы с задачами — доля
+ * закрытых с результатом, время реакции на обращения, напоминания клиентов, возвраты «не
+ * выполнено», оценка клиентов. Те же блоки и плитки по тем же правилам (dashboardBlocks.ts).
  */
 import { FC, useEffect, useMemo, useState } from "react";
-import { asText } from "src/utils/asText";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { translate } from "src/i18";
-import { CategoryBars, TaskStackBars, type CatDatum, type TaskDatum } from "./charts";
-import { fmtValue } from "./format";
+import { CategoryBars, TaskStackBars } from "./charts";
+import { fmtMaybe, fmtValue } from "./format";
+import { barData, num, taskData, userTileValue } from "./metrics";
 import {
 	BLOCKS,
 	KPI_TILES,
@@ -54,30 +58,19 @@ interface PerfRow {
 	tasksDone: number;
 	tasksActive: number;
 	tasksOverdue: number;
+	// E17 (СК1.8): качество работы с задачами. Средние и доля — null, если считать не из чего.
+	doneWithResult?: number;
+	reminders?: number;
+	returned?: number;
+	requests?: number;
+	reactionMinutesAvg?: number | null;
+	resultShare?: number | null;
+	ratingAvg?: number | null;
 	[k: string]: unknown;
 }
 
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
 const yearEnd = () => `${new Date().getFullYear()}-12-31`;
-const TOP_N = 15;
-
-// ── Хелперы данных ───────────────────────────────────────────────────────────
-const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
-
-function barData(rows: Array<Record<string, unknown>>, nameKey: string, valueKey: string): CatDatum[] {
-	return rows
-		.map((r) => ({ name: asText(r[nameKey] ?? "—"), value: num(r[valueKey]) }))
-		.filter((d) => d.value !== 0)
-		.sort((a, b) => b.value - a.value)
-		.slice(0, TOP_N);
-}
-function taskData(rows: PerfRow[]): TaskDatum[] {
-	return rows
-		.map((r) => ({ name: r.userName, done: num(r.tasksDone), active: num(r.tasksActive), overdue: num(r.tasksOverdue) }))
-		.filter((d) => d.done + d.active + d.overdue > 0)
-		.sort((a, b) => b.done + b.active + b.overdue - (a.done + a.active + a.overdue))
-		.slice(0, TOP_N);
-}
 
 export const UserPerformanceList: FC = () => {
 	const [dateFrom, setDateFrom] = useState(yearStart);
@@ -153,9 +146,10 @@ export const UserPerformanceList: FC = () => {
 	const shownBlocks = availableBlocks.filter((b) => selected.has(b.id));
 
 	// ── Значение KPI-плитки ───────────────────────────────────────────────────
-	const tileValue = (t: KpiTileDef): number => {
+	// null — показателя нет (доля без единой закрытой задачи): плитка пишет «—», а не 0 %.
+	const tileValue = (t: KpiTileDef): number | null => {
 		if (t.source === "managers") return num(managerTotals?.[t.key]);
-		return perfRows.reduce((s, r) => s + num(r[t.key]), 0);
+		return userTileValue(perfRows, t);
 	};
 	const tileLoading = (t: KpiTileDef) => (t.source === "managers" ? managersQ.isLoading : usersQ.isLoading);
 
@@ -195,9 +189,9 @@ export const UserPerformanceList: FC = () => {
 							className={`${styles.Chip} ${selected.has(b.id) ? styles.on : ""}`}
 							aria-pressed={selected.has(b.id)}
 							onClick={() => toggleBlock(b.id)}
-							title={b.subtitle}
+							title={translate(b.subtitle)}
 						>
-							{b.title}
+							{translate(b.title)}
 						</button>
 					))}
 				</div>
@@ -208,9 +202,9 @@ export const UserPerformanceList: FC = () => {
 				<div className={styles.Kpis}>
 					{availableTiles.map((t) => (
 						<div key={t.id} className={styles.Kpi}>
-							<span className={styles.KpiLabel}>{t.label}</span>
+							<span className={styles.KpiLabel}>{translate(t.label)}</span>
 							<span className={styles.KpiVal}>
-								{tileLoading(t) ? "…" : fmtValue(tileValue(t), t.format)}
+								{tileLoading(t) ? "…" : fmtMaybe(tileValue(t), t.format)}
 							</span>
 						</div>
 					))}
@@ -264,9 +258,9 @@ const BlockCard: FC<{
 		}
 		const rows = block.source === "managers" ? managerRows : perfRows;
 		const nameKey = block.source === "managers" ? "managerName" : "userName";
-		const data = barData(rows as Array<Record<string, unknown>>, nameKey, block.valueKey!);
+		const data = barData(rows as Array<Record<string, unknown>>, nameKey, block.valueKey!, block);
 		return data.length ? (
-			<CategoryBars data={data} colorVar={block.colorVar!} format={block.format ?? "int"} seriesName={block.title} />
+			<CategoryBars data={data} colorVar={block.colorVar!} format={block.format ?? "int"} seriesName={translate(block.title)} />
 		) : (
 			<div className={styles.CardStatus}>{translate("perfEmpty")}</div>
 		);
@@ -274,8 +268,8 @@ const BlockCard: FC<{
 	return (
 		<section className={styles.Card}>
 			<header className={styles.CardHead}>
-				<h3>{block.title}</h3>
-				<p>{block.subtitle}</p>
+				<h3>{translate(block.title)}</h3>
+				<p>{translate(block.subtitle)}</p>
 			</header>
 			{body()}
 		</section>
@@ -320,11 +314,18 @@ const DataTables: FC<{ blocks: DashboardBlockDef[]; managerRows: ManagerRow[]; p
 					<caption>По пользователям</caption>
 					<thead>
 						<tr>
-							<th>Пользователь</th>
-							<th>Документов</th>
-							<th>Выполнено</th>
-							<th>В работе</th>
-							<th>Просрочено</th>
+							<th>{translate("perfUser")}</th>
+							<th>{translate("perfDocuments")}</th>
+							<th>{translate("perfTasksDone")}</th>
+							<th>{translate("perfTasksActive")}</th>
+							<th>{translate("perfTasksOverdue")}</th>
+							{/* E17 (СК1.8): качество работы с задачами. «—» — считать не из чего, а не ноль. */}
+							<th title={translate("perfBlockResultShareSub")}>{translate("perfResultShare")}</th>
+							<th>{translate("perfRequests")}</th>
+							<th title={translate("perfBlockReactionSub")}>{translate("perfReaction")}</th>
+							<th title={translate("perfBlockRemindersSub")}>{translate("perfReminders")}</th>
+							<th title={translate("perfBlockReturnedSub")}>{translate("perfReturned")}</th>
+							<th title={translate("perfBlockRatingSub")}>{translate("perfRating")}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -335,6 +336,12 @@ const DataTables: FC<{ blocks: DashboardBlockDef[]; managerRows: ManagerRow[]; p
 								<td className={styles.numCell}>{r.tasksDone}</td>
 								<td className={styles.numCell}>{r.tasksActive}</td>
 								<td className={styles.numCell}>{r.tasksOverdue}</td>
+								<td className={styles.numCell}>{fmtMaybe(r.resultShare, "percent")}</td>
+								<td className={styles.numCell}>{num(r.requests)}</td>
+								<td className={styles.numCell}>{fmtMaybe(r.reactionMinutesAvg, "minutes")}</td>
+								<td className={styles.numCell}>{num(r.reminders)}</td>
+								<td className={styles.numCell}>{num(r.returned)}</td>
+								<td className={styles.numCell}>{fmtMaybe(r.ratingAvg, "rating")}</td>
 							</tr>
 						))}
 					</tbody>

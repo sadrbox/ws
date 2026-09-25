@@ -1,0 +1,80 @@
+// Реестр нарушений стандарта (E17 СК5): карточка записи, решение, история.
+
+// Ряд меток состояния над фактом записи.
+.StatusRow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+// Условия «самовыявлено» — колонкой под переключателем, со сдвигом: видно, к чему они относятся.
+.Conditions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	padding-left: 18px;
+}
+
+// Доказательства: вид (задача, находка…) и ссылка на запись.
+.EvidenceList,
+.History {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.EvidenceItem {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+	font-size: $fontsize;
+}
+
+.EvidenceKind {
+	min-width: 120px;
+	color: $gray500;
+	font-size: $fontsize - 1px;
+}
+
+// История решений: время, что произошло и кто, комментарий строкой ниже.
+.HistoryItem {
+	display: grid;
+	grid-template-columns: 130px 1fr;
+	column-gap: 12px;
+	row-gap: 2px;
+	font-size: $fontsize;
+}
+
+.HistoryAt {
+	color: $gray500;
+	font-variant-numeric: tabular-nums;
+}
+
+.HistoryActor {
+	color: $gray600;
+}
+
+.HistoryNote {
+	grid-column: 2;
+	padding: 4px 8px;
+	border-left: 2px solid $color33;
+	color: $color51;
+	white-space: pre-wrap;
+}
+
+// Текст выбранного пункта стандарта — под списком пунктов, мелко.
+.ItemText {
+	padding: 6px 8px;
+	border: 1px solid $color33;
+	border-radius: $radius3;
+	background: $gray50;
+	color: $color51;
+	font-size: $fontsize - 1px;
+	white-space: pre-wrap;
+}

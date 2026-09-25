@@ -1,0 +1,128 @@
+// «Мой день» и «Посещаемость»: отметка начала дня, заявки, журнал, графики.
+
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	padding: 2px 2px 8px;
+}
+
+// Карточка «Сегодня» с большой кнопкой «Начал работу».
+.Today {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px 24px;
+	padding: 14px 16px;
+	border: 1px solid $color33;
+	border-radius: 8px;
+	background: $color60;
+	flex: 0 0 auto;
+}
+
+.TodayInfo {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.TodayTitle {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: $color6;
+}
+
+.TodayLine {
+	font-size: 13px;
+	color: $color51;
+}
+
+.TodayStrong {
+	color: $color6;
+	font-weight: 600;
+}
+
+.SectionTitle {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: $color51;
+	flex: 0 0 auto;
+}
+
+.TableArea {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+// Вкладки панели «Посещаемость»: таблица занимает высоту вкладки.
+.Tab {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+}
+
+// ── Окна (заявка, решение, график) ─────────────────────────────────────────
+.ModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 440px;
+	max-width: 620px;
+}
+
+.Days {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.DaysLabel {
+	font-size: 12px;
+	color: $color51;
+	margin-right: 4px;
+}
+
+.Facts {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 13px;
+	color: $color6;
+}
+
+.FactLabel {
+	color: $color51;
+}
+
+.Reason {
+	margin: 0;
+	padding: 8px 10px;
+	border-left: 3px solid $color34;
+	background: $gray50;
+	font-size: 13px;
+	color: $color6;
+	white-space: pre-wrap;
+}
+
+.Note {
+	margin: -4px 0 0;
+	font-size: 12px;
+	color: $color51;
+}
+
+.Empty {
+	color: $gray400;
+	font-size: 13px;
+}

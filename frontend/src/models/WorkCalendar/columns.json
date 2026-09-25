@@ -1,0 +1,8 @@
+[
+	{ "identifier": "wcDate", "type": "date", "width": "120px", "minWidth": "100px", "alignment": "left", "hint": "Дата", "visible": true, "inlist": true },
+	{ "identifier": "wcWeekday", "type": "string", "width": "70px", "minWidth": "50px", "alignment": "left", "hint": "День недели", "visible": true, "inlist": true },
+	{ "identifier": "wcKind", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Праздник, перенесённый выходной или рабочий день-перенос", "visible": true, "inlist": true },
+	{ "identifier": "wcName", "type": "string", "width": "320px", "minWidth": "140px", "alignment": "left", "hint": "Название праздника или основание переноса", "visible": true, "inlist": true },
+	{ "identifier": "wcSource", "type": "string", "width": "130px", "minWidth": "90px", "alignment": "left", "hint": "Заполнено по закону или внесено вручную", "visible": true, "inlist": true },
+	{ "identifier": "wcLaw", "type": "string", "width": "190px", "minWidth": "120px", "alignment": "left", "hint": "Сверка с календарём по закону", "visible": true, "inlist": true }
+]

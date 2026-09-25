@@ -172,6 +172,17 @@ const MODEL_REGISTRY: ModelRegistryEntry[] = [
 		storageKey: "todo-statuses-form",
 		label: "Статусы задач",
 	},
+	// E17 «Стандарт качества» (docs/PLAN_QUALITY_STANDARD_2026-09-25.md).
+	{ endpoint: "standard-violations", module: () => import("src/models/StandardViolations"), formName: "StandardViolationsForm", listName: "StandardViolationsList", storageKey: "standard-violations-form", label: "Нарушения стандарта" },
+	{ endpoint: "standard-items", module: () => import("src/models/StandardItems"), formName: "StandardItemsForm", listName: "StandardItemsList", storageKey: "standard-items-form", label: "Пункты стандарта" },
+	{ endpoint: "staff-groups", module: () => import("src/models/StaffGroups"), formName: "StaffGroupsForm", listName: "StaffGroupsList", storageKey: "staff-groups-form", label: "Группы сотрудников" },
+	{ endpoint: "error-types", module: () => import("src/models/ErrorTypes"), formName: "ErrorTypesForm", listName: "ErrorTypesList", storageKey: "error-types-form", label: "Типовые ошибки" },
+	{ endpoint: "check-findings", module: () => import("src/models/CheckFindings"), formName: "CheckFindingsForm", listName: "CheckFindingsList", storageKey: "check-findings-form", label: "Проверки учёта 1С" },
+	{ endpoint: "checklist-templates", module: () => import("src/models/ChecklistTemplates"), formName: "ChecklistTemplatesForm", listName: "ChecklistTemplatesList", storageKey: "checklist-templates-form", label: "Шаблоны чек-листов" },
+	{ endpoint: "checklist-runs", module: () => import("src/models/ChecklistRuns"), formName: "ChecklistRunsForm", listName: "ChecklistRunsList", storageKey: "checklist-runs-form", label: "Чек-листы самопроверки" },
+	{ endpoint: "kn-statements", module: () => import("src/models/KnStatements"), formName: "KnStatementsForm", listName: "KnStatementsList", storageKey: "kn-statements-form", label: "Сверка с лицевым счётом КН" },
+	// Сюда ведут уведомления сервера «Заявка: …»; списка-модели у заявок нет — они живут в «Посещаемости».
+	{ endpoint: "absence-requests", module: () => import("src/models/Attendance"), formName: "AbsenceRequestsForm", listName: "AttendanceJournal", storageKey: "absence-requests-form", label: "Заявки на опоздание и отсутствие" },
 	{
 		endpoint: "currencies",
 		module: () => import("src/models/Currencies"),

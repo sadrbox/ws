@@ -1,0 +1,11 @@
+[
+	{ "identifier": "mgrGroup", "type": "string", "width": "170px", "minWidth": "100px", "alignment": "left", "hint": "Группа сотрудников", "visible": true, "inlist": true },
+	{ "identifier": "mgrEmployee", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Сотрудник", "visible": true, "inlist": true },
+	{ "identifier": "mgrRole", "type": "string", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "Главбух группы или сотрудник", "visible": true, "inlist": true },
+	{ "identifier": "mgrBonus", "type": "number", "width": "120px", "minWidth": "90px", "alignment": "left", "hint": "Бонус за месяц: нет ни одного подтверждённого нарушения", "visible": true, "inlist": true },
+	{ "identifier": "mgrConfirmed", "type": "number", "width": "130px", "minWidth": "90px", "alignment": "right", "hint": "Подтверждённые нарушения месяца", "visible": true, "inlist": true },
+	{ "identifier": "mgrCandidates", "type": "number", "width": "130px", "minWidth": "90px", "alignment": "right", "hint": "Кандидаты в нарушения, ждут решения", "visible": true, "inlist": true },
+	{ "identifier": "mgrWindow", "type": "number", "width": "140px", "minWidth": "90px", "alignment": "right", "hint": "Подтверждённых нарушений за окно систематичности", "visible": true, "inlist": true },
+	{ "identifier": "mgrSystematic", "type": "number", "width": "130px", "minWidth": "90px", "alignment": "left", "hint": "Нарушения систематические: вопрос соответствия должности", "visible": true, "inlist": true },
+	{ "identifier": "mgrNoMeasure", "type": "number", "width": "180px", "minWidth": "110px", "alignment": "left", "hint": "Нарушения повторяются, а мер руководителя нет (п. 30)", "visible": true, "inlist": true }
+]

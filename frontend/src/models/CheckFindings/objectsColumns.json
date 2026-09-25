@@ -1,0 +1,5 @@
+[
+	{ "identifier": "findingObjKind", "type": "string", "width": "180px", "minWidth": "100px", "alignment": "left", "hint": "Вид объекта 1С", "visible": true, "inlist": true },
+	{ "identifier": "name", "type": "string", "width": "300px", "minWidth": "120px", "alignment": "left", "hint": "Наименование в 1С", "visible": true, "inlist": true },
+	{ "identifier": "findingOnecId", "type": "string", "width": "300px", "minWidth": "120px", "alignment": "left", "hint": "Идентификатор (GUID) объекта в 1С", "visible": true, "inlist": true }
+]

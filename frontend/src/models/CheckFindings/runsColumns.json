@@ -1,0 +1,13 @@
+[
+	{ "identifier": "createdAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Когда прошёл прогон", "visible": true, "inlist": true },
+	{ "identifier": "organizationName", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Клиент — организация в базе 1С", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "checkTitle", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Проверка учёта", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "status", "type": "string", "width": "140px", "minWidth": "100px", "alignment": "left", "hint": "Итог прогона", "visible": true, "inlist": true },
+	{ "identifier": "checkRunFound", "type": "number", "width": "100px", "minWidth": "80px", "alignment": "right", "hint": "Сколько находок вернула 1С", "visible": true, "inlist": true, "sortable": false, "dynamic": true },
+	{ "identifier": "truncated", "type": "boolean", "width": "100px", "minWidth": "80px", "alignment": "center", "hint": "Ответ обрезан по пределу: отсутствие находки в таком прогоне ничего не закрывает", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "errorCode", "type": "string", "width": "160px", "minWidth": "100px", "alignment": "left", "hint": "Код отказа 1С или агента", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "errorMessage", "type": "string", "width": "300px", "minWidth": "120px", "alignment": "left", "hint": "Текст отказа", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "skipReason", "type": "string", "width": "240px", "minWidth": "120px", "alignment": "left", "hint": "Почему проверка к базе неприменима", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "durationMs", "type": "number", "width": "120px", "minWidth": "90px", "alignment": "right", "hint": "Длительность прогона, мс", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "checkCode", "type": "string", "width": "200px", "minWidth": "100px", "alignment": "left", "hint": "Код проверки в расширении 1С", "visible": false, "inlist": true }
+]

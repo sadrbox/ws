@@ -90,6 +90,25 @@ export const ContactPersonsList = lazyView("ContactPersonsList", () => import('s
 export const UsersList = lazyView("UsersList", () => import('src/models/Users').then(m => ({ default: m.UsersList })));
 export const TodosList = lazyView("TodosList", () => import('src/models/Todos').then(m => ({ default: m.TodosList })));
 export const TaskBoardList = lazyView("TaskBoardList", () => import('src/models/TaskBoard').then(m => ({ default: m.TaskBoardList })));
+// E17 «Стандарт качества БухПроф» (docs/PLAN_QUALITY_STANDARD_2026-09-25.md).
+export const StandardViolationsList = lazyView("StandardViolationsList", () => import('src/models/StandardViolations').then(m => ({ default: m.StandardViolationsList })));
+export const StandardItemsList = lazyView("StandardItemsList", () => import('src/models/StandardItems').then(m => ({ default: m.StandardItemsList })));
+export const StaffGroupsList = lazyView("StaffGroupsList", () => import('src/models/StaffGroups').then(m => ({ default: m.StaffGroupsList })));
+export const ErrorTypesList = lazyView("ErrorTypesList", () => import('src/models/ErrorTypes').then(m => ({ default: m.ErrorTypesList })));
+export const QualityBonusView = lazyView("QualityBonusView", () => import('src/models/QualityBonus').then(m => ({ default: m.QualityBonusView })));
+export const QualitySettingsView = lazyView("QualitySettingsView", () => import('src/models/QualitySettings').then(m => ({ default: m.QualitySettingsView })));
+export const QualityNotificationsList = lazyView("QualityNotificationsList", () => import('src/models/QualityNotifications').then(m => ({ default: m.QualityNotificationsList })));
+export const ConsultationCheckView = lazyView("ConsultationCheckView", () => import('src/models/ConsultationCheck').then(m => ({ default: m.ConsultationCheckView })));
+export const CheckFindingsList = lazyView("CheckFindingsList", () => import('src/models/CheckFindings').then(m => ({ default: m.CheckFindingsList })));
+export const CheckRunsList = lazyView("CheckRunsList", () => import('src/models/CheckFindings').then(m => ({ default: m.CheckRunsList })));
+export const ChecklistTemplatesList = lazyView("ChecklistTemplatesList", () => import('src/models/ChecklistTemplates').then(m => ({ default: m.ChecklistTemplatesList })));
+export const ChecklistRunsList = lazyView("ChecklistRunsList", () => import('src/models/ChecklistRuns').then(m => ({ default: m.ChecklistRunsList })));
+export const KnStatementsList = lazyView("KnStatementsList", () => import('src/models/KnStatements').then(m => ({ default: m.KnStatementsList })));
+export const QualityChiefDashboard = lazyView("QualityChiefDashboard", () => import('src/models/QualityChiefDashboard').then(m => ({ default: m.QualityChiefDashboard })));
+export const QualityManagerDashboard = lazyView("QualityManagerDashboard", () => import('src/models/QualityManagerDashboard').then(m => ({ default: m.QualityManagerDashboard })));
+export const AttendanceMyDay = lazyView("AttendanceMyDay", () => import('src/models/Attendance').then(m => ({ default: m.AttendanceMyDay })));
+export const AttendanceJournal = lazyView("AttendanceJournal", () => import('src/models/Attendance').then(m => ({ default: m.AttendanceJournal })));
+export const WorkCalendarView = lazyView("WorkCalendarView", () => import('src/models/WorkCalendar').then(m => ({ default: m.WorkCalendarView })));
 export const UserPerformanceList = lazyView("UserPerformanceList", () => import('src/models/UserPerformance').then(m => ({ default: m.UserPerformanceList })));
 export const ChatList = lazyView("ChatList", () => import('src/models/Chat').then(m => ({ default: m.ChatList })));
 export const CommunicationsPanel = lazyView("CommunicationsPanel", () => import('src/models/Communications').then(m => ({ default: m.CommunicationsPanel })));
@@ -221,6 +240,25 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	UsersList: UsersList,
 	TodosList: TodosList,
 	TaskBoardList: TaskBoardList,
+	// E17 «Стандарт качества».
+	StandardViolationsList: StandardViolationsList,
+	StandardItemsList: StandardItemsList,
+	StaffGroupsList: StaffGroupsList,
+	ErrorTypesList: ErrorTypesList,
+	QualityBonusView: QualityBonusView,
+	QualitySettingsView: QualitySettingsView,
+	QualityNotificationsList: QualityNotificationsList,
+	ConsultationCheckView: ConsultationCheckView,
+	CheckFindingsList: CheckFindingsList,
+	CheckRunsList: CheckRunsList,
+	ChecklistTemplatesList: ChecklistTemplatesList,
+	ChecklistRunsList: ChecklistRunsList,
+	KnStatementsList: KnStatementsList,
+	QualityChiefDashboard: QualityChiefDashboard,
+	QualityManagerDashboard: QualityManagerDashboard,
+	AttendanceMyDay: AttendanceMyDay,
+	AttendanceJournal: AttendanceJournal,
+	WorkCalendarView: WorkCalendarView,
 	UserPerformanceList: UserPerformanceList,
 	ChatList: ChatList,
 	CommunicationsPanel: CommunicationsPanel,

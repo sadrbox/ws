@@ -1,0 +1,15 @@
+// Обёртка метки качества: перекрашивает точку общего StateChip для двух своих тонов.
+.Chip {
+	display: inline-flex;
+	vertical-align: middle;
+}
+
+// «Ждёт решения»: кандидат в нарушения, «мер нет».
+.ToneWarn [data-tone]::before {
+	background: $warning;
+}
+
+// «На рассмотрении»: возражение сотрудника.
+.ToneInfo [data-tone]::before {
+	background: $primary;
+}

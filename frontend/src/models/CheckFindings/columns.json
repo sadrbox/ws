@@ -1,0 +1,12 @@
+[
+	{ "identifier": "organizationName", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Клиент — организация в базе 1С", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "checkTitle", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Проверка учёта", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "severity", "type": "string", "width": "130px", "minWidth": "100px", "alignment": "left", "hint": "Ошибка, предупреждение или подсказка", "visible": true, "inlist": true },
+	{ "identifier": "title", "type": "string", "width": "400px", "minWidth": "160px", "alignment": "left", "hint": "Что не так в базе", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "amount", "type": "number", "decimals": 2, "width": "130px", "minWidth": "90px", "alignment": "right", "hint": "Сумма находки", "visible": true, "inlist": true },
+	{ "identifier": "factDate", "type": "date", "width": "110px", "minWidth": "90px", "alignment": "left", "hint": "Дата факта в учёте", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "findingFirstSeen", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Когда ночной прогон нашёл впервые", "visible": true, "inlist": true, "sortable": false, "dynamic": true },
+	{ "identifier": "findingLastSeen", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Когда прогон видел последний раз", "visible": true, "inlist": true, "sortable": false, "dynamic": true },
+	{ "identifier": "state", "type": "string", "width": "130px", "minWidth": "100px", "alignment": "left", "hint": "Открыта, исключение или устранена", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "checkCode", "type": "string", "width": "200px", "minWidth": "100px", "alignment": "left", "hint": "Код проверки в расширении 1С", "visible": false, "inlist": true }
+]

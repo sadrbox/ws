@@ -25,6 +25,7 @@ import { TDataItem } from "src/components/Table/types";
 import LoginForm from "src/components/LoginForm";
 import { isAuthenticated, verifyToken, logout, getCurrentUser, type AuthUser } from "src/services/auth";
 import { useConfirm } from "src/hooks/useConfirm";
+import { useQualityNotifications } from "src/hooks/useQualityNotifications";
 import ConfirmModal from "src/components/ConfirmModal";
 import { startHealthCheck, stopHealthCheck } from "src/services/networkStatus";
 import { clearAllFormStores } from "src/hooks/useFormSessionStore";
@@ -153,6 +154,9 @@ const App: React.FC = () => {
     });
     return off;
   }, [isLoggedIn]);
+
+  // ── Уведомления E17 (SLA, эскалации, кандидаты в нарушения) + отметка прихода при входе ──
+  useQualityNotifications(isLoggedIn);
 
   // ── Регистрация Service Worker (один раз при монтировании) ──
   useEffect(() => {

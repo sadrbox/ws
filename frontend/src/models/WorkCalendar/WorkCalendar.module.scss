@@ -1,0 +1,169 @@
+// Производственный календарь: год сеткой месяцев и список дней.
+
+.Body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	overflow: auto;
+	padding: 8px 4px 16px;
+}
+
+// Вкладка списка: таблица занимает высоту вкладки.
+.Tab {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+}
+
+.Summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 18px;
+	font-size: 13px;
+	color: $color51;
+}
+
+.SummaryMain {
+	font-size: 14px;
+	font-weight: 600;
+	color: $color6;
+}
+
+.Legend {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 6px;
+}
+
+.Swatch {
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	margin-left: 6px;
+	border-radius: 3px;
+	border: 1px solid $color33;
+}
+
+// Двенадцать месяцев: столько колонок, сколько помещается (на телефоне — одна).
+.Months {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+	gap: 12px;
+}
+
+.Month {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border: 1px solid $color33;
+	border-radius: 8px;
+	background: $color60;
+}
+
+.MonthHead {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.MonthName {
+	font-weight: 600;
+	color: $color6;
+}
+
+.MonthCount {
+	font-size: 12px;
+	color: $color51;
+}
+
+.Grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+}
+
+.WeekHead {
+	font-size: 11px;
+	text-align: center;
+	color: $color51;
+	padding-bottom: 2px;
+}
+
+.Empty {
+	min-height: 26px;
+}
+
+.Day {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 26px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	font-size: 12px;
+	color: $color6;
+	background: transparent;
+	font-family: inherit;
+	padding: 0;
+}
+
+.DayButton {
+	cursor: pointer;
+
+	&:hover {
+		border-color: $accentBlueBorder;
+	}
+
+	&:focus-visible {
+		outline: 2px solid $primary;
+		outline-offset: 1px;
+	}
+}
+
+// Выходной по рабочей неделе фирмы.
+.Weekend {
+	background: $gray100;
+	color: $color51;
+}
+
+// Праздник.
+.Holiday {
+	background: $attentionBg;
+	color: $attentionText;
+	font-weight: 600;
+}
+
+// Перенесённый выходной.
+.Dayoff {
+	background: $warningBg;
+	color: $warningText;
+}
+
+// Рабочий день-перенос (суббота по постановлению).
+.Workday {
+	background: $primaryBg;
+	color: $primaryText;
+	border-color: $primaryBorder;
+}
+
+.Today {
+	box-shadow: inset 0 0 0 2px $primary;
+}
+
+// ── Окно дня ───────────────────────────────────────────────────────────────
+.ModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: min(440px, calc(100vw - 48px));
+	max-width: 620px;
+}

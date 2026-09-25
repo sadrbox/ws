@@ -1,0 +1,80 @@
+// Экран «Проверки учёта 1С»: карточка находки, журнал прогонов. Цвета — токены темы.
+
+// Метки важности и состояния в шапке карточки — одним рядом.
+.Chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+// Отпечаток находки и идентификаторы 1С — моноширинно: их сверяют посимвольно.
+.Mono {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	word-break: break-all;
+}
+
+// Реквизиты находки (details) — JSON как есть, с прокруткой.
+.Details {
+	margin: 0;
+	padding: 10px 12px;
+	max-height: 100%;
+	overflow: auto;
+	border: 1px solid $color33;
+	border-radius: $radius3;
+	background: $gray50;
+	color: $color6;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+// Вкладка с двумя таблицами (объекты и документы): каждая делит высоту пополам.
+.Stack {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	height: 100%;
+	min-height: 0;
+}
+
+.StackTitle {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: $color51;
+}
+
+// Вкладка «Реквизиты»: отступ как у тела формы.
+.Pane {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+	min-height: 0;
+	padding: 4px 0;
+}
+
+// Пусто: «исключения нет», «реквизитов нет».
+.Empty {
+	color: $gray400;
+	font-size: 13px;
+}
+
+// Подсказка в окне исключения.
+.ModalHint {
+	margin: 0 0 10px;
+	font-size: 13px;
+	color: $color51;
+	max-width: 520px;
+}
+
+.ModalBody {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 420px;
+}

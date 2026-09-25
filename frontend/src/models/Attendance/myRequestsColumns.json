@@ -1,0 +1,10 @@
+[
+	{ "identifier": "attKind", "type": "string", "width": "170px", "minWidth": "110px", "alignment": "left", "hint": "Опоздание, отсутствие или изменение графика", "visible": true, "inlist": true },
+	{ "identifier": "attPeriod", "type": "string", "width": "240px", "minWidth": "140px", "alignment": "left", "hint": "Даты и время заявки", "visible": true, "inlist": true },
+	{ "identifier": "reason", "type": "string", "width": "320px", "minWidth": "140px", "alignment": "left", "hint": "Причина", "visible": true, "inlist": true },
+	{ "identifier": "attStatus", "type": "string", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "На согласовании, согласована или отклонена", "visible": true, "inlist": true },
+	{ "identifier": "attUnforeseen", "type": "boolean", "width": "130px", "minWidth": "90px", "alignment": "center", "hint": "Согласующий отметил объективную непредвиденную причину", "visible": true, "inlist": true },
+	{ "identifier": "attSubmittedAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Когда подана заявка", "visible": true, "inlist": true },
+	{ "identifier": "attDecidedBy", "type": "string", "width": "180px", "minWidth": "110px", "alignment": "left", "hint": "Кто решил по заявке", "visible": true, "inlist": true },
+	{ "identifier": "attDecisionNote", "type": "string", "width": "240px", "minWidth": "120px", "alignment": "left", "hint": "Комментарий к решению", "visible": true, "inlist": true }
+]

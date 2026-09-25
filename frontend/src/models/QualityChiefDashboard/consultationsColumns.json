@@ -1,0 +1,8 @@
+[
+	{ "identifier": "consultCompletedAt", "type": "datetime", "width": "140px", "minWidth": "110px", "alignment": "left", "hint": "Когда обращение закрыто", "visible": true, "inlist": true },
+	{ "identifier": "consultClient", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Клиент", "visible": true, "inlist": true },
+	{ "identifier": "consultTask", "type": "string", "width": "260px", "minWidth": "140px", "alignment": "left", "hint": "Обращение клиента", "visible": true, "inlist": true },
+	{ "identifier": "executorName", "type": "string", "width": "180px", "minWidth": "110px", "alignment": "left", "hint": "Кто отвечал клиенту", "visible": true, "inlist": true },
+	{ "identifier": "consultRating", "type": "number", "width": "110px", "minWidth": "80px", "alignment": "right", "hint": "Оценка клиента, 1–5", "visible": true, "inlist": true },
+	{ "identifier": "consultReasons", "type": "string", "width": "360px", "minWidth": "160px", "alignment": "left", "hint": "Почему ответ попал в выборку", "visible": true, "inlist": true }
+]

@@ -1,0 +1,9 @@
+[
+	{ "identifier": "name", "type": "string", "width": "280px", "minWidth": "140px", "alignment": "left", "hint": "Чек-лист (по шаблону)", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "clientName", "type": "string", "width": "240px", "minWidth": "120px", "alignment": "left", "hint": "Клиент", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "checklistRunPeriod", "type": "string", "width": "200px", "minWidth": "140px", "alignment": "left", "hint": "Период самопроверки", "visible": true, "inlist": true, "sortable": false, "dynamic": true },
+	{ "identifier": "executorName", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Кто отмечает пункты", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "reviewerName", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Главбух, который подписывает", "visible": true, "inlist": true, "sortable": false },
+	{ "identifier": "status", "type": "string", "width": "140px", "minWidth": "100px", "alignment": "left", "hint": "Открыт, сдан главбуху или подписан", "visible": true, "inlist": true },
+	{ "identifier": "progress", "type": "string", "width": "180px", "minWidth": "100px", "alignment": "left", "hint": "Отмечено пунктов из всех; проблемы", "visible": true, "inlist": true, "sortable": false }
+]

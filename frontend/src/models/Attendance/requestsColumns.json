@@ -1,0 +1,11 @@
+[
+	{ "identifier": "attEmployee", "type": "string", "width": "200px", "minWidth": "120px", "alignment": "left", "hint": "Сотрудник", "visible": true, "inlist": true },
+	{ "identifier": "attKind", "type": "string", "width": "160px", "minWidth": "110px", "alignment": "left", "hint": "Опоздание, отсутствие или изменение графика", "visible": true, "inlist": true },
+	{ "identifier": "attPeriod", "type": "string", "width": "230px", "minWidth": "140px", "alignment": "left", "hint": "Даты и время заявки", "visible": true, "inlist": true },
+	{ "identifier": "reason", "type": "string", "width": "300px", "minWidth": "140px", "alignment": "left", "hint": "Причина", "visible": true, "inlist": true },
+	{ "identifier": "attStatus", "type": "string", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "На согласовании, согласована или отклонена", "visible": true, "inlist": true },
+	{ "identifier": "attSubmittedAt", "type": "datetime", "width": "150px", "minWidth": "110px", "alignment": "left", "hint": "Когда подана заявка: после начала дня — п. 34", "visible": true, "inlist": true },
+	{ "identifier": "attUnforeseen", "type": "boolean", "width": "130px", "minWidth": "90px", "alignment": "center", "hint": "Отмечена объективная непредвиденная причина", "visible": true, "inlist": true },
+	{ "identifier": "attDecidedBy", "type": "string", "width": "180px", "minWidth": "110px", "alignment": "left", "hint": "Кто решил по заявке", "visible": true, "inlist": true },
+	{ "identifier": "attDecisionNote", "type": "string", "width": "220px", "minWidth": "120px", "alignment": "left", "hint": "Комментарий к решению", "visible": false, "inlist": true }
+]

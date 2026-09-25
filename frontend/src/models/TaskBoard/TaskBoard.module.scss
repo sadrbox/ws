@@ -69,6 +69,13 @@
   background: color-mix(in srgb, var(--color-link) 6%, var(--surface-muted));
 }
 
+// Колонка статуса, которого нет в справочнике: задачи в ней видны, но бросать сюда нельзя —
+// пунктирная рамка говорит «это не настоящий этап».
+.Column.unknown {
+  border: 1px dashed var(--line, var(--n-88));
+  background: transparent;
+}
+
 .ColumnHead {
   display: flex;
   align-items: center;
@@ -135,6 +142,52 @@
   line-height: 1.35;
   color: var(--ink, var(--c-blue-15));
   word-break: break-word;
+  // Длинное описание (сводная задача проверки учёта — список находок) не растягивает карточку
+  // на полэкрана: четыре строки, остальное — в самой задаче.
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+// ── Значки карточки (E17): вид задачи, SLA, напоминания, «помощь» ─────────────
+.CardBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3, 3px);
+}
+
+.Badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+
+.badgeInfo {
+  color: var(--color-link, #1c5fcb);
+  background: color-mix(in srgb, var(--color-link, #1c5fcb) 10%, transparent);
+}
+
+.badgeDanger {
+  color: var(--danger, #d32f2f);
+  background: color-mix(in srgb, var(--danger, #d32f2f) 10%, transparent);
+}
+
+.badgeWarning {
+  color: var(--warning, #b35900);
+  background: color-mix(in srgb, var(--warning, #b35900) 10%, transparent);
+}
+
+.badgeAccent {
+  color: var(--c-blue-45, #3949ab);
+  background: color-mix(in srgb, var(--c-blue-45, #3949ab) 10%, transparent);
 }
 
 .CardMeta {

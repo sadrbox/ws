@@ -1,0 +1,21 @@
+[
+	{
+		"identifier": "name",
+		"type": "string",
+		"width": "300px",
+		"minWidth": "120px",
+		"alignment": "left",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "description",
+		"type": "string",
+		"width": "460px",
+		"minWidth": "160px",
+		"alignment": "left",
+		"sortable": false,
+		"visible": true,
+		"inlist": true
+	}
+]

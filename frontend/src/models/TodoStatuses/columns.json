@@ -58,5 +58,25 @@
 		"hint": "Завершающий",
 		"visible": true,
 		"inlist": true
+	},
+	{
+		"identifier": "isWaiting",
+		"type": "boolean",
+		"width": "140px",
+		"minWidth": "140px",
+		"alignment": "center",
+		"hint": "Ожидание",
+		"visible": true,
+		"inlist": true
+	},
+	{
+		"identifier": "isCancel",
+		"type": "boolean",
+		"width": "120px",
+		"minWidth": "120px",
+		"alignment": "center",
+		"hint": "Отмена",
+		"visible": true,
+		"inlist": true
 	}
 ]
