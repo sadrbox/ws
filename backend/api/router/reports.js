@@ -800,14 +800,27 @@ router.get("/reports/user-performance", requireReportAccess("user-performance"),
 		if (from || to) taskWhere.createdAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
 		const tasks = await prisma.todo.findMany({
 			where: taskWhere,
-			select: { executorUuid: true, status: true, deadline: true },
+			select: {
+				executorUuid: true, status: true, deadline: true, kind: true, result: true, createdAt: true,
+				acceptedAt: true, reminderCount: true, returnedCount: true, clientRating: true,
+			},
 		});
+		// Закрытость — по справочнику статусов (isFinal), как на доске: раньше здесь были зашиты
+		// "done"/"cancelled", и свой финальный статус считался бы вечно активной задачей (E17 СК0.1).
+		const statusRows = await prisma.todoStatus.findMany({ where: { deletedAt: null }, select: { code: true, isFinal: true } });
+		const finalCodes = new Set(statusRows.filter((s) => s.isFinal).map((s) => s.code));
+		if (!finalCodes.size) { finalCodes.add("done"); finalCodes.add("cancelled"); }
+		const CANCEL = new Set(["cancelled", "canceled", "cancel"]);
 
 		// ── Свод по пользователю ───────────────────────────────────────────────
 		const byUser = new Map();
 		const ensure = (uid) => {
 			if (!uid) return null;
-			if (!byUser.has(uid)) byUser.set(uid, { userUuid: uid, docs: 0, tasksTotal: 0, tasksDone: 0, tasksOverdue: 0, tasksActive: 0 });
+			if (!byUser.has(uid)) byUser.set(uid, {
+				userUuid: uid, docs: 0, tasksTotal: 0, tasksDone: 0, tasksOverdue: 0, tasksActive: 0,
+				// E17: качество работы с задачами.
+				doneWithResult: 0, reminders: 0, returned: 0, requests: 0, reactionMinutesSum: 0, reactionCount: 0, ratingSum: 0, ratingCount: 0,
+			});
 			return byUser.get(uid);
 		};
 		for (const r of docRows) { const u = ensure(r.uid); if (u) u.docs = r.docs; }
@@ -816,12 +829,31 @@ router.get("/reports/user-performance", requireReportAccess("user-performance"),
 			const u = ensure(t.executorUuid);
 			if (!u) continue;
 			u.tasksTotal++;
-			const closed = t.status === "done" || t.status === "cancelled";
-			if (t.status === "done") u.tasksDone++;
+			const closed = finalCodes.has(t.status);
+			if (closed && !CANCEL.has(t.status)) {
+				u.tasksDone++;
+				if (t.result && t.result.trim()) u.doneWithResult++;
+			}
 			if (!closed) {
 				u.tasksActive++;
 				if (t.deadline && new Date(t.deadline).getTime() < now) u.tasksOverdue++;
 			}
+			u.reminders += t.reminderCount || 0;
+			u.returned += t.returnedCount || 0;
+			if (t.kind === "client_request") {
+				u.requests++;
+				if (t.acceptedAt) {
+					u.reactionMinutesSum += Math.max(0, (new Date(t.acceptedAt).getTime() - new Date(t.createdAt).getTime()) / 60_000);
+					u.reactionCount++;
+				}
+			}
+			if (Number.isInteger(t.clientRating)) { u.ratingSum += t.clientRating; u.ratingCount++; }
+		}
+		for (const u of byUser.values()) {
+			u.reactionMinutesAvg = u.reactionCount ? Math.round(u.reactionMinutesSum / u.reactionCount) : null;
+			u.resultShare = u.tasksDone ? Math.round((u.doneWithResult / u.tasksDone) * 100) : null;
+			u.ratingAvg = u.ratingCount ? Math.round((u.ratingSum / u.ratingCount) * 10) / 10 : null;
+			delete u.reactionMinutesSum; delete u.reactionCount; delete u.ratingSum; delete u.ratingCount;
 		}
 
 		// Имена пользователей.

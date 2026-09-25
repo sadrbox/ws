@@ -18,7 +18,7 @@ const FILES = [
 	"esfResolver", "fiscalProvider", "govMappers", "importLandedCost", "installAccessRules", "listUtils",
 	"openapi", "orgFieldValidation", "parse1cDate", "parseUploadErrors", "periodLock",
 	"permissionProfiles", "routeSubjects", "moduleRoutes", "recordScope", "supportMode", "isolationAudit", "quotas", "bin", "serviceLinks",
-	"recomputeCosting", "scheduler", "sortOrder", "twoFactor", "waConversations", "waResolve", "waWebhook",
+	"recomputeCosting", "scheduler", "qualityRules", "sortOrder", "twoFactor", "waConversations", "waResolve", "waWebhook",
 ].map((n) => path.join("__tests__", `${n}.test.js`));
 
 const r = spawnSync("node", ["--test", ...FILES], { cwd: root, stdio: "inherit" });

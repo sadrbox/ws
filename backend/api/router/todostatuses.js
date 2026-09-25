@@ -51,7 +51,7 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 
 router.post(`/${ROUTE}`, async (req, res) => {
 	try {
-		const { name, code, sortOrder, isFinal } = req.body;
+		const { name, code, sortOrder, isFinal, isWaiting, isCancel } = req.body;
 		if (!name?.trim()) return res.status(400).json({ success: false, message: "Наименование обязательно" });
 		// Код можно не задавать — выведем из названия (для кириллицы уйдём в fallback).
 		const finalCode = toCode(code) || toCode(name) || `status_${Date.now().toString(36)}`;
@@ -64,6 +64,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				name: name.trim(),
 				sortOrder: sortOrder != null ? parseInt(sortOrder, 10) : 100,
 				isFinal: isFinal === true,
+				// E17: ожидание («ждём клиента») не финальное и требует даты контроля; финал ожиданием быть не может.
+				isWaiting: isWaiting === true && isFinal !== true,
+				// Отмена — только у финального статуса: «отменена» и есть конец задачи, без результата.
+				isCancel: isCancel === true && isFinal === true,
 			},
 		});
 		return res.status(201).json({ success: true, item });
@@ -83,6 +87,10 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.name !== undefined) data.name = req.body.name?.trim() ?? null;
 		if (req.body.sortOrder !== undefined) data.sortOrder = req.body.sortOrder != null ? parseInt(req.body.sortOrder, 10) : 100;
 		if (req.body.isFinal !== undefined) data.isFinal = req.body.isFinal === true;
+		if (req.body.isWaiting !== undefined) data.isWaiting = req.body.isWaiting === true;
+		if (req.body.isCancel !== undefined) data.isCancel = req.body.isCancel === true;
+		if (data.isFinal === true) data.isWaiting = false;
+		if (data.isFinal === false) data.isCancel = false;
 		const item = await prisma[MODEL].update({ where: w, data });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

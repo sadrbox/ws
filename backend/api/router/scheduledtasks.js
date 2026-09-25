@@ -3,7 +3,25 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { cronError } from "../../services/quality/cron.js";
 const router = express.Router();
+
+/**
+ * E17 СК1.7: расписание стало исполняемым (services/quality/jobs.js → runScheduledTasks), поэтому
+ * кривое cron-выражение отвергается сразу, а не молча не срабатывает.
+ */
+function scheduleFields(body) {
+	const data = {};
+	if (body.kind !== undefined) data.kind = body.kind === "regulation" ? "regulation" : String(body.kind || "regulation");
+	if (body.executorUuid !== undefined) data.executorUuid = body.executorUuid || null;
+	if (body.staffGroupUuid !== undefined) data.staffGroupUuid = body.staffGroupUuid || null;
+	if (body.deadlineDays !== undefined) {
+		const d = body.deadlineDays === null || body.deadlineDays === "" ? null : Number(body.deadlineDays);
+		if (d !== null && (!Number.isInteger(d) || d < 0 || d > 365)) return { error: "Срок задачи — целое число дней от 0 до 365" };
+		data.deadlineDays = d;
+	}
+	return { data };
+}
 const MODEL = "scheduledTask";
 const ROUTE = "scheduled-tasks";
 const TEXT_FIELDS = ["name", "description", "cronExpr"];
@@ -138,6 +156,12 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			return res
 				.status(400)
 				.json({ success: false, message: "Наименование обязательно" });
+		if (cronExpr?.trim()) {
+			const err = cronError(cronExpr.trim());
+			if (err) return res.status(400).json({ success: false, message: `Расписание: ${err}` });
+		}
+		const extra = scheduleFields(req.body);
+		if (extra.error) return res.status(400).json({ success: false, message: extra.error });
 		const item = await prisma[MODEL].create({
 			data: {
 				name: name.trim(),
@@ -146,6 +170,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 				status: status || "active",
 				organizationUuid: organizationUuid || null,
 				authorUuid: req.user.uuid,
+				...extra.data,
 			},
 			include: {
 				organization: true,
@@ -179,6 +204,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.lastRunAt = req.body.lastRunAt ? new Date(req.body.lastRunAt) : null;
 		if (req.body.nextRunAt !== undefined)
 			data.nextRunAt = req.body.nextRunAt ? new Date(req.body.nextRunAt) : null;
+		if (data.cronExpr) {
+			const err = cronError(data.cronExpr);
+			if (err) return res.status(400).json({ success: false, message: `Расписание: ${err}` });
+		}
+		// Сменили выражение — ближайший запуск пересчитает исполнитель расписаний.
+		if (req.body.cronExpr !== undefined && req.body.nextRunAt === undefined) data.nextRunAt = null;
+		const extra = scheduleFields(req.body);
+		if (extra.error) return res.status(400).json({ success: false, message: extra.error });
+		Object.assign(data, extra.data);
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,

@@ -636,6 +636,12 @@ model TodoStatus {
   name      String
   sortOrder Int       @default(100)
   isFinal   Boolean   @default(false)
+  /// Статус ожидания («ждём клиента/контрагента», E17 СК1.2): не финальный и требует даты
+  /// следующего контроля — иначе ожидание превращается в способ не делать задачу.
+  isWaiting Boolean   @default(false)
+  /// Отмена (E17): финальный статус, который результата не требует — задачу не выполняли. Признак,
+  /// а не код: справочник настраиваемый, и свой статус отмены с другим кодом должен работать так же.
+  isCancel  Boolean   @default(false)
   updatedAt DateTime  @default(now()) @updatedAt
   deletedAt DateTime?
 
@@ -672,6 +678,38 @@ model Todo {
   // Подпись происхождения на момент создания: «Чат в 1С — Dev_01». Живёт отдельно от
   // sourceLabel по той же причине: та подписывает ОБЪЕКТ, эта — откуда пришла задача.
   originLabel      String?
+  // ── E17 «Стандарт качества» (docs/PLAN_QUALITY_STANDARD_2026-09-25.md, СК1) ──────────
+  /// Вид задачи: task | client_request | error | control | check_finding | regulation |
+  /// manager_order. От вида зависят SLA, правила кандидатов в нарушения и эскалация.
+  kind             String        @default("task")
+  /// low | normal | high | urgent — по нему выбирается срок реакции обращения.
+  priority         String        @default("normal")
+  /// Обращение принято в работу / первый ответ клиенту / срок принятия по SLA (п. 3).
+  acceptedAt       DateTime?
+  firstResponseAt  DateTime?
+  reactionDueAt    DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  /// Что сделано. Без результата задачу не закрыть (п. 1: «написала/передала» — не результат).
+  result           String?
+  /// Дата следующего контроля для статусов ожидания.
+  nextControlAt    DateTime?
+  /// Кто нашёл ошибку: client | staff | chief | check (п. 4 — ошибку первым нашёл клиент).
+  reportedBy       String?
+  errorTypeUuid    String?
+  /// Родитель: задача-проверка исправления ссылается на задачу-ошибку (п. 5).
+  parentTodoUuid   String?
+  reminderCount    Int           @default(0)
+  lastReminderAt   DateTime?
+  returnedCount    Int           @default(0)
+  escalationLevel  Int           @default(0)
+  escalatedAt      DateTime?
+  helpRequestedAt  DateTime?
+  lastActivityAt   DateTime?
+  clientRating     Int?
+  clientRatingNote String?
+  /// Код проверки учёта — у сводной задачи по находкам (kind = check_finding).
+  checkCode        String?
   counterparty     Counterparty? @relation(fields: [counterpartyUuid], references: [uuid])
   curator          User?         @relation("TodoCurator", fields: [curatorUuid], references: [uuid])
   executor         User?         @relation("TodoExecutor", fields: [executorUuid], references: [uuid])
@@ -685,6 +723,9 @@ model Todo {
   @@index([updatedAt])
   @@index([sourceType, sourceUuid])
   @@index([origin])
+  @@index([kind])
+  @@index([parentTodoUuid])
+  @@index([organizationUuid, checkCode])
   @@map("todos")
 }
 
@@ -1012,6 +1053,13 @@ model ScheduledTask {
   nextRunAt        DateTime?
   organizationUuid String?
   authorUuid       String
+  /// E17 СК1.7: что создаёт расписание. regulation — регламентная задача: для группы —
+  /// по задаче на каждого клиента группы ответственному, иначе одна задача исполнителю.
+  kind             String        @default("regulation")
+  executorUuid     String?
+  staffGroupUuid   String?
+  /// Срок создаваемой задачи в днях от момента создания.
+  deadlineDays     Int?
   updatedAt        DateTime      @default(now()) @updatedAt
   deletedAt        DateTime?
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid])
@@ -3451,4 +3499,554 @@ model WaMessage {
 
   @@index([conversationUuid, createdAt])
   @@map("wa_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E17 «СТАНДАРТ КАЧЕСТВА БУХПРОФ» (docs/PLAN_QUALITY_STANDARD_2026-09-25.md).
+//
+// Модели на СКАЛЯРАХ без FK к пользователям и организациям — как Note: записи о качестве
+// переживают удаление пользователя, а User/Organization не обрастают десятком обратных
+// связей. Связи есть только внутри самих моделей E17 (группа → участники, шаблон → пункты).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Журнал событий задачи: принята, передана, напоминание клиента, возврат «не выполнено»,
+/// «Нужна помощь», эскалация, результат, оценка. Одна таблица вместо пяти — это история
+/// одной задачи, и читают её вместе.
+model TodoEvent {
+  id           Int      @id @default(autoincrement())
+  uuid         String   @unique @default(uuid())
+  todoUuid     String
+  /// created | accepted | status | transfer | reminder | returned | help | escalation |
+  /// result | rating | control | control_date
+  type         String
+  actorUuid    String?
+  actorName    String?
+  fromUserUuid String?
+  toUserUuid   String?
+  /// Канал: erp | 1c-chat | phone | whatsapp | system.
+  channel      String?
+  note         String?
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([todoUuid, createdAt])
+  @@index([type, createdAt])
+  @@map("todo_events")
+}
+
+/// Наблюдатель задачи: передавший остаётся на связи до закрытия (п. 22 — «я передала» не
+/// означает «выполнено»).
+model TodoWatcher {
+  id        Int      @id @default(autoincrement())
+  uuid      String   @unique @default(uuid())
+  todoUuid  String
+  userUuid  String
+  /// transfer — передал задачу; manual — подписался сам.
+  reason    String   @default("transfer")
+  createdAt DateTime @default(now())
+
+  @@unique([todoUuid, userUuid])
+  @@index([userUuid])
+  @@map("todo_watchers")
+}
+
+/// Группа сотрудников фирмы: главбух (head), участники, руководитель над группой (manager)
+/// и клиенты группы. От группы зависит, кто чьи нарушения видит и подтверждает
+/// (services/quality/access.js) и кому уходят задачи по находкам проверок.
+model StaffGroup {
+  id               Int                @id @default(autoincrement())
+  uuid             String             @unique @default(uuid())
+  organizationUuid String?
+  name             String
+  headUuid         String?
+  managerUuid      String?
+  comment          String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @default(now()) @updatedAt
+  deletedAt        DateTime?
+  members          StaffGroupMember[]
+  clients          StaffGroupClient[]
+
+  @@index([organizationUuid])
+  @@index([headUuid])
+  @@index([managerUuid])
+  @@map("staff_groups")
+}
+
+model StaffGroupMember {
+  id        Int        @id @default(autoincrement())
+  uuid      String     @unique @default(uuid())
+  groupUuid String
+  userUuid  String
+  createdAt DateTime   @default(now())
+  group     StaffGroup @relation(fields: [groupUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([groupUuid, userUuid])
+  @@index([userUuid])
+  @@map("staff_group_members")
+}
+
+/// Клиент группы и ответственный бухгалтер: ему — задачи по находкам проверок и регламентные
+/// задачи, главбуху группы — клиент на панели.
+model StaffGroupClient {
+  id                     Int        @id @default(autoincrement())
+  uuid                   String     @unique @default(uuid())
+  groupUuid              String
+  clientOrganizationUuid String
+  responsibleUuid        String?
+  createdAt              DateTime   @default(now())
+  group                  StaffGroup @relation(fields: [groupUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([groupUuid, clientOrganizationUuid])
+  @@index([clientOrganizationUuid])
+  @@index([responsibleUuid])
+  @@map("staff_group_clients")
+}
+
+/// Справочник типовых ошибок: по типу ловится повтор уже разобранной ошибки (п. 6).
+model ErrorType {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String?
+  name             String
+  description      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@index([organizationUuid])
+  @@map("error_types")
+}
+
+/// Пункт стандарта качества организации. Заполняется из services/quality/standardItems.js,
+/// дальше правится руками.
+model StandardItem {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String?
+  number           Int
+  title            String
+  text             String
+  /// Кто может нарушить: employee | chief | manager.
+  appliesTo        String    @default("employee")
+  /// Как выявляется: auto | signal | manual (таблица покрытия плана).
+  kind             String    @default("manual")
+  isActive         Boolean   @default(true)
+  version          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@unique([organizationUuid, number])
+  @@map("standard_items")
+}
+
+/// НАРУШЕНИЕ СТАНДАРТА — ядро E17. Бонус за месяц не начисляется при хотя бы одном
+/// подтверждённом нарушении, выявленном в этом месяце (bonusMonth — месяц detectedAt:
+/// «ошибки прошлых периодов не сгорают» и учитываются в месяце выявления).
+model StandardViolation {
+  id                     Int       @id @default(autoincrement())
+  uuid                   String    @unique @default(uuid())
+  /// Организация-фирма, в которой ведётся учёт качества.
+  organizationUuid       String?
+  /// Нарушитель.
+  userUuid               String
+  /// Клиент или участок.
+  clientOrganizationUuid String?
+  standardItemUuid       String?
+  itemNumber             Int
+  occurredAt             DateTime
+  detectedAt             DateTime  @default(now())
+  /// YYYY-MM месяца выявления.
+  bonusMonth             String
+  description            String
+  /// Доказательства: [{ kind: todo|finding|document|file|checklist|note, uuid?, label?, … }].
+  evidence               Json?
+  /// manual | rule:<код правила>
+  source                 String    @default("manual")
+  /// Ключ идемпотентности правила: повторный прогон не заводит второго кандидата, а
+  /// отклонённый кандидат не возвращается.
+  ruleKey                String?   @unique
+  /// candidate | confirmed | disputed | rejected
+  status                 String    @default("candidate")
+  /// Самовыявленная ошибка (правила применения бонуса) — в бонус не идёт.
+  selfDetected           Boolean   @default(false)
+  selfDetectedInfo       Json?
+  createdByUuid          String?
+  decidedByUuid          String?
+  decidedAt              DateTime?
+  decisionNote           String?
+  disputeText            String?
+  disputedAt             DateTime?
+  disputeDecidedByUuid   String?
+  disputeDecidedAt       DateTime?
+  disputeDecision        String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now()) @updatedAt
+  deletedAt              DateTime?
+
+  @@index([organizationUuid, bonusMonth])
+  @@index([userUuid, status])
+  @@index([clientOrganizationUuid])
+  @@index([status])
+  @@map("standard_violations")
+}
+
+/// Мера руководителя (п. 30): беседа, обучение, предупреждение. По мерам видно, была ли
+/// реакция на повторяющиеся нарушения.
+model ViolationMeasure {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String?
+  userUuid         String
+  violationUuid    String?
+  /// talk | training | warning | other
+  kind             String    @default("talk")
+  date             DateTime  @default(now())
+  note             String?
+  createdByUuid    String?
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  @@index([organizationUuid, userUuid])
+  @@map("violation_measures")
+}
+
+/// Закрытый месяц бонусов — снимок итогов. После закрытия нарушения этого месяца не меняются.
+model BonusMonth {
+  id               Int      @id @default(autoincrement())
+  uuid             String   @unique @default(uuid())
+  organizationUuid String
+  /// YYYY-MM
+  month            String
+  closedAt         DateTime @default(now())
+  closedByUuid     String?
+  results          Json?
+
+  @@unique([organizationUuid, month])
+  @@map("bonus_months")
+}
+
+/// Уведомление пользователю: SLA, эскалации, кандидаты в нарушения. ХРАНИТСЯ, а не только
+/// летит по SSE: шина событий живёт в памяти процесса, а backend в production работает
+/// кластером — событие из соседнего процесса до пользователя может не дойти.
+model UserNotification {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  userUuid         String
+  organizationUuid String?
+  kind             String
+  title            String
+  body             String?
+  /// Куда вести по щелчку: { endpoint, uuid } или { pane }.
+  link             Json?
+  /// Ключ от повторов: периодическое правило не шлёт одно уведомление дважды.
+  dedupKey         String?   @unique
+  readAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([userUuid, readAt])
+  @@index([createdAt])
+  @@map("user_notifications")
+}
+
+/// Привязка пользователя к Telegram-боту уведомлений (СК0.4).
+model UserTelegramLink {
+  id        Int       @id @default(autoincrement())
+  uuid      String    @unique @default(uuid())
+  userUuid  String    @unique
+  chatId    String?
+  /// Одноразовый код из ссылки t.me/<бот>?start=<код>.
+  linkCode  String?   @unique
+  linkedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  @@map("user_telegram_links")
+}
+
+/// Прогон одной проверки учёта в базе 1С клиента (СК2): что спросили и чем кончилось.
+model CheckRun {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  baseKey          String?
+  checkCode        String
+  checkVersion     Int?
+  /// organization | base
+  scope            String?
+  /// ok | findings | skipped | error
+  status           String
+  truncated        Boolean   @default(false)
+  total            Int       @default(0)
+  summary          Json?
+  params           Json?
+  periodFrom       DateTime?
+  periodTo         DateTime?
+  onDate           DateTime?
+  errorCode        String?
+  errorMessage     String?
+  skipReason       String?
+  durationMs       Int?
+  readAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([organizationUuid, checkCode, createdAt])
+  @@index([createdAt])
+  @@map("check_runs")
+}
+
+/// Находка проверки учёта. Живёт по fingerprint: появилась → висит → исчезла. Исключение
+/// («ОС используем дальше») ставит главбух с причиной — задача и кандидат по ней не заводятся.
+model CheckFinding {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  checkCode        String
+  fingerprint      String
+  /// error | warning | info
+  severity         String
+  title            String
+  factDate         DateTime?
+  amount           Decimal?  @db.Decimal(18, 2)
+  /// objects, documents, details, account, quantity — как пришло из 1С.
+  data             Json?
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  resolvedAt       DateTime?
+  reopenedCount    Int       @default(0)
+  lastRunUuid      String?
+  todoUuid         String?
+  exceptionReason  String?
+  exceptionByUuid  String?
+  exceptionAt      DateTime?
+  exceptionUntil   DateTime?
+  /// Когда по находке заведён кандидат в нарушения (чтобы не заводить второй).
+  candidateAt      DateTime?
+
+  @@unique([organizationUuid, fingerprint])
+  @@index([organizationUuid, checkCode, resolvedAt])
+  @@index([resolvedAt])
+  @@map("check_findings")
+}
+
+/// Снимок данных 1С (taxes, documents): вторая сторона сравнения лежит вне 1С.
+model AccountingSnapshot {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  code             String
+  baseKey          String?
+  periodFrom       DateTime?
+  periodTo         DateTime?
+  onDate           DateTime?
+  rows             Json?
+  readAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([organizationUuid, code, createdAt])
+  @@map("accounting_snapshots")
+}
+
+/// Выписка лицевого счёта из кабинета налогоплательщика (п. 11), загруженная бухгалтером,
+/// и итог сравнения со снимком taxes из 1С.
+model KnStatement {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  onDate           DateTime
+  rows             Json
+  comparison       Json?
+  userUuid         String?
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  @@index([organizationUuid, onDate])
+  @@map("kn_statements")
+}
+
+/// Отметка о получении первички клиента за месяц (п. 19).
+model PrimaryDocsReceipt {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  /// YYYY-MM
+  month            String
+  receivedAt       DateTime  @default(now())
+  /// Первичка за месяц получена полностью.
+  complete         Boolean   @default(false)
+  note             String?
+  userUuid         String?
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  @@index([organizationUuid, month])
+  @@map("primary_docs_receipts")
+}
+
+/// Шаблон чек-листа самопроверки (СК3).
+model ChecklistTemplate {
+  id               Int                     @id @default(autoincrement())
+  uuid             String                  @unique @default(uuid())
+  organizationUuid String?
+  name             String
+  description      String?
+  /// month | quarter | year | once
+  periodicity      String                  @default("month")
+  isActive         Boolean                 @default(true)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @default(now()) @updatedAt
+  deletedAt        DateTime?
+  items            ChecklistTemplateItem[]
+
+  @@index([organizationUuid])
+  @@map("checklist_templates")
+}
+
+model ChecklistTemplateItem {
+  id                 Int               @id @default(autoincrement())
+  uuid               String            @unique @default(uuid())
+  templateUuid       String
+  position           Int               @default(0)
+  text               String
+  /// Код проверки учёта: при открытых находках пункт нельзя отметить «ок».
+  checkCode          String?
+  standardItemNumber Int?
+  template           ChecklistTemplate @relation(fields: [templateUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([templateUuid])
+  @@map("checklist_template_items")
+}
+
+/// Прогон чек-листа по клиенту за период: исполнитель отмечает пункты, главбух подписывает.
+model ChecklistRun {
+  id                     Int                @id @default(autoincrement())
+  uuid                   String             @unique @default(uuid())
+  organizationUuid       String?
+  clientOrganizationUuid String
+  templateUuid           String?
+  name                   String
+  periodFrom             DateTime
+  periodTo               DateTime
+  executorUuid           String?
+  reviewerUuid           String?
+  /// open | submitted | reviewed
+  status                 String             @default("open")
+  submittedAt            DateTime?
+  reviewedAt             DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @default(now()) @updatedAt
+  deletedAt              DateTime?
+  items                  ChecklistRunItem[]
+
+  @@index([organizationUuid])
+  @@index([clientOrganizationUuid, periodFrom])
+  @@map("checklist_runs")
+}
+
+model ChecklistRunItem {
+  id              Int          @id @default(autoincrement())
+  uuid            String       @unique @default(uuid())
+  runUuid         String
+  position        Int          @default(0)
+  text            String
+  checkCode       String?
+  /// pending | ok | na | problem
+  status          String       @default("pending")
+  comment         String?
+  confirmedByUuid String?
+  confirmedAt     DateTime?
+  run             ChecklistRun @relation(fields: [runUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([runUuid])
+  @@index([checkCode])
+  @@map("checklist_run_items")
+}
+
+/// График работы сотрудника (СК6).
+model WorkSchedule {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  userUuid         String
+  /// Местное время "HH:MM".
+  startTime        String    @default("09:00")
+  endTime          String    @default("18:00")
+  /// Дни недели ISO через запятую: 1 — понедельник … 7 — воскресенье.
+  workDays         String    @default("1,2,3,4,5")
+  graceMinutes     Int       @default(10)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@unique([organizationUuid, userUuid])
+  @@map("work_schedules")
+}
+
+/// Отметка начала рабочего дня.
+model WorkDayMark {
+  id               Int      @id @default(autoincrement())
+  uuid             String   @unique @default(uuid())
+  organizationUuid String
+  userUuid         String
+  /// Местная дата YYYY-MM-DD.
+  date             String
+  markedAt         DateTime @default(now())
+  /// button | login | manual
+  source           String   @default("button")
+  note             String?
+  createdAt        DateTime @default(now())
+
+  @@unique([organizationUuid, userUuid, date])
+  @@map("work_day_marks")
+}
+
+/// Заявка на опоздание, отсутствие или изменение графика (пп. 32–34).
+model AbsenceRequest {
+  id               Int       @id @default(autoincrement())
+  uuid             String    @unique @default(uuid())
+  organizationUuid String
+  userUuid         String
+  /// late | absence | schedule_change
+  kind             String
+  /// Местные даты YYYY-MM-DD включительно.
+  dateFrom         String
+  dateTo           String
+  timeFrom         String?
+  timeTo           String?
+  reason           String?
+  /// pending | approved | rejected
+  status           String    @default("pending")
+  /// Отмечает согласующий: объективная непредвиденная причина — исключение п. 34.
+  unforeseen       Boolean   @default(false)
+  decidedByUuid    String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  deletedAt        DateTime?
+
+  @@index([organizationUuid, userUuid, dateFrom])
+  @@map("absence_requests")
+}
+
+/// Производственный календарь (E17): праздники, перенесённые выходные и рабочие дни-переносы. Дата без
+/// записи — рабочая, если это будний день (пн–пт). По календарю считаются SLA в рабочем времени, сроки
+/// отработки находок и посещаемость: обращение в пятницу вечером не становится нарушением в субботу, а
+/// праздник — прогулом.
+model WorkCalendarDay {
+  id        Int      @id @default(autoincrement())
+  uuid      String   @unique @default(uuid())
+  /// Местная дата YYYY-MM-DD.
+  date      String   @unique
+  /// holiday — праздничный; dayoff — перенесённый выходной; workday — рабочий день-перенос (например, суббота).
+  kind      String
+  name      String?
+  /// seed — заполнено системой по закону; manual — поправлено человеком (постановление Правительства).
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("work_calendar_days")
 }

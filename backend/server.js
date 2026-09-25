@@ -134,6 +134,15 @@ import onecRouter from "./api/router/onec.js";
 import { moduleGuardMiddleware } from "./services/moduleAccess.js";
 import permissionProfilesRouter from "./api/router/permissionProfiles.js";
 import serviceLinksRouter from "./api/router/serviceLinks.js";
+// E17 «Стандарт качества БухПроф» (docs/PLAN_QUALITY_STANDARD_2026-09-25.md).
+import qualityRouter from "./api/router/quality.js";
+import standardViolationsRouter from "./api/router/standardViolations.js";
+import staffGroupsRouter from "./api/router/staffGroups.js";
+import checklistsRouter from "./api/router/checklists.js";
+import attendanceRouter from "./api/router/attendance.js";
+import accountingChecksRouter from "./api/router/accountingChecks.js";
+import { runSlaJob, runScheduledTasks, runAttendanceJob, runFindingCandidates, runAnnouncement } from "./services/quality/jobs.js";
+import { pollTelegramUpdates, telegramEnabled } from "./services/quality/telegram.js";
 import productRegisterRouter from "./api/router/productregister.js";
 import chartOfAccountsRouter from "./api/router/chartofaccounts.js";
 import subkontoTypesRouter from "./api/router/subkontotypes.js";
@@ -213,6 +222,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
 	.split(",")
 	.map((o) => o.trim())
 	.filter(Boolean);
+
 
 app.use(
 	cors({
@@ -341,6 +351,11 @@ app.use("/api/v1/auth/join", registerLimiter);
 // СЫРОМУ телу (у роутера свой express.raw). Без auth, префикс /api1 (как esf-license).
 app.use("/api1", waWebhookRouter);
 
+// E17: итоги ночного прогона проверок учёта из сервиса ai — до ~1000 находок на проверку и
+// два десятка проверок в одной посылке; общий предел 1 МБ отдал бы 413. Свой парсер — только на
+// этот путь и ДО общего: body-parser не разбирает тело второй раз. Ключ канала проверяется ДО
+// разбора — чужой запрос не заставит сервер разбирать 25 МБ.
+app.use("/bpai/checks/results", bpaiAuth, express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
@@ -436,6 +451,13 @@ app.use("/api/v1", modulesRouter);
 app.use("/api/v1", permissionProfilesRouter);
 // Обслуживание клиентов консалтинговой фирмой (К1–К5): кабинет фирмы и согласие клиента.
 app.use("/api/v1", serviceLinksRouter);
+// E17: права внутри роутеров (сегменты — guarded в utils/routeSubjects.js).
+app.use("/api/v1", qualityRouter);
+app.use("/api/v1", standardViolationsRouter);
+app.use("/api/v1", staffGroupsRouter);
+app.use("/api/v1", checklistsRouter);
+app.use("/api/v1", attendanceRouter);
+app.use("/api/v1", accountingChecksRouter);
 app.use("/api/v1", dealsRouter);
 app.use("/api/v1", backupRouter);
 app.use("/api/v1", apiv1);
@@ -615,6 +637,17 @@ const server = app.listen(port, () => {
 			return r.deleted ? `удалено записей журнала: ${r.deleted}` : undefined;
 		},
 	});
+	// E17 «Стандарт качества»: правила по срокам, регламентные задачи, находки проверок учёта,
+	// посещаемость, привязка Telegram. Все идемпотентны (ruleKey/dedupKey) — повтор не плодит дублей.
+	// QUALITY_JOBS=off выключает их разом (например, на копии базы для отладки).
+	const qualityOn = process.env.QUALITY_JOBS !== "off";
+	registerTask({ name: "quality-sla", intervalMs: qualityOn ? 5 * 60_000 : 0, run: () => runSlaJob() });
+	registerTask({ name: "quality-regulation", intervalMs: qualityOn ? 60_000 : 0, run: () => runScheduledTasks() });
+	registerTask({ name: "quality-findings", intervalMs: qualityOn ? 30 * 60_000 : 0, run: () => runFindingCandidates() });
+	registerTask({ name: "quality-attendance", intervalMs: qualityOn ? 15 * 60_000 : 0, run: () => runAttendanceJob() });
+	registerTask({ name: "telegram-poll", intervalMs: qualityOn && telegramEnabled() ? 30_000 : 0, initialDelayMs: 15_000, run: () => pollTelegramUpdates() });
+	// Однократное объявление о новых правилах задач (флаг в AppSetting; повторные тики — пустые).
+	registerTask({ name: "quality-announce", intervalMs: qualityOn ? 6 * 3_600_000 : 0, initialDelayMs: 120_000, run: () => runAnnouncement() });
 	startScheduler();
 });
 
