@@ -127,6 +127,7 @@ import backupRouter from "./api/router/backup.js";
 import { runBackup, listBackups } from "./services/backup.js";
 import { pruneAuditLog, retentionDays } from "./services/auditLog.js";
 import { registerTask, startScheduler } from "./services/scheduler.js";
+import { withClusterLock } from "./services/clusterLock.js";
 import openapiRouter from "./api/router/openapi.js";
 import waWebhookRouter from "./api/router/waWebhook.js";
 import waRouter from "./api/router/wa.js";
@@ -223,6 +224,31 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
 	.map((o) => o.trim())
 	.filter(Boolean);
 
+/*
+ * ЗАГОЛОВКИ, РАЗРЕШЁННЫЕ БРАУЗЕРУ — ОДНИМ СПИСКОМ (24.09).
+ *
+ * Список был написан ДВАЖДЫ: для обычных запросов и для preflight. Пока заголовки добавляли по
+ * одному, это сходило с рук; но стоило завести `X-Org-Scope` и вписать его не туда — и браузер
+ * начал отменять КАЖДЫЙ xhr на предварительной проверке. Со стороны это выглядит как «сервер
+ * недоступен»: запрос не уходит вовсе, ошибка приходит от браузера, а в логах сервера пусто.
+ *
+ * Поэтому список один. Забыть второе место больше нельзя, потому что его нет.
+ */
+const CORS_ALLOWED_HEADERS = [
+	"Content-Type",
+	"Authorization",
+	"Accept",
+	"Cache-Control",
+	"Pragma",
+	"X-Force-Overwrite",
+	"X-Organization-ID",
+	// Выбранный в панели кластер 1С: прокси `onec-bases` передаёт его сервису (21.09). Без разрешения
+	// заголовка браузер отменяет запрос на предварительной проверке, и список баз не грузится вовсе.
+	"X-Onec-Server",
+	// Сводный вид по группе организаций (Г2, 24.09): панель шлёт его в каждом запросе, когда
+	// выбрано «Все организации группы».
+	"X-Org-Scope",
+];
 
 app.use(
 	cors({
@@ -234,18 +260,7 @@ app.use(
 		},
 		credentials: true,
 		methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-		allowedHeaders: [
-			"Content-Type",
-			"Authorization",
-			"Accept",
-			"Cache-Control",
-			"Pragma",
-			"X-Force-Overwrite",
-			"X-Organization-ID",
-			// Выбранный в панели кластер 1С: прокси `onec-bases` передаёт его сервису (21.09). Без разрешения
-			// заголовка браузер отменяет запрос на предварительной проверке, и список баз не грузится вовсе.
-			"X-Onec-Server",
-		],
+		allowedHeaders: CORS_ALLOWED_HEADERS,
 	}),
 );
 
@@ -260,18 +275,7 @@ app.options(
 		},
 		credentials: true,
 		methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-		allowedHeaders: [
-			"Content-Type",
-			"Authorization",
-			"Accept",
-			"Cache-Control",
-			"Pragma",
-			"X-Force-Overwrite",
-			"X-Organization-ID",
-			// Выбранный в панели кластер 1С: прокси `onec-bases` передаёт его сервису (21.09). Без разрешения
-			// заголовка браузер отменяет запрос на предварительной проверке, и список баз не грузится вовсе.
-			"X-Onec-Server",
-		],
+		allowedHeaders: CORS_ALLOWED_HEADERS,
 	}),
 );
 
@@ -648,7 +652,11 @@ const server = app.listen(port, () => {
 	registerTask({ name: "telegram-poll", intervalMs: qualityOn && telegramEnabled() ? 30_000 : 0, initialDelayMs: 15_000, run: () => pollTelegramUpdates() });
 	// Однократное объявление о новых правилах задач (флаг в AppSetting; повторные тики — пустые).
 	registerTask({ name: "quality-announce", intervalMs: qualityOn ? 6 * 3_600_000 : 0, initialDelayMs: 120_000, run: () => runAnnouncement() });
-	startScheduler();
+	/*
+	 * Блокировка между процессами: в проде воркеров четыре, и без неё бэкап делался бы
+	 * четырежды одновременно. На одиночном процессе она просто всегда достаётся первому.
+	 */
+	startScheduler({ withLock: (name, run) => withClusterLock(name, run, (m, e) => console.warn(m, e)) });
 });
 
 // Graceful shutdown

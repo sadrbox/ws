@@ -1,6 +1,10 @@
 {
   "__release": "Отвязать",
   "accounting2": "Бухгалтерский учёт",
+  "aiExtensionName": "Расширение buhprof_api",
+  "aiExtensionUnavailable": "Расширение buhprof_api не отвечает: команды в базе не выполняются",
+  "aiOnecPlatform": "Платформа 1С",
+  "aiStatusExtension": "Расширение 1С",
   "contacts": "Контакты",
   "costingMethod": "Метод себестоимости",
   "counterpartyName": "Контрагент",
@@ -2308,6 +2312,7 @@
   "rowNotSelectable": "Эту строку отмечать нечего: над ней нет действия",
   "techMessagesDockRight": "Область справа",
   "techMessagesDockBottom": "Область внизу",
+  "techDockExpand": "Раскрыть",
   "system": "Система",
   "validationNeedFile": "Сначала выберите файл (.xlsx, .xls)",
   "validationNeedValue": "Укажите значение операции",

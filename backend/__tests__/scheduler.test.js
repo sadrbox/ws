@@ -40,3 +40,36 @@ test("startScheduler: ошибка задачи не роняет планиро
 	assert.equal(good, 1, "исправная задача выполнилась несмотря на падение соседней");
 	assert.ok(errs.some((m) => /bad/.test(m)), "ошибка залогирована");
 });
+
+test("startScheduler: задача выполняется под переданной блокировкой", async () => {
+	/*
+	 * В проде воркеров четыре, и без блокировки бэкап делался бы четырежды одновременно.
+	 * Планировщик про базу не знает — блокировку передаёт вызывающий (services/clusterLock.js).
+	 */
+	_reset();
+	const calls = [];
+	let ran = 0;
+	registerTask({ name: "locked", intervalMs: 60_000, initialDelayMs: 10, run: () => { ran += 1; } });
+	startScheduler({
+		log: { info() {}, warn() {}, error() {} },
+		withLock: async (name, run) => { calls.push(name); return run(); },
+	});
+	await new Promise((r) => setTimeout(r, 60));
+	assert.equal(ran, 1, "задача выполнена");
+	assert.deepEqual(calls, ["locked"], "и именно через блокировку");
+	_reset();
+});
+
+test("startScheduler: не получив блокировку, задачу не выполняем", async () => {
+	// Значит её уже ведёт другой воркер: делать её вторым нечего, ждать — тоже.
+	_reset();
+	let ran = 0;
+	registerTask({ name: "busy", intervalMs: 60_000, initialDelayMs: 10, run: () => { ran += 1; } });
+	startScheduler({
+		log: { info() {}, warn() {}, error() {} },
+		withLock: async () => undefined,
+	});
+	await new Promise((r) => setTimeout(r, 60));
+	assert.equal(ran, 0);
+	_reset();
+});

@@ -69,6 +69,27 @@
 
 
 	}
+
+	/*
+	 * ТЕЛЕФОН — ВЕСЬ ЭКРАН ПОВЕРХ ПЕЙНОВ. В 380 пикселях делить нечего: колонка справа
+	 * оставляла и форме, и журналу по полоске, в которой не читалось ни то, ни другое.
+	 * Раскрытая область занимает рабочее пространство целиком («Скрыть» — в её шапке), и
+	 * накладка здесь — не помеха, а просьба человека: журнал вместо формы.
+	 *
+	 * z-index тот же, что у пейнов и строки вкладок (3): пейны раньше в разметке — область
+	 * ложится на них; строка вкладок позже — её меню «ещё», раскрывающееся вверх, ложится на
+	 * область. Фон — фон экрана: сквозь накладку не должна просвечивать форма.
+	 */
+	&[data-place="mobile"] {
+		position: absolute;
+		inset: 0;
+		z-index: 3;
+		min-width: 0;
+		max-width: none;
+		min-height: 0;
+		padding: 6px;
+		background: $color30;
+	}
 }
 
 // Стрелка «свернуть» у раскрытой области: смотрит туда, куда область уедет. Поворот, а не
@@ -113,6 +134,52 @@
 			transform: rotate(180deg);
 		}
 	}
+
+	// Свёрнутая на телефоне — полоса во всю ширину под пейнами, вся она — кнопка (.RailBar).
+	// Стрелка смотрит вверх: раскрытая область встанет на место пейнов.
+	&[data-place="mobile"] {
+		flex-direction: row;
+		padding: 6px 6px 0 6px;
+
+		svg {
+			transform: rotate(180deg);
+		}
+	}
+}
+
+// Полоса-кнопка свёрнутой области на телефоне. Высота — с поле ввода и ещё шаг: в стрелку
+// 24×24 пальцем не попасть, а в полосу во всю ширину — с первого раза.
+.RailBar {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: $heightFieldInput + 8px;
+	padding: 0 9px;
+	border: 1px solid $color10;
+	border-radius: $radius2;
+	background: var(--sv-color60);
+	color: $color51;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid $color3;
+		outline-offset: 1px;
+	}
+}
+
+// «Раскрыть» — у правого края: подпись слева говорит, ЧТО свёрнуто, действие справа — что с ним сделать.
+.RailAction {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	color: $color3;
+	white-space: nowrap;
 }
 
 .RailTitle {
@@ -125,9 +192,16 @@
 	overflow: hidden;
 
 	// В нижней полосе места по горизонтали вдоволь — подпись ставится как обычный текст.
-	[data-place="bottom"] & {
+	[data-place="bottom"] &,
+	[data-place="mobile"] & {
 		writing-mode: horizontal-tb;
 		transform: none;
+	}
+
+	// На телефоне длинное название вида уступает счётчику и «Раскрыть» — многоточием.
+	[data-place="mobile"] & {
+		min-width: 0;
+		text-overflow: ellipsis;
 	}
 }
 

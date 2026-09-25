@@ -32,11 +32,43 @@ router.get("/notes", async (req, res) => {
 	try {
 		const entityType = String(req.query.entityType || "").trim();
 		const entityUuid = String(req.query.entityUuid || "").trim();
-		if (!entityType || !entityUuid) return res.status(400).json({ success: false, message: "entityType и entityUuid обязательны" });
 		const orgs = allowedOrgs(req);
-		const where = { entityType, entityUuid, deletedAt: null };
+		const where = { deletedAt: null };
+
+		/*
+		 * ДВА РЕЖИМА ОДНОГО МАРШРУТА (25.09).
+		 *
+		 * С `entityType`+`entityUuid` — заметки ОДНОЙ записи: так их читает кнопка в форме и чат
+		 * внутри 1С. Так было с самого начала, и это поведение не меняется.
+		 *
+		 * Без параметров — ЖУРНАЛ: все заметки доступных организаций. Его не было вовсе, и
+		 * заметку, написанную неделю назад, найти было негде: нужно было вспомнить, к какой
+		 * записи её привязали, и открыть именно её. Заметка тем и ценна, что пишется мимоходом,
+		 * — значит и находиться должна без усилий.
+		 *
+		 * Частичный набор параметров (только тип, только uuid) — ошибка вызывающего, а не режим:
+		 * отвечаем отказом, иначе он получит журнал вместо ожидаемой выборки и не заметит.
+		 */
+		if (entityType || entityUuid) {
+			if (!entityType || !entityUuid) {
+				return res.status(400).json({ success: false, message: "entityType и entityUuid указываются вместе" });
+			}
+			where.entityType = entityType;
+			where.entityUuid = entityUuid;
+		}
+
 		// Скрываем заметки чужих организаций (заметки без организации видны всем).
 		if (orgs !== null) where.OR = [{ organizationUuid: null }, { organizationUuid: { in: orgs } }];
+
+		// Поиск по тексту и автору — журналу без него нечем пользоваться, когда заметок сотни.
+		const search = String(req.query.search || "").trim();
+		if (search) {
+			where.AND = [{ OR: [
+				{ body: { contains: search, mode: "insensitive" } },
+				{ authorName: { contains: search, mode: "insensitive" } },
+			] }];
+		}
+
 		const items = await prisma.note.findMany({ where, orderBy: { createdAt: "desc" }, take: 500 });
 		return res.status(200).json({ success: true, items });
 	} catch (error) {

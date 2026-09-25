@@ -16,6 +16,7 @@ import { NoticeScope, retireScope, setScopeObject, setTechMessagesOwner, useTech
 import { resetOps } from 'src/components/TechMessages/operations';
 import { restoreRunningWork } from 'src/models/OneCAdmin/progress';
 import { VSplitBar, useSplitResize } from 'src/components/SplitPane';
+import { useIsMobileLayout } from 'src/hooks/useIsMobileLayout';
 
 // ── Ленивая загрузка моделей (code-split) ─────────────────────────────────────
 // Статические импорты моделей убраны: иначе они все попадали в основной бандл и
@@ -126,6 +127,14 @@ export const Container: FC = () => {
   const techOpen = useTechMessagesOpen();
   const techPlace = useTechMessagesPlacement();
   const techBottom = techPlace === "bottom";
+  /*
+   * НА ТЕЛЕФОНЕ МЕСТА ДЛЯ ДВУХ ОБЛАСТЕЙ НЕТ. Колонка сообщений справа от формы в 380
+   * пикселях оставляет обеим по полоске, а полоса внизу — по половине высоты, в которой не
+   * помещается ни форма, ни журнал. Поэтому там не «справа/внизу», а «Раскрыть/Скрыть»:
+   * свёрнутая область — полоса под пейнами, раскрытая — весь экран над ними (см.
+   * TechMessages.module.scss, `[data-place="mobile"]`). Делить нечего — и разделителя нет.
+   */
+  const mobile = useIsMobileLayout();
 
   /*
    * Размер области сообщений — тем же разделителем, что и везде в приложении: у людей
@@ -186,14 +195,14 @@ export const Container: FC = () => {
         <>
           <div
             className={styles.Workspace}
-            data-tech={techPlace}
+            data-tech={mobile ? "mobile" : techPlace}
             ref={split.containerRef}
             style={{
               [techBottom ? "--tech-height" : "--tech-width"]: `${split.percent}%`,
             } as CSSProperties}
           >
             <Panes />
-            {techOpen && (
+            {techOpen && !mobile && (
               <VSplitBar
                 orientation={techBottom ? "horizontal" : "vertical"}
                 onPointerDown={split.startResize}

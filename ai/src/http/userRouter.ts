@@ -249,7 +249,26 @@ export function userRouter(deps: {
 				service: { version, chat: workflow !== null, model: cfg.LLM_MODEL },
 				llm: llmHealth(),
 				agent: a ? { configured: true, online: a.online, name: a.name, version: a.version, lastSeenAt: a.lastSeenAt } : { configured: false, online: false, name: null, version: null, lastSeenAt: null },
-				onec: { reachable: a?.online === true && a.onec.reachable, version: a?.onec.version ?? null },
+				/*
+				 * ЧТО ЗА ВЕРСИЯ — ЗАВИСИТ ОТ РОЛИ АГЕНТА (25.09).
+				 *
+				 * Поле `onec.version` агент шлёт одно, а смысл у него разный: админ-агент
+				 * разговаривает с кластером и рапортует версию ПЛАТФОРМЫ (8.3.25.1257),
+				 * бизнес-агент говорит с базой через шлюз расширения и рапортует версию
+				 * РАСШИРЕНИЯ buhprof_api (1.6.1). Панель показывала это одной подписью «База
+				 * 1С», и разбираться, что именно перед тобой, приходилось ровно в тот момент,
+				 * когда что-то сломалось.
+				 *
+				 * Здесь выбираются только бизнес-агенты (см. выше), поэтому `kind` — всегда
+				 * `extension`; поле отдаём явно, чтобы панель не догадывалась, а читала.
+				 * Когда агент начнёт слать версии раздельно (задача стороны 1С), сюда придёт
+				 * настоящее значение, а панель менять не придётся.
+				 */
+				onec: {
+					reachable: a?.online === true && a.onec.reachable,
+					version: a?.onec.version ?? null,
+					kind: "extension" as const,
+				},
 				organizationSelected: Boolean(org),
 				at: new Date().toISOString(),
 			},

@@ -21,6 +21,10 @@
  * СВОРАЧИВАНИЕ — ШИРИНОЙ, А НЕ НАКЛАДКОЙ. Область живёт в том же флекс-ряду, что и пейны:
  * свёрнутая занимает узкую полосу, раскрытая — свою долю. Никакого `position: absolute`:
  * накладка закрывала бы содержимое формы ровно там, где с ним работают.
+ *
+ * ИСКЛЮЧЕНИЕ — ТЕЛЕФОН. Делить ширину в 380 пикселей не на что: там область либо свёрнута
+ * полосой под пейнами («Раскрыть»), либо раскрыта на всё рабочее пространство поверх них
+ * («Скрыть»). Накладка здесь — не помеха, а смысл: человек сам попросил журнал вместо формы.
  */
 import { FC, Suspense, lazy, useEffect, useRef, useState } from "react";
 import { translate } from "src/i18";
@@ -28,6 +32,7 @@ import { Button } from "src/components/Button";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { useAppContext } from "src/app/context";
+import { useIsMobileLayout } from "src/hooks/useIsMobileLayout";
 import {
 	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
 	TECH_DOCK_TITLES, useScopedNotices, useTechDockView, useTechMessagesOpen,
@@ -116,6 +121,9 @@ export const TechMessages: FC = () => {
 	 * граница слева и подпись боком, у нижней полосы — граница сверху и подпись как обычно.
 	 */
 	const placement = useTechMessagesPlacement();
+	// На телефоне места нет ни справа, ни внизу — там своё место (см. комментарий к модулю).
+	const mobile = useIsMobileLayout();
+	const place = mobile ? "mobile" : placement;
 	/*
 	 * ЧТО ПОКАЗЫВАЕТ ОБЛАСТЬ. Место справа (или внизу) одно, а спутников основного экрана
 	 * несколько; переключатель в шапке меняет содержимое, не трогая ни размер, ни место.
@@ -157,11 +165,62 @@ export const TechMessages: FC = () => {
 
 	const viewTitle = translate(TECH_DOCK_TITLES[view]);
 
+	/*
+	 * НА ТЕЛЕФОНЕ ПЕРЕХОД К ФОРМЕ СКРЫВАЕТ ОБЛАСТЬ. Раскрытая, она закрывает пейны целиком, а
+	 * сменилась активная форма — значит, человек к ней и шёл: нажал вкладку внизу, открыл
+	 * документ по ссылке из сообщения или из меню. Оставить область поверх значило бы открыть
+	 * форму, которую не видно. На широком экране область стоит рядом с формой и не мешает ей.
+	 */
+	const shownPane = useRef(activePane);
+	useEffect(() => {
+		if (shownPane.current === activePane) return;
+		shownPane.current = activePane;
+		if (mobile && open) setTechMessagesOpen(false);
+	}, [activePane, mobile, open]);
+
+	if (!open && mobile) {
+		/*
+		 * СВЁРНУТАЯ НА ТЕЛЕФОНЕ — ПОЛОСА-КНОПКА во всю ширину под пейнами. Попадать пальцем в
+		 * стрелку 24×24 — работа, а не действие, поэтому раскрывает нажатие на любое место
+		 * полосы. Подпись и счётчик — внутри кнопки: их и зачитает скринридер.
+		 */
+		return (
+			<>
+			<Announcer />
+			<aside className={styles.Rail} data-place={place} aria-label={viewTitle}>
+				<button
+					type="button"
+					className={styles.RailBar}
+					aria-expanded={false}
+					title={translate("techMessagesOpen")}
+					onClick={() => setTechMessagesOpen(true)}
+				>
+					<span className={styles.RailTitle}>{viewTitle}</span>
+					{running > 0 && (
+						<span className={styles.Spinner} role="img"
+							title={translate("techMsgProgress")}
+							aria-label={`${translate("techMsgProgress")}: ${running}`} />
+					)}
+					{active > 0 && (
+						<span className={styles.RailCount} aria-label={`${translate("techMsgActive")}: ${active}`}>
+							{active}
+						</span>
+					)}
+					<span className={styles.RailAction}>
+						{translate("techDockExpand")}
+						<Icon name="caretDown" />
+					</span>
+				</button>
+			</aside>
+			</>
+		);
+	}
+
 	if (!open) {
 		return (
 			<>
 			<Announcer />
-			<aside className={styles.Rail} data-place={placement} aria-label={viewTitle}>
+			<aside className={styles.Rail} data-place={place} aria-label={viewTitle}>
 				<IconButton
 					size="md"
 					title={`${viewTitle}${active ? `: ${active}` : ""}`}
@@ -191,7 +250,7 @@ export const TechMessages: FC = () => {
 	return (
 		<>
 		<Announcer />
-		<aside className={styles.Dock} data-place={placement} aria-label={viewTitle}>
+		<aside className={styles.Dock} data-place={place} aria-label={viewTitle}>
 			{/*
 			  * ШАПКА — ДВЕ ОБЛАСТИ, А НЕ ОДИН РЯД. Слева то, ЧТО показано (выбор вида и признак
 			  * идущей работы), справа — что сделать с самой областью (где держать, свернуть).
@@ -216,6 +275,19 @@ export const TechMessages: FC = () => {
 					)}
 				</div>
 				<div className={styles.HeadRight}>
+				{/*
+				  * НА ТЕЛЕФОНЕ ВЫБИРАТЬ МЕСТО НЕ ИЗ ЧЕГО: область занимает весь экран, и
+				  * кнопка одна — «Скрыть», словами, а не стрелкой: пара «Раскрыть/Скрыть»
+				  * должна читаться с обоих концов одинаково.
+				  */}
+				{mobile ? (
+					<Button size="sm" variant="secondary" trailingIcon="caretDown"
+						aria-expanded
+						title={translate("techMessagesClose")}
+						onClick={() => setTechMessagesOpen(false)}>
+						{translate("hide")}
+					</Button>
+				) : (<>
 				{/*
 				  * ГДЕ ДЕРЖАТЬ ОБЛАСТЬ — решает тот, кто работает. Длинной ошибке нужна
 				  * ширина: в узкой колонке справа абзац превращается в лесенку из двух слов.
@@ -256,6 +328,7 @@ export const TechMessages: FC = () => {
 				>
 					<Icon name="caretDown" />
 				</IconButton>
+				</>)}
 				</div>
 			</div>
 

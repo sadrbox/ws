@@ -247,6 +247,18 @@ export async function installationScopeGuard(req, res, next) {
 export function groupScopeReadOnly(req, res, next) {
 	if (req.method === "GET" || req.method === "OPTIONS" || req.method === "HEAD") return next();
 	if (!groupScopeRequested(req)) return next();
+
+	/*
+	 * ЗАПРЕТ КАСАЕТСЯ ТОЛЬКО УЧЁТНЫХ ДАННЫХ. Смысл запрета — «в какой организации ты создаёшь
+	 * документ?»; у настроек интерфейса, отметок о прочтении и служебных вызовов такого вопроса
+	 * нет, и глушить их значило бы ломать работу на ровном месте: человек в сводном виде не смог
+	 * бы даже поправить ширину колонки.
+	 *
+	 * Признак — наличие предмета-модели в карте прав: она и означает «данные организации».
+	 */
+	const segment = req.path.replace(/^\/+/, "").split("/")[0];
+	if (!ROUTE_TO_MODEL[segment]) return next();
+
 	return res.status(400).json({
 		success: false,
 		code: "SCOPE_READ_ONLY",

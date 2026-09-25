@@ -38,6 +38,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useSyncExternalStore } from "react";
 import type { NoticeItem, NoticeType } from "src/components/Notice";
 import { showToast, type UIToastType } from "src/components/UIToast";
+import { isMobileLayout, subscribeMobileLayout } from "src/hooks/useIsMobileLayout";
 
 export type TechMessage = {
 	id: string;
@@ -715,18 +716,39 @@ const OPEN_KEY = "tech_messages_open";
 let open = (() => {
 	try { return localStorage.getItem(OPEN_KEY) === "1"; } catch { return false; }
 })();
+/*
+ * НА ТЕЛЕФОНЕ — СВОЁ «РАСКРЫТА». Там раскрытая область занимает весь экран и закрывает
+ * формы (см. TechMessages.module.scss, `[data-place="mobile"]`), поэтому:
+ *   • она не запоминается между загрузками — открыв приложение, человек идёт к формам, и
+ *     встречать его журналом во весь экран значило бы прятать то, за чем он пришёл;
+ *   • она не трогает настольную настройку: окно, суженное до телефона и расширенное
+ *     обратно, должно вернуть область такой, какой её оставили на широком экране.
+ * Переключатели (кнопка в области, колокольчик) ничего об этом не знают: и запись, и
+ * чтение сами выбирают состояние по текущей ширине.
+ */
+let mobileOpen = false;
 const openListeners = new Set<() => void>();
 
 export function setTechMessagesOpen(v: boolean): void {
-	if (open === v) return;
-	open = v;
-	try { localStorage.setItem(OPEN_KEY, v ? "1" : "0"); } catch { /* не беда */ }
+	if (isMobileLayout()) {
+		if (mobileOpen === v) return;
+		mobileOpen = v;
+	} else {
+		if (open === v) return;
+		open = v;
+		try { localStorage.setItem(OPEN_KEY, v ? "1" : "0"); } catch { /* не беда */ }
+	}
 	for (const l of openListeners) l();
 }
 
 export const useTechMessagesOpen = (): boolean => useSyncExternalStore(
-	(l) => { openListeners.add(l); return () => { openListeners.delete(l); }; },
-	() => open,
+	(l) => {
+		openListeners.add(l);
+		// Смена ширины меняет и ответ: переход через границу — тоже событие для подписчика.
+		const offMedia = subscribeMobileLayout(l);
+		return () => { openListeners.delete(l); offMedia(); };
+	},
+	() => (isMobileLayout() ? mobileOpen : open),
 	() => false,
 );
 

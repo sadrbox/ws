@@ -41,7 +41,12 @@ type StatusData = {
 	service: { version: string; chat: boolean; model: string };
 	llm: { ok: boolean; lastSuccessAt: string | null; lastError: { code: string; message: string; hint: string; at: string } | null };
 	agent: { configured: boolean; online: boolean; name: string | null; version: string | null; lastSeenAt: string | null };
-	onec: { reachable: boolean; version: string | null };
+	/**
+	 * Состояние 1С глазами агента. `kind` говорит, ЧТО за версия: бизнес-агент разговаривает с
+	 * базой через шлюз расширения и рапортует версию `buhprof_api`, админ-агент — версию
+	 * платформы. Поле в протоколе агента одно, поэтому смысл называет сервис (25.09).
+	 */
+	onec: { reachable: boolean; version: string | null; kind?: "extension" | "platform" };
 	organizationSelected: boolean;
 	at: string;
 };
@@ -97,6 +102,19 @@ const fmtTime = (iso: string) => {
 	const d = new Date(iso);
 	return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
+
+/**
+ * Подсказка индикатора 1С: что именно проверено и какой версии.
+ *
+ * Недоступность важнее версии: когда расширение молчит, человеку нужно знать не «какая там сборка»,
+ * а «почему не работает».
+ */
+function onecTitle(status: StatusData): string {
+	const isPlatform = status.onec.kind === "platform";
+	if (!status.onec.reachable) return isPlatform ? translate("aiOnecUnavailable") : translate("aiExtensionUnavailable");
+	const what = isPlatform ? translate("aiOnecPlatform") : translate("aiExtensionName");
+	return `${what} ${status.onec.version ?? ""}`.trim();
+}
 
 export const AiAssistantList: FC = () => {
 	const org = getCurrentUser()?.organizationUuid ?? null;
@@ -285,8 +303,14 @@ export const AiAssistantList: FC = () => {
 							<span title={!status.agent.configured ? translate("aiAgentNotConfigured") : status.agent.online ? `${status.agent.name ?? ""} ${status.agent.version ?? ""}`.trim() : `${translate("aiAgentOffline")}${status.agent.lastSeenAt ? ` · ${fmtTime(status.agent.lastSeenAt)}` : ""}`}>
 								{translate("aiStatusAgent")}
 							</span>
+							{/*
+							  * ПОДПИСЬ НАЗЫВАЕТ ТО, ЧТО ПРОВЕРЯЕТСЯ. Раньше здесь стояло «База 1С», а
+							  * показывалась версия расширения: помощник работает с базой ЧЕРЕЗ шлюз
+							  * `buhprof_api`, и когда расширение молчит, база может быть жива — но ни
+							  * одна команда не пройдёт. Разбираться в этом в момент поломки поздно.
+							  */}
 							<span className={`${styles.Dot} ${status.onec.reachable ? styles.DotOk : styles.DotBad}`} />
-							<span title={status.onec.reachable ? `1С API ${status.onec.version ?? ""}` : translate("aiOnecUnavailable")}>{translate("aiStatusOnec")}</span>
+							<span title={onecTitle(status)}>{status.onec.kind === "platform" ? translate("aiStatusOnec") : translate("aiStatusExtension")}</span>
 							<span className={`${styles.Dot} ${!status.service.chat ? styles.DotBad : !status.llm.ok ? styles.DotBad : status.llm.lastSuccessAt ? styles.DotOk : styles.DotWarn}`} />
 							<span title={status.llm.lastError ? `${status.llm.lastError.hint} (${fmtTime(status.llm.lastError.at)})` : status.llm.lastSuccessAt ? `${status.service.model} · ${fmtTime(status.llm.lastSuccessAt)}` : `${status.service.model} · ${translate("aiModelUnknown")}`}>{translate("aiStatusModel")}</span>
 						</span>

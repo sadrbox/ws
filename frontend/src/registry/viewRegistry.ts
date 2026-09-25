@@ -137,6 +137,7 @@ export const OneCExtensionList = MODULE_ONEC
 export const OneCAdminList = MODULE_ONEC
 	? lazyView("OneCAdminList", () => import('src/models/OneCAdmin').then(m => ({ default: m.OneCAdminList })))
 	: moduleAbsentView("OneCAdminList");
+export const NotesList = lazyView("NotesList", () => import('src/models/Notes').then(m => ({ default: m.NotesList })));
 export const NotificationsList = lazyView("NotificationsList", () => import('src/models/Notifications').then(m => ({ default: m.NotificationsList })));
 export const WarehousesList = lazyView("WarehousesList", () => import('src/models/Warehouses').then(m => ({ default: m.WarehousesList })));
 export const CashboxesList = lazyView("CashboxesList", () => import('src/models/Cashboxes').then(m => ({ default: m.CashboxesList })));
@@ -267,6 +268,7 @@ export const VIEWS: Record<string, React.FC<any>> = {
 	OneCClustersList: OneCClustersList,
 	OneCExtensionList: OneCExtensionList,
 	OneCAgentsList: OneCAgentsList,
+	NotesList: NotesList,
 	NotificationsList: NotificationsList,
 	WarehousesList: WarehousesList,
 	CashboxesList: CashboxesList,

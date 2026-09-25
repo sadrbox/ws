@@ -1,6 +1,10 @@
 {
   "__release": "Ажырату",
   "accounting2": "Бухгалтерлік есеп",
+  "aiExtensionName": "buhprof_api кеңейтімі",
+  "aiExtensionUnavailable": "buhprof_api кеңейтімі жауап бермейді: базадағы командалар орындалмайды",
+  "aiOnecPlatform": "1С платформасы",
+  "aiStatusExtension": "1С кеңейтімі",
   "contacts": "Байланыстар",
   "costingMethod": "Өзіндік құн әдісі",
   "counterpartyName": "Контрагент",
@@ -2308,6 +2312,7 @@
   "rowNotSelectable": "Бұл жолды белгілеудің қажеті жоқ: оған қатысты әрекет жоқ",
   "techMessagesDockRight": "Аймақ оң жақта",
   "techMessagesDockBottom": "Аймақ төменде",
+  "techDockExpand": "Жаю",
   "system": "Жүйе",
   "validationNeedFile": "Алдымен файлды таңдаңыз (.xlsx, .xls)",
   "validationNeedValue": "Операция мәнін көрсетіңіз",

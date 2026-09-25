@@ -345,7 +345,7 @@ async function main(): Promise<void> {
 	const log = createLogger(cfg.LOG_LEVEL);
 	log.info({ version: VERSION, config: describe(cfg) }, "BuhProf AI Service запускается");
 
-	const { db, erp } = createPools(cfg.DATABASE_URL, cfg.ERP_DATABASE_URL);
+	const { db, erp } = createPools(cfg.DATABASE_URL, cfg.ERP_DATABASE_URL, log);
 	await migrate(db, log);
 
 	const { app, queue } = createApp({ cfg, log, db, erp });

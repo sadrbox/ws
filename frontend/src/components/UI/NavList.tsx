@@ -30,6 +30,7 @@ import {
   OneCClustersList,
   OneCExtensionList,
   OneCAgentsList,
+  NotesList,
   NotificationsList,
   WarehousesList,
   CashboxesList,
@@ -465,6 +466,13 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {(isSuperAdmin || can("OneCAdmin")) && (
             <NavItem onClick={() => addPane({ component: OneCExtensionList, label: translate("OneCExtension") })}>{translate("OneCExtension")}</NavItem>
           )}
+          {/*
+            * Лицензии ЭСФ — здесь же (25.09). Они про то, кому РАЗРЕШЕНО пользоваться расширением
+            * в базах, то есть про то же хозяйство, что кластеры и агенты; в «Настройках» они
+            * лежали среди пользователей и файлов и выглядели учётной справкой. Оба раздела —
+            * консалтинговой компании и вместе уходят из клиентской поставки (К6).
+            */}
+          {isSuperAdmin && <NavItem onClick={() => addPane({ component: EsfLicensesList, label: translate("EsfLicensesList") })}>{translate("EsfLicensesList")}</NavItem>}
         </ul>
       </div>
     </>
@@ -500,12 +508,17 @@ export const NavList = ({ label }: TypeNavListProps) => {
           {can("ActivityHistory") && <NavItem onClick={() => addPane({ component: PipeActivitiesDashboard, label: translate("PipeActivitiesDashboard") })}>{translate("PipeActivitiesDashboard")}</NavItem>}
           {can("Notification") && <NavItem onClick={() => addPane({ component: NotificationsList, label: translate("techMessages") })}>{translate("techMessages")}</NavItem>}
           <NavItem onClick={() => addPane({ component: FilesList, label: translate("files") })}>{translate("files")}</NavItem>
+          {/*
+            * Журнал заметок (25.09): раньше заметку можно было прочитать только у той записи, к
+            * которой её привязали, — то есть нужно было заранее помнить, где она. Заметка же
+            * пишется мимоходом, и через неделю помнят содержание, а не документ.
+            */}
+          <NavItem onClick={() => addPane({ component: NotesList, label: translate("notes") })}>{translate("notes")}</NavItem>
           <NavItem onClick={() => addPane({ component: UnsavedFormsList, label: translate("unsavedRecords") })}>{translate("unsavedRecords")}</NavItem>
           {can("ScheduledTask") && <NavItem onClick={() => addPane({ component: ScheduledTasksList })}>{translate("ScheduledTasksList")}</NavItem>}
           <NavItem onClick={() => addPane({ component: SyncDashboard, label: translate("syncOfflineData") })}>{translate("syncOfflineData")}</NavItem>
           <NavItem onClick={() => addPane({ component: OrphanRefsForm, label: translate("deletedReferenceControl") })}>{translate("deletedReferenceControl")}</NavItem>
           <NavItem onClick={() => addPane({ component: SearchReplaceRefsForm, label: translate("searchReplaceReferences") })}>{translate("searchReplaceReferences")}</NavItem>
-          {isSuperAdmin && <NavItem onClick={() => addPane({ component: EsfLicensesList, label: translate("EsfLicensesList") })}>{translate("EsfLicensesList")}</NavItem>}
           {isSuperAdmin && <NavItem onClick={() => addPane({ component: ModuleSettings, label: translate("moduleSettingsTitle") })}>{translate("moduleSettingsTitle")}</NavItem>}
         </ul>
       </div>

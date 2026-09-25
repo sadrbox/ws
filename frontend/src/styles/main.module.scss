@@ -592,6 +592,18 @@ body {
 	&[data-tech="bottom"] {
 		flex-direction: column;
 	}
+
+	/*
+	 * ТЕЛЕФОН (см. hooks/useIsMobileLayout.ts) — тоже столбец: пейны на всю высоту, свёрнутая
+	 * область полосой под ними. Раскрытая ложится ПОВЕРХ пейнов на всё рабочее пространство
+	 * (TechMessages.module.scss, `[data-place="mobile"]`), отсюда `position: relative`. Пейны
+	 * под ней остаются смонтированными и разложенными: скрыв область, человек возвращается к
+	 * форме с той же прокруткой, а не к перерисованной заново.
+	 */
+	&[data-tech="mobile"] {
+		flex-direction: column;
+		position: relative;
+	}
 }
 
 .Panes {
