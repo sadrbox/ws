@@ -185,12 +185,18 @@
 |---|---|
 | `GET /v1/onec-chat/task-statuses` | справочник статусов ERP: `code`, `name`, `isFinal`, `sortOrder` |
 | `GET /v1/onec-chat/tasks?bin=&state=open\|all&limit=` | задачи организации; у каждой `url` — адрес карточки в панели, если сервису задан `PUBLIC_PANEL_URL` |
-| `POST /v1/onec-chat/tasks` | создать; кроме `name`/`description`/`deadline`/`executorName` принимает ссылку на объект: `sourceType` + `sourceUuid` (+ `sourceLabel`) |
-| `PATCH /v1/onec-chat/tasks/:uuid` | изменить или закрыть (`close: true`) |
+| `POST /v1/onec-chat/tasks` | создать; кроме `name`/`description`/`deadline`/`executorName` принимает ссылку на объект: `sourceType` + `sourceUuid` (+ `sourceLabel`) и с 25.09 `kind: "client_request"` — обращение клиента со сроком реакции по SLA |
+| `PATCH /v1/onec-chat/tasks/:uuid` | изменить или закрыть (`close: true`). **С 25.09 закрыть можно только с результатом:** `result` — что сделано, не короче 10 знаков; «написала», «позвонила», «передала», «не ответили» ERP отвергает `400` с текстом для человека (E17, п. 1 стандарта). Кнопка «Закрыть» в форме должна спрашивать результат |
 | `GET /v1/onec-chat/notes?bin=&limit=` | заметки организации |
 | `POST /v1/onec-chat/notes` | создать заметку |
 | `PATCH /v1/onec-chat/notes/:uuid` | исправить СВОЮ заметку (чужая — `403`, чужой организации — `404`) |
 | `DELETE /v1/onec-chat/notes/:uuid` | убрать СВОЮ заметку; тело обязательно — в нём БИН и имя автора |
+
+**Стандарт качества (E17, 25.09).** Задачи ERP теперь несут вид (`kind`), результат (`result`), число
+напоминаний клиента (`reminderCount`) и оценку клиента (`clientRating`) — они приходят в ответах выше.
+Напоминание и оценку модель чата делает серверными инструментами `remind_task` и `rate_task` (исполняет
+сервис, форме ничего делать не нужно). Второе напоминание по одной задаче ERP заводит кандидатом в
+нарушения стандарта исполнителя — поэтому инструмент идёт через карточку подтверждения.
 
 **Происхождение и ссылка — разные вещи.** У задачи, пришедшей из чата 1С, ERP сама ставит
 `origin = "1c-chat"` и `originLabel = "Чат в 1С — <база>"`. Поля `sourceType`/`sourceUuid` остаются
