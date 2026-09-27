@@ -1,4 +1,4 @@
-# Ответ сервису: реквизиты организаций в заявке на подключение (Р1–Р4)
+﻿# Ответ сервису: реквизиты организаций в заявке на подключение (Р1–Р4)
 
 27.09.2026. От стороны 1С (расширение `buhprof_api` **1.8.2**) по задаче
 `TASK_EXTENSION_REGISTRATION_ORG_DETAILS_2026-09-26.md`. Контракт — `CONTRACT_BASE_REGISTRATION_2026-09-19.md`.
@@ -71,4 +71,4 @@ okedCode, okedName, legalAddress, actualAddress, phones, director, chiefAccounta
 
 ## Сборка
 
-`releases/2026-09-27_1.8.2/` — `buhprof_api.cfe`, `src.zip`, `ПРОЧТИ.txt`. CHANGELOG — запись 1.8.2.
+`BuhProfAI/releases/2026-09-27_1.8.2/` — `buhprof_api.cfe`, `src.zip`, `ПРОЧТИ.txt`. CHANGELOG — запись 1.8.2.

@@ -49,4 +49,21 @@ export function splitSeenUpdates(updates, storedByUuid) {
 	return { touch, full };
 }
 
-export default { canonicalJson, findingChanged, splitSeenUpdates };
+/**
+ * Сводка прогона для ERP: счётчики `summary` из ответа 1С плюс заметки `notes` (расширение 1.8.3+:
+ * «сборных контрагентов исключено: N»). Заметка — не находка (чинить нечего), но исключение должно быть
+ * видно бухгалтеру в карточке прогона, иначе «у Физ.лица нет контактов» пропало молча. Кривые заметки
+ * (не строки, пустые) отбрасываются; длина и число ограничены — это поле Json, а не журнал.
+ */
+export function summaryWithNotes(summary, notes, { max = 20, maxLen = 500 } = {}) {
+	const base = summary && typeof summary === "object" && !Array.isArray(summary) ? { ...summary } : {};
+	const clean = (Array.isArray(notes) ? notes : [])
+		.filter((n) => typeof n === "string" && n.trim())
+		.slice(0, max)
+		.map((n) => n.trim().slice(0, maxLen));
+	if (clean.length) base.notes = clean;
+	else delete base.notes;
+	return Object.keys(base).length ? base : undefined;
+}
+
+export default { canonicalJson, findingChanged, splitSeenUpdates, summaryWithNotes };

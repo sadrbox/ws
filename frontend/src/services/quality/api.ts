@@ -354,7 +354,8 @@ export interface CheckRun {
 	status: "ok" | "findings" | "skipped" | "error";
 	truncated: boolean;
 	total: number;
-	summary: { error?: number; warning?: number; info?: number } | null;
+	/** Счётчики из 1С; `notes` — заметки прогона («сборных контрагентов исключено: N», расширение 1.8.3+). */
+	summary: { error?: number; warning?: number; info?: number; notes?: string[] } | null;
 	errorCode: string | null;
 	errorMessage: string | null;
 	skipReason: string | null;

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildFirmScope, todoScopeWhere } from "../services/quality/scope.js";
 import { manyKeys, freshRecipients } from "../services/quality/dedupBatch.js";
-import { canonicalJson, findingChanged, splitSeenUpdates } from "../services/quality/ingestPlan.js";
+import { canonicalJson, findingChanged, splitSeenUpdates, summaryWithNotes } from "../services/quality/ingestPlan.js";
 import { groupByOrg, primaryDocsState } from "../services/quality/dashboards.js";
 import { deadlineDueAt } from "../services/quality/taskRules.js";
 import { computeBonusResults } from "../services/quality/bonusRules.js";
@@ -135,4 +135,12 @@ test("срок задачи голой датой (00:00Z) истекает в �
 	const night = new Date("2026-09-26T19:00:00Z");
 	assert.equal(deadlineDueAt(bare, tz) < morning, false);
 	assert.equal(deadlineDueAt(bare, tz) < night, true);
+});
+
+test("приём: заметки прогона (notes, расширение 1.8.3) попадают в сводку, мусор отбрасывается", () => {
+	assert.deepEqual(summaryWithNotes({ error: 1 }, ["сборных контрагентов исключено: 1", "", 5, "  x  "]), { error: 1, notes: ["сборных контрагентов исключено: 1", "x"] });
+	assert.deepEqual(summaryWithNotes({ error: 1 }, []), { error: 1 });
+	assert.equal(summaryWithNotes(undefined, undefined), undefined);
+	assert.deepEqual(summaryWithNotes(null, ["a"]), { notes: ["a"] });
+	assert.equal(summaryWithNotes({}, Array(30).fill("n")).notes.length, 20);
 });

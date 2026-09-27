@@ -479,6 +479,12 @@ export const CheckRunForm: FC<Partial<TPane>> = ({ uniqId, data }) => {
 								<FieldTextarea label={translate("skipReason")} name={`${name}_skip`} value={asText(run.skipReason)} disabled minWidth={FIELD_WIDTH.lg} rows={2} />
 							</Group>
 						)}
+						{!!summary.notes?.length && (
+							<Group>
+								{/* Заметки 1С — не находки: «сборных контрагентов исключено: N». Без них исключение было бы невидимым. */}
+								<FieldTextarea label={translate("checkRunNotes")} name={`${name}_notes`} value={summary.notes.join("\n")} disabled minWidth={FIELD_WIDTH.lg} rows={Math.min(4, summary.notes.length)} />
+							</Group>
+						)}
 						{!run.uuid && <span className={styles.Empty}>{translate("checkRunNoData")}</span>}
 					</GroupCol>
 				</div>

@@ -21,7 +21,7 @@ import { createCandidate } from "./violations.js";
 import { notifyUser, notifyMany } from "./notify.js";
 import { loadStatuses, doneStatus, logEvent } from "./todos.js";
 import { detectSelfCheckViolations } from "./checklists.js";
-import { splitSeenUpdates } from "./ingestPlan.js";
+import { splitSeenUpdates, summaryWithNotes } from "./ingestPlan.js";
 import { firmScope } from "./scope.js";
 import { sentNotificationKeys, existingRuleKeys, manyKeys, freshRecipients } from "./dedupBatch.js";
 
@@ -82,7 +82,7 @@ export async function ingestCheckResults(organizationUuid, body) {
 					status,
 					truncated: !!data?.truncated,
 					total: Number.isFinite(data?.total) ? data.total : Array.isArray(data?.findings) ? data.findings.length : 0,
-					summary: data?.summary ?? undefined,
+					summary: summaryWithNotes(data?.summary, data?.notes),
 					params: data?.params ?? req.params ?? undefined,
 					periodFrom: asDate(data?.from ?? req.from),
 					periodTo: asDate(data?.to ?? req.to),
