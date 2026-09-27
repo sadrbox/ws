@@ -1,7 +1,7 @@
 // Единая drill-навигация отчётов. ВАЖНО: переход по ссылке — по ДВОЙНОМУ клику
 // (одиночный клик не навигирует, чтобы не уводить случайно при выделении/чтении).
 import { FC, ReactNode } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { translate } from "src/i18";
 import { openReport } from "src/utils/openReport";
 import { openDocumentByType } from "src/utils/accountingDocTypes";
@@ -20,7 +20,7 @@ export interface ReportDrillContext {
  *   drill.toReport("account-card", { accountCode, accountName });
  */
 export function useReportDrill(ctx: ReportDrillContext) {
-	const { windows: { addPane } } = useAppContext();
+	const { windows: { addPane } } = useAppActions();
 	const carry = () => ({
 		initialDateFrom: ctx.applied?.dateFrom,
 		initialDateTo: ctx.applied?.dateTo,

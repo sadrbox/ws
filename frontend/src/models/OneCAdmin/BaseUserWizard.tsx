@@ -35,7 +35,6 @@ import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Button } from "src/components/Button";
-import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
@@ -43,12 +42,13 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import {
-	fetchRoles, fetchUserOccurrences, runBatch, type UserOccurrence,
+	fetchRoles, fetchUserOccurrences, runBatch, type BatchStart, type UserOccurrence,
 } from "src/services/onec/api";
 import { attachBatch, finishOp, startOp } from "./progress";
-import { useOnecPermissions } from "./shared";
+import { reportBatchStart, useOnecPermissions } from "./shared";
+import { nothingQueued, sumBatchStarts } from "./batchStart";
 import { deniedText, sectionAllows } from "./onecPermissions";
 import { useOpenBaseUser } from "./BaseUserForm";
 import main from "src/styles/main.module.scss";
@@ -92,7 +92,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 	const row = (paneProps.data ?? {}) as TDataItem;
 	const userName = asText(row.userName) || asText(row.name);
 	const qc = useQueryClient();
-	const { requestClose } = useAppContext().windows;
+	const { requestClose } = useAppActions().windows;
 	const openCard = useOpenBaseUser();
 
 	const occurrences = useQuery({
@@ -306,7 +306,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 				byPayload.set(sig, g);
 			}
 
-			let started = 0;
+			const started: BatchStart[] = [];
 			for (const { bases: group, payload } of byPayload.values()) {
 				const opId = startOp({
 					kind: "update", title: translate("onecUserGroupEdit"),
@@ -317,7 +317,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 					const r = await runBatch("IB_UPDATE_USER", group, payload);
 					attachBatch(opId, r.batchId, r.total,
 						r.skipped.length ? `${translate("onecBatchSkipped")}: ${r.skipped.length}` : "");
-					started += 1;
+					started.push(r);
 				} catch (e) {
 					finishOp(opId, { failed: group.length, note: e instanceof Error ? e.message : String(e), error: e });
 					throw e;
@@ -325,8 +325,11 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 			}
 			return started;
 		},
-		onSuccess: (n) => {
-			showToast(`${translate("onecBatchQueued")}: ${n}`, "success");
+		onSuccess: (list) => {
+			// Итог словами; при нуле (агент не на связи) помощник с вводом остаётся открытым (И26).
+			const sum = sumBatchStarts(list);
+			reportBatchStart(sum, translate("onecUser"));
+			if (nothingQueued(sum)) return;
 			setDraft(new Map());
 			setProfile({});
 			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
@@ -489,7 +492,7 @@ BaseUserWizard.displayName = "BaseUserWizard";
 
 /** Открыть помощник группового редактирования отдельным пейном. */
 export function useOpenBaseUserWizard() {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	return (userName: string) => {
 		if (!userName) return;
 		addPane({

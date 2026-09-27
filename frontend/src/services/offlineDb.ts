@@ -32,6 +32,12 @@ export interface PendingChange {
 	data?: Record<string, unknown>; // данные (для create/update)
 	clientUpdatedAt: string; // ISO timestamp локального изменения
 	createdAt: string; // ISO timestamp создания записи в очереди
+	/**
+	 * Сервер отказался принимать изменение через /sync/push (SYNC_PUSH_REFUSED: документы,
+	 * пользователи, права, организации). Такое изменение больше не отправляется (иначе
+	 * повторялось бы при каждом обмене), но и не удаляется — данные остаются в очереди.
+	 */
+	refused?: string;
 }
 
 /** Базовый тип для всех sync-записей */

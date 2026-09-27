@@ -68,9 +68,9 @@ const DEFAULT_FIELDS: TFields = {
 	// Ручная запись руководителя по умолчанию — подтверждённая (так же решает сервер).
 	status: "confirmed" as ViolationStatus,
 	detectedAt: "", bonusMonth: "", evidence: [], source: "", selfDetected: false,
-	createdByName: "", decidedByName: "", decidedAt: "", decisionNote: "",
+	createdByName: "", decidedByName: "", decidedByUuid: "", decidedAt: "", decisionNote: "",
 	disputeText: "", disputedAt: "", disputeDecision: "", disputeDecidedByName: "", disputeDecidedAt: "",
-	canDecide: false, isMine: false,
+	canDecide: false, isMine: false, canResolveDispute: null,
 };
 
 type ViolationRecord = Partial<Violation> & { disputeDecidedAt?: string | null };
@@ -100,7 +100,8 @@ const StandardViolationsForm: FC<Partial<TPane>> = (paneProps) => {
 			description: d.description ?? "",
 			evidence: Array.isArray(d.evidence) ? d.evidence : [],
 			source: d.source ?? "", status: d.status ?? "candidate", selfDetected: !!d.selfDetected,
-			createdByName: d.createdByName ?? "", decidedByName: d.decidedByName ?? "", decidedAt: d.decidedAt ?? "",
+			createdByName: d.createdByName ?? "", decidedByName: d.decidedByName ?? "", decidedByUuid: d.decidedByUuid ?? "",
+			decidedAt: d.decidedAt ?? "",
 			decisionNote: d.decisionNote ?? "", disputeText: d.disputeText ?? "", disputedAt: d.disputedAt ?? "",
 			disputeDecision: d.disputeDecision ?? "", disputeDecidedByName: d.disputeDecidedByName ?? "",
 			disputeDecidedAt: d.disputeDecidedAt ?? "",
@@ -108,6 +109,8 @@ const StandardViolationsForm: FC<Partial<TPane>> = (paneProps) => {
 			// сервер дал именно тому, кто решает по этому сотруднику, — значит, и решать ему.
 			canDecide: d.canDecide ?? !prev?.uuid,
 			isMine: d.isMine ?? false,
+			// Слово сервера по возражению — только в GET /:id и только у старого сервера его нет.
+			canResolveDispute: typeof d.canResolveDispute === "boolean" ? d.canResolveDispute : null,
 		}),
 		buildPayload: (fd) => {
 			const missing = missingViolationFacts(fd);

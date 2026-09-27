@@ -22,7 +22,7 @@ import {
 } from "../src/onec/accountingChecks.ts";
 import { AccountingCheckRunStore, AccountingChecksRunner, SERVED_ORGANIZATIONS_SQL, type ChecksConfig } from "../src/onec/accountingChecksRunner.ts";
 import { accountingChecksRouter } from "../src/http/accountingChecksRouter.ts";
-import { ErpRefused, ErpUnavailable, type ErpCheckResults } from "../src/erp/tasks.ts";
+import { ErpRefused, ErpTimeout, ErpUnavailable, type ErpCheckResults } from "../src/erp/tasks.ts";
 import { purgeOldData } from "../src/retention.ts";
 
 /** Момент местного времени: расписание и периоды живут по часам сервера, а не по UTC. */
@@ -913,4 +913,60 @@ test("маршруты: без права «Администрирование 1
 	try {
 		assert.equal((await owner.call("POST", "/run", {})).status, 202);
 	} finally { owner.close(); }
+});
+
+// ── Аудит 26.09 ──────────────────────────────────────────────────────────────
+
+test("аудит 26.09: после таймаута ERP посылка НЕ повторяется — второй приём шёл бы поверх первого", async () => {
+	let calls = 0;
+	const h = harness({
+		agents: [agent("ag-1")],
+		bases: { "ag-1": [{ key: "Dev_01", organizations: [{ id: "o1", name: "А", bin: BIN_A }] }] },
+		erpOrgs: { [BIN_A]: { uuid: ORG_A, name: "А" } },
+		sink: () => { calls++; throw new ErpTimeout("ERP не ответила вовремя"); },
+	});
+	const r = await h.runner.run();
+	assert.equal(calls, 1);
+	assert.deepEqual(r.forward, { ok: 0, failed: 1 });
+});
+
+test("аудит 26.09: проверку, чей срок агент продлевает, ждём дальше — а не объявляем «нет ответа»", async () => {
+	const seen: Record<string, number> = {};
+	const h = harness({
+		agents: [agent("ag-1")],
+		bases: { "ag-1": [{ key: "Dev_01", organizations: [{ id: "o1", name: "А", bin: BIN_A }] }] },
+		erpOrgs: { [BIN_A]: { uuid: ORG_A, name: "А" } },
+		reply: (c) => {
+			if (c.type === "LIST_ACCOUNTING_CHECKS") return { state: "done", result: CATALOG };
+			if (c.type !== "RUN_ACCOUNTING_CHECK") return { state: "done", result: { snapshot: c.payload.snapshot, version: 1, rows: [] } };
+			seen[c.id] = (seen[c.id] ?? 0) + 1;
+			// Первое ожидание кончилось, а агент подтверждает работу: срок продлён на час вперёд.
+			return seen[c.id] === 1
+				? ({ state: "dispatched", expires_at: new Date(Date.now() + 3_600_000) } as unknown as Reply)
+				: { state: "done", result: { check: c.payload.check, version: 1, status: "ok", total: 0, findings: [] } };
+		},
+	});
+	const r = await h.runner.run();
+	assert.equal(r.failures, 0, "продлённая проверка дождалась ответа");
+	assert.ok(Object.values(seen).every((n) => n === 2));
+});
+
+test("аудит 26.09: база, где идёт обслуживание агентом кластера, ночью пропускается; ручной запуск по базе — нет", async () => {
+	const mk = (baseKey: string | null) => {
+		const h = harness({
+			agents: [agent("ag-1")],
+			bases: { "ag-1": [{ key: "Dev_01", organizations: [{ id: "o1", name: "А", bin: BIN_A }] }] },
+			erpOrgs: { [BIN_A]: { uuid: ORG_A, name: "А" } },
+		});
+		(h.runner as unknown as { d: { queue: Record<string, unknown> } }).d.queue.basesUnderMaintenance = async () => new Set(["dev_01"]);
+		return { h, run: () => h.runner.run(baseKey) };
+	};
+	const night = mk(null);
+	const r1 = await night.run();
+	assert.equal(r1.targets, 0);
+	assert.deepEqual(r1.skipped.basesUnderMaintenance, ["Dev_01@ag-1"]);
+	assert.equal(night.h.enqueued.length, 0, "в базу под выгрузкой команды проверок не ставятся");
+	const manual = mk("Dev_01");
+	const r2 = await manual.run();
+	assert.equal(r2.targets, 1, "оператор назвал базу сам");
 });

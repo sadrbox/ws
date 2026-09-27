@@ -80,7 +80,8 @@ const SalesOrdersForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "salesOrderUuid",
       mapFields: mapPaymentFromBasis,
       mapItems: () => [],
-      existingCheckEndpoint: "cash-receipt-orders",
+      // Платёж: новый на каждую частичную оплату, сумма — остаток (И21 аудита 26.09).
+      paidByEndpoint: "cash-receipt-orders",
     },
   ],
 });

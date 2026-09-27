@@ -1,12 +1,13 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership, orgIsAccessible, resolveWritableOrg, respondOrgAccessError, OrgAccessError, requireOwnedRecord, requireOwnedBatch } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
-import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
-import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
-import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
+import { removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
+import { removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { commitDocumentHeader, requireStockRemovable, recomputeAfterDelete } from "../../services/documentCommit.js";
 import { assertDocumentSerials, respondSerialError, releaseTransferSerials } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
@@ -24,10 +25,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawCursor = req.query.cursor;
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(
-			Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1),
-			999999,
-		);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res
@@ -118,8 +116,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 router.get(`/${ROUTE}/:id`, async (req, res) => {
@@ -137,7 +135,8 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
-		if (!item)
+		// Чужой документ — «не найден» (Б5 аудита 26.09).
+		if (!item || !checkOwnership(item, req, "organizationUuid", { allowShared: false }))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		// T7.11: подпись связанной (корректировочной) СНТ для формы.
 		if (item.sntRelatedUuid) {
@@ -163,11 +162,12 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			comment,
 			fromWarehouseUuid,
 			toWarehouseUuid,
-			organizationUuid,
 			posted,
 			amount,
 			sntRelatedUuid,
 		} = req.body;
+		// Организация документа — доступная пользователю (Б8 аудита 26.09).
+		const organizationUuid = resolveWritableOrg(req, req.body.organizationUuid);
 		// Stage D: оба склада принадлежат организации документа.
 		await assertOrgFieldMembership({ organizationUuid, fromWarehouseUuid, toWarehouseUuid }, prisma);
 		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
@@ -196,6 +196,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (respondDuplicateNumberError(error, res)) return;
@@ -234,8 +235,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			where: w,
 			select: { uuid: true, posted: true, number: true, fromWarehouseUuid: true, toWarehouseUuid: true, organizationUuid: true, date: true },
 		});
-		if (!existing)
+		// Б5 аудита 26.09: чужой документ по числовому id правился и проводился.
+		if (!existing || !checkOwnership(existing, req, "organizationUuid", { allowShared: false }))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		if ("organizationUuid" in data && data.organizationUuid !== existing.organizationUuid) {
+			if (!data.organizationUuid && !req.user?.isSuperAdmin) throw new OrgAccessError(400, "Не выбрана организация документа");
+			if (data.organizationUuid && !orgIsAccessible(req, data.organizationUuid)) throw new OrgAccessError(403, "Организация недоступна");
+		}
 		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
 		await assertPeriodOpen(existing.organizationUuid, existing.date);
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
@@ -260,15 +266,20 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			// партия назначена и её остаток на складе-ИСТОЧНИКЕ достаточен.
 			await assertDocumentSerials({ docType: "inventory_transfer", docUuid: existing.uuid, itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid" });
 			await assertDocumentBatches({ docType: "inventory_transfer", docUuid: existing.uuid, itemModel: "inventoryTransferItem", parentField: "inventoryTransferUuid", warehouseField: "fromWarehouseUuid" });
+			// Предпроверка остатка до записи (окончательная — в транзакции commitDocumentHeader).
 			await assertStockForPosting("inventory_transfer", existing.uuid, {
 				fromWarehouseUuid,
+				date: data.date ?? undefined,
 			});
 			// Проверка возможности проведения в бухучёте (счета/субконто).
 			await assertPostable("inventory_transfer", existing.uuid, { ...data, posted: true });
 		}
-		const item = await prisma[MODEL].update({
-			where: w,
-			data,
+		// Шапка, контроль остатка (и на складе-получателе: распроведение перемещения, с
+		// которого уже продано, — 409), регистр и проводки (Дт 1330 получатель Кт 1330
+		// источник) — одной транзакцией под блокировкой документа (У2/У4 аудита 26.09);
+		// связи дочитываются после фиксации. Строки перемещения денормализованных полей не несут.
+		const item = await commitDocumentHeader({
+			documentType: "inventory_transfer", model: MODEL, uuid: existing.uuid, data, existing,
 			include: {
 				fromWarehouse: true,
 				toWarehouse: true,
@@ -276,14 +287,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
-		await reconcileDocumentRegister("inventory_transfer", item.uuid);
-		// Бухпроводки перемещения (Дт 1330 склад-получатель Кт 1330 склад-источник).
-		await reconcileDocumentEntries("inventory_transfer", item.uuid);
-		// Ввод задним числом делает COGS последующих документов устаревшим —
-		// пересчитываем хвост истории (не трогая закрытый период).
-		await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: item.date });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
@@ -308,11 +314,15 @@ const onTransferDeleted = async (doc) => {
 		fromWh = d?.fromWarehouseUuid ?? null;
 	}
 	await releaseTransferSerials(doc.uuid, fromWh ?? null);
+	// Удаление проведённого перемещения задним числом меняет себестоимость последующих
+	// документов — пересчёт хвоста (в фоне).
+	await recomputeAfterDelete(doc);
 };
-router.delete(`/${ROUTE}/:id`, (req, res) =>
+// Перемещение, с склада-получателя которого уже продано, удалять нельзя (У4): 409.
+router.delete(`/${ROUTE}/:id`, requireOwnedRecord(MODEL), requireStockRemovable("inventory_transfer", MODEL), (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL, numberDocType: "inventory_transfer", onDeleted: onTransferDeleted }),
 );
-router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+router.post(`/${ROUTE}/batch-delete`, requireOwnedBatch(MODEL), requireStockRemovable("inventory_transfer", MODEL), (req, res) =>
 	handleBatchDelete({ req, res, prisma, modelName: MODEL, numberDocType: "inventory_transfer", onDeleted: onTransferDeleted }),
 );
 

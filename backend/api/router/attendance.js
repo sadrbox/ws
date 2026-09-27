@@ -20,7 +20,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { orgIsAccessible } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
-import { qualityContext, canSee, canDecide, userNames, decidersOf } from "../../services/quality/access.js";
+import { qualityContext, canSee, canDecide, userNames, decidersOf, firmMembersAmong, isInstallationQualityAdmin } from "../../services/quality/access.js";
 import { getQualitySettings } from "../../services/quality/settings.js";
 import { evaluateDay, ABSENCE_KINDS } from "../../services/quality/attendanceRules.js";
 import { localParts, parseHm } from "../../services/quality/time.js";
@@ -69,6 +69,8 @@ router.post("/attendance/mark", handler("POST /attendance/mark", async (req, res
 	if (source === "manual") {
 		if (!ctx.isAdmin) return fail(res, 403, "Отметку задним числом ставит только администратор");
 		userUuid = text(req.body?.userUuid) || userUuid;
+		// Только сотруднику фирмы (Б9 аудита 26.09): раньше годился любой userUuid.
+		if (!(await firmMembersAmong(ctx.firmOrgUuid, [userUuid])).has(userUuid)) return fail(res, 400, "Сотрудник не состоит в организации-фирме");
 		if (!ymdRe.test(String(req.body?.date || ""))) return fail(res, 400, "Дата — ГГГГ-ММ-ДД");
 		date = req.body.date;
 		const hm = parseHm(req.body?.time);
@@ -156,6 +158,9 @@ router.post("/work-schedules", handler("POST /work-schedules", async (req, res) 
 	const userUuid = text(req.body?.userUuid);
 	if (!userUuid) return fail(res, 400, "Укажите сотрудника");
 	if (!canDecide(ctx, userUuid) && !ctx.isAdmin) return fail(res, 403, "График задаёт главбух, руководитель или администратор");
+	// График — только сотруднику фирмы (Б9 аудита 26.09): раньше принимался любой userUuid, и
+	// посторонний пользователь попадал в журнал посещаемости и под правила опозданий.
+	if (!(await firmMembersAmong(ctx.firmOrgUuid, [userUuid])).has(userUuid)) return fail(res, 400, "Сотрудник не состоит в организации-фирме");
 	let data;
 	try { data = scheduleData(req.body || {}); } catch (e) { return fail(res, 400, e.message); }
 	const s = await prisma.workSchedule.upsert({
@@ -275,7 +280,7 @@ router.get("/work-calendar", handler("GET /work-calendar", async (req, res) => {
 
 router.post("/work-calendar", handler("POST /work-calendar", async (req, res) => {
 	const ctx = await qualityContext(req);
-	if (!ctx.isAdmin) return fail(res, 403, "Производственный календарь правит администратор");
+	if (!(await isInstallationQualityAdmin(req))) return fail(res, 403, "Производственный календарь (общий на установку) правит суперадминистратор или администратор назначенной фирмы");
 	const date = String(req.body?.date || "");
 	const kind = String(req.body?.kind || "");
 	if (!ymdRe.test(date)) return fail(res, 400, "Дата — ГГГГ-ММ-ДД");
@@ -293,7 +298,7 @@ router.post("/work-calendar", handler("POST /work-calendar", async (req, res) =>
 
 router.delete("/work-calendar/:date", handler("DELETE /work-calendar/:date", async (req, res) => {
 	const ctx = await qualityContext(req);
-	if (!ctx.isAdmin) return fail(res, 403, "Производственный календарь правит администратор");
+	if (!(await isInstallationQualityAdmin(req))) return fail(res, 403, "Производственный календарь (общий на установку) правит суперадминистратор или администратор назначенной фирмы");
 	const date = String(req.params.date || "");
 	if (!ymdRe.test(date)) return fail(res, 400, "Дата — ГГГГ-ММ-ДД");
 	await prisma.workCalendarDay.deleteMany({ where: { date } });
@@ -303,8 +308,7 @@ router.delete("/work-calendar/:date", handler("DELETE /work-calendar/:date", asy
 }));
 
 router.post("/work-calendar/seed", handler("POST /work-calendar/seed", async (req, res) => {
-	const ctx = await qualityContext(req);
-	if (!ctx.isAdmin) return fail(res, 403, "Производственный календарь правит администратор");
+	if (!(await isInstallationQualityAdmin(req))) return fail(res, 403, "Производственный календарь (общий на установку) правит суперадминистратор или администратор назначенной фирмы");
 	const year = Number(req.body?.year);
 	if (!Number.isInteger(year) || year < 2020 || year > 2100) return fail(res, 400, "Год — от 2020 до 2100");
 	// Недостающие по закону дни дописываются; внесённое руками не трогаем.

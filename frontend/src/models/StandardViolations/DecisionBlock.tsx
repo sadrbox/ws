@@ -11,16 +11,17 @@
 import { type FC, useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { Button } from "src/components/Button";
 import { FieldSelect, FieldTextarea } from "src/components/Field";
 import { Group, GroupCol } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import type { NoticeItem } from "src/components/Notice";
 import { routeError } from "src/services/errors/route";
+import { useQualityMe } from "src/hooks/useQualityMe";
 import { confirmViolation, disputeViolation, rejectViolation, resolveDispute, type ViolationStatus } from "src/services/quality/api";
 import {
-	availableActions, EMPTY_SELF_DETECTED, validateConfirm, validateDispute, validateReject, validateResolve,
+	availableActions, EMPTY_SELF_DETECTED, resolveNeedsHigherLevel, validateConfirm, validateDispute, validateReject, validateResolve,
 	type SelfDetectedInfo,
 } from "./violations";
 import main from "src/styles/main.module.scss";
@@ -40,6 +41,10 @@ interface Props {
 	selfDetected: boolean;
 	canDecide: boolean;
 	isMine: boolean;
+	/** Кто подтверждал нарушение: по возражению он не решает (кроме администратора). */
+	decidedByUuid?: string | null;
+	/** Слово сервера, можно ли решить по возражению (И24); `null`/нет — старый сервер, решаем по decidedByUuid. */
+	canResolveDispute?: boolean | null;
 	/** Форма занята (загрузка) — кнопки недоступны. */
 	disabled?: boolean;
 	/** Имя формы — подпись записей журнала. */
@@ -50,10 +55,14 @@ interface Props {
 	onNotices: (items: NoticeItem[]) => void;
 }
 
-export const DecisionBlock: FC<Props> = ({ uuid, status, selfDetected, canDecide, isMine, disabled, source, onDone, onNotices }) => {
+export const DecisionBlock: FC<Props> = ({ uuid, status, selfDetected, canDecide, isMine, decidedByUuid, canResolveDispute, disabled, source, onDone, onNotices }) => {
 	const queryClient = useQueryClient();
-	const { confirm } = useAppContext().actions;
-	const acts = availableActions({ status, selfDetected, canDecide, isMine });
+	const { actions: { confirm } } = useAppActions();
+	const auth = useAppAuth();
+	const { me } = useQualityMe();
+	const myUuid = auth.user?.uuid ?? "";
+	const who = { decidedByMe: !!decidedByUuid && decidedByUuid === myUuid, isAdmin: !!me?.isAdmin };
+	const acts = availableActions({ status, selfDetected, canDecide, isMine, canResolveDispute: canResolveDispute ?? undefined }, who);
 	const [note, setNote] = useState("");
 	const [self, setSelf] = useState(false);
 	const [info, setInfo] = useState<SelfDetectedInfo>(EMPTY_SELF_DETECTED);
@@ -123,7 +132,9 @@ export const DecisionBlock: FC<Props> = ({ uuid, status, selfDetected, canDecide
 	if (!acts.confirm && !acts.reject && !acts.dispute && !acts.resolve) {
 		return (
 			<div className={main.SettingHint}>
-				{translate(status === "rejected" ? "violationNoActionsRejected" : isMine ? "violationNoActionsMine" : "violationNoActions")}
+				{translate(status === "rejected" ? "violationNoActionsRejected"
+					: resolveNeedsHigherLevel({ status, canDecide, canResolveDispute: canResolveDispute ?? undefined }, who) ? "violationResolveHint"
+					: isMine ? "violationNoActionsMine" : "violationNoActions")}
 			</div>
 		);
 	}

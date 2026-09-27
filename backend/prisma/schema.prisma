@@ -317,6 +317,10 @@ model Counterparty {
   @@unique([externalSource, externalId])
   @@index([organizationUuid])
   @@index([updatedAt])
+  // Поиск контрагентов (лукап, список) — ILIKE по bin/name/legalName: раздел 5 аудита 26.09.
+  @@index([bin(ops: raw("gin_trgm_ops"))], map: "counterparties_bin_trgm", type: Gin)
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "counterparties_name_trgm", type: Gin)
+  @@index([legalName(ops: raw("gin_trgm_ops"))], map: "counterparties_legalName_trgm", type: Gin)
   @@map("counterparties")
 }
 
@@ -370,9 +374,16 @@ model AttachedFile {
   uploadedAt DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
   deletedAt  DateTime?
+  /// Организация файла — организация записи-владельца на момент загрузки (аудит 26.09). Нужна
+  /// выборкам (список «Файлы», объём хранилища организации) одним запросом. ДОСТУП к файлу
+  /// по-прежнему решает владелец (api/router/files.js → ownerAccessible): колонка может устареть,
+  /// если запись перенесут в другую организацию. Без FK — как у моделей E17: файл переживает
+  /// удаление организации, а журнал файлов не должен ронять её удаление.
+  organizationUuid String?
 
   @@index([ownerType, ownerUuid])
   @@index([updatedAt])
+  @@index([organizationUuid])
   @@map("attached_files")
 }
 
@@ -407,6 +418,8 @@ model Contact {
   @@index([contactType, ownerType, ownerUuid, isPrimary])
   @@index([organizationUuid])
   @@index([updatedAt])
+  // Поиск контактов по значению (телефон, почта).
+  @@index([value(ops: raw("gin_trgm_ops"))], map: "contacts_value_trgm", type: Gin)
   @@map("contacts")
 }
 
@@ -429,6 +442,9 @@ model ContactPerson {
   @@index([ownerType, ownerUuid])
   @@index([organizationUuid])
   @@index([updatedAt])
+  // Поиск контактных лиц — ФИО и комментарий.
+  @@index([fullName(ops: raw("gin_trgm_ops"))], map: "contact_persons_fullName_trgm", type: Gin)
+  @@index([comment(ops: raw("gin_trgm_ops"))], map: "contact_persons_comment_trgm", type: Gin)
   @@map("contact_persons")
 }
 
@@ -489,6 +505,7 @@ model ActivityHistory {
   @@index([organizationUuid])
   @@index([objectType, objectId])
   @@index([userUuid])
+  @@index([organizationUuid, id])
   @@map("activity_history")
 }
 
@@ -579,6 +596,9 @@ model Note {
   @@index([entityType, entityUuid])
   @@index([organizationUuid])
   @@index([authorUuid])
+  // Журнал заметок — поиск по тексту и автору.
+  @@index([body(ops: raw("gin_trgm_ops"))], map: "notes_body_trgm", type: Gin)
+  @@index([authorName(ops: raw("gin_trgm_ops"))], map: "notes_authorName_trgm", type: Gin)
   @@map("notes")
 }
 
@@ -726,6 +746,17 @@ model Todo {
   @@index([kind])
   @@index([parentTodoUuid])
   @@index([organizationUuid, checkCode])
+  @@index([organizationUuid, id])
+  // Н6 аудита 26.09: отбор просрочек, простоя и сроков реакции в SLA-джобе (quality/jobs.js).
+  @@index([deadline])
+  @@index([reactionDueAt])
+  @@index([nextControlAt])
+  @@index([lastActivityAt])
+  // Поиск в списке задач — ILIKE по name/description/result (все ветки OR должны быть индексируемы;
+  // по status поиска нет — для него есть фильтр, Б12 аудита 26.09).
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "todos_name_trgm", type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], map: "todos_description_trgm", type: Gin)
+  @@index([result(ops: raw("gin_trgm_ops"))], map: "todos_result_trgm", type: Gin)
   @@map("todos")
 }
 
@@ -975,6 +1006,7 @@ model OutgoingInvoice {
   @@index([updatedAt])
   @@index([basisDocumentUuid])
   @@index([esfStatus])
+  @@index([organizationUuid, id])
   @@map("outgoing_invoices")
 }
 
@@ -1007,6 +1039,7 @@ model IncomingInvoice {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("incoming_invoices")
 }
 
@@ -1039,6 +1072,7 @@ model PaymentInvoice {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("payment_invoices")
 }
 
@@ -1109,6 +1143,7 @@ model InventoryTransfer {
   @@index([authorUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("inventory_transfers")
 }
 
@@ -1891,6 +1926,7 @@ model SaleReturn {
   @@index([date])
   @@index([updatedAt])
   @@index([basisDocumentUuid])
+  @@index([organizationUuid, id])
   @@map("sale_returns")
 }
 
@@ -1974,6 +2010,7 @@ model PurchaseReturn {
   @@index([date])
   @@index([updatedAt])
   @@index([basisDocumentUuid])
+  @@index([organizationUuid, id])
   @@map("purchase_returns")
 }
 
@@ -2149,6 +2186,10 @@ model ProductRegister {
   // дате (balanceFor, warehouseBatchBalances, costSnapshot, costCache). Заменяет
   // отдельные сканы productUuid/warehouseUuid + сортировку по date одним индексом.
   @@index([productUuid, warehouseUuid, date])
+  // Снимок себестоимости и пересчёт (services/costSnapshot.js, costingReplay.js) читают ВСЕ движения
+  // организации до даты в порядке date, documentId, id — один индекс отдаёт их без сортировки
+  // (аудит 26.09, У8: порядок при равной дате).
+  @@index([organizationUuid, date, documentId, id])
   @@map("product_register")
 }
 
@@ -2370,6 +2411,7 @@ model CommercialOffer {
   @@index([date])
   @@index([basisDocumentUuid])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("commercial_offers")
 }
 
@@ -2447,6 +2489,7 @@ model SalesOrder {
   @@index([date])
   @@index([basisDocumentUuid])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("sales_orders")
 }
 
@@ -2602,6 +2645,7 @@ model PurchaseOrder {
   @@index([date])
   @@index([basisDocumentUuid])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("purchase_orders")
 }
 
@@ -2846,6 +2890,23 @@ model Classifier {
 
 // Системные настройки (key-value) — напр. конфиг интеграции eGov (egov.dataset,
 // egov.apiKey и т.п.). Секреты хранятся только на сервере. Правит суперадмин.
+/// Ключи идемпотентности входящих запросов служебных каналов (services/idempotency.js): повтор
+/// запроса с тем же ключом получает сохранённый ответ, а не вторую задачу или второй приём.
+model IdempotencyKey {
+  id          Int       @id @default(autoincrement())
+  key         String    @unique
+  /// Маршрут, на котором ключ использован: один ключ — один маршрут.
+  route       String
+  /// HTTP-статус сохранённого ответа; null — запрос ещё обрабатывается.
+  status      Int?
+  response    Json?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
 model AppSetting {
   id        Int      @id @default(autoincrement())
   key       String   @unique
@@ -2948,6 +3009,7 @@ model WriteOff {
   @@index([warehouseUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("write_offs")
 }
 
@@ -3003,6 +3065,7 @@ model GoodsReceipt {
   @@index([warehouseUuid])
   @@index([date])
   @@index([updatedAt])
+  @@index([organizationUuid, id])
   @@map("goods_receipts")
 }
 

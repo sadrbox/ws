@@ -1,8 +1,10 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { clampLimit, sendError, parseDateParam, BadRequestError } from "../../utils/listQuery.js";
+import { tenantFilter, checkOwnership, resolveWritableOrg, respondOrgAccessError, orgIsAccessible } from "../../utils/auth.js";
 import { idSearchCondition } from "../../utils/searchId.js";
 import { publish } from "../../services/chatBus.js";
+import { personalChannel } from "../../services/quality/notify.js";
 import {
 	prepareCreate, prepareUpdate, afterCreate, afterUpdate, acceptTodo, remindTodo, returnTodo,
 	helpTodo, rateTodo, todoHistory,
@@ -12,13 +14,14 @@ const router = express.Router();
 
 /**
  * Уведомить исполнителя о назначенной задаче через ту же SSE-шину, что и чат.
- * Событие уходит в канал организации; на клиенте бейдж покажется только тому, чей
- * executorUuid совпал. Себе задачу назначил (executor == актор) — не беспокоим.
+ * Событие уходит в ЛИЧНЫЙ канал исполнителя (Б13 аудита 26.09): раньше — в канал организации, и
+ * название чужой задачи получал каждый сотрудник, а отбор делал только браузер.
+ * Себе задачу назначил (executor == актор) — не беспокоим.
  */
 function notifyTaskAssigned(item, actorUuid) {
-	if (!item?.executorUuid || !item.organizationUuid) return;
+	if (!item?.executorUuid) return;
 	if (item.executorUuid === actorUuid) return;
-	publish(item.organizationUuid, {
+	publish(personalChannel(item.executorUuid), {
 		type: "task",
 		todo: {
 			uuid: item.uuid,
@@ -29,14 +32,30 @@ function notifyTaskAssigned(item, actorUuid) {
 	});
 }
 
-const TEXT_FIELDS = ["name", "description", "status", "result"];
+// Статус ищется фильтром, а не полнотекстом: `contains` по коду статуса находил лишнее
+// («new» внутри «renewal») и мешал индексу (О, передача «backend-платформа»).
+const TEXT_FIELDS = ["name", "description", "result"];
+
+/**
+ * Видна ли задача пользователю. Задача БЕЗ организации (старые записи, созданные до Б8 аудита
+ * 26.09) раньше считалась «глобальной» и читалась и правилась любым по id — теперь она видна
+ * суперадмину и своим участникам (куратору, исполнителю).
+ */
+function canSeeTodo(item, req) {
+	if (!item || item.deletedAt) return false;
+	if (item.organizationUuid == null) {
+		const me = req.user?.uuid;
+		return !!req.user?.isSuperAdmin || (!!me && (item.curatorUuid === me || item.executorUuid === me));
+	}
+	return checkOwnership(item, req);
+}
 
 /** Задача по id/uuid ЭТОЙ организации пользователя; чужая и удалённая — «не найдена». */
 async function findOwnTodo(req, param) {
 	const numId = Number(param);
 	const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
 	const item = await prisma.todo.findUnique({ where: isNumeric ? { id: numId } : { uuid: String(param) } });
-	if (!item || item.deletedAt || !checkOwnership(item, req)) return null;
+	if (!canSeeTodo(item, req)) return null;
 	return item;
 }
 
@@ -46,11 +65,25 @@ const actorOf = (req) => ({ uuid: req.user?.uuid ?? null, name: req.user?.userna
 /** Поля E17, которые форма может прислать при создании/правке. */
 const QUALITY_FIELDS = ["kind", "priority", "result", "nextControlAt", "reportedBy", "errorTypeUuid", "parentTodoUuid"];
 
+/*
+ * Куратор и исполнитель — только безопасные поля (Б3 аудита 26.09): `include` отдавал строку
+ * User целиком — хэш пароля и секрет 2FA в каждом списке задач.
+ */
+const TODO_USER_SELECT = {
+	select: {
+		id: true,
+		uuid: true,
+		username: true,
+		avatarPath: true,
+		employeeUuid: true,
+		employee: { select: { uuid: true, fullName: true, firstName: true, lastName: true, middleName: true, avatarPath: true } },
+	},
+};
 const INCLUDE = {
 	organization: true,
 	counterparty: true,
-	curator: { include: { employee: true } },
-	executor: { include: { employee: true } },
+	curator: TODO_USER_SELECT,
+	executor: TODO_USER_SELECT,
 };
 
 // ============================================
@@ -63,8 +96,7 @@ router.get("/todos", async (req, res) => {
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
@@ -202,11 +234,8 @@ router.get("/todos", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /todos error:", error);
-		return res.status(500).json({
-			success: false,
-			message: "Ошибка сервера при получении задач",
-		});
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера при получении задач", label: "GET /todos" });
 	}
 });
 
@@ -227,7 +256,7 @@ router.get("/todos/:id", async (req, res) => {
 
 		// Чужая организация и удалённая задача — «не найдена», а не «нет доступа»: иначе по
 		// коду ответа можно перебирать чужие задачи (до E17 проверки не было вовсе).
-		if (!item || item.deletedAt || !checkOwnership(item, req)) {
+		if (!canSeeTodo(item, req)) {
 			return res
 				.status(404)
 				.json({ success: false, message: "Задача не найдена" });
@@ -260,9 +289,9 @@ router.post("/todos", async (req, res) => {
 			sourceLabel,
 		} = req.body;
 
-		if (organizationUuid && !checkOwnership({ organizationUuid }, req)) {
-			return res.status(403).json({ success: false, message: "Организация недоступна" });
-		}
+		// Организация задачи — доступная пользователю; не указана — активная (Б8 аудита 26.09:
+		// задача без организации читалась и правилась любым по id).
+		const orgUuid = resolveWritableOrg(req, organizationUuid);
 
 		// E17: вид, SLA, результат; проверка статуса (финал — только с результатом).
 		const quality = await prepareCreate(req.body);
@@ -273,11 +302,11 @@ router.post("/todos", async (req, res) => {
 				name: name?.trim() ?? null,
 				description: description?.trim() ?? null,
 				status: status || "new",
-				organizationUuid: organizationUuid || null,
+				organizationUuid: orgUuid,
 				counterpartyUuid: counterpartyUuid || null,
 				curatorUuid: curatorUuid || null,
 				executorUuid: executorUuid || null,
-				deadline: deadline ? new Date(deadline) : null,
+				deadline: parseDateParam(deadline, "deadline"),
 				deadlineDays: deadlineDays ? parseInt(deadlineDays) : null,
 				// Ссылка на объект-источник (создание «из заметки» и т.п.)
 				sourceType: sourceType || null,
@@ -296,6 +325,8 @@ router.post("/todos", async (req, res) => {
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
+		if (error instanceof BadRequestError) return res.status(400).json({ success: false, message: error.message });
 		console.error("POST /todos error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -312,7 +343,7 @@ router.put("/todos/:id", async (req, res) => {
 		const whereClause = isNumeric ? { id: numId } : { uuid: param };
 
 		const existing = await prisma.todo.findUnique({ where: whereClause });
-		if (!existing || existing.deletedAt || !checkOwnership(existing, req)) {
+		if (!canSeeTodo(existing, req)) {
 			return res
 				.status(404)
 				.json({ success: false, message: "Задача не найдена" });
@@ -338,14 +369,23 @@ router.put("/todos/:id", async (req, res) => {
 		if (description !== undefined)
 			data.description = description?.trim() ?? null;
 		if (status !== undefined) data.status = status;
-		if (organizationUuid !== undefined)
+		// Перенос в другую организацию — только в доступную: раньше свою задачу можно было
+		// «переложить» в чужую фирму.
+		if (organizationUuid !== undefined) {
+			if (!organizationUuid && !req.user?.isSuperAdmin) {
+				return res.status(400).json({ success: false, message: "Не выбрана организация задачи" });
+			}
+			if (organizationUuid && !orgIsAccessible(req, organizationUuid)) {
+				return res.status(403).json({ success: false, code: "ORG_NOT_ACCESSIBLE", message: "Организация недоступна" });
+			}
 			data.organizationUuid = organizationUuid || null;
+		}
 		if (counterpartyUuid !== undefined)
 			data.counterpartyUuid = counterpartyUuid || null;
 		if (curatorUuid !== undefined) data.curatorUuid = curatorUuid || null;
 		if (executorUuid !== undefined) data.executorUuid = executorUuid || null;
 		if (deadline !== undefined)
-			data.deadline = deadline ? new Date(deadline) : null;
+			data.deadline = parseDateParam(deadline, "deadline");
 		if (deadlineDays !== undefined)
 			data.deadlineDays = deadlineDays ? parseInt(deadlineDays) : null;
 		// Ссылка на объект-источник
@@ -380,6 +420,7 @@ router.put("/todos/:id", async (req, res) => {
 
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (error instanceof BadRequestError) return res.status(400).json({ success: false, message: error.message });
 		if (error.code === "P2025") {
 			return res
 				.status(404)
@@ -403,7 +444,7 @@ router.delete("/todos/:id", async (req, res) => {
 		// Мягкое удаление (E17 СК0.1): у задачи журнал событий, наблюдатели и, возможно,
 		// нарушения со ссылкой на неё — физическое удаление оставило бы их без предмета.
 		const existing = await prisma.todo.findUnique({ where: whereClause });
-		if (!existing || existing.deletedAt || !checkOwnership(existing, req)) {
+		if (!canSeeTodo(existing, req)) {
 			return res.status(404).json({ success: false, message: "Задача не найдена" });
 		}
 		await prisma.todo.update({ where: { uuid: existing.uuid }, data: { deletedAt: new Date() } });
@@ -457,8 +498,23 @@ router.post("/todos/:id/help", todoAction(async (todo, req) => {
 	return { extra: { notified: r.notified } };
 }));
 
-// Оценка клиента результата (СК7.2).
-router.post("/todos/:id/rate", todoAction((todo, req) =>
+/*
+ * Оценка клиента результата (СК7.2). Оценку со слов клиента вносит сотрудник — но НЕ исполнитель
+ * задачи (Б9 аудита 26.09): иначе исполнитель сам ставил себе «5» и перезаписывал низкую оценку,
+ * а по ней считается бонус. Клиент из 1С оценивает через канал /bpai.
+ */
+router.post("/todos/:id/rate", async (req, res, next) => {
+	try {
+		const todo = await findOwnTodo(req, req.params.id);
+		if (todo && todo.executorUuid && todo.executorUuid === req.user?.uuid) {
+			return res.status(403).json({ success: false, code: "SELF_RATING", message: "Исполнитель не может оценивать свою задачу — оценку вносит клиент или другой сотрудник" });
+		}
+		return next();
+	} catch (error) {
+		console.error("POST /todos/:id/rate error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+}, todoAction((todo, req) =>
 	rateTodo(todo, actorOf(req), { rating: req.body?.rating, comment: req.body?.comment ?? null })));
 
 // История задачи: события и наблюдатели.

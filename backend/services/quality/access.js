@@ -123,6 +123,95 @@ export function canDecide(ctx, violatorUuid) {
 export const canManage = (ctx) => ctx.isAdmin || ctx.isManager;
 
 /**
+ * УРОВЕНЬ РОЛИ над сотрудником: 0 — роли нет, 1 — главбух его группы, 2 — руководитель его группы,
+ * 3 — администратор фирмы. Как в buildContext: главбух решает по участникам, руководитель — по
+ * участникам и главбуху.
+ */
+export function roleLevelOver(groups, userUuid, violatorUuid, { isAdmin = false } = {}) {
+	if (isAdmin) return 3;
+	if (!userUuid || !violatorUuid) return 0;
+	let level = 0;
+	for (const g of groups ?? []) {
+		const isMember = g.members.some((m) => m.userUuid === violatorUuid);
+		if (g.managerUuid === userUuid && (isMember || g.headUuid === violatorUuid)) level = Math.max(level, 2);
+		if (g.headUuid === userUuid && isMember) level = Math.max(level, 1);
+	}
+	return level;
+}
+
+export const ROLE_LEVEL_LABEL = ["сотрудник без роли", "главбух", "руководитель", "администратор фирмы"];
+
+/**
+ * Кто вправе решить по возражению (аудит 26.09, И24): тот, кто решает по сотруднику, И уровнем ВЫШЕ
+ * подтвердившего нарушение — не сам подтвердивший и не его коллега того же уровня (главбух за
+ * главбуха, руководитель за руководителя). Администратор фирмы решает всегда: в маленькой фирме
+ * уровня выше может не быть (решено 25.09); суперадмин — всегда. Подтверждавшего нет (decidedByUuid
+ * пуст) — решает любой, кто решает по сотруднику. Фронт прячет кнопку «Решить» по этому же правилу.
+ * @returns {Promise<string|null>} null — можно, строка — понятная причина отказа
+ */
+export async function disputeResolveDenied(ctx, v) {
+	if (!canDecide(ctx, v.userUuid)) return "Решает главбух, руководитель или администратор";
+	if (ctx.isSuperAdmin || ctx.isAdmin) return null;
+	if (!v.decidedByUuid) return null;
+	if (v.decidedByUuid === ctx.userUuid) return "По возражению решает не тот, кто подтверждал нарушение, а уровень выше";
+	const confirmerAdmin = await isFirmAdmin(v.decidedByUuid, ctx.firmOrgUuid);
+	const confirmer = roleLevelOver(ctx.groups, v.decidedByUuid, v.userUuid, { isAdmin: confirmerAdmin });
+	if (roleLevelOver(ctx.groups, ctx.userUuid, v.userUuid) > confirmer) return null;
+	const who = confirmer >= 2 ? "администратор фирмы" : "руководитель или администратор фирмы";
+	return `Нарушение подтвердил ${ROLE_LEVEL_LABEL[confirmer]} — по возражению решает уровень выше: ${who}`;
+}
+
+/**
+ * Может ли править КОНКРЕТНУЮ группу (Б9 аудита 26.09): администратор фирмы — любую, руководитель —
+ * только ту, где он руководитель. Раньше руководитель одной группы правил все: назначал себя
+ * главбухом соседней и сам выбирал, кто решает по его нарушениям.
+ */
+export function canManageGroup(ctx, group) {
+	if (ctx.isAdmin) return true;
+	return !!group && !!ctx.userUuid && group.managerUuid === ctx.userUuid;
+}
+
+/**
+ * Состав группы, который вправе задать НЕ администратор (руководитель своей группы): он остаётся
+ * руководителем и не входит в группу ни участником, ни главбухом — иначе решать по его нарушениям
+ * стал бы подобранный им же человек. null — можно, строка — причина отказа.
+ */
+export function groupCompositionDenied(ctx, { headUuid, managerUuid, members }) {
+	if (ctx.isAdmin) return null;
+	if (managerUuid !== ctx.userUuid) return "Руководителя группы назначает администратор фирмы";
+	if (headUuid === ctx.userUuid || (members || []).includes(ctx.userUuid)) {
+		return "Руководитель не может входить в свою группу главбухом или участником — по его нарушениям решает уровень выше";
+	}
+	return null;
+}
+
+/** Кто из перечисленных состоит в организации-фирме (членство). Посторонних в группы не берём. */
+export async function firmMembersAmong(firmOrgUuid, userUuids) {
+	const ids = [...new Set((userUuids || []).filter(Boolean))];
+	if (!firmOrgUuid || !ids.length) return new Set();
+	const rows = await prisma.accessRight.findMany({
+		where: { organizationUuid: firmOrgUuid, userUuid: { in: ids } },
+		select: { userUuid: true },
+	});
+	return new Set(rows.map((r) => r.userUuid));
+}
+
+/**
+ * ГЛОБАЛЬНЫЕ ДЕЙСТВИЯ КАЧЕСТВА — назначение организации-фирмы, общий производственный календарь
+ * (Б9 аудита 26.09). «Админ фирмы» в контексте запроса — админ `resolveFirmOrg`, а та при
+ * недоступной фирме откатывается к активной организации: админ ЛЮБОЙ организации переназначал
+ * (или обнулял — выключая стандарт на всей установке) фирму и правил общий календарь, от которого
+ * считаются сроки SLA и посещаемость. Теперь это — суперадмин или администратор ЯВНО назначенной
+ * фирмы по членству.
+ */
+export async function isInstallationQualityAdmin(req) {
+	if (req.user?.isSuperAdmin) return true;
+	const firm = await getFirmOrgSetting();
+	if (!firm) return false;
+	return isFirmAdmin(req.user?.uuid ?? null, firm);
+}
+
+/**
  * Кто решает по нарушениям сотрудника — ему уходят уведомления о кандидатах:
  * главбухи его групп, руководители групп; для главбуха — руководители; нет никого — админы фирмы.
  */
@@ -252,5 +341,7 @@ export async function orgNames(uuids) {
 
 export default {
 	resolveFirmOrg, loadGroups, isFirmAdmin, qualityContext, buildContext, canSee, canDecide, canManage,
+	canManageGroup, groupCompositionDenied, firmMembersAmong, isInstallationQualityAdmin,
+	roleLevelOver, ROLE_LEVEL_LABEL, disputeResolveDenied,
 	decidersOf, chiefsOf, managersOf, responsibleForClient, groupOfClient, firmOrgForUser, userNames, orgNames, isStaffUser,
 };

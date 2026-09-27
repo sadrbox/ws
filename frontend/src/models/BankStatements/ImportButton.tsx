@@ -10,6 +10,7 @@ import LookupField from "src/components/Field/LookupField";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
+import { decodeStatementBytes } from "./decodeStatement";
 
 interface ImportResult {
   success?: boolean;
@@ -75,7 +76,8 @@ const BankStatementImportButton: FC = () => {
     if (missing.length || !file) return;
     setBusy(true);
     try {
-      const text = await file.text();
+      // Не file.text(): тот всегда читает UTF-8, а выписка 1С — в windows-1251 (И18).
+      const text = decodeStatementBytes(await file.arrayBuffer());
       const r = await withOp(
         {
           kind: "create", title: translate("bankImport"), target: accName || file.name,

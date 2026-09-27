@@ -47,8 +47,8 @@ import DeleteDocumentButton from "src/components/DeleteDocumentButton";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import DocumentChainButton from "src/components/DocumentChain/DocumentChainButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
-import { useAppContext } from "src/app/context";
-import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, fetchDocumentItems, type BasisFromTarget , type BasisSource } from "src/utils/createFromBasis";
+import { useAppActions, useAppAuth } from "src/app/context";
+import { openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, fetchDocumentItems, confirmBasisItemsRefresh, type BasisFromTarget , type BasisSource } from "src/utils/createFromBasis";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { useRefillAction } from "src/hooks/useRefillAction";
 import ConfirmModal from "src/components/ConfirmModal";
@@ -179,6 +179,21 @@ interface TradeServerRecord {
   basisDocumentType?: string | null; basisDocumentUuid?: string | null; basisDocumentLabel?: string | null;
 }
 
+/**
+ * Патч, пришедший после await, без полей, которые пользователь изменил, пока шёл запрос
+ * (значение сейчас отличается от значения на момент запроса) — их не перетираем (И13).
+ */
+function keepManualEdits(patch: object, atRequest: object, now: object): Record<string, unknown> {
+  const before = atRequest as Record<string, unknown>;
+  const current = now as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+    if (current[k] !== before[k]) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 export function createTradeDocForm(cfg: TradeDocConfig): {
   Form: FC<Partial<TPane>>;
   List: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void; ownerUuid?: string; ownerField?: string; extraQueryParams?: Record<string, string> }>;
@@ -194,7 +209,8 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
     const { canWrite } = useAccessPermission(cfg.accessPermissionModel);
-    const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
+    const { windows: { addPane }, actions: { confirm } } = useAppActions();
+    const { user: currentUser } = useAppAuth();
 
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data as TradePaneData | undefined;
@@ -423,6 +439,16 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     // к «Очистить» в ряду действий поля — поэтому через подтверждение.
     const refill = useRefillAction({ run: handleRefillFromBasis, getRowCount: () => allItemsRef.current.length });
 
+    // «Обновить» таблицы у документа с основанием перезаполняет строки — ручные правки
+    // спрашиваем, а не теряем молча (И20, как в createInvoiceLikeForm и Sales).
+    const refreshItemsFromBasis = useCallback(async () => {
+      const ok = await confirmBasisItemsRefresh({
+        basisType: form.fields.basisDocumentType, basisUuid: form.fields.basisDocumentUuid,
+        displayed: allItemsRef.current, confirm,
+      });
+      if (ok) await handleRefillFromBasis(true);
+    }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, confirm, handleRefillFromBasis]);
+
     const { isVatEnabled, useDiscount } = useOrgAccountingSettings(
       form.fields.organizationUuid || null,
       form.fields.date || null,
@@ -438,7 +464,13 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
     // Смена контрагента: подставляем его ОСНОВНОЙ договор, иначе чистим чужой
     // (см. useContractSync). Тот же onSelect отрабатывает и очистку контрагента —
     // LookupField зовёт onSelect("", "", {}).
+    // ГОНКИ ПОЗДНИХ ОТВЕТОВ (аудит 26.09, И13). Быстро сменили организацию A→B или контрагента:
+    // ответ по прежнему выбору приходил позже и ставил склад/договор организации A в документ B.
+    // После await сверяемся, что выбор ещё тот же, и не трогаем поля, которые за это время
+    // изменили вручную (склад, выбранный, пока шёл запрос).
+    const counterpartySeqRef = useRef(0);
     const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
+      const seq = ++counterpartySeqRef.current;
       form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
       const cur = form.store.getSnapshot().fields;
       const patch = await syncContract({
@@ -446,18 +478,25 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
         organizationUuid: cur.organizationUuid,
         currentContractUuid: cur.contractUuid,
       });
-      if (patch) form.setFields(patch as Partial<TFields>);
+      const now = form.store.getSnapshot().fields;
+      if (seq !== counterpartySeqRef.current || now.counterpartyUuid !== uuid || now.organizationUuid !== cur.organizationUuid) return;
+      if (patch) form.setFields(keepManualEdits(patch, cur, now) as Partial<TFields>);
     }, [form.setFields, form.store, syncContract]);
 
+    const organizationSeqRef = useRef(0);
     const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
-      const cur = form.store.getSnapshot().fields;
-      if (cur.organizationUuid === uuid) return;
+      const prev = form.store.getSnapshot().fields;
+      if (prev.organizationUuid === uuid) return;
+      const seq = ++organizationSeqRef.current;
       form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
+      const cur = form.store.getSnapshot().fields;
       const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
         { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
         { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
       ]);
-      form.setFields(patch as Partial<TFields>);
+      const now = form.store.getSnapshot().fields;
+      if (seq !== organizationSeqRef.current || now.organizationUuid !== uuid) return;
+      form.setFields(keepManualEdits(patch, cur, now) as Partial<TFields>);
     }, [form.setFields, form.store, currentUser?.uuid]);
 
     const contractScope = useMemo<Record<string, string> | null>(() => {
@@ -644,7 +683,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
             organizationUuid={form.fields.organizationUuid} documentDate={form.fields.date || null}
             priceTypeUuid={form.fields.priceTypeUuid}
             disabled={form.isLoading} deferRemoteChanges
-            onRefresh={hasBasis ? () => handleRefillFromBasis(true) : undefined}
+            onRefresh={hasBasis ? refreshItemsFromBasis : undefined}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}
@@ -669,7 +708,7 @@ export function createTradeDocForm(cfg: TradeDocConfig): {
           />
         ),
       }] : []),
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, handleFaAllItems, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis, refill.onRefill, isRefilling]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleTotalChange, handleFaAllItems, canWrite, items, fixedAssetItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, hasBasis, handleRefillFromBasis, refreshItemsFromBasis, refill.onRefill, isRefilling]);
 
     const runCreateTarget = useCallback(async (t: TradeCreateTarget) => {
       const srcLabel = cfg.basisSourceLabelKey ? translate(cfg.basisSourceLabelKey) : cfg.formLabel;

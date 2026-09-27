@@ -12,6 +12,8 @@
 // видов документов заданы в коде (NUMBER_CONFIG) + переопределение в настройках.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { onCacheInvalidate } from "./cacheBus.js";
+import { localYear, yearBounds, orgTimeZone } from "./periodBounds.js";
 
 // docType → { префикс по умолчанию, человекочитаемая метка }.
 // Префикс можно переопределить в настройках (таблица document_number_settings,
@@ -73,9 +75,14 @@ async function loadSettings(client, orgUuid) {
 	return map;
 }
 
-/** Сбросить кэш настроек (вызывать после изменения настроек нумерации). */
+// Сброс — во всех воркерах через шину (Н7 аудита 26.09): иначе соседний воркер до 15 с
+// выдавал номера по старому префиксу.
+const broadcastSettingsInvalidate = onCacheInvalidate("numberSettings", () => _cache.clear());
+
+/** Сбросить кэш настроек (вызывать после изменения настроек нумерации) — во всех воркерах. */
 export function invalidateNumberSettingsCache() {
 	_cache.clear();
+	broadcastSettingsInvalidate();
 }
 
 /**
@@ -91,7 +98,7 @@ export async function allocateNumber(docType, organizationUuid, date, client = p
 	if (!def) return null;
 	const settings = await loadSettings(client, organizationUuid);
 	const prefix = (settings[docType]?.prefix ?? "").trim();
-	const year = (date ? new Date(date) : new Date()).getFullYear();
+	const year = yearOf(date, organizationUuid);
 	try {
 		const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
 		return formatDocNumber(prefix, jmax + 1);
@@ -125,7 +132,23 @@ const DOC_JOURNAL = {
 	payroll_payment: { table: "payroll_payments" },
 	month_close: { table: "month_closes" },
 	fixed_asset_acceptance: { table: "fixed_asset_acceptances" },
+	// Складские документы (аудит 26.09): их не было в журнале — journalMaxForYear отдавал 0,
+	// автономер всегда был «ПРЕФИКС-1», и второй документ года получал 409 «номер занят».
+	import_declaration: { table: "import_declarations" },
+	write_off: { table: "write_offs" },
+	goods_receipt: { table: "goods_receipts" },
+	stock_count: { table: "stock_counts" },
 };
+
+/** Виды документов с нумерацией, но без журнала (страж для теста: должно быть пусто). */
+export function unjournaledDocTypes() {
+	return Object.keys(NUMBER_CONFIG).filter((t) => !DOC_JOURNAL[t]);
+}
+
+// Год номера — МЕСТНЫЙ год организации (аудит 26.09, У5): на стыке года документ от
+// 01.01 00:30 по Алматы (31.12 по UTC) не должен попадать в ряд прошлого года.
+const yearOf = (date, organizationUuid) => localYear(date ? new Date(date) : new Date(), orgTimeZone(organizationUuid)) ?? new Date().getFullYear();
+const yearRange = (year, organizationUuid) => yearBounds(year, orgTimeZone(organizationUuid));
 
 /**
  * Занят ли номер в серии за год другим документом (кроме excludeUuid)? Учитывает
@@ -139,13 +162,14 @@ export async function isNumberTaken(docType, number, organizationUuid, date, exc
 	// Сравнение по нормализованному значению (без ведущих нулей): «00074» == «74».
 	const num = normalizeDocNumber(number);
 	if (!j || !num) return false;
-	const year = (date ? new Date(date) : new Date()).getFullYear();
+	const year = yearOf(date, organizationUuid);
+	const { start: ys, end: ye } = yearRange(year, organizationUuid);
 	const params = [num];
 	let where = `"number" = $1 AND "deletedAt" IS NULL`;
 	if (j.direction) where += ` AND "direction" = '${j.direction}'`;
 	if (organizationUuid) { params.push(organizationUuid); where += ` AND "organizationUuid" = $${params.length}`; }
-	params.push(new Date(year, 0, 1)); where += ` AND "date" >= $${params.length}`;
-	params.push(new Date(year + 1, 0, 1)); where += ` AND "date" < $${params.length}`;
+	params.push(ys); where += ` AND "date" >= $${params.length}`;
+	params.push(ye); where += ` AND "date" < $${params.length}`;
 	if (excludeUuid) { params.push(excludeUuid); where += ` AND "uuid" <> $${params.length}`; }
 	try {
 		const rows = await client.$queryRawUnsafe(`SELECT 1 FROM "${j.table}" WHERE ${where} LIMIT 1`, ...params);
@@ -187,8 +211,9 @@ export async function journalMaxForYear(docType, organizationUuid, year, prefix,
 	let where = `"deletedAt" IS NULL AND "number" IS NOT NULL`;
 	if (j.direction) where += ` AND "direction" = '${j.direction}'`;
 	if (organizationUuid) { params.push(organizationUuid); where += ` AND "organizationUuid" = $${params.length}`; }
-	params.push(new Date(year, 0, 1)); const ys = `$${params.length}`;
-	params.push(new Date(year + 1, 0, 1)); const ye = `$${params.length}`;
+	const bounds = yearRange(year, organizationUuid);
+	params.push(bounds.start); const ys = `$${params.length}`;
+	params.push(bounds.end); const ye = `$${params.length}`;
 	where += ` AND "date" >= ${ys} AND "date" < ${ye}`;
 	let maxExpr;
 	if (prefix) {
@@ -224,7 +249,7 @@ export async function peekNextNumber(docType, organizationUuid, date, client = p
 	// ВАЖНО: enabled здесь НЕ проверяем — кнопка «Присвоить номер» это явное
 	// действие пользователя (даём номер даже при выключенной автонумерации).
 	const prefix = (settings[docType]?.prefix ?? "").trim();
-	const year = (date ? new Date(date) : new Date()).getFullYear();
+	const year = yearOf(date, organizationUuid);
 	const jmax = await journalMaxForYear(docType, organizationUuid, year, prefix, client);
 	return formatDocNumber(prefix, jmax + 1);
 }

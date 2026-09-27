@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { draftsToPayload, moveDraft, toDrafts, withCheck, type TemplateItemDraft } from "src/models/ChecklistTemplates/templateItems";
-import { defaultPeriod, pendingCount, progressText, runStatusTone } from "src/models/ChecklistRuns/runView";
+import { canSignRun, defaultPeriod, pendingCount, progressText, runStatusTone } from "src/models/ChecklistRuns/runView";
 
 // Чек-листы самопроверки (E17 СК3): пункты шаблона (порядок, привязка к проверке, сборка
 // items[] для сервера) и период нового чек-листа по периодичности шаблона.
@@ -90,5 +90,21 @@ describe("Прогресс чек-листа", () => {
 		expect(runStatusTone("open")).toBe("warn");
 		expect(runStatusTone("submitted")).toBe("info");
 		expect(runStatusTone("reviewed")).toBe("ok");
+	});
+});
+
+describe("подпись чек-листа (И24)", () => {
+	it("исполнитель не подписывает свой чек-лист, даже если сервер дал canReview по роли", () => {
+		expect(canSignRun({ canReview: true, executorUuid: "me" }, "me")).toBe(false);
+	});
+
+	it("проверяющий — не исполнитель — подписывает", () => {
+		expect(canSignRun({ canReview: true, executorUuid: "worker" }, "me")).toBe(true);
+		expect(canSignRun({ canReview: true, executorUuid: null }, "me")).toBe(true);
+	});
+
+	it("без canReview — нет", () => {
+		expect(canSignRun({ canReview: false, executorUuid: "worker" }, "me")).toBe(false);
+		expect(canSignRun(null, "me")).toBe(false);
 	});
 });

@@ -21,6 +21,45 @@ import { checkOwnership } from "./auth.js";
 import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError, PeriodLockedError } from "../services/periodLock.js";
 
 /**
+ * ДОКУМЕНТЫ: ЗАПИСЬ БЕЗ ОРГАНИЗАЦИИ — НЕ «ОБЩАЯ» (аудит 26.09, п. 14 отчёта инспекции маршрутов).
+ *
+ * `checkOwnership` считает запись с пустой организацией общей для всех — для справочников это
+ * правило (общий контрагент в режиме group), а для документа это битая запись: удалить её мог
+ * любой пользователь любой организации. Документ здесь — модель, у которой есть и организация, и
+ * признак проведения (`posted`); строки документов (`…Item`) исключены — их удаляют роутеры строк
+ * с проверкой документа-родителя, а у старых строк организация бывает не заполнена. Такую запись
+ * без организации удаляет только суперадмин; чужая — «не найдена», как и раньше.
+ *
+ * Проверить потом: удаление ОБЩЕЙ записи справочника (контрагент, товар, план счетов) по-прежнему
+ * доступно любому с правом записи на модель — хотя создать общую запись может только
+ * администратор (services/recordScope.js → resolveNewScope). Сузить до администратора — решение
+ * владельца (затронет бухгалтеров в режиме group).
+ */
+let strictDocModels = null;
+export function isStrictOwnershipModel(modelName) {
+	if (!strictDocModels) {
+		strictDocModels = new Set();
+		try {
+			for (const m of Prisma.dmmf.datamodel.models) {
+				const f = new Set(m.fields.map((x) => x.name));
+				if (f.has("organizationUuid") && f.has("posted") && !m.name.endsWith("Item")) {
+					strictDocModels.add(m.name.charAt(0).toLowerCase() + m.name.slice(1));
+				}
+			}
+		} catch {
+			// DMMF недоступен — остаётся хотя бы список документов с блокировкой периода.
+		}
+		for (const m of PERIOD_LOCKED_MODELS) strictDocModels.add(m);
+	}
+	return strictDocModels.has(modelName);
+}
+
+/** Своя ли запись для удаления: документы — строго, остальное — как checkOwnership. */
+function ownedForDelete(existing, req, modelName) {
+	return checkOwnership(existing, req, "organizationUuid", { allowShared: !isStrictOwnershipModel(modelName) });
+}
+
+/**
  * Кэш карты FK: { [referencedTable]: Array<{ table, column, refColumn }> }
  * Заполняется однократно при первом обращении.
  */
@@ -415,7 +454,7 @@ export async function handleDelete({
 
 	try {
 		const existing = await prisma[modelName].findUnique({ where });
-		if (!existing || (req && !checkOwnership(existing, req))) {
+		if (!existing || (req && !ownedForDelete(existing, req, modelName))) {
 			return res.status(404).json({ success: false, message: notFoundMessage });
 		}
 
@@ -500,7 +539,7 @@ export async function handleBatchDelete({
 	for (const uuid of uuids) {
 		try {
 			const existing = await prisma[modelName].findUnique({ where: { uuid } });
-			if (!existing || !checkOwnership(existing, req)) {
+			if (!existing || !ownedForDelete(existing, req, modelName)) {
 				failed.push({ uuid, message: "Не найдено" });
 				continue;
 			}

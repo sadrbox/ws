@@ -124,12 +124,23 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
     emit(y, m + 1);
   }, [selYear, selMonth, emit]);
 
-  // Прокрутка колесом на триггере
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    shiftPeriod(e.deltaY > 0 ? 1 : -1);
-  }, [disabled, shiftPeriod]);
+  // Прокрутка колесом на триггере — ТОЛЬКО когда поле в фокусе. Иначе прокрутка формы
+  // колесом, проходя над полем, молча меняла месяц (аудит 26.09, И15). Слушатель —
+  // нативный с passive: false: в React 18 onWheel пассивный, preventDefault не работал,
+  // и вместе со сменой месяца прокручивалась страница.
+  const wheelRef = useRef<{ disabled: boolean; shiftPeriod: (d: number) => void }>({ disabled, shiftPeriod });
+  wheelRef.current = { disabled, shiftPeriod };
+  useEffect(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (wheelRef.current.disabled || document.activeElement !== el) return;
+      e.preventDefault();
+      wheelRef.current.shiftPeriod(e.deltaY > 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   // Стрелки на триггере
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -180,7 +191,6 @@ export const FieldPeriod: FC<FieldPeriodProps> = ({
             return !o;
           });
         }}
-        onWheel={handleWheel}
         onKeyDown={handleKeyDown}
       >
         <div className={styles.FieldPeriod} >

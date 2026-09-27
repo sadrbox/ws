@@ -7,12 +7,14 @@
 // пишутся; в аудит — только код, база и решение.
 
 import { Router, type Request, type RequestHandler } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import { z } from "zod";
 import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
 import type { Audit } from "../audit/index.ts";
 import type { BaseTokenStore } from "../bases/tokens.ts";
 import type { RegistrationRow, RegistrationStore } from "../bases/registrations.ts";
+import { normalizeOrgDetails } from "../bases/orgDetails.ts";
 import { rateLimit } from "./rateLimit.ts";
 
 const text = (max: number) => z.string().trim().max(max);
@@ -28,10 +30,19 @@ export const registrationSchema = z.object({
 		extensionVersion: text(50).nullable().optional(),
 		computer: text(200).nullable().optional(),
 	}),
-	organizations: z.array(z.object({ id: text(100).nullable().optional(), name: text(300).nullable().optional(), bin: text(20).nullable().optional() })).max(200).default([]),
+	organizations: z.array(z.object({
+		id: text(100).nullable().optional(), name: text(300).nullable().optional(), bin: text(20).nullable().optional(),
+		// Реквизиты — мягким разбором, а не схемой: кривое поле реквизитов не должно отменять заявку (см. orgDetails.ts).
+		details: z.unknown().optional().transform(normalizeOrgDetails),
+	})).max(200).default([]),
 	user: z.object({ id: text(100).nullable().optional(), name: text(200).nullable().optional() }).nullable().optional(),
 	contact: text(500).nullable().optional(),
 	comment: text(2000).nullable().optional(),
+	/**
+	 * Секрет опроса прежней заявки (Б11 аудита 26.09): повтор с ним обновляет ТУ ЖЕ заявку и код, без него —
+	 * новая заявка с новым кодом. Можно прислать и заголовком `X-Registration-Secret`, как при опросе.
+	 */
+	pollSecret: text(200).nullable().optional(),
 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,6 +62,8 @@ export function baseRegistrationRouter(deps: {
 	const { registrations, tokens, erp, audit, log } = deps;
 	const perHour = deps.perHour ?? 5;
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "регистрация базы");
 
 	// Два лимита, а не один: база за NAT делит адрес с соседями, а одна база может ходить с разных адресов.
 	const hour = 60 * 60_000;
@@ -81,7 +94,9 @@ export function baseRegistrationRouter(deps: {
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: `Некорректная заявка: ${issue ? `${issue.path.join(".") || "тело"} — ${issue.message}` : "тело запроса"}` } });
 			return;
 		}
-		const { row, secret, repeated } = await registrations.submit(p.data, req.ip ?? null);
+		const presented = String(req.headers["x-registration-secret"] ?? "").trim() || p.data.pollSecret || null;
+		const { pollSecret: _presented, ...body } = p.data;
+		const { row, secret, repeated } = await registrations.submit(body, req.ip ?? null, presented);
 		await audit.write({
 			event: repeated ? "base.registration.repeated" : "base.registration.created",
 			details: { registrationId: row.id, code: row.code, base: row.baseName, onecBaseId: row.onecBaseId, bins: p.data.organizations.map((o) => o.bin).filter(Boolean), ip: req.ip ?? null },

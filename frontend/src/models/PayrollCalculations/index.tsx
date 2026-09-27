@@ -25,6 +25,7 @@ import ModelList from "src/components/ModelList";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
 import { FormRequiredScope, FormDirtyScope } from "src/hooks/useFormRequired";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
+import { PAYROLL_RATES } from "./payrollRates";
 
 const MODEL_ENDPOINT = "payroll-calculations";
 const LIST_NAME = "PayrollCalculationsList";
@@ -68,17 +69,17 @@ const DEFAULT_FIELDS: TFields = {
  * - Социальный налог = 9.5% от (оклад - ОПВ) - СО (за счёт работодателя)
  * - ВОСМС (взносы ОСМС) = 2% от оклада (удержание с работника)
  * - ООСМС (отчисления ОСМС) = 3% от оклада (за счёт работодателя)
+ * Ставки и МРП — в payrollRates.ts (одно место на смену года).
  */
-function calcDeductions(baseSalary: number) {
-  const MRP = 3932; // МРП на 2025 год
-  const opv = Math.round(baseSalary * 0.10 * 100) / 100;
-  const vosms = Math.round(baseSalary * 0.02 * 100) / 100;
-  const taxBase = Math.max(baseSalary - opv - vosms - (14 * MRP), 0);
-  const ipn = Math.round(taxBase * 0.10 * 100) / 100;
+function calcDeductions(baseSalary: number, R = PAYROLL_RATES) {
+  const opv = Math.round(baseSalary * R.opv * 100) / 100;
+  const vosms = Math.round(baseSalary * R.vosms * 100) / 100;
+  const taxBase = Math.max(baseSalary - opv - vosms - (R.ipnDeductionMrp * R.mrp), 0);
+  const ipn = Math.round(taxBase * R.ipn * 100) / 100;
   const soBase = Math.max(baseSalary - opv, 0);
-  const socialContrib = Math.round(soBase * 0.035 * 100) / 100;
-  const socialTax = Math.max(Math.round(soBase * 0.095 * 100) / 100 - socialContrib, 0);
-  const oosms = Math.round(baseSalary * 0.03 * 100) / 100;
+  const socialContrib = Math.round(soBase * R.socialContrib * 100) / 100;
+  const socialTax = Math.max(Math.round(soBase * R.socialTax * 100) / 100 - socialContrib, 0);
+  const oosms = Math.round(baseSalary * R.oosms * 100) / 100;
   const netSalary = Math.round((baseSalary - opv - ipn - vosms) * 100) / 100;
   const totalExpense = Math.round((baseSalary + socialContrib + socialTax + oosms) * 100) / 100;
   return { opv, ipn, socialContrib, socialTax, vosms, oosms, netSalary, totalExpense };

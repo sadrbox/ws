@@ -15,7 +15,7 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Field, FieldPeriod } from "src/components/Field";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { routeError } from "src/services/errors/route";
 import { createPrimaryDocsReceipt, deletePrimaryDocsReceipt, fetchPrimaryDocs } from "src/services/quality/api";
 import { getAppUtcOffset, getFormatDate } from "src/utils/datetime";
@@ -34,7 +34,7 @@ interface Props {
 
 export const PrimaryDocsModal: FC<Props> = ({ organizationUuid, organizationName, onClose }) => {
 	const qc = useQueryClient();
-	const { confirm } = useAppContext().actions;
+	const { confirm } = useAppActions().actions;
 	// Панель показывает прошлый месяц — с него и начинаем.
 	const [month, setMonth] = useState(() => addMonths(currentMonth(getAppUtcOffset() * 60), -1));
 	const [complete, setComplete] = useState(false);

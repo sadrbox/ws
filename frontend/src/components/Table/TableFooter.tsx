@@ -11,8 +11,11 @@ import { computeFooterValue } from './services';
 import styles from './Table.module.scss';
 
 export const TableFooter = memo(() => {
-  const { columns, rows } = useTableContext();
+  const { variant, selectable, columns, rows } = useTableContext();
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
+  // Ячейка под чекбокс — только если колонка отметок есть (как в шапке и colgroup):
+  // иначе итоги съезжали на колонку вправо («Сальдо КН» под «Сальдо 1С»).
+  const showCheckbox = variant !== 'select' && selectable;
 
   // Проверяем есть ли хоть одна колонка с footer-итогом
   const hasFooter = visibleColumns.some(c => c.footer && c.footer !== 'none');
@@ -22,7 +25,7 @@ export const TableFooter = memo(() => {
     <tfoot>
       <tr>
         {/* Колонка чекбокса */}
-        <td />
+        {showCheckbox && <td />}
         {visibleColumns.map(col => {
           const value = computeFooterValue(col, rows);
           return (

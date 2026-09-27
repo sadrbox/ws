@@ -30,6 +30,9 @@ import {
   upsertRecords,
 } from "./offlineDb";
 import { getIsOnline } from "./networkStatus";
+import { offlineDb, type PendingChange } from "./offlineDb";
+import { OFFLINE_WRITE_TABLES } from "./offlineDataService";
+import { notify as notifyEvent } from "src/components/TechMessages/store";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -65,6 +68,8 @@ export interface SyncError {
   uuid: string;
   table: string;
   error: string;
+  /** Код отказа сервера, напр. SYNC_PUSH_REFUSED (таблица офлайн не принимается). */
+  code?: string;
 }
 
 export type SyncStatus =
@@ -258,10 +263,46 @@ interface PushResult {
   errors: SyncError[];
 }
 
+/**
+ * ОТКАЗ СЕРВЕРА ПРИНЯТЬ ИЗМЕНЕНИЕ (SYNC_PUSH_REFUSED, аудит 26.09 Б1): /sync/push принимает
+ * только справочники; документ, задача, пользователь, права, организация — отклоняются.
+ * Такое изменение больше не отправляем (иначе оно повторялось бы при каждом обмене) и не
+ * удаляем (данные остаются в очереди), а СООБЩАЕМ пользователю — раньше оно терялось молча.
+ */
+async function markRefused(changes: PendingChange[], reason: (p: PendingChange) => string): Promise<SyncError[]> {
+  const out: SyncError[] = [];
+  for (const p of changes) {
+    const why = reason(p);
+    if (p.id != null) {
+      await offlineDb._pendingChanges.update(p.id, { refused: why }).catch(() => 0);
+    }
+    out.push({ uuid: p.uuid, table: p.table, error: why, code: "SYNC_PUSH_REFUSED" });
+  }
+  if (out.length) {
+    const first = out[0];
+    notifyEvent({
+      severity: "error",
+      source: "Синхронизация",
+      key: "sync-push-refused",
+      text: out.length === 1
+        ? `Изменение, сделанное без связи, не отправлено (${first.table}): ${first.error}`
+        : `Изменения, сделанные без связи, не отправлены (${out.length}): ${first.error}`,
+    });
+  }
+  return out;
+}
+
 async function pushChanges(): Promise<PushResult> {
-  const pending = await getAllPendingChanges();
+  const all = await getAllPendingChanges();
+  // Уже отклонённые сервером не отправляем повторно; таблицы, которые сервер через обмен не
+  // принимает (записанные офлайн до перехода на этот порядок), — отмечаем и сообщаем, не отправляя.
+  const waiting = all.filter((p) => !p.refused);
+  const notPushable = waiting.filter((p) => !OFFLINE_WRITE_TABLES.has(p.table));
+  const pending = waiting.filter((p) => OFFLINE_WRITE_TABLES.has(p.table));
+  const localRefusals = await markRefused(notPushable, () =>
+    "без связи записываются только справочники — откройте документ и сохраните его при связи");
   if (pending.length === 0) {
-    return { applied: 0, conflicts: [], errors: [] };
+    return { applied: 0, conflicts: [], errors: localRefusals };
   }
 
   // Формируем массив changes для API
@@ -302,10 +343,20 @@ async function pushChanges(): Promise<PushResult> {
       }
     }
 
+    // Отказы сервера по таблице — отмечаем, чтобы не слать их при каждом обмене, и сообщаем.
+    const refusedKeys = new Map(
+      (body.errors ?? []).filter((e) => e.code === "SYNC_PUSH_REFUSED").map((e) => [`${e.table}:${e.uuid}`, e.error] as const),
+    );
+    const serverRefusals = await markRefused(
+      pending.filter((p) => refusedKeys.has(`${p.table}:${p.uuid}`)),
+      (p) => refusedKeys.get(`${p.table}:${p.uuid}`) ?? "сервер не принял изменение",
+    );
+    const otherErrors = (body.errors ?? []).filter((e) => e.code !== "SYNC_PUSH_REFUSED");
+
     return {
       applied: body.applied ?? 0,
       conflicts: body.conflicts ?? [],
-      errors: body.errors ?? [],
+      errors: [...localRefusals, ...serverRefusals, ...otherErrors],
     };
   } catch (err: unknown) {
     if ((err as Error)?.name === "AbortError") throw err;

@@ -23,7 +23,7 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Group, GroupCol } from "src/components/UI";
 import { HelpBox, HelpText } from "src/components/HelpBox";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { useQualityMe } from "src/hooks/useQualityMe";
 import { routeError } from "src/services/errors/route";
 import {
@@ -42,7 +42,7 @@ import { useQualityListActions } from "src/models/_quality/useQualityListActions
 import { openFindingsPane } from "src/models/CheckFindings/openFindings";
 import { CreateChecklistRunModal } from "./CreateRunModal";
 import {
-	MARKS, itemStatusLabel, itemStatusTone, pendingCount, periodText, progressText, runStatusLabel, runStatusTone,
+	MARKS, canSignRun, itemStatusLabel, itemStatusTone, pendingCount, periodText, progressText, runStatusLabel, runStatusTone,
 } from "./runView";
 import columnsJson from "./columns.json";
 import styles from "./ChecklistRuns.module.scss";
@@ -56,8 +56,9 @@ const ITEM_CLASS: Partial<Record<ChecklistItemStatus, string>> = { ok: styles.It
 
 export const ChecklistRunsForm: FC<Partial<TPane>> = ({ uniqId, data }) => {
 	const uuid = asText(data?.uuid);
-	const { addPane, requestClose, updatePaneLabel } = useAppContext().windows;
-	const { confirm } = useAppContext().actions;
+	const { addPane, requestClose, updatePaneLabel } = useAppActions().windows;
+	const { actions: { confirm } } = useAppActions();
+	const auth = useAppAuth();
 	const { me } = useQualityMe();
 	const qc = useQueryClient();
 	const q = useQuery({ queryKey: runKey(uuid), queryFn: async () => (await fetchChecklistRun(uuid)).item, enabled: !!uuid });
@@ -238,7 +239,7 @@ export const ChecklistRunsForm: FC<Partial<TPane>> = ({ uniqId, data }) => {
 					{translate("checklistRunSubmit")}
 				</Button>
 			)}
-			{run.canReview && (
+			{canSignRun(run, auth.user?.uuid ?? "") && (
 				<Button variant="primary" onClick={() => void act("review")} disabled={busy !== null}>{translate("checklistRunReview")}</Button>
 			)}
 			{mayDelete && <Button onClick={() => void act("delete")} disabled={busy !== null}>{translate("delete")}</Button>}
@@ -255,7 +256,7 @@ ChecklistRunsForm.displayName = "ChecklistRunsForm";
 
 export const ChecklistRunsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDataItem) => void }> = ({ variant, onSelectItem }) => {
 	const { me } = useQualityMe();
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const { deleteRows, refresh } = useQualityListActions(MODEL_ENDPOINT, LIST_NAME, ChecklistRunsForm as ComponentType<Record<string, unknown>>);
 	const [creating, setCreating] = useState(false);
 	const [status, setStatus] = useState("");

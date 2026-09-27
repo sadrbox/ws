@@ -40,7 +40,9 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { abortCommand, cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
-import { useAppContext } from "src/app/context";
+import { usePaneOnScreen } from "src/hooks/usePaneActive";
+import { BATCHES_KEY, isBatchWatchActive } from "./progress";
+import { useAppActions } from "src/app/context";
 import { notify } from "src/components/TechMessages/store";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
@@ -186,7 +188,7 @@ export const BatchesTab: FC = () => {
 	// Прерывание начатых команд — «управление» агентами (вложенное разрешение).
 	const canAbort = agentsAllow(useOnecPermissions(), "manage");
 	const qc = useQueryClient();
-	const { actions: { confirm } } = useAppContext();
+	const { actions: { confirm } } = useAppActions();
 	const [expanded, setExpanded] = useState<Set<string>>(new Set());
 	/**
 	 * Отмеченные КОМАНДЫ (по идентификатору): цель отмены. Отмечают базы, а не задания —
@@ -194,11 +196,17 @@ export const BatchesTab: FC = () => {
 	 */
 	const [picked, setPicked] = useState<Set<string>>(new Set());
 
-	// Пока есть незавершённые — опрашиваем; когда всё стихло, опрос прекращается сам.
+	/*
+	 * Пока есть незавершённые — опрашиваем; когда всё стихло, опрос прекращается сам.
+	 * Не опрашиваем (О4 аудита 26.09): в скрытой панели и пока задания опрашивает модуль слежения
+	 * (progress.ts) — он кладёт тот же список под этот же ключ, и два опроса по 3 с были дублем.
+	 */
+	const onScreen = usePaneOnScreen();
 	const batches = useQuery({
-		queryKey: ["onec", "batches"],
+		queryKey: BATCHES_KEY,
 		queryFn: fetchBatches,
 		refetchInterval: (q) => {
+			if (!onScreen || isBatchWatchActive()) return false;
 			const items = (q.state.data as { items?: { pending: number }[] } | undefined)?.items ?? [];
 			return items.some((b) => b.pending > 0) ? 3000 : false;
 		},

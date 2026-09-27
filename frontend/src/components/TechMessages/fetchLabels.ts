@@ -51,10 +51,14 @@ export type QueryLike = {
  * Фоновый — не запускал человек: опрос по расписанию у запроса, данные которого уже есть,
  * или явно помеченный `meta: { background: true }`. Первая загрузка опрашиваемого списка —
  * не фон: экран пуст и ждёт именно её.
+ *
+ * Опрос по расписанию узнаём по `refetchInterval` наблюдателя или по `meta: { poll: true }` —
+ * так помечен запрос, который опрашивает не наблюдатель, а общий таймер модуля (агенты 1С, О4).
  */
 export function isBackgroundQuery(q: QueryLike): boolean {
 	if (q.meta?.background === true) return true;
-	return q.state.dataUpdatedAt > 0 && (q.observers ?? []).some((o) => !!o.options.refetchInterval);
+	if (q.state.dataUpdatedAt <= 0) return false;
+	return q.meta?.poll === true || (q.observers ?? []).some((o) => !!o.options.refetchInterval);
 }
 
 /** Сколько ждём и чего: только не фоновые запросы, имена без повторов, не больше трёх. */

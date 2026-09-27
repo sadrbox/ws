@@ -29,7 +29,7 @@ DIFF=$(npx prisma migrate diff \
   --script 2>/dev/null)
 
 # Индексы, которые Prisma не выражает: их «снос» в выводе — ожидаемый шум, а не дрейф.
-EXPECTED_INDEXES='chart_of_accounts_global_code_key|classifiers_code_trgm|classifiers_name_trgm|products_barcode_active_uq|product_barcodes_barcode_active_uq'
+EXPECTED_INDEXES='chart_of_accounts_global_code_key|classifiers_code_trgm|classifiers_name_trgm|products_barcode_active_uq|product_barcodes_barcode_active_uq|month_closes_posted_period_uq'
 
 # Убираем комментарии, пустые строки, ожидаемые индексы и переименования ограничений.
 # `|| true` — grep без совпадений возвращает 1, что под `set -e` уронило бы скрипт.

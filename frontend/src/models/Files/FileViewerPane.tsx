@@ -5,7 +5,7 @@ import IconButton from "src/components/IconButton/IconButton";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { makePaneLabel } from "src/utils/buildPaneLabel";
 import { FileViewPane, type FileMeta } from "./FileViewPane";
 
@@ -33,7 +33,7 @@ const FileViewerPane: FC<Record<string, unknown>> = (props) => {
   const data = (props.data ?? props) as FileViewerData;
   const paneId = props.uniqId as string | undefined;
   const initialUuid = data.file?.uuid ?? "";
-  const { updatePaneLabel } = useAppContext().windows;
+  const { updatePaneLabel } = useAppActions().windows;
   const [ownerLabel, setOwnerLabel] = useState<string | null>(null);
 
   // Метка владельца файла (в формате *Form). Грузим запись по ownerType/ownerUuid.

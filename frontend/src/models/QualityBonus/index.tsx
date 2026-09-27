@@ -17,7 +17,7 @@
 import { type FC, type ReactNode, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate, getLanguage } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import Table from "src/components/Table";
 import Toolbar from "src/components/Toolbar";
 import { FieldFastSearchInternal } from "src/components/Table/TableToolbarControls";
@@ -41,7 +41,7 @@ import { currentMonth, monthLabel } from "src/models/_quality/month";
 import { escapeHtml, fillTemplate } from "src/models/_quality/text";
 import { itemCaption } from "src/models/StandardViolations/violations";
 import MeasuresModal from "./MeasuresModal";
-import { bonusExportAoa, bonusExportFileName, bonusRows, needsConfirmation, roleLabel, violationsSummary, type BonusTableRow } from "./bonus";
+import { bonusExportAoa, bonusExportFileName, bonusRows, isMonthOver, needsConfirmation, roleLabel, violationsSummary, type BonusTableRow } from "./bonus";
 import main from "src/styles/main.module.scss";
 import styles from "./QualityBonus.module.scss";
 
@@ -62,7 +62,8 @@ const COLUMNS: TColumn[] = [
 
 export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const queryClient = useQueryClient();
-	const { actions: { confirm }, auth } = useAppContext();
+	const { actions: { confirm } } = useAppActions();
+	const auth = useAppAuth();
 	const myUuid = auth.user?.uuid ?? "";
 	const { me, canManage } = useQualityMe();
 	const isAdmin = !!me?.isAdmin;
@@ -86,6 +87,8 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const view = useStaticTableView(rows as unknown as TDataItem[]);
 	const closed = data?.closed ?? null;
 	const label = monthLabel(month, getLanguage());
+	// Закрывается только прошедший месяц: в текущий ещё идут выявления (И23).
+	const monthOver = isMonthOver(month, currentMonth(getAppUtcOffset() * 60));
 
 	const toggle = useCallback((uuid: string) => setExpanded((prev) => {
 		const next = new Set(prev);
@@ -100,6 +103,7 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	}, [queryClient]);
 
 	const closeMonth = useCallback(async () => {
+		if (!monthOver) return;
 		if (!(await confirm(escapeHtml(fillTemplate(translate("bonusCloseAsk"), { month: label }))))) return;
 		setBusy(true);
 		setNotices([]);
@@ -120,7 +124,7 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 		} finally {
 			setBusy(false);
 		}
-	}, [confirm, label, month, afterChange]);
+	}, [confirm, label, month, monthOver, afterChange]);
 
 	const reopenMonth = useCallback(async () => {
 		if (!(await confirm(escapeHtml(fillTemplate(translate("bonusReopenAsk"), { month: label }))))) return;
@@ -142,7 +146,7 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 		if (!data?.items?.length) return;
 		try {
 			const { downloadAoa } = await import("src/utils/sheetIO");
-			downloadAoa(bonusExportAoa(data), { sheetName: month, fileName: bonusExportFileName(month, !!data.closed) });
+			await downloadAoa(bonusExportAoa(data), { sheetName: month, fileName: bonusExportFileName(month, !!data.closed) });
 			if (!data.closed) showToast(fillTemplate(translate("bonusExportPreliminary"), { month: label }), "info");
 		} catch (e) {
 			setNotices(routeError(e, { source: translate(COMPONENT), fallback: translate("bonusExportFailed") }));
@@ -212,7 +216,8 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 			right={showSearch ? <FieldFastSearchInternal value={view.search.value} onChange={view.search.onChange} /> : undefined}>
 			<FieldPeriod name="quality_bonus_month" value={month} onChange={(e) => { setMonth(e.target.value); setNotices([]); }} />
 			{canManage && !closed && (
-				<Button onClick={() => void closeMonth()} disabled={busy || q.isLoading} title={translate("bonusCloseHint")}>
+				<Button onClick={() => void closeMonth()} disabled={busy || q.isLoading || !monthOver}
+					title={translate(monthOver ? "bonusCloseHint" : "bonusCloseNotOver")}>
 					{translate("bonusCloseMonth")}
 				</Button>
 			)}

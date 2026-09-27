@@ -82,4 +82,17 @@ export const ROUTE_TO_MODEL = {
 	accounting: "AccountingEntry",
 	users: "User",
 	files: "AttachedFile",
+
+	// ── Описано по Б12 аудита 26.09 (сканер прав раньше не видел шаблонных путей) ──────────
+	// Строки документа правит тот, кто правит документ: право — модели-родителя. Отдельных
+	// «прав на строки» никто не раздавал, а право документа уже есть у всех, кто с ним работает.
+	purchaseitems: "Purchase",
+	purchasefixedassetitems: "Purchase",
+	outgoinginvoiceitems: "OutgoingInvoice",
+	incominginvoiceitems: "IncomingInvoice",
+	paymentinvoiceitems: "PaymentInvoice",
+	inventorytransferitems: "InventoryTransfer",
+	// Закрытие месяца закрывает период всей организации. Меню панели уже открывает раздел только
+	// по праву MonthClose (NavList), а API пускал любого вошедшего — теперь правило одно.
+	"month-closes": "MonthClose",
 };

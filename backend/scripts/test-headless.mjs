@@ -17,8 +17,12 @@ const FILES = [
 	"esfErrorHandling", "esfInboundToPurchase", "esfInvoiceMapper", "esfLicense",
 	"esfResolver", "fiscalProvider", "govMappers", "importLandedCost", "installAccessRules", "listUtils",
 	"openapi", "orgFieldValidation", "parse1cDate", "parseUploadErrors", "periodLock",
-	"permissionProfiles", "routeSubjects", "moduleRoutes", "recordScope", "supportMode", "isolationAudit", "corsHeaders", "quotas", "bin", "serviceLinks",
+	"permissionProfiles", "routeSubjects", "moduleRoutes", "recordScope", "supportMode", "isolationAudit", "corsHeaders", "quotas", "bin", "orgFromOnec", "orgFromOnecRoute", "serviceLinks",
 	"recomputeCosting", "scheduler", "clusterLock", "chatBus", "backupFiles", "qualityRules", "sortOrder", "twoFactor", "waConversations", "waResolve", "waWebhook",
+	// Аудит 26.09: платформа, безопасность, учёт (все — на мок-клиентах, без БД).
+	"asyncErrors", "backupAtomic", "cacheBus", "listQuery", "qualityJobsPure",
+	"securityAccess", "securityRouters", "securityExtra", "fiscalReceiptsAccess",
+	"periodBounds", "accountingFixes", "stockControl", "cashBalanceFix", "basisReturns", "documentItemsFactory", "documentCommit", "idempotency",
 ].map((n) => path.join("__tests__", `${n}.test.js`));
 
 const r = spawnSync("node", ["--test", ...FILES], { cwd: root, stdio: "inherit" });

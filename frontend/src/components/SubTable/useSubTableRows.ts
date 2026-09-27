@@ -74,6 +74,20 @@ export function useSubTableRows({
       ? Math.min(-1, Math.min(...initialPendingRows.map(r => (typeof r.id === "number" ? r.id : 0))) - 1)
       : -1,
   );
+  // Новые строки получают id НИЖЕ всех уже известных: строки черновика из «Несохранённых»
+  // приходят ПОСЛЕ монтирования (stash применяется эффектом формы), и счётчик, посчитанный
+  // при монтировании, выдавал новой строке -1 — как у восстановленной (аудит 26.09, И12).
+  const lowerTempIdBelow = useCallback((rows: readonly TDataItem[] | undefined) => {
+    if (!rows?.length) return;
+    let min = 0;
+    for (const r of rows) if (typeof r.id === "number" && r.id < min) min = r.id;
+    if (tempIdRef.current >= min) tempIdRef.current = Math.min(-1, min - 1);
+  }, []);
+  // dataUpdatedAt на момент, когда родитель ОЧИСТИЛ pending (запись или ⟳ формы). Пустой
+  // ответ сервера, пришедший ПОЗЖЕ, авторитетен — см. ветку B.
+  const pendingClearedAtRef = useRef<number | null>(null);
+  const dataUpdatedAtRef = useRef(dataUpdatedAt);
+  dataUpdatedAtRef.current = dataUpdatedAt;
   // Флаг: были ли initialPendingRows уже применены (мерж выполняется один раз)
   const pendingAppliedRef = useRef(false);
   // Счётчик для принудительного запуска основного эффекта после применения stash
@@ -121,6 +135,10 @@ export function useSubTableRows({
     if (deferRemoteChanges && prevLen > 0 && curLen === 0) {
       // pending очищен после коммита — сбрасываем флаг мержа
       pendingAppliedRef.current = false;
+      // Очищен не обязательно коммитом: ⟳ формы тоже обнуляет pending. Запоминаем момент —
+      // следующий ответ сервера заменит кэш целиком, даже пустой (иначе добавленные строки
+      // оставались видны без маркеров: форма «чистая», «Записать» их не сохранит).
+      pendingClearedAtRef.current = dataUpdatedAtRef.current;
 
       // Строки с delete-маркером удаляем из кэша — они уже удалены на сервере.
       // Строки с create/update-маркером оставляем без маркера, чтобы они
@@ -140,9 +158,10 @@ export function useSubTableRows({
     } else if (deferRemoteChanges && curLen > 0 && prevLen === 0) {
       // stash применён — сбрасываем флаг мержа и запускаем основной эффект заново
       pendingAppliedRef.current = false;
+      lowerTempIdBelow(initialPendingRows);
       setMergeTrigger(v => v + 1);
     }
-  }, [deferRemoteChanges, initialPendingRows]);
+  }, [deferRemoteChanges, initialPendingRows, lowerTempIdBelow]);
 
   useEffect(() => {
     // ── Ветка A: мерж pending-строк из initialPendingRows (один раз при восстановлении) ──
@@ -164,6 +183,7 @@ export function useSubTableRows({
 
       pendingAppliedRef.current = true;
       const merged = mergeServerWithPending([...allItems], initialPendingRows);
+      lowerTempIdBelow(merged);
 
       cachedRowsRef.current = merged;
       setCacheVersion(v => v + 1);
@@ -213,7 +233,10 @@ export function useSubTableRows({
     const hasTmpRows = deferRemoteChanges && prev.some(r =>
       typeof r.uuid === "string" && r.uuid.startsWith("tmp-"),
     );
-    if (hasTmpRows && clean.length === 0) return;
+    // Ответ пришёл ПОСЛЕ очистки pending (запись / ⟳ формы) — он авторитетен даже пустой.
+    const freshAfterClear = pendingClearedAtRef.current !== null && dataUpdatedAt > pendingClearedAtRef.current;
+    if (hasTmpRows && clean.length === 0 && !freshAfterClear) return;
+    pendingClearedAtRef.current = null;
 
     const hadDirtyRows = prev.some(r => r._pendingAction);
     const countChanged = prev.length !== clean.length;

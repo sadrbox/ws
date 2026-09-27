@@ -29,12 +29,13 @@ import { getCurrentUser } from "src/services/auth";
 import { useTodoStatuses } from "src/hooks/useTodoStatuses";
 import { useConfirm } from "src/hooks/useConfirm";
 import ConfirmModal from "src/components/ConfirmModal";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { loadFormByEndpoint } from "src/registry/modelRegistry";
 import { notify } from "src/components/TechMessages/store";
 import { errorStatus, errorText, isSystemError, reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
-import { getFormatDateOnly } from "src/utils/datetime";
+import { getAppUtcOffset, getFormatDateOnly } from "src/utils/datetime";
+import { deadlineDueMs } from "src/models/Todos/todoRules";
 import { boardColumns, cardBadges, cardTitle, groupByColumn, moveError, type BoardColumn, type CardBadge } from "./board";
 import styles from "./TaskBoard.module.scss";
 import main from "src/styles/main.module.scss";
@@ -70,10 +71,15 @@ const CLICK_AFTER_DRAG_MS = 300;
 const userName = (t: TodoItem): string =>
   t.executor?.employee?.fullName || t.executor?.username || "";
 
-/** Просрочена: срок прошёл, а статус НЕ завершающий (isFinal из справочника). */
-const isOverdue = (t: TodoItem, finalCodes: ReadonlySet<string>): boolean =>
-  !!t.deadline && !finalCodes.has(t.status) &&
-  new Date(t.deadline).getTime() < Date.now();
+/**
+ * Просрочена: срок прошёл, а статус НЕ завершающий (isFinal из справочника). Срок, записанный голой
+ * датой (00:00Z), истекает в конце местного дня, а не в 05:00 утра (У5 аудита 26.09).
+ */
+const isOverdue = (t: TodoItem, finalCodes: ReadonlySet<string>): boolean => {
+  if (!t.deadline || finalCodes.has(t.status)) return false;
+  const due = deadlineDueMs(t.deadline, getAppUtcOffset() * 60);
+  return due != null && due < Date.now();
+};
 
 const TONE_CLASS: Record<CardBadge["tone"], string> = {
   info: styles.badgeInfo,
@@ -157,7 +163,7 @@ const Column: FC<{ column: BoardColumn; items: TodoItem[]; finalCodes: ReadonlyS
 export const TaskBoardList: FC = () => {
   const me = getCurrentUser();
   const queryClient = useQueryClient();
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
   // Колонки и признаки «завершающий»/«ожидание» — из справочника (E9.5, E17).
   const { statuses, finalCodes, isLoading: statusesLoading } = useTodoStatuses();
   const { confirm, confirmState } = useConfirm();

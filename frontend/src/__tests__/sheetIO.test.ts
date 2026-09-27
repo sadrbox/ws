@@ -51,12 +51,12 @@ describe("recordsToAoa", () => {
 });
 
 describe("readWorkbookAoa (round-trip через xlsx)", () => {
-  it("собранная книга читается обратно в массив-строк", () => {
+  it("собранная книга читается обратно в массив-строк", async () => {
     const aoa = [["name", "bin"], ["ТОО А", "111"]];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "s");
     const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-    const back = readWorkbookAoa(buf);
+    const back = await readWorkbookAoa(buf);
     expect(back[0]).toEqual(["name", "bin"]);
     expect(back[1]).toEqual(["ТОО А", "111"]);
   });

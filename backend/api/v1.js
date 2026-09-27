@@ -1,8 +1,8 @@
 import express from "express";
-import cors from "cors";
-import { prisma } from "../prisma/prisma-client.js";
 const router = express.Router();
-router.use(cors());
+// CORS здесь НЕ подключаем (Б14 аудита 26.09): глобальный cors() в server.js уже пускает только
+// разрешённые домены, а `cors()` без настроек ставил `Access-Control-Allow-Origin: *` на КАЖДЫЙ
+// ответ /api/v1, прошедший через этот роутер (он смонтирован раньше остальных).
 
 // Backend
 
@@ -298,57 +298,10 @@ router.use(cors());
 // 	}
 // });
 
-router.post("/counterparties", async (req, res) => {
-	try {
-		const { bin, name, legalName } = req.body;
-
-		// Валидация
-		const errors = [];
-
-		if (!bin || typeof bin !== "string") {
-			errors.push("BIN обязателен и должен быть строкой");
-		} else if (!/^\d{12}$/.test(bin)) {
-			errors.push("BIN должен состоять ровно из 12 цифр");
-		}
-
-		if (name && typeof name !== "string") {
-			errors.push("name должен быть строкой");
-		}
-
-		if (legalName && typeof legalName !== "string") {
-			errors.push("legalName должен быть строкой");
-		}
-
-		if (errors.length > 0) {
-			return res.status(400).json({
-				message: "Ошибка валидации",
-				errors,
-			});
-		}
-
-		const counterparty = await prisma.counterparty.create({
-			data: {
-				bin: bin.trim(),
-				name: name?.trim() || null,
-				legalName: legalName?.trim() || null,
-			},
-		});
-
-		res.status(201).json(counterparty);
-	} catch (error) {
-		if (error.code === "P2002") {
-			return res.status(409).json({
-				message: "Контрагент с таким БИН уже существует",
-			});
-		}
-
-		console.error(error);
-		res.status(500).json({
-			message: "Не удалось создать контрагента",
-			error: error.message,
-		});
-	}
-});
+// POST /counterparties отсюда УДАЛЁН (Б10 аудита 26.09). Этот роутер смонтирован раньше
+// api/router/counterparties.js и перехватывал создание: контрагент из формы заводился только с БИН и
+// названиями, без организации (то есть общим для всех) и без журнала действий. Создаёт теперь
+// counterparties.js — с организацией, всеми полями формы и аудитом.
 
 router.get("/data", (req, res) => {
 	res.json({ message: "Data response" });

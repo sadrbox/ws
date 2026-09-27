@@ -7,24 +7,28 @@
 // Заметка может стать основанием задачи (Todo) — предзаполнение делает фронт.
 // Org-изоляция — по доступным пользователю организациям (как в chat), а сам
 // список и так сужен конкретной записью, которую пользователь уже открыл.
+//
+// ОРГАНИЗАЦИЮ ЗАМЕТКИ ОПРЕДЕЛЯЕТ СЕРВЕР (аудит 26.09, п. 15 отчёта инспекции маршрутов). Кнопка
+// заметок в форме её не присылала — заметка получала null и попадала в журнал ВСЕХ организаций
+// установки. Теперь организация — это организация записи (utils/entityOwner.js); у общей записи —
+// организация автора. Заметки без организации (старые) видны: на открытой доступной записи — всем,
+// кто её видит; в журнале — только автору; целиком — суперадмину.
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { orgIsAccessible } from "../../utils/auth.js";
+import { resolveEntity, entityAccessible, organizationForAttachment, allowedOrgList } from "../../utils/entityOwner.js";
 
 const router = express.Router();
 
-/** Организации, доступные пользователю. null = суперадмин (видит всё). */
-function allowedOrgs(req) {
-	if (req.user?.isSuperAdmin) return null;
-	if (req.user?.allowedOrgUuids?.length) return req.user.allowedOrgUuids;
-	if (req.user?.organizationUuid) return [req.user.organizationUuid];
-	return [];
-}
+/** Организации, доступные пользователю. null = суперадмин с открытыми данными (видит всё). */
+const allowedOrgs = allowedOrgList;
 
-/** Автор заметки или суперадмин — только они правят/удаляют. */
+/** Автор заметки (пока у него есть доступ к её организации) или суперадмин — только они правят/удаляют. */
 function canModify(req, note) {
-	return req.user?.isSuperAdmin || (note.authorUuid && note.authorUuid === req.user?.uuid);
+	if (req.user?.isSuperAdmin) return true;
+	if (!note.authorUuid || note.authorUuid !== req.user?.uuid) return false;
+	return note.organizationUuid == null || orgIsAccessible(req, note.organizationUuid);
 }
 
 // ── Заметки записи ───────────────────────────────────────────────────────────
@@ -49,16 +53,27 @@ router.get("/notes", async (req, res) => {
 		 * Частичный набор параметров (только тип, только uuid) — ошибка вызывающего, а не режим:
 		 * отвечаем отказом, иначе он получит журнал вместо ожидаемой выборки и не заметит.
 		 */
+		let recordOpen = false;
 		if (entityType || entityUuid) {
 			if (!entityType || !entityUuid) {
 				return res.status(400).json({ success: false, message: "entityType и entityUuid указываются вместе" });
 			}
 			where.entityType = entityType;
 			where.entityUuid = entityUuid;
+			// Заметки чужой записи не показываем вовсе — даже свои организации.
+			const ent = await resolveEntity(entityType, entityUuid);
+			if (ent.found && !entityAccessible(req, ent)) return res.status(200).json({ success: true, items: [] });
+			recordOpen = ent.found;
 		}
 
-		// Скрываем заметки чужих организаций (заметки без организации видны всем).
-		if (orgs !== null) where.OR = [{ organizationUuid: null }, { organizationUuid: { in: orgs } }];
+		// Скрываем заметки чужих организаций. Без организации (старые) — на открытой доступной
+		// записи всем, кто её видит, в журнале — только автору.
+		if (orgs !== null) {
+			where.OR = [
+				{ organizationUuid: { in: orgs } },
+				recordOpen ? { organizationUuid: null } : { organizationUuid: null, authorUuid: req.user?.uuid ?? "__none__" },
+			];
+		}
 
 		// Поиск по тексту и автору — журналу без него нечем пользоваться, когда заметок сотни.
 		const search = String(req.query.search || "").trim();
@@ -85,21 +100,20 @@ router.post("/notes", async (req, res) => {
 		const text = String(body ?? "").trim();
 		if (!entityType || !entityUuid) return res.status(400).json({ success: false, message: "entityType и entityUuid обязательны" });
 		if (!text) return res.status(400).json({ success: false, message: "Текст заметки обязателен" });
-		// Tenant-изоляция на записи: нельзя привязать заметку к чужой организации
-		// (иначе она стала бы видна там, где нет доступа). null = глобально.
-		if (organizationUuid && !orgIsAccessible(req, organizationUuid)) {
-			return res.status(403).json({ success: false, message: "Нет доступа к указанной организации" });
-		}
+		// Организация заметки — организация записи (чужая запись — 404, чужая организация в теле — 403);
+		// у общей записи — организация автора.
+		const noteOrg = await organizationForAttachment(req, String(entityType), String(entityUuid), organizationUuid || null);
 		const authorName = req.user.username || req.user.email || null;
 		const item = await prisma.note.create({
 			data: {
 				entityType: String(entityType), entityUuid: String(entityUuid), body: text,
-				organizationUuid: organizationUuid || null,
+				organizationUuid: noteOrg,
 				authorUuid: req.user.uuid, authorName,
 			},
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (error?.status === 403 || error?.status === 404) return res.status(error.status).json({ success: false, message: error.message });
 		console.error("POST /notes error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}

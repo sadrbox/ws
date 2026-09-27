@@ -135,19 +135,30 @@ export class BaseTokenStore {
 	 * на каждый неудавшийся ответ по новому токену значило бы плодить годные ключи.
 	 */
 	async rotate(tokenId: string, createdBy: string): Promise<string | null> {
-		const cur = await this.db.query<{ base_id: string; organization_uuid: string }>(
-			`SELECT base_id, organization_uuid FROM base_tokens WHERE id = $1 AND revoked_at IS NULL AND replaced_by IS NULL`, [tokenId]);
+		const cur = await this.db.query<{ base_id: string; organization_uuid: string; revoked_at: Date | null; replaced_by: string | null }>(
+			`SELECT base_id, organization_uuid, revoked_at, replaced_by FROM base_tokens WHERE id = $1`, [tokenId]);
 		const row = cur.rows[0];
-		if (!row) return null;
+		if (!row || row.revoked_at) return null;
+		// Преемника уже выпустил параллельный ход той же базы — отдаём его, а не второй (аудит 26.09).
+		if (row.replaced_by) return this.redeliver(tokenId);
 		const id = randomUUID();
 		const token = newBaseToken();
 		await this.db.query(
 			`INSERT INTO base_tokens (id, base_id, organization_uuid, token_hash, created_by, rotate_after)
 			 VALUES ($1, $2, $3, $4, $5, CASE WHEN $6::int > 0 THEN now() + ($6 || ' days')::interval END)`,
 			[id, row.base_id, row.organization_uuid, sha256(token), createdBy, this.rotateDays]);
-		await this.db.query(
+		/*
+		 * ГОНКА ДВУХ ХОДОВ ОДНОЙ БАЗЫ (аудит 26.09). Оба прочитали «преемника нет» и выпустили по токену; второй
+		 * перезаписывал `replaced_by`, и токен первого оставался действующим, без срока и ничьим. Теперь преемник
+		 * записывается только при условии «его ещё нет»: проигравший свой токен убирает и отдаёт победителя.
+		 */
+		const won = await this.db.query(
 			`UPDATE base_tokens SET replaced_by = $2, accepted_until = now() + ($3 || ' hours')::interval, pending_secret = $4
-			  WHERE id = $1`, [tokenId, id, this.overlapHours, seal(token, this.key)]);
+			  WHERE id = $1 AND replaced_by IS NULL AND revoked_at IS NULL`, [tokenId, id, this.overlapHours, seal(token, this.key)]);
+		if ((won.rowCount ?? 0) === 0) {
+			await this.db.query(`DELETE FROM base_tokens WHERE id = $1`, [id]);
+			return this.redeliver(tokenId);
+		}
 		return token;
 	}
 

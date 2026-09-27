@@ -7,11 +7,37 @@ import {
 	handleDelete,
 	handleBatchDelete,
 } from "../../utils/checkReferences.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, directoryScope, checkOwnership } from "../../utils/auth.js";
 
 const router = express.Router();
 const MODEL = "productPrice";
 const ROUTE = "product-prices";
+
+/*
+ * ЦЕНЫ — ПО ТОВАРУ (Б12 аудита 26.09). У `ProductPrice` нет организации: цена принадлежит товару,
+ * а товар — организации (или общий в режиме group). Раньше список, экспорт «всех цен», карточка и
+ * запись работали по всей установке: чужие цены читались и правились. Теперь выборка ограничена
+ * товарами, видимыми в справочнике (`directoryScope`), а запись — ценами доступного товара.
+ */
+async function productWhere(req, extra = {}) {
+	const scope = await directoryScope(req, "Product");
+	return Object.keys(scope).length ? { AND: [extra, scope] } : extra;
+}
+
+/** Товар доступен пользователю (для записи цены). */
+async function productAccessible(req, productUuid, db = prisma) {
+	if (!productUuid) return false;
+	const p = await db.product.findUnique({ where: { uuid: String(productUuid) }, select: { organizationUuid: true } });
+	return !!p && checkOwnership(p, req);
+}
+
+/** Цена по id/uuid, если её товар доступен. */
+async function findAccessiblePrice(req, param, db = prisma) {
+	const n = Number(param);
+	const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(param) };
+	const row = await db[MODEL].findUnique({ where: w, include: { product: { select: { organizationUuid: true } } } });
+	return row && checkOwnership(row.product, req) ? row : null;
+}
 
 const num = (v) => (v != null && v !== "" ? parseFloat(v) : null);
 const toDate = (v) => (v ? new Date(v) : new Date());
@@ -38,10 +64,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			where.productUuid = String(productUuid);
 		}
 
-		// Фильтр по бренду номенклатуры (через связь product)
-		if (brandUuid) {
-			where.product = { brandUuid: String(brandUuid) };
-		}
+		// Фильтр по бренду номенклатуры (через связь product) — и только видимые товары.
+		where.product = await productWhere(req, brandUuid ? { brandUuid: String(brandUuid) } : {});
 
 		// Фильтр по priceTypeUuid (если указан)
 		if (priceTypeUuid) {
@@ -116,6 +140,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 router.get(`/${ROUTE}/export`, async (req, res) => {
 	try {
 		const items = await prisma[MODEL].findMany({
+			where: { product: await productWhere(req) },
 			include: INCLUDE,
 			orderBy: [{ date: "desc" }, { id: "desc" }],
 			take: 100000,
@@ -210,7 +235,8 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w =
 			!isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		const item = await prisma[MODEL].findUnique({ where: w, include: INCLUDE });
+		const own = await findAccessiblePrice(req, req.params.id);
+		const item = own ? await prisma[MODEL].findUnique({ where: w, include: INCLUDE }) : null;
 		if (!item)
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
@@ -227,6 +253,8 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			return res
 				.status(400)
 				.json({ success: false, message: "productUuid обязателен" });
+		if (!(await productAccessible(req, productUuid)))
+			return res.status(404).json({ success: false, message: "Товар не найден" });
 		const item = await prisma[MODEL].create({
 			data: {
 				productUuid,
@@ -253,6 +281,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			data.priceTypeUuid = req.body.priceTypeUuid || null;
 		if (req.body.date !== undefined) data.date = toDate(req.body.date);
 		if (req.body.price !== undefined) data.price = num(req.body.price);
+		if (!(await findAccessiblePrice(req, req.params.id)))
+			return res.status(404).json({ success: false, message: "Не найдено" });
 		const item = await prisma[MODEL].update({ where: w, data });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -263,7 +293,29 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-router.delete(`/${ROUTE}/:id`, (req, res) =>
+// Удалять — только цены доступного товара (общий обработчик организации у цены не видит).
+async function requireOwnPrice(req, res, next) {
+	try {
+		if (!(await findAccessiblePrice(req, req.params.id))) return res.status(404).json({ success: false, message: "Не найдено" });
+		return next();
+	} catch (error) {
+		console.error(`DELETE /${ROUTE}/:id error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+}
+async function requireOwnPrices(req, res, next) {
+	try {
+		for (const u of Array.isArray(req.body?.uuids) ? req.body.uuids : []) {
+			if (!(await findAccessiblePrice(req, u))) return res.status(404).json({ success: false, message: "Часть записей не найдена — удаление не выполнено" });
+		}
+		return next();
+	} catch (error) {
+		console.error(`POST /${ROUTE}/batch-delete error:`, error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+}
+
+router.delete(`/${ROUTE}/:id`, requireOwnPrice, (req, res) =>
 	handleDelete({
 		req,
 		res,
@@ -340,11 +392,11 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 				const { action, uuid, data } = op;
 				try {
 					if (action === "create" && data?.productUuid) {
-						// Валидация: товар должен существовать
+						// Валидация: товар должен существовать и быть доступен пользователю
 						const product = await tx.product.findUnique({
 							where: { uuid: data.productUuid },
 						});
-						if (!product) {
+						if (!product || !checkOwnership(product, req)) {
 							summary.errors.push({
 								idx,
 								action,
@@ -383,6 +435,10 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 						summary.created++;
 						affected.add(data.productUuid);
 					} else if (action === "update" && uuid && data) {
+						if (!(await findAccessiblePrice(req, uuid, tx))) {
+							summary.errors.push({ idx, action, message: "Not found" });
+							continue;
+						}
 						const upd = {};
 						if (data.priceTypeUuid !== undefined)
 							upd.priceTypeUuid = data.priceTypeUuid || null;
@@ -397,6 +453,7 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 							affected.add(row.productUuid);
 						}
 					} else if (action === "delete" && uuid) {
+						if (!(await findAccessiblePrice(req, uuid, tx))) continue; // чужая или уже удалена
 						try {
 							const row = await tx[MODEL].delete({ where: { uuid } });
 							summary.deleted++;
@@ -424,7 +481,7 @@ router.post(`/${ROUTE}/batch`, async (req, res) => {
 	}
 });
 
-router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+router.post(`/${ROUTE}/batch-delete`, requireOwnPrices, (req, res) =>
 	handleBatchDelete({ req, res, prisma, modelName: MODEL }),
 );
 

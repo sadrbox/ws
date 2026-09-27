@@ -12,6 +12,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupRow, GroupCol } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
+import { useReportLoadError } from "./_shared/reportLoadError";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
 import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
@@ -40,7 +41,7 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ applied, orgName: fields.orgName });
 
-  const { data: movements = [], isLoading } = useQuery<ProductMovement[]>({
+  const { data: movements = [], isLoading, error: loadError } = useQuery<ProductMovement[]>({
     queryKey: ["report-material", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
@@ -54,6 +55,7 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
     },
     enabled: !!applied,
   });
+  const loadErrorText = useReportLoadError(loadError, translate("MaterialStatementList"));
 
   const totals = movements.reduce(
     (acc, r) => ({
@@ -172,8 +174,8 @@ const MaterialStatement: FC<MaterialStatementProps> = ({ uniqId }) => {
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!applied || movements.length === 0)}
-      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      isEmpty={!!loadErrorText || (!isLoading && (!applied || movements.length === 0))}
+      emptyMessage={loadErrorText ?? (!applied ? translate("reportPressGenerate") : undefined)}
       onGenerate={handleGenerate}
       fileBaseName={translate("MaterialStatementList")}
       title={translate("MaterialStatementList")}

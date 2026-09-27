@@ -4,17 +4,17 @@ import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
-import { syncItemsFromParent } from "./_documentItemsFactory.js";
-import { reconcileDocumentRegister, removeDocumentRegister } from "../../services/productRegister.js";
-import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { removeDocumentRegister, respondStockError } from "../../services/productRegister.js";
+import { removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, removeReceiptSerials } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
-import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
+import { commitDocumentHeader, requireStockRemovable, recomputeAfterDelete } from "../../services/documentCommit.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -28,10 +28,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawCursor = req.query.cursor;
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(
-			Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1),
-			999999,
-		);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res
@@ -124,8 +122,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 
@@ -288,9 +287,12 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
 			await assertPostable("purchase", existing.uuid, { ...data, posted: true });
 		}
-		const item = await prisma[MODEL].update({
-			where: w,
-			data,
+		// Шапка, строки, контроль остатка (распроведение или перенос поступления, из
+		// которого уже продано, — 409), регистр и проводки — одной транзакцией под
+		// блокировкой документа (У2/У4 аудита 26.09); связи дочитываются после фиксации.
+		const item = await commitDocumentHeader({
+			documentType: "purchase", model: MODEL, uuid: existing.uuid, data, existing,
+			itemModel: "purchaseItem", parentField: "purchaseUuid",
 			include: {
 				organization: true,
 				counterparty: true,
@@ -300,16 +302,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
-		await syncItemsFromParent("purchaseItem", "purchaseUuid", item.uuid, item);
-		await reconcileDocumentRegister("purchase", item.uuid);
-		await reconcileDocumentEntries("purchase", item.uuid);
-		// Ввод задним числом делает COGS последующих документов устаревшим —
-		// пересчитываем хвост истории (не трогая закрытый период).
-		await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: item.date });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
+		if (respondStockError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondSerialError(error, res)) return;
 		if (respondBatchError(error, res)) return;
@@ -326,13 +323,17 @@ const onPurchaseDeleted = async (doc) => {
 	await removeDocumentRegister("purchase", doc.uuid);
 	await removeDocumentEntries("purchase", doc.uuid);
 	await removeReceiptSerials("purchase", doc.uuid);
+	// Удаление проведённого поступления задним числом меняет себестоимость последующих
+	// документов — пересчёт хвоста (в фоне).
+	await recomputeAfterDelete(doc);
 };
 
-router.delete(`/${ROUTE}/:id`, (req, res) =>
+// Поступление, из которого уже продано, удалять нельзя — остаток уйдёт в минус (У4): 409.
+router.delete(`/${ROUTE}/:id`, requireStockRemovable("purchase", MODEL), (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL, numberDocType: "purchase", onDeleted: onPurchaseDeleted }),
 );
 
-router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+router.post(`/${ROUTE}/batch-delete`, requireStockRemovable("purchase", MODEL), (req, res) =>
 	handleBatchDelete({ req, res, prisma, modelName: MODEL, numberDocType: "purchase", onDeleted: onPurchaseDeleted }),
 );
 

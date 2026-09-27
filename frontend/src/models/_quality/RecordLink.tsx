@@ -6,7 +6,7 @@
  * делаем: кнопка, по которой ничего не происходит, хуже простого текста.
  */
 import { type FC, type ReactNode, useCallback } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { translate } from "src/i18";
 import { getByEndpoint } from "src/registry/modelRegistry";
 import { openFormByEndpoint } from "src/registry/formRegistry";
@@ -21,7 +21,7 @@ interface Props {
 }
 
 export const RecordLink: FC<Props> = ({ endpoint, uuid, children, onOpen }) => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const open = useCallback(() => {
 		onOpen?.();
 		void openFormByEndpoint(endpoint, uuid, addPane);

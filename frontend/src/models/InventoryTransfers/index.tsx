@@ -123,17 +123,21 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         batchEndpoint: "inventorytransferitems/batch",
         requiredItemFields: ["productUuid", "unitOfMeasureUuid", "quantity"],
         requiredItemFieldLabels: { productUuid: "Номенклатура", unitOfMeasureUuid: "Ед. изм.", quantity: "Количество" },
+        // Партия, выбранная в ячейке (T6.1), раньше на сервер не уходила — перемещение
+        // партионного товара всегда получало 422 «не указана партия» (У8).
         createPayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         updatePayload: (r: TDataItem) => ({
           productUuid: r.productUuid ?? null,
           quantity: r.quantity ?? 0,
           price: r.price ?? 0,
           unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
+          batchUuid: r.batchUuid ?? null,
         }),
         extraSkipFields: ["inventoryTransferUuid"],
       },
@@ -215,6 +219,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
 
   const assignNumber = useAssignNumber();
   const notices = useDocumentNotices({ docType: "inventory_transfer", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
+  // СНТ: хук выше вкладок — его ошибка показывается в сообщениях формы (И19).
+  const govDocs = useGovDocs();
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -258,6 +265,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol className={styles.FormNotice}>
               <Notice items={notices} />
+              {/* Сбой выписки СНТ (NCALayer не запущен, отказ сервера) раньше не показывался нигде (И19). */}
+              {govDocs.error && <Notice items={[{ type: "attention", text: `${translate("govDocsSection")}: ${govDocs.error}` }]} />}
               <GovDocErrors groups={[{ label: translate("govSntIssue"), text: (form.fields as unknown as { sntErrorText?: string | null }).sntErrorText }]} />
             </GroupCol>
           </div>
@@ -286,10 +295,9 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, notices, assignNumber]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleOrganizationSelect, canWrite, items, notices, assignNumber, govDocs.error]);
 
   // ── СНТ (сопроводительная накладная) из документа Перемещения ──
-  const govDocs = useGovDocs();
   const sntFields = form.fields as unknown as { sntStatus?: string | null; sntId?: string | null };
   const isSavedDoc = form.isEditMode && !!form.fields.uuid;
   const handleSnt = useCallback(async (id: string) => {

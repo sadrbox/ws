@@ -8,7 +8,8 @@
  */
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter, checkOwnership } from "../../utils/auth.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
+import { tenantFilter, checkOwnership, orgIsAccessible, resolveWritableOrg, respondOrgAccessError, OrgAccessError } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
@@ -38,7 +39,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			const rawLimit = req.query.limit;
 			const rawCursor = req.query.cursor;
 			const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-			const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+			const limitNumber = clampLimit(rawLimit);
 			const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 			if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 				return res.status(400).json({ success: false, message: "Некорректный cursor" });
@@ -93,8 +94,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (cursorNumber === null) total = await prisma[MODEL].count({ where: baseWhere });
 			return res.status(200).json({ success: true, items, nextCursor, hasMore, ...(total !== undefined ? { total } : {}) });
 		} catch (error) {
-			console.error(`GET /${route} error:`, error);
-			return res.status(500).json({ success: false, message: "Ошибка сервера" });
+			// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+			return sendError(res, error, { message: "Ошибка сервера", label: `GET /${route}` });
 		}
 	});
 
@@ -105,7 +106,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 			// findFirst c direction — чтобы маршрут отдавал только свой тип ордера.
 			const item = await prisma[MODEL].findFirst({ where: { ...w, direction }, include: INCLUDE });
-			if (!item || !checkOwnership(item, req))
+			if (!item || !checkOwnership(item, req, "organizationUuid", { allowShared: false }))
 				return res.status(404).json({ success: false, message: "Не найдено" });
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
@@ -121,6 +122,8 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			const { date, comment, amount, organizationUuid, counterpartyUuid, contractUuid, cashboxUuid, employeeUuid, posted,
 				operationType, basisDocumentType, basisDocumentUuid, basisDocumentLabel } = req.body;
 			const willPost = posted === undefined ? true : !!posted;
+			// Организация ордера — доступная пользователю (Б8 аудита 26.09).
+			const docOrg = resolveWritableOrg(req, organizationUuid);
 			const docData = {
 				direction,
 				date: date ? new Date(date) : new Date(),
@@ -131,7 +134,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 				basisDocumentType: basisDocumentType || null,
 				basisDocumentUuid: basisDocumentUuid || null,
 				basisDocumentLabel: basisDocumentLabel?.trim?.() ?? basisDocumentLabel ?? null,
-				organizationUuid: organizationUuid || null,
+				organizationUuid: docOrg,
 				counterpartyUuid: counterpartyUuid || null,
 				contractUuid: contractUuid || null,
 				cashboxUuid: cashboxUuid || null,
@@ -153,6 +156,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (item.posted) await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (respondOrgAccessError(error, res)) return;
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
@@ -181,8 +185,13 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (req.body.number !== undefined) data.number = req.body.number?.trim?.() || null;
 			// Проверяем существование И принадлежность маршруту (direction).
 			const existing = await prisma[MODEL].findFirst({ where: { ...w, direction }, select: { uuid: true, organizationUuid: true, posted: true, number: true, contractUuid: true, cashboxUuid: true, date: true, basisDocumentType: true, amount: true } });
-			if (!existing || !checkOwnership(existing, req))
+			if (!existing || !checkOwnership(existing, req, "organizationUuid", { allowShared: false }))
 				return res.status(404).json({ success: false, message: "Не найдено" });
+			// Перенос в другую организацию — только в доступную (Б8 аудита 26.09).
+			if ("organizationUuid" in data && data.organizationUuid !== existing.organizationUuid) {
+				if (!data.organizationUuid && !req.user?.isSuperAdmin) throw new OrgAccessError(400, "Не выбрана организация документа");
+				if (data.organizationUuid && !orgIsAccessible(req, data.organizationUuid)) throw new OrgAccessError(403, "Организация недоступна");
+			}
 			// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания.
 			if (data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType ?? existing.basisDocumentType, data.basisDocumentUuid);
 			// Блокировка закрытого периода: нельзя трогать закрытый ордер и переносить в закрытый период.
@@ -195,14 +204,15 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			}, prisma);
 			const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 			if (willBePosted) await assertPostable(docType, existing.uuid, { ...data, posted: true });
-			// Собственные проводки документа исключаем — иначе расход посчитается дважды.
-			if (willBePosted) {
-				await assertCashForPosting(docType, existing.uuid, {
-					organizationUuid: data.organizationUuid ?? existing.organizationUuid,
-					date: data.date ?? existing.date,
-					amount: data.amount ?? existing.amount,
-				});
-			}
+			// Касса не уходит в минус — на ЛЮБОЕ изменение (аудит 26.09, У8): распроведение,
+			// уменьшение или перенос ПКО, из которого уже выдано, тоже оставляют выданные деньги
+			// без источника. Собственные проводки документа сервис исключает сам.
+			await assertCashForPosting(docType, existing.uuid, {
+				organizationUuid: data.organizationUuid ?? existing.organizationUuid,
+				date: data.date ?? existing.date,
+				amount: data.amount ?? existing.amount,
+				posted: willBePosted,
+			});
 			// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 			{
 				const _num = await ensureDocumentNumber({ docType, modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid, uniqueWhere: { direction } });
@@ -212,6 +222,7 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			await reconcileDocumentEntries(docType, item.uuid);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (respondOrgAccessError(error, res)) return;
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
@@ -224,10 +235,52 @@ export function createCashOrderRouter({ direction, route, docType }) {
 		}
 	});
 
-	router.delete(`/${route}/:id`, (req, res) =>
+	/*
+	 * УДАЛЕНИЕ — ТОЛЬКО СВОЕГО НАПРАВЛЕНИЯ (У8 аудита 26.09). ПКО и РКО лежат в одной таблице,
+	 * а общий обработчик ищет запись только по id/uuid: через `/cash-receipt-orders` удалялся
+	 * РКО, и его проводки (снимаются по docType маршрута) оставались сиротами. Сверяем
+	 * направление и владельца ДО общего обработчика; ордер без организации — не «общий».
+	 */
+	const sameDirectionOwned = (row, req) => !!row && row.direction === direction && checkOwnership(row, req, "organizationUuid", { allowShared: false });
+	// Удалить проведённый ПКО, из которого уже выдано, нельзя — касса уйдёт в минус (У8): 409.
+	// РКО удалением кассу только пополняет — проверка не нужна.
+	const assertCashRemovable = async (row) => {
+		if (direction !== "receipt" || !row?.posted || row.deletedAt) return;
+		await assertCashForPosting(docType, row.uuid, { organizationUuid: row.organizationUuid, date: row.date, amount: row.amount, posted: false });
+	};
+	const DELETE_SELECT = { uuid: true, direction: true, organizationUuid: true, posted: true, deletedAt: true, date: true, amount: true };
+	router.delete(`/${route}/:id`, async (req, res, next) => {
+		try {
+			const n = Number(req.params.id);
+			const where = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(req.params.id) };
+			const row = await prisma[MODEL].findUnique({ where, select: DELETE_SELECT });
+			if (!sameDirectionOwned(row, req)) return res.status(404).json({ success: false, message: "Не найдено" });
+			await assertCashRemovable(row);
+			return next();
+		} catch (error) {
+			if (respondCashError(error, res)) return;
+			console.error(`DELETE /${route}/:id error:`, error);
+			return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		}
+	}, (req, res) =>
 		handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid), numberDocType: docType }),
 	);
-	router.post(`/${route}/batch-delete`, (req, res) =>
+	router.post(`/${route}/batch-delete`, async (req, res, next) => {
+		try {
+			const uuids = Array.isArray(req.body?.uuids) ? req.body.uuids.filter((u) => typeof u === "string") : null;
+			if (!uuids) return next();
+			const rows = await prisma[MODEL].findMany({ where: { uuid: { in: uuids } }, select: DELETE_SELECT });
+			if (rows.some((r) => !sameDirectionOwned(r, req))) {
+				return res.status(404).json({ success: false, message: "Часть записей не найдена — удаление не выполнено" });
+			}
+			for (const r of rows) await assertCashRemovable(r);
+			return next();
+		} catch (error) {
+			if (respondCashError(error, res)) return;
+			console.error(`POST /${route}/batch-delete error:`, error);
+			return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		}
+	}, (req, res) =>
 		handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid), numberDocType: docType }),
 	);
 

@@ -8,7 +8,7 @@
  * действия, а не ломаем весь текст.
  */
 import { FC, useCallback } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { restorePane } from "src/app/paneRestore";
 import { decodeRestore } from "src/utils/paneLink";
 import type { ObjectRef } from "src/utils/objectRef";
@@ -21,7 +21,7 @@ interface ObjectLinkProps {
 }
 
 const ObjectLink: FC<ObjectLinkProps> = ({ objectRef, title }) => {
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
   const restore = decodeRestore(objectRef.code);
 
   const handleOpen = useCallback(() => {

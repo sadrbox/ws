@@ -4,14 +4,23 @@
  * Стратегия:
  *  - HTML / index.html → Network First (fallback на кэш)
  *  - JS / CSS / fonts  → Cache First (быстро из кэша, обновление в фоне)
- *  - Images            → Cache First с лимитом
+ *  - Images            → Cache First (кэши живут до следующей сборки — см. BUILD_ID)
  *  - API и чужие origin → не трогаем вовсе (см. fetch: SW обслуживает только свой origin)
  */
 
 /// <reference lib="webworker" />
 
-const CACHE_NAME = "app-static-v4";
-const RUNTIME_CACHE = "app-runtime-v3";
+/*
+ * ВЕРСИЯ СБОРКИ В ИМЕНИ КЭША (аудит 26.09, Н10). Метку ниже при сборке заменяет хэш бандла
+ * (плагин aleppo:sw-build-version в vite.config.ts). Имя было константой — файл между
+ * деплоями не менялся, браузер не видел новой версии SW, activate не наступал, и чанки
+ * всех прежних сборок копились в Cache Storage бессрочно. Теперь новая сборка — новый
+ * sw.js и новые имена кэшей, а activate удаляет всё, что не принадлежит текущей.
+ * На dev-сервере метка остаётся как есть — там кэш чанков Vite не используется.
+ */
+const BUILD_ID = "__SW_BUILD_ID__";
+const CACHE_NAME = `app-static-${BUILD_ID}`;
+const RUNTIME_CACHE = `app-runtime-${BUILD_ID}`;
 
 /**
  * Ресурсы, которые кэшируем при установке (precache).

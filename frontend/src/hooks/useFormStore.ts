@@ -1,7 +1,7 @@
 import { asText } from "src/utils/asText";
 import { addPaneNotification, resolvePaneNotifications, dismissNetworkNotifications, NETWORK_KEY, type PaneNotification } from "./paneNotifications";
 import { persistToSession, restoreFromSession, clearSession } from "./formSession";
-import { setPaneDirty, setPaneIsEditMode } from "./paneFormState";
+import { setPaneBusy, setPaneDirty, setPaneIsEditMode } from "./paneFormState";
 import {
 	useCallback,
 	useRef,
@@ -13,7 +13,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 // Под другим именем: `notify` здесь — оповещение подписчиков стора формы.
 import { notify as notifyEvent, useNoticeOrigin, useScopeObject } from "src/components/TechMessages/store";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { isNetworkError } from "src/services/networkUtils";
 import { getIsOnline } from "src/services/networkStatus";
 import { commitPendingRows } from "src/services/commitPendingRows";
@@ -46,6 +46,21 @@ export { isItemFieldEmpty } from "./formStore.types";
 // ═══════════════════════════════════════════════════════════════════════════
 
 const STORAGE_PREFIX = "formStore:";
+
+/**
+ * Ответ 409 — конфликт версии (запись изменена другим пользователем), а не «уже существует».
+ * Распознаём по коду или тексту ответа сервера.
+ * Проверить потом: сервер пока версий не проверяет (updatedAt / If-Match не отправляются и не
+ * сверяются) — правки двух пользователей молча перетирают друг друга. Нужна проверка версии в
+ * PUT на backend (код ответа VERSION_CONFLICT) и отправка updatedAt из формы.
+ */
+function isVersionConflict(data: unknown): boolean {
+	const d = data as { code?: unknown; message?: unknown } | undefined;
+	if (!d) return false;
+	if (d.code === "VERSION_CONFLICT" || d.code === "STALE_UPDATE") return true;
+	const m = typeof d.message === "string" ? d.message.toLowerCase() : "";
+	return /измен[её]н[аоы]? другим|version conflict|modified by another/.test(m);
+}
 
 /** Текущий userId или "anon" — для разделения черновиков между пользователями. */
 export function getFormStoreUserId(): string {
@@ -293,6 +308,7 @@ function createFormStore<F extends object>(
 
 	/** Сбросить dirty-флаг (вызывать после load / save) */
 	function markClean(): void {
+		draftApplied = false;
 		savedSnapshot = stableStringify({
 			fields: stripDerived(state.fields as Record<string, unknown>),
 			tables: state.tables,
@@ -498,6 +514,14 @@ function createFormStore<F extends object>(
 					fields: stripDerived(mapped as unknown as Record<string, unknown>),
 					tables: emptyTables,
 				});
+				// Разобранный снимок — тоже серверный: по нему подсвечиваются изменённые поля
+				// черновика из «Несохранённых» (getDirtyFieldKeys), а не по defaults.
+				try {
+					parsedSnapshot = JSON.parse(savedSnapshot) as typeof parsedSnapshot;
+				} catch {
+					parsedSnapshot = { fields: {}, tables: emptyTables };
+				}
+				snapshotRev++;
 				snapshotReady = true;
 				// isLoading остаётся true — снимем ПОСЛЕ afterLoad,
 				// чтобы поля формы были disabled до резолва invalidate/refetch SubTable.
@@ -643,7 +667,13 @@ function createFormStore<F extends object>(
 				noteType = "warning";
 				key = NETWORK_KEY;
 			} else if (status === 409) {
-				msg = serverMsg || "Запись уже существует";
+				// 409 — не только «уже существует» (уникальность), но и конфликт состояния
+				// (остаток, запись изменена другим). Причину берём из ответа сервера; без неё
+				// не утверждаем «уже существует» (аудит 26.09, И13).
+				msg = serverMsg || "Конфликт данных: запись изменена или уже существует. Обновите форму (⟳) и повторите.";
+				if (isVersionConflict((err as ApiError).response?.data)) {
+					msg = `${serverMsg || "Запись изменена другим пользователем"}. Обновите форму (⟳): ваши правки не записаны.`;
+				}
 				kind = "form";
 			} else if (status === 400) {
 				msg = serverMsg || "Ошибка валидации";
@@ -687,6 +717,9 @@ function createFormStore<F extends object>(
 		for (const [key, tableDef] of Object.entries(tableDefs)) {
 			const { pending } = state.tables[key];
 			if (!pending.length) continue;
+			// clear: pending таблицы чистим СРАЗУ после её успешного коммита, а не в конце:
+			// упала вторая таблица — при повторном «Записать» create-строки первой уходили
+			// ещё раз, получались дубли (аудит 26.09, И11). Упавшая таблица сохраняет pending.
 			await commitPendingRows(
 				tableDef.endpoint,
 				pending,
@@ -702,8 +735,8 @@ function createFormStore<F extends object>(
 					batchEndpoint: tableDef.batchEndpoint,
 				},
 			);
+			if (clear) clearTablePending(key);
 		}
-		if (clear) clearAllTablesPending();
 	}
 
 	/** Коммит pending-строк одной конкретной таблицы */
@@ -765,6 +798,12 @@ function createFormStore<F extends object>(
 	function hasPendingStash(): boolean {
 		return pendingStash !== null;
 	}
+	// Черновик применён и ещё не записан/не перечитан: загрузка с сервера должна обновить
+	// ТОЛЬКО снимок (snapshotOnly), а не затирать черновик (аудит 26.09, И11).
+	let draftApplied = false;
+	function isDraftApplied(): boolean {
+		return draftApplied;
+	}
 	/** Применить stash к state. Вызывается при открытии через "Несохранённые записи". */
 	function applyPendingStash(): void {
 		if (!pendingStash) return;
@@ -774,8 +813,27 @@ function createFormStore<F extends object>(
 			tables: { ...state.tables, ...pendingStash.tables },
 		};
 		pendingStash = null;
+		draftApplied = true;
 		notify();
 		schedulePersist();
+	}
+
+	// Новая форма: значения, которые поля выставили при МОНТИРОВАНИИ (FieldPeriod — текущий
+	// месяц), — умолчания, а не правка: нетронутая форма не должна быть «грязной» (И15).
+	// Только поля шапки и только один раз на store; строки таблиц не трогаем.
+	let initialFieldsSettled = false;
+	function settleInitialFields(): void {
+		if (initialFieldsSettled) return;
+		initialFieldsSettled = true;
+		const snapFields = stripDerived(state.fields as Record<string, unknown>);
+		savedSnapshot = stableStringify({ fields: snapFields, tables: parsedSnapshot.tables });
+		try {
+			parsedSnapshot = JSON.parse(savedSnapshot) as typeof parsedSnapshot;
+		} catch {
+			parsedSnapshot = { fields: snapFields, tables: parsedSnapshot.tables };
+		}
+		snapshotRev++;
+		notify();
 	}
 	/** Сбросить stash без применения. */
 	function clearPendingStash(): void {
@@ -846,6 +904,8 @@ function createFormStore<F extends object>(
 		hasPendingStash,
 		applyPendingStash,
 		clearPendingStash,
+		isDraftApplied,
+		settleInitialFields,
 		getDirtyFieldKeys,
 
 		// Cleanup
@@ -1135,7 +1195,7 @@ export function useFormStore<F extends object>(
 	const {
 		windows: { updatePaneLabel, requestClose, registerBeforeClose },
 		actions: { confirm },
-	} = useAppContext();
+	} = useAppActions(); // стабильные действия: форма не перерисовывается от чужих панелей (О3)
 	const formUid = useUID();
 	const queryClient = useQueryClient();
 
@@ -1237,6 +1297,35 @@ export function useFormStore<F extends object>(
 		};
 	}, [store, uniqId]);
 
+	// ── Busy-индикатор панели: пока идёт загрузка/запись, ⟳ в шапке крутится и не нажимается ──
+	// Иначе ⟳ во время «Записать»: GET обгонял PUT, load очищал pending таблиц — строки не
+	// записывались, а форма помечалась «чистой» (аудит 26.09, И11).
+	useEffect(() => {
+		if (!uniqId) return;
+		let busy = store.getSnapshot().meta.isLoading;
+		setPaneBusy(uniqId, busy);
+		const unsub = store.subscribe(() => {
+			const next = store.getSnapshot().meta.isLoading;
+			if (next !== busy) {
+				busy = next;
+				setPaneBusy(uniqId, next);
+			}
+		});
+		return () => {
+			unsub();
+			setPaneBusy(uniqId, false);
+		};
+	}, [store, uniqId]);
+
+	// ── Новая форма: умолчания, выставленные полями при монтировании, — не правка ──
+	// Эффекты дочерних полей (FieldPeriod эмитит текущий месяц) уже отработали: эффект
+	// родителя идёт после них. Черновик из «Несохранённых» не трогаем.
+	useEffect(() => {
+		if (uuid || isFromUnsaved) return;
+		store.settleInitialFields();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []); // только при монтировании
+
 	// ── Стабильные ref-ы для колбэков (не пересоздаются) ──
 	const mapRef = useRef(mapServerToForm);
 	mapRef.current = mapServerToForm;
@@ -1303,11 +1392,13 @@ export function useFormStore<F extends object>(
 			// Если данные восстановлены из sessionStorage — загружаем серверные данные
 			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
 			// Если sessionStorage пуст — полная загрузка (заменяет fields).
+			// Открыта из «Несохранённых» и черновик применён — только снимок: иначе автозагрузка
+			// заменяла поля серверными, а persist через 300 мс затирал черновик (И11).
 			void store.load(
 				uuid,
 				mapRef.current,
 				afterLoadRef.current,
-				store.hadStoredData,
+				store.hadStoredData || store.isDraftApplied(),
 			).then(refreshPaneLabel);
 		}
 	}, [uuid, store, refreshPaneLabel]);
@@ -1461,8 +1552,13 @@ export function useFormStore<F extends object>(
 	);
 
 	// ── Submit (fields + tables) ──
+	// Повторный вызов, пока идёт запись (Enter + щелчок, горячая клавиша), не запускает
+	// вторую цепочку PUT/коммита строк поверх первой.
+	const submitInFlightRef = useRef(false);
 	const submit = useCallback(
 		async (options?: { keepLoadingOnSuccess?: boolean }): Promise<boolean> => {
+			if (submitInFlightRef.current) return false;
+			submitInFlightRef.current = true;
 			const keepLoading = Boolean(options?.keepLoadingOnSuccess);
 			// keepLoadingOnSuccess: true вне зависимости от опции — нужно,
 			// чтобы поля формы оставались disabled на протяжении ВСЕЙ цепочки
@@ -1553,6 +1649,12 @@ export function useFormStore<F extends object>(
 				try {
 					await store.commitAllTables(parentUuid, { clear: true });
 				} catch (e: unknown) {
+					// Таблицы, успевшие записаться (их pending уже пуст), перечитываем с сервера:
+					// их строки получили настоящие uuid, временные в кэше SubTable устарели.
+					const committed = Object.entries(tableDefs)
+						.filter(([k, def]) => def.endpoint && !(store.getSnapshot().tables[k]?.pending.length))
+						.map(([, def]) => def.endpoint);
+					for (const ep of committed) void queryClient.invalidateQueries({ queryKey: [ep], refetchType: "active" });
 					store.setError((e as ApiError)?.message || "Не удалось сохранить вложенные данные");
 					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
@@ -1631,7 +1733,9 @@ export function useFormStore<F extends object>(
 			// мигрируем ключ, чтобы при F5 данные были привязаны к uuid записи.
 			const newUuid = savedData?.uuid ?? store.getSnapshot().meta.uuid;
 			if (newUuid) {
-				const uuidKey = `${STORAGE_PREFIX}${storageKey}:${asText(newUuid)}`;
+				// Ключ — того же вида, что fullStorageKey (с userId): без него правки после
+				// записи не видны в «Несохранённых», не чистятся при выходе (аудит 26.09, И12).
+				const uuidKey = `${STORAGE_PREFIX}${getFormStoreUserId()}:${storageKey}:${asText(newUuid)}`;
 				if (store.getStorageKey() !== uuidKey) {
 					store.migrateStorageKey(uuidKey);
 				}
@@ -1652,6 +1756,7 @@ export function useFormStore<F extends object>(
 				store.setError(m ? translateError(m) : "Непредвиденная ошибка при сохранении");
 				return false;
 			} finally {
+				submitInFlightRef.current = false;
 				// Гарантированный сброс блокировки. Исключение — успешное сохранение с
 				// keepLoadingOnSuccess (handleSaveAndClose): форма намеренно остаётся
 				// disabled до анмаунта панели, чтобы поля не «прыгали».
@@ -1722,9 +1827,13 @@ export function useFormStore<F extends object>(
 	}, [store, uniqId, requestClose, confirm]);
 
 	const handleReload = useCallback(async () => {
+		// Идёт запись или загрузка — ⟳ не выполняем: GET, обогнавший PUT, очистил бы pending
+		// таблиц до их коммита (И11). Кнопка в шапке в это время и так погашена (busy).
+		if (store.getSnapshot().meta.isLoading) return;
 		if (store.isDirty()) {
 			const answer = await confirm(translate("confirmReloadUnsaved"));
 			if (!answer) return;
+			if (store.getSnapshot().meta.isLoading) return;
 		}
 		// При reload отбрасываем pending-stash (несохранённые правки из прошлого
 		// открытия формы) — пользователь явно запросил свежие данные с сервера.

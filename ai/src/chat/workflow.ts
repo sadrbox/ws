@@ -26,7 +26,7 @@
 // Предел раундов модели (CHAT_MAX_TOOL_ROUNDS) в этом режиме считается через ходы (context.rounds):
 // иначе клиент, присылающий результаты, крутил бы модель бесконечно.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
 import type { LLMProvider, ChatMessage, ToolCall, ToolResult } from "../llm/provider.ts";
@@ -45,6 +45,7 @@ import { summarizePurchase, purchaseLinesText, purchasePayload, clean, fmt as fm
 import type { FileStore, FileRef } from "../files/store.ts";
 import { extractOrgBases, referencedBases, rememberIdBases } from "./orgBases.ts";
 import { serverToolCard, serverToolQuestion } from "./serverTools.ts";
+import { HISTORY_MAX_CHARS, repairHistory, windowHistory } from "./history.ts";
 
 export type Attachment = { fileName: string; mimeType: string; content: Buffer };
 
@@ -67,7 +68,8 @@ export type ChatUser = {
 	uuid: string;
 	organizationUuid: string;
 	channel?: "erp" | "1c";
-	onec?: { baseId: string; userName: string; organization: OnecOrganization | null };
+	/** `baseKey` — ключ базы из токена: им помечается автор задач и заметок в ERP (Б11 аудита 26.09). */
+	onec?: { baseId: string; baseKey?: string; userName: string; organization: OnecOrganization | null };
 };
 
 type PendingCall = { toolCallId: string; tool: string; payload: Record<string, unknown>; requestId: string; card: string; priorResults: ToolResult[] };
@@ -113,6 +115,13 @@ type Context = {
 	 * (та же защита `seenIds`, что у всех остальных идентификаторов).
 	 */
 	docs?: Record<string, { type: string; label: string }>;
+	/**
+	 * Незавершённые изменяющие операции: отпечаток операции → её requestId (И29 аудита 26.09). Повтор той же операции
+	 * после TIMEOUT или потерянного ответа идёт с тем же номером — 1С не создаёт второй документ.
+	 */
+	inflight?: Record<string, string>;
+	/** В контексте модели — тексты задач и заметок ERP (их пишут пользователи 1С): изменения — только через карточку. */
+	erpText?: boolean;
 };
 
 /** Куда идёт команда чата (СВ3, C0): база агента, отказ по лимиту, смешение баз или «решит прежний путь». */
@@ -166,6 +175,10 @@ export type WorkflowDeps = {
 	 * (план docs/PLAN_1C_TASKS_NOTES_2026-09-22.md). null — канал не настроен, и модель их не видит.
 	 */
 	serverTools?: ServerToolRunner | null;
+	/** Окно истории для модели, символов JSON (И29 аудита 26.09); по умолчанию HISTORY_MAX_CHARS. */
+	historyMaxChars?: number;
+	/** Сколько вложений распознавать одновременно (аудит 26.09): по умолчанию 2. */
+	extractParallel?: number;
 };
 
 /**
@@ -186,10 +199,25 @@ export type ServerToolRunner = {
 	summary?: (user: ChatUser) => Promise<{ text: string; ids: string[] } | null>;
 };
 
-// Границу слова  здесь использовать нельзя: в JS она знает только латиницу, и «да» не
-// совпадало бы. Слово должно стоять в начале и заканчиваться концом строки или знаком.
-const YES = /^(?:да|ок|окей|давай|подтверждаю|подтвердить|создавай|создай|верно|согласен|yes|ok|\+)(?=$|[\s.,!)])/i;
-const NO = /^(?:нет|отмена|отмени|отменить|не надо|стоп|no|cancel|-)(?=$|[\s.,!)])/i;
+// Границу слова (\b) здесь использовать нельзя: в JS она знает только латиницу, и «да» не совпадало бы.
+//
+// ОТВЕТ НА КАРТОЧКУ — ТОЛЬКО ЦЕЛИКОМ (И27 аудита 26.09). Раньше хватало начала: «да, но количество 5», «создай
+// на 10 вместо 5», «ок, только цену 6000» исполняли СТАРУЮ карточку — с прежним количеством и ценой. Теперь
+// согласие — это одно или несколько слов согласия и знаки препинания, и больше ничего; любое продолжение —
+// новое указание: карточка снимается, модель получает текст и строит новую. Так же и с отказом: «нет, поставь 5»
+// — не просто «отменено», а правка.
+const YES_WORD = "(?:да|ага|ок|окей|давай|подтверждаю|подтвердить|подтверди|создавай|создай|верно|всё верно|все верно|согласен|согласна|конечно|пожалуйста|yes|ok|\\+)";
+const NO_WORD = "(?:нет|отмена|отмени|отменить|не надо|не нужно|стоп|no|cancel|-)";
+const YES = new RegExp(`^${YES_WORD}(?:[\\s.,!)]+${YES_WORD})*[\\s.,!)]*$`, "i");
+const NO = new RegExp(`^${NO_WORD}(?:[\\s.,!)]+${NO_WORD})*[\\s.,!)]*$`, "i");
+
+/** Ответ на карточку подтверждения — чистое согласие, чистый отказ или новое указание (И27). */
+export function confirmationAnswer(text: string): "yes" | "no" | "other" {
+	const t = text.trim();
+	if (YES.test(t)) return "yes";
+	if (NO.test(t)) return "no";
+	return "other";
+}
 
 export class ChatWorkflow {
 	private readonly d: WorkflowDeps;
@@ -223,8 +251,46 @@ export class ChatWorkflow {
 		}
 	}
 
+	/*
+	 * ОДИН ХОД ДИАЛОГА ЗА РАЗ (И28 аудита 26.09). Ход длиннее ожидания клиента (45–90 с) продолжается в фоне, а клиент
+	 * получает PROCESSING и волен прислать следующее сообщение. Без замка два хода одного диалога писали в историю
+	 * вперемешку: результат инструмента одного хода вставал после вызова другого, и модель отвечала 400 на КАЖДЫЙ
+	 * следующий ход — диалог ломался навсегда. Теперь ходы одного диалога идут строго по очереди: следующий ждёт,
+	 * пока закончится предыдущий, и видит его итог.
+	 *
+	 * Замок — в памяти процесса: сервис работает одним экземпляром (pm2 fork). Консультативная блокировка Postgres
+	 * держала бы соединение пула на всё время хода — минуты, — а пул на весь сервис десять соединений.
+	 */
+	private readonly turns = new Map<string, Promise<void>>();
+
+	private async exclusive<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
+		const prev = this.turns.get(conversationId) ?? Promise.resolve();
+		let release!: () => void;
+		const tail = new Promise<void>((resolve) => { release = resolve; });
+		const chained = prev.then(() => tail);
+		this.turns.set(conversationId, chained);
+		try {
+			await prev;
+			return await fn();
+		} finally {
+			release();
+			// Хвост очереди — наш: ждать больше некому, запись убираем (иначе карта росла бы по диалогу на каждый ход).
+			if (this.turns.get(conversationId) === chained) this.turns.delete(conversationId);
+		}
+	}
+
+	/** Идёт ли сейчас ход этого диалога — для проверок и журнала. */
+	busy(conversationId: string): boolean {
+		return this.turns.has(conversationId);
+	}
+
 	/** Главная точка: сообщение пользователя → ответ. */
 	async handle(user: ChatUser, conversationId: string | null, text: string, attachments: Attachment[] = []): Promise<ChatReply> {
+		if (!conversationId) return this.handleLocked(user, null, text, attachments);
+		return this.exclusive(conversationId, () => this.handleLocked(user, conversationId, text, attachments));
+	}
+
+	private async handleLocked(user: ChatUser, conversationId: string | null, text: string, attachments: Attachment[]): Promise<ChatReply> {
 		const conv = conversationId ? await this.load(conversationId, user) : await this.create(user);
 		if (!conv) throw new WorkflowError("NOT_FOUND", "Диалог не найден");
 
@@ -249,8 +315,9 @@ export class ChatWorkflow {
 		// Ответ на подтверждение — без модели. Признак — ожидающий вызов в контексте, а не
 		// состояние: состояние мог сменить prepare() или фоновый ход.
 		if (conv.context.pending) {
-			if (YES.test(text.trim())) return this.executePending(conv, user);
-			if (NO.test(text.trim())) return this.cancelPending(conv, user);
+			const answer = confirmationAnswer(text);
+			if (answer === "yes") return this.executePending(conv, user);
+			if (answer === "no") return this.cancelPending(conv, user);
 			// Не «да» и не «нет» — считаем новым указанием: отменяем ожидание и идём к модели.
 			const p = conv.context.pending;
 			await this.appendMessage(conv.id, { role: "user", toolResults: [...p.priorResults, { toolCallId: p.toolCallId, content: { cancelled: true, reason: "пользователь дал новое указание вместо подтверждения" }, isError: true }] });
@@ -265,6 +332,10 @@ export class ChatWorkflow {
 
 	/** Ответ на карточку подтверждения полем decision (канал 1С) — вместо текста «да»/«нет». */
 	async decide(user: ChatUser, conversationId: string, accepted: boolean): Promise<ChatReply> {
+		return this.exclusive(conversationId, () => this.decideLocked(user, conversationId, accepted));
+	}
+
+	private async decideLocked(user: ChatUser, conversationId: string, accepted: boolean): Promise<ChatReply> {
 		const conv = await this.load(conversationId, user);
 		if (!conv) throw new WorkflowError("NOT_FOUND", "Диалог не найден");
 		if (!conv.context.pending) throw new WorkflowError("NOTHING_TO_CONFIRM", "Диалог не ждёт подтверждения");
@@ -276,6 +347,10 @@ export class ChatWorkflow {
 	 * выдуманный отклоняется целиком (400), до каких-либо изменений. Пришли не все — ждём остальные.
 	 */
 	async submitToolResults(user: ChatUser, conversationId: string, results: ClientToolResult[]): Promise<ChatReply> {
+		return this.exclusive(conversationId, () => this.submitToolResultsLocked(user, conversationId, results));
+	}
+
+	private async submitToolResultsLocked(user: ChatUser, conversationId: string, results: ClientToolResult[]): Promise<ChatReply> {
 		const conv = await this.load(conversationId, user);
 		if (!conv) throw new WorkflowError("NOT_FOUND", "Диалог не найден");
 		const cyc = conv.context.client;
@@ -345,6 +420,9 @@ export class ChatWorkflow {
 		// Задачи из сводки — «виденные» (25.09): сводка сама предлагает их taskId для update_task и complete_task.
 		// Контекст сохранится со следующей сменой состояния хода.
 		if (summary?.ids.length) conv.context.seenIds = [...new Set([...conv.context.seenIds, ...summary.ids])];
+		// Тексты задач и заметок пишут пользователи 1С организации — это данные, а не указания (аудит 26.09):
+		// после них изменяющие операции идут только через карточку, как после чужого файла (И4).
+		if (summary?.text) conv.context.erpText = true;
 
 		for (let round = startRound; round < this.d.maxToolRounds; round++) {
 			if (client) conv.context.rounds = round + 1;
@@ -462,13 +540,13 @@ export class ChatWorkflow {
 	 */
 	private needsConfirmation(spec: ToolSpec, ctx: Context): boolean {
 		if (spec.operation === "CRITICAL" || (spec.operation === "WRITE" && this.d.confirmWrite)) return true;
-		return spec.mutating && hasFileData(ctx);
+		return spec.mutating && (hasFileData(ctx) || !!ctx.erpText);
 	}
 
 	/** Карточка подтверждения: вызов откладывается в context.pending, ход останавливается. */
 	private async askConfirmation(conv: Conversation, user: ChatUser, spec: ToolSpec, payload: Record<string, unknown>, toolCallId: string,
 		priorResults: ToolResult[], lead: string, attachments: FileRef[], usage: ChatReply["usage"]): Promise<ChatReply> {
-		const card = spec.commandType === "CREATE_PURCHASE_FROM_DOCUMENT" ? await this.purchaseCard(conv, user, payload) : this.card(spec, payload, conv.context);
+		const card = spec.commandType === "CREATE_PURCHASE_FROM_DOCUMENT" ? await this.purchaseCard(conv, user, payload) : this.card(spec, payload, conv.context, await this.namesFor(conv));
 		const pending: PendingCall = { toolCallId, tool: spec.name, payload, requestId: randomUUID(), card, priorResults };
 		conv.context.pending = pending;
 		await this.setState(conv.id, "WAITING_CONFIRMATION", conv.context);
@@ -711,24 +789,72 @@ export class ChatWorkflow {
 			}
 		}
 
+		/*
+		 * ТОТ ЖЕ НОМЕР ЗАПРОСА ДЛЯ ТОЙ ЖЕ ОПЕРАЦИИ (И29 аудита 26.09). Изменяющая команда, не дождавшаяся ответа (TIMEOUT)
+		 * или оставшаяся без ответа у агента, могла выполниться; повтор раньше получал новую карточку с новым requestId —
+		 * и 1С создавала второй документ. Номер незавершённой операции запоминается в диалоге по её содержимому:
+		 * повтор идёт с ним, и 1С отвечает прежним результатом, а очередь присоединяет повтор к ещё идущей команде.
+		 */
+		const fp = requestId ? operationFingerprint(spec.commandType, prep.payload) : null;
+		const rid = fp ? conv.context.inflight?.[fp] ?? requestId : requestId;
 		const cmd = await this.d.queue.enqueue({
-			agentId: agent.id, organizationUuid: user.organizationUuid, type: spec.commandType, payload: prep.payload, requestId,
+			agentId: agent.id, organizationUuid: user.organizationUuid, type: spec.commandType, payload: prep.payload, requestId: rid,
 			// База — и в колонке очереди (C1): команды одной базы идут по очереди, повтор узнаётся в пределах базы.
 			...(target.kind === "agent" ? { baseKey: target.baseKey } : {}),
 			// Больше предела агента (600 с) с запасом на ожидание пропуска (С24): при равных сроках команда
 			// объявлялась просроченной ровно тогда, когда агент ещё мог ответить.
 			userUuid: user.uuid, conversationId: conv.id, ttlSeconds: 900,
 		});
-		await this.audit(user, { event: "command.enqueue", conversationId: conv.id, userUuid: user.uuid, agentId: agent.id, commandId: cmd.id, requestId, details: { type: spec.commandType, tool: spec.name, source: "chat" } });
+		await this.audit(user, { event: "command.enqueue", conversationId: conv.id, userUuid: user.uuid, agentId: agent.id, commandId: cmd.id, requestId: rid, details: { type: spec.commandType, tool: spec.name, source: "chat" } });
+		// Номер операции — в диалог ДО ожидания: ход может оборваться (перезапуск), а повтор должен его найти.
+		const remember = async (keep: boolean) => {
+			if (!fp || !rid) return;
+			const had = conv.context.inflight?.[fp] === rid;
+			if (keep === had) return;
+			const next = { ...(conv.context.inflight ?? {}) };
+			if (keep) next[fp] = rid; else delete next[fp];
+			conv.context.inflight = next;
+			await this.setState(conv.id, "EXECUTING", conv.context);
+		};
+		await remember(true);
 
 		const done: CommandRow | null = await this.d.queue.waitResult(cmd.id, this.d.commandTimeoutMs);
 		if (!done || done.state === "queued" || done.state === "dispatched") {
-			return { result: { toolCallId: call.id, content: { error: "TIMEOUT", message: "1С не ответила вовремя; команда осталась в очереди" }, isError: true } };
+			/*
+			 * НЕ ДОЖДАЛИСЬ — СНИМАЕМ ЕЩЁ НЕ ВЫДАННУЮ (И29). Раньше команда оставалась в очереди ещё до 15 минут и
+			 * выполнялась, когда человек уже получил «не ответила» и, возможно, повторил: второй документ. Не выдана
+			 * агенту — снимается и не выполнится; уже выполняется — остаётся, а её номер запроса сохранён для повтора.
+			 */
+			const canceled = done?.state !== "dispatched" && (await this.d.queue.cancel([cmd.id], "chat-timeout")) > 0;
+			await remember(!canceled);
+			const message = canceled
+				? "1С не ответила вовремя: команда ждала своей очереди у базы и снята — в 1С она выполнена НЕ будет. Можно повторить позже."
+				: spec.mutating
+					? "1С не ответила вовремя, но команда уже выполняется в 1С — итог придёт позже. Не создавай операцию заново как новую: "
+						+ "повтор этой же операции уйдёт с тем же номером запроса, и 1С не создаст второй документ. Предложи пользователю проверить результат в 1С."
+					: "1С не ответила вовремя; команда ещё выполняется — повтори запрос чуть позже.";
+			return { result: { toolCallId: call.id, content: { error: "TIMEOUT", message, ...(canceled ? { canceled: true } : { stillRunning: true }) }, isError: true } };
 		}
 		if (done.state === "expired") {
-			return { result: { toolCallId: call.id, content: { error: "EXPIRED", message: "Команда не была исполнена агентом вовремя" }, isError: true } };
+			// Не выдана агенту (не дождалась очереди, агент не на связи) — точно не выполнялась; выдана и без ответа —
+			// МОГЛА выполниться: говорить «не была исполнена» здесь неправда (И29).
+			const code = done.error?.code ?? "COMMAND_EXPIRED";
+			const neverRan = code === "COMMAND_QUEUE_TIMEOUT" || code === "AGENT_OFFLINE" || !done.dispatched_at;
+			await remember(!neverRan);
+			return { result: { toolCallId: call.id, content: { error: "EXPIRED", code, message: neverRan
+				? "Команда не дождалась агента 1С и не выполнялась."
+				: spec.mutating
+					? "Агент забрал команду, но не ответил (служба перезапустилась или истёк срок): операция МОГЛА выполниться. "
+						+ "Предложи пользователю проверить в 1С, прежде чем повторять; повтор этой же операции уйдёт с тем же номером запроса и второго документа не создаст."
+					: "Агент забрал команду, но не ответил — повтори запрос." }, isError: true } };
 		}
-		const outcome: Outcome = done.state === "failed" ? { ok: false, error: done.error ?? null } : { ok: true, data: done.result };
+		// Отменённая в панели (или прерванная оператором) — НЕ успех (И29): раньше модель получала `{ok:true}`,
+		// выписка помечалась загруженной, а документ поставщика — созданным.
+		const outcome: Outcome = done.state === "canceled"
+			? { ok: false, error: { code: done.error?.code ?? "COMMAND_CANCELED", message: `${done.error?.message ?? "Команда отменена"} Операция в 1С не выполнена.` } }
+			: done.state === "failed" ? { ok: false, error: done.error ?? null } : { ok: true, data: done.result };
+		// Итог известен — номер операции больше не нужен; упавшая по TIMEOUT у агента могла дойти до 1С — номер храним.
+		await remember(done.state === "failed" && done.error?.code === "TIMEOUT");
 		// Объекты ответа — из этой базы (C0): следующий вызов с ними уйдёт туда же. Сохраняется вместе с контекстом в interpret.
 		if (target.kind === "agent") {
 			conv.context.idBases ??= {};
@@ -922,8 +1048,7 @@ export class ChatWorkflow {
 	}
 
 	/** Карточка подтверждения (§17) — из payload и уже виденных описаний объектов. */
-	private card(spec: ToolSpec, payload: Record<string, unknown>, ctx: Context): string {
-		const names = this.namesFromHistory(ctx);
+	private card(spec: ToolSpec, payload: Record<string, unknown>, ctx: Context, names: Map<string, string>): string {
 		const nameOf = (id: unknown) => (typeof id === "string" && names.get(id)) || String(id ?? "");
 		// Задачи и заметки ERP (E17): своя карточка — общая ветка ниже говорит о «документе 1С».
 		if (spec.runsOnServer) {
@@ -1094,8 +1219,12 @@ ${previewLines(r.statement)}]`, file };
 				return { text: `[Вложение «${a.fileName}» сохранено, но не удалось распознать выписку — ${msg}]`, file };
 			}
 		};
-		// Параллельно: три выписки по минуте каждая — это минута, а не три.
-		const parts = await Promise.all(attachments.map(one));
+		/*
+		 * ПАРАЛЛЕЛЬНО, НО НЕ ВСЕ СРАЗУ (аудит 26.09). Три выписки по минуте — это минута, а не три; но двадцать PDF
+		 * по 30 МБ, разбираемые и отправляемые модели одновременно, не помещались в предел памяти процесса (400 МБ),
+		 * и pm2 перезапускал сервис посреди хода. Порядок частей — порядок вложений.
+		 */
+		const parts = await mapLimited(attachments, Math.max(1, this.d.extractParallel ?? 2), one);
 		const files = parts.map((p) => p.file).filter((f): f is FileRef => f !== null);
 		return { text: [text, ...parts.map((p) => p.text)].filter(Boolean).join("\n\n"), files };
 	}
@@ -1150,7 +1279,7 @@ ${purchaseLinesText(r.document)}]`, file };
 		if (!stored) return `Поступление по документу ${String(payload.purchaseDocumentId)}`;
 		const d = stored.document;
 		const match = parseMatch(stored.matchResult);
-		const names = this.namesFromHistory(conv.context);
+		const names = await this.namesFor(conv);
 		for (const [id, n] of match.names) names.set(id, n);
 		const nameOf = (id: unknown) => (typeof id === "string" && names.get(id)) || String(id ?? "");
 		const resolution = new Map((payload.resolution as { index: number; productId?: string; createProduct?: { name: string; kind: string; unit?: string; article?: string } }[]).map((r) => [r.index, r]));
@@ -1185,7 +1314,15 @@ ${purchaseLinesText(r.document)}]`, file };
 		].filter(Boolean).join("\n");
 	}
 
-	private namesFromHistory(ctx: Context): Map<string, string> {
+	/**
+	 * Имена объектов для карточки — из результатов инструментов ЭТОГО диалога (Н5 аудита 26.09).
+	 *
+	 * Раньше имена брались из общей на процесс карты `nameCache`: туда складывались результаты всех инструментов всех
+	 * диалогов, она не чистилась никогда и обходилась целиком на каждой карточке. Память росла до предела pm2
+	 * (400 МБ), и перезапуск рвал долгие опросы агентов, фоновые ходы и ночной прогон. Заодно карточка одного
+	 * пользователя могла подписать идентификатор именем из чужого диалога.
+	 */
+	private async namesFor(conv: Conversation): Promise<Map<string, string>> {
 		const m = new Map<string, string>();
 		const walk = (v: unknown) => {
 			if (!v || typeof v !== "object") return;
@@ -1196,12 +1333,15 @@ ${purchaseLinesText(r.document)}]`, file };
 			if (typeof o.taskId === "string" && typeof o.name === "string") m.set(o.taskId, o.name);
 			Object.values(o).forEach(walk);
 		};
-		walk(ctx.lastResult);
-		for (const cached of this.nameCache.values()) walk(cached);
+		// Результаты вызовов — от старых к новым: свежее имя объекта перекрывает старое.
+		for (const msg of await this.rawMessages(conv.id)) {
+			if (msg.role === "user" && "toolResults" in msg) for (const r of msg.toolResults) walk(r.content);
+		}
+		// И то, что ещё не записано в историю (результаты текущего хода).
+		for (const r of conv.context.client?.results ?? []) walk(r.content);
+		walk(conv.context.lastResult);
 		return m;
 	}
-	// Результаты READ-инструментов последних ходов, чтобы карточка показывала имена, а не id.
-	private readonly nameCache = new Map<string, unknown>();
 
 	// ── хранение ──────────────────────────────────────────────────────────
 
@@ -1245,37 +1385,21 @@ ${purchaseLinesText(r.document)}]`, file };
 	}
 
 	private async appendMessage(conversationId: string, m: ChatMessage): Promise<void> {
-		if (m.role === "user" && "toolResults" in m) {
-			// И ошибки тоже: кандидаты договоров приходят в details ошибки CONTRACT_AMBIGUOUS.
-			for (const r of m.toolResults) this.nameCache.set(r.toolCallId, r.content);
-		}
 		await this.d.db.query(`INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3::jsonb)`,
 			[conversationId, m.role, JSON.stringify(m)]);
 	}
 
-	private async history(conversationId: string): Promise<ChatMessage[]> {
+	private async rawMessages(conversationId: string): Promise<ChatMessage[]> {
 		const r = await this.d.db.query<{ content: ChatMessage }>(`SELECT content FROM messages WHERE conversation_id = $1 ORDER BY id`, [conversationId]);
-		const raw = r.rows.map((x) => x.content);
-		// Самовосстановление: API модели требует tool_result на каждый tool_use в следующем же
-		// сообщении. Если ход прервался (сбой, перезапуск) и результата нет — подставляем отказ,
-		// иначе диалог навсегда остаётся неотправляемым.
-		const msgs: ChatMessage[] = [];
-		for (let i = 0; i < raw.length; i++) {
-			const m = raw[i];
-			msgs.push(m);
-			if (m.role === "assistant" && m.toolCalls.length) {
-				const next = raw[i + 1];
-				const answered = new Set(next && next.role === "user" && "toolResults" in next ? next.toolResults.map((t) => t.toolCallId) : []);
-				const missing = m.toolCalls.filter((c) => !answered.has(c.id));
-				if (missing.length) {
-					const filler: ChatMessage = { role: "user", toolResults: missing.map((c) => ({ toolCallId: c.id, content: { error: "INTERRUPTED", message: "ход был прерван, результат не получен" }, isError: true })) };
-					if (next && next.role === "user" && "toolResults" in next) next.toolResults.push(...filler.toolResults);
-					else msgs.push(filler);
-				}
-			}
-		}
-		for (const m of msgs) if (m.role === "user" && "toolResults" in m) for (const t of m.toolResults) this.nameCache.set(t.toolCallId, t.content);
-		return msgs;
+		return r.rows.map((x) => x.content);
+	}
+
+	/** История для модели: целостная (repairHistory) и в пределах окна (windowHistory). */
+	private async history(conversationId: string): Promise<ChatMessage[]> {
+		const msgs = repairHistory(await this.rawMessages(conversationId));
+		const w = windowHistory(msgs, this.d.historyMaxChars ?? HISTORY_MAX_CHARS);
+		if (w.dropped) this.d.log.debug({ conversationId, dropped: w.dropped, kept: w.messages.length }, "история диалога сокращена до окна");
+		return w.messages;
 	}
 
 	/** История диалога для интерфейса: только текстовые ходы + карточка, если ждём подтверждения. */
@@ -1322,6 +1446,34 @@ type Outcome = { ok: true; data: unknown } | { ok: false; error: { code?: string
 
 function isClient(user: ChatUser): boolean {
 	return user.channel === "1c";
+}
+
+/** JSON с ключами по алфавиту: одинаковое содержимое — одинаковая строка, как бы модель ни расставила поля. */
+function stableJson(v: unknown): string {
+	if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+	if (v && typeof v === "object") {
+		return `{${Object.keys(v as Record<string, unknown>).sort().map((k) => `${JSON.stringify(k)}:${stableJson((v as Record<string, unknown>)[k])}`).join(",")}}`;
+	}
+	return JSON.stringify(v ?? null);
+}
+
+/** Отпечаток изменяющей операции: тип и содержимое (с базой) — одна и та же операция даёт один отпечаток. */
+export function operationFingerprint(commandType: string, payload: Record<string, unknown>): string {
+	return createHash("sha256").update(`${commandType}\n${stableJson(payload)}`).digest("hex").slice(0, 32);
+}
+
+/** Как Promise.all(items.map(fn)), но не больше `limit` одновременно; порядок результатов — порядок входа. */
+export async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+	const out: R[] = new Array(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const i = next++;
+			out[i] = await fn(items[i]!);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+	return out;
 }
 
 const deferred = (toolCallId: string): ToolResult => ({ toolCallId, content: { error: "DEFERRED", message: "не выполнено: сначала нужно подтверждение предыдущей операции" }, isError: true });

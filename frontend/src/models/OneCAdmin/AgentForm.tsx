@@ -12,7 +12,7 @@
  */
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { withOp } from "./progress";
 import ServerParams from "./ServerParams";
 import ModelForm from "src/components/ModelForm";
@@ -32,6 +32,7 @@ import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { useScopeObject } from "src/components/TechMessages/store";
 import { translate } from "src/i18";
+import { PaneActiveProvider } from "src/hooks/usePaneActive";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
@@ -41,9 +42,8 @@ import {
 	deleteAgent, fetchServers, releaseAgentInstance, renameAgent, restartAgent, rotateAgentToken,
 	setAgentDisabled, setAgentOwner, updateAgent,
 } from "src/services/onec/api";
-import {
-	QueryError, useAgents, useOnecPermissions,
-} from "./shared";
+import { useAgents, useOnecPermissions } from "./shared";
+import { QueryError } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
@@ -63,7 +63,7 @@ export const stateLabel = (a: { disabled: boolean; online: boolean; busy?: boole
 		: a.busy ? translate("onecAgentBusy")
 			: a.online ? translate("onecAgentOnline") : translate("onecAgentOffline");
 
-export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
+const AgentFormBody: FC<Partial<TPane>> = (paneProps) => {
 	const perms = useOnecPermissions();
 	const canEditAgent = agentsAllow(perms, "edit");
 	const canManageAgent = agentsAllow(perms, "manage");
@@ -174,7 +174,7 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
-	const { requestClose } = useAppContext().windows;
+	const { requestClose } = useAppActions().windows;
 	const closeCard = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
@@ -580,11 +580,18 @@ export const AgentForm: FC<Partial<TPane>> = (paneProps) => {
 		</>
 	);
 };
+
+/** Корень панели: опросы внутри идут, только пока панель на экране (О4 аудита 26.09). */
+export const AgentForm: FC<Partial<TPane>> = (paneProps) => (
+	<PaneActiveProvider uniqId={paneProps.uniqId}>
+		<AgentFormBody {...paneProps} />
+	</PaneActiveProvider>
+);
 AgentForm.displayName = "AgentForm";
 
 /** Открыть форму агента отдельным пейном — двойным щелчком по строке списка. */
 export function useOpenAgent() {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	return (row: Partial<TDataItem>) => addPane({
 		label: `${translate("onecTabAgents")}: ${asText(row.name) || asText(row.agentId).slice(0, 8)}`,
 		component: AgentForm as never,

@@ -24,9 +24,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { orgIsAccessible } from "../../utils/auth.js";
+import { orgIsAccessible, isAdminOfOrg } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
-import { qualityContext, canManage, userNames, orgNames } from "../../services/quality/access.js";
+import { qualityContext, canManage, userNames, orgNames, isInstallationQualityAdmin } from "../../services/quality/access.js";
 import { getQualitySettings, saveQualitySettings, setFirmOrgSetting, getFirmOrgSetting } from "../../services/quality/settings.js";
 import { DEFAULT_SETTINGS, settingsPatchError, mergedWorkHoursError } from "../../services/quality/settingsRules.js";
 import { computeBonusResults, windowMonths } from "../../services/quality/bonusRules.js";
@@ -86,8 +86,11 @@ router.put("/quality/settings", handler("PUT /quality/settings", async (req, res
 	if (patchError) return fail(res, 400, patchError);
 	if (req.body?.firmOrganizationUuid !== undefined) {
 		const org = req.body.firmOrganizationUuid || null;
-		if (!ctx.isAdmin) return fail(res, 403, "Организацию-фирму назначает администратор");
-		if (org && !orgIsAccessible(req, org)) return fail(res, 403, "Организация недоступна");
+		// Фирма — настройка ВСЕЙ установки (Б9 аудита 26.09): назначает суперадмин или
+		// администратор уже назначенной фирмы, а новой фирмой может стать только организация,
+		// которой он сам распоряжается.
+		if (!(await isInstallationQualityAdmin(req))) return fail(res, 403, "Организацию-фирму назначает суперадминистратор или администратор назначенной фирмы");
+		if (org && (!orgIsAccessible(req, org) || !isAdminOfOrg(req, org))) return fail(res, 403, "Организация недоступна");
 		await setFirmOrgSetting(org);
 		// Фирма — это организация вида «service» (обслуживающая, PLAN_INSTALL_MODES К1): отмечаем, чтобы
 		// с ней согласовались связи обслуживания и следующий поиск фирмы нашёл её сам.
@@ -148,8 +151,10 @@ router.get("/quality/firm-candidates", handler("GET /quality/firm-candidates", a
 router.get("/quality/notifications", handler("GET /quality/notifications", async (req, res) => {
 	const unread = req.query.unread === "1" || req.query.unread === "true";
 	const take = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+	// Кривая дата — 400 (Н10 аудита 26.09): раньше молча игнорировалась, и панель получала ВСЕ уведомления.
 	const since = req.query.since ? new Date(String(req.query.since)) : null;
-	const where = { userUuid: req.user.uuid, ...(unread ? { readAt: null } : {}), ...(since && !Number.isNaN(since.getTime()) ? { createdAt: { gt: since } } : {}) };
+	if (since && Number.isNaN(since.getTime())) return fail(res, 400, "Некорректная дата в параметре «since»");
+	const where = { userUuid: req.user.uuid, ...(unread ? { readAt: null } : {}), ...(since ? { createdAt: { gt: since } } : {}) };
 	const [items, unreadCount] = await Promise.all([
 		prisma.userNotification.findMany({ where, orderBy: { createdAt: "desc" }, take }),
 		prisma.userNotification.count({ where: { userUuid: req.user.uuid, readAt: null } }),

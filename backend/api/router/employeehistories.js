@@ -2,6 +2,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { checkOwnership } from "../../utils/auth.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -37,8 +38,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (!(await assertEmployeeOwned(employeeUuid, req, res))) return;
 
 		const rawLimit = req.query.limit;
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 
 		const orderBy = [];
 		const sortParam =
@@ -68,8 +69,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			total: items.length,
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

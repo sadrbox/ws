@@ -31,9 +31,8 @@ import { agentMatches, agentOfflineSummary, type AgentRoleFilter, type AgentStat
 import { withStableIds } from "src/utils/stableRowId";
 import { stateLabel, useOpenAgent } from "./AgentForm";
 import { agentBuildLabel } from "./agentHealth";
-import {
-	QueryError, useAgents, useOnecPermissions,
-} from "./shared";
+import { useAgents, useOnecPermissions } from "./shared";
+import { QueryError } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 

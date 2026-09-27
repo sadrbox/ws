@@ -16,7 +16,7 @@ import LookupField from "src/components/Field/LookupField";
 import FieldActionButton from "src/components/Field/FieldActionButton";
 import { HelpBox } from "src/components/HelpBox";
 import { Button } from "src/components/Button";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import columnsJson from "./columns.json";
@@ -46,7 +46,8 @@ const DocumentNumberSettings: FC = () => {
   // Нумерацию «по умолчанию (для всех организаций)» (orgKey пуст) может править
   // только суперадмин — это общесистемная настройка. Настройки конкретной
   // организации (orgKey задан) доступны обычным пользователям с правами.
-  const { auth, actions } = useAppContext();
+  const auth = useAppAuth();
+  const { actions } = useAppActions();
   const isSuperAdmin = !!auth.user?.isSuperAdmin;
   const canEdit = isSuperAdmin || !!orgKey;
 

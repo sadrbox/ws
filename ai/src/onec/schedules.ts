@@ -175,6 +175,21 @@ export class ScheduleStore {
 	}
 
 	/**
+	 * ЗАНЯТЬ ОКНО (Н9 аудита 26.09): одна атомарная запись ДО постановки задания. Условие — `last_run_at` тот же, что
+	 * прочитал тик: второй тик (наложение таймеров) и второй процесс увидят уже новое значение и окно не получат.
+	 * `false` — окно занято кем-то другим.
+	 */
+	async claimRun(id: string, seenLastRunAt: string | null): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE maintenance_schedules SET last_run_at = now(), last_batch_id = NULL
+			  -- Миллисекунды: отметку тик прочёл через Date (точность до мс), а в базе она до микросекунд.
+			  WHERE id = $1 AND date_trunc('milliseconds', last_run_at) IS NOT DISTINCT FROM $2::timestamptz`,
+			[id, seenLastRunAt],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/**
 	 * Отметить прогон.
 	 *
 	 * Пишется СРАЗУ после постановки задания, а не после его окончания: задание живёт часами,

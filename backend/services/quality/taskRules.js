@@ -2,6 +2,9 @@
 // Проверяются headless-тестом; работу с базой делает services/quality/todos.js.
 
 import { addWorkingMinutes } from "./workTime.js";
+import { endOfLocalDay, orgTimeZone } from "../periodBounds.js";
+
+const DAY = 86_400_000;
 
 /** Виды задач. От вида зависят SLA, правила кандидатов и эскалация. */
 export const TODO_KINDS = ["task", "client_request", "error", "control", "check_finding", "regulation", "manager_order"];
@@ -124,8 +127,26 @@ export function overdueItemFor(kind) {
 	return 20;
 }
 
+/**
+ * Момент, после которого задача просрочена.
+ *
+ * Срок, записанный до исправления 26.09 голой датой, лежит ровно в 00:00:00.000Z — это «весь этот
+ * день», и считать его истёкшим с 05:00 утра по Алматы неверно: такой срок истекает в конце местного
+ * дня (день — записанная дата, то есть UTC-части момента). Остальные сроки — точные моменты (SLA в
+ * рабочем времени, конец местного дня от нового фронта) — как есть. Зеркало deadlineDueMs во
+ * frontend/src/models/Todos/todoRules.ts. Пусто/мусор → null.
+ */
+export function deadlineDueAt(value, tz = orgTimeZone()) {
+	if (!value) return null;
+	const d = value instanceof Date ? value : new Date(value);
+	const ms = d.getTime();
+	if (Number.isNaN(ms)) return null;
+	if (ms % DAY !== 0) return d;
+	return endOfLocalDay(d.toISOString().slice(0, 10), tz);
+}
+
 export default {
 	TODO_KINDS, TODO_PRIORITIES, REPORTED_BY, CANCEL_CODES, MIN_RESULT_LENGTH,
 	normKind, normPriority, normReportedBy, reactionDueAt, resolveDueAt, resultError,
-	statusOf, isFinalStatus, isCancelStatus, transitionError, transitionStamps, overdueItemFor,
+	statusOf, isFinalStatus, isCancelStatus, transitionError, transitionStamps, overdueItemFor, deadlineDueAt,
 };

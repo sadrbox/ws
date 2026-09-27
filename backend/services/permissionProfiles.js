@@ -41,7 +41,7 @@ const G = {
 		"WriteOff", "WriteOffItem", "SerialNumber", "ProductBatch", "Warehouse"],
 	cash: ["CashReceiptOrder", "CashExpenseOrder", "Cashbox", "BankAccount", "BankStatement", "PaymentInvoice"],
 	hr: ["Employee", "EmployeeHistory", "Position", "PayrollCalculation", "PayrollPayment"],
-	accounting: ["AccountingEntry", "ChartOfAccount", "SubkontoType", "VatRate"],
+	accounting: ["AccountingEntry", "ChartOfAccount", "SubkontoType", "VatRate", "MonthClose"],
 	/** Справочники, без которых не выписать ни одного документа. */
 	catalogs: ["Counterparty", "Contract", "Contact", "ContactPerson", "Product", "Brand",
 		"Currency", "UnitOfMeasure"],

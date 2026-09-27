@@ -12,19 +12,20 @@ import mainStyles from "src/styles/main.module.scss";
 import styles from "./ProductPriceProcessing.module.scss";
 import apiClient from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import type { TPane } from "src/app/types";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import { getFormatDateOnly } from "src/utils/datetime";
-import * as XLSX from "xlsx";
+import { getFormatDateOnly, isoToLocalInput } from "src/utils/datetime";
+import { loadXlsx } from "src/utils/loadXlsx";
 
 // Бэкенд-маршрут цен номенклатуры (см. backend/api/router/productprices.js).
 const ENDPOINT = "product-prices";
 
-const todayDateOnly = () => new Date().toISOString().slice(0, 10);
+// Сегодня — по часовому поясу приложения, а не по UTC: с 00:00 до 05:00 по Алматы UTC-дата ещё вчерашняя (аудит 26.09).
+const todayDateOnly = () => isoToLocalInput(new Date()).slice(0, 10);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const toNum = (v: unknown): number | null =>
   v == null || v === "" ? null : Number.isNaN(Number(v)) ? null : Number(v);
@@ -170,7 +171,7 @@ const PriceCorrectionPanel: FC<{
   initialProductUuid?: string;
   initialProductName?: string;
 }> = ({ canWrite, initialProductUuid = "", initialProductName = "" }) => {
-  const { actions: { confirm } } = useAppContext();
+  const { actions: { confirm } } = useAppActions();
   const [priceTypeUuid, setPriceTypeUuid] = useState("");
   const [priceTypeName, setPriceTypeName] = useState("");
   // Фильтр по номенклатуре (подчинённый справочник цен): при выборе товара
@@ -539,7 +540,7 @@ async function fetchExistingKeySet(): Promise<Set<string>> {
 // ═══════════════════════════════════════════════════════════════════════════
 export const ProductPriceImport: FC<Partial<TPane>> = () => {
   const canWrite = usePriceCanWrite();
-  const { actions: { confirm } } = useAppContext();
+  const { actions: { confirm } } = useAppActions();
   // Тип цены в импорте берётся только из файла (fileType) — собственного
   // выбора типа в этой форме нет, поэтому значения фиксированы пустыми.
   const priceTypeUuid = "";
@@ -577,6 +578,8 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
     setIsLoading(true);
     try {
       const buf = await file.arrayBuffer();
+      // xlsx — только по требованию (utils/loadXlsx): иначе его тянула форма номенклатуры.
+      const XLSX = await loadXlsx();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
@@ -712,10 +715,12 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
     const rows = allRows.filter((r) => !r.productUuid);
     if (rows.length === 0) { showToast(translate("noUnmatchedRows"), "info"); return; }
     const aoa = [["sku", "barcode", "name", "price"], ...rows.map((r) => [r.sku ?? "", r.barcode ?? "", r.product?.name ?? "", r.price ?? ""])];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    XLSX.utils.book_append_sheet(wb, ws, "unmatched");
-    XLSX.writeFile(wb, "unmatched_prices.xlsx");
+    void loadXlsx().then((XLSX) => {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      XLSX.utils.book_append_sheet(wb, ws, "unmatched");
+      XLSX.writeFile(wb, "unmatched_prices.xlsx");
+    }).catch((err) => reportError(err, { source: translate("ProductPriceCorrection"), fallback: translate("exportError") }));
   };
 
   // Бэкап всех цен в xlsx. Формат = формат импорта (round-trip).
@@ -737,10 +742,11 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
           e.price ?? "",
         ]),
       ];
+      const XLSX = await loadXlsx();
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       XLSX.utils.book_append_sheet(wb, ws, "prices");
-      XLSX.writeFile(wb, `product_prices_backup_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `product_prices_backup_${todayDateOnly()}.xlsx`);
       showToast(`${translate("downloadBackup")}: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
@@ -751,17 +757,20 @@ export const ProductPriceImport: FC<Partial<TPane>> = () => {
   };
 
   const handleDownloadTemplate = () => {
-    try {
-      const header = [["sku", "barcode", "name", "brand", "priceType", "date", "price"]];
-      const sample = [["ART-001", "0123456789012", "Пример товара", "", "Цена продажи", new Date().toISOString().slice(0, 10), "123.45"]];
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet([...header, ...sample]);
-      XLSX.utils.book_append_sheet(wb, ws, "template");
-      XLSX.writeFile(wb, "product_prices_template.xlsx");
-    } catch (err) {
-      console.error("download template error", err);
-      notify({ severity: "error", text: translate("templateError"), source: translate("ProductPriceCorrection") });
-    }
+    void (async () => {
+      try {
+        const header = [["sku", "barcode", "name", "brand", "priceType", "date", "price"]];
+        const sample = [["ART-001", "0123456789012", "Пример товара", "", "Цена продажи", todayDateOnly(), "123.45"]];
+        const XLSX = await loadXlsx();
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([...header, ...sample]);
+        XLSX.utils.book_append_sheet(wb, ws, "template");
+        XLSX.writeFile(wb, "product_prices_template.xlsx");
+      } catch (err) {
+        console.error("download template error", err);
+        notify({ severity: "error", text: translate("templateError"), source: translate("ProductPriceCorrection") });
+      }
+    })();
   };
 
   return (

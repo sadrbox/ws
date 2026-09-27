@@ -6,6 +6,12 @@
 
 import { z } from "zod";
 
+/**
+ * Предел ожидания в HTTP-запросе браузера (аудит 26.09): прокси по дороге (cloudflared) держит запрос около 100 с и
+ * обрывает его своим ответом без заголовков CORS. Всё, что ждёт внутри запроса панели, укладывается в этот предел.
+ */
+export const PROXY_SAFE_SECS = 85;
+
 const schema = z.object({
 	PORT: z.coerce.number().int().min(1).max(65535).default(3100),
 	NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -32,6 +38,21 @@ const schema = z.object({
 	ALLOWED_ORIGINS: z.string().default("https://aleppo.kz,http://192.168.1.112:5173,http://localhost:5173,http://tauri.localhost")
 		.transform((v) => v.split(",").map((x) => x.trim()).filter(Boolean)),
 	LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+	/*
+	 * КОМУ ВЕРИТЬ В X-Forwarded-For (Б11 аудита 26.09). Было `trust proxy: true`: адрес клиента брался из
+	 * САМОЙ ЛЕВОЙ записи заголовка, а её пишет сам клиент, — и лимит «5 заявок на подключение в час с адреса»
+	 * обходился подменой заголовка. Теперь доверяем только прокси из своей сети: cloudflared стоит на
+	 * отдельном хосте локальной сети (192.168.1.113), Cloudflare дописывает настоящий адрес клиента ПРАВОЙ
+	 * записью — её express и возьмёт. Значение — как у express: имена подсетей (loopback, uniquelocal),
+	 * адреса через запятую, число хопов или true/false.
+	 */
+	TRUST_PROXY: z.string().default("loopback,uniquelocal").transform((v): boolean | number | string => {
+		const t = v.trim();
+		if (t === "true") return true;
+		if (t === "false" || t === "") return false;
+		if (/^\d+$/.test(t)) return Number(t);
+		return t;
+	}),
 	// Сколько секунд держать long-poll агента максимум (сам агент просит wait=N).
 	POLL_MAX_WAIT_SECS: z.coerce.number().int().min(1).max(60).default(30),
 	// Агент считается офлайн, если heartbeat не приходил дольше этого.
@@ -110,7 +131,9 @@ const schema = z.object({
 	 * панели: эти числа считаются по регистрам, и двадцати секунд базе часто мало, а пустая карточка с
 	 * «1С не ответила» у базы, которая просто думает, — худший из ответов.
 	 */
-	ORG_FINANCE_TIMEOUT_SECS: z.coerce.number().int().min(5).max(180).default(60),
+	// Не дольше 85 с (аудит 26.09): прокси (cloudflared) держит запрос ~100 с — больше значило бы обрыв без CORS.
+	// Значение сверх предела не роняет запуск, а урезается до него.
+	ORG_FINANCE_TIMEOUT_SECS: z.coerce.number().int().min(5).max(180).default(60).transform((v) => Math.min(v, PROXY_SAFE_SECS)),
 	/**
 	 * Сколько баз опрашивать ОДНОВРЕМЕННО при групповой проверке из панели.
 	 *
@@ -121,6 +144,22 @@ const schema = z.object({
 	ONEC_CHECK_PARALLEL: z.coerce.number().int().min(1).max(16).default(4),
 	// Предел раундов «модель → инструменты» за один ход пользователя.
 	CHAT_MAX_TOOL_ROUNDS: z.coerce.number().int().min(1).max(20).default(8),
+	/*
+	 * Окно истории диалога для модели, символов JSON (И29 аудита 26.09). Раньше каждый раунд (до 8 за ход) вёз
+	 * всю историю: стоимость росла как история × раунды, длинный диалог упирался в предел контекста. Окно режется
+	 * по началу хода; ~300 тыс. символов — порядка 80–100 тыс. токенов.
+	 */
+	CHAT_HISTORY_MAX_CHARS: z.coerce.number().int().min(20_000).max(3_000_000).default(300_000),
+	/*
+	 * Сколько вложений одного хода распознавать одновременно (аудит 26.09). Было «все сразу»: двадцать PDF по 30 МБ
+	 * разбирались и уходили модели параллельно при пределе памяти процесса 400 МБ.
+	 */
+	CHAT_EXTRACT_PARALLEL: z.coerce.number().int().min(1).max(8).default(2),
+	/*
+	 * Сколько мегабайт вложений принимать в ОДНОМ ходе канала 1С (аудит 26.09): файлы хода держатся в памяти разом,
+	 * и двадцать файлов по пределу одного (CHAT_ATTACHMENT_MAX_MB) — это сотни мегабайт.
+	 */
+	CHAT_ATTACHMENTS_TURN_MAX_MB: z.coerce.number().int().min(1).max(600).default(80),
 	// Модель для чтения PDF выписок; по умолчанию — основная. Извлечение таблиц из многостраничных
 	// PDF — задача, где точность важнее цены, поэтому отдельная переменная, а не «что подешевле».
 	BANK_EXTRACT_MODEL: z.string().default(""),
@@ -220,7 +259,7 @@ const schema = z.object({
 	 * Сколько ждать модель, секунды, — вместе с повтором разбора. Прокси по дороге (cloudflared) держит запрос около
 	 * 100 с: ждать дольше значит получить обрыв без заголовков CORS вместо внятного 504 «повторите».
 	 */
-	QUALITY_REVIEW_TIMEOUT_SECS: z.coerce.number().int().min(10).max(300).default(90),
+	QUALITY_REVIEW_TIMEOUT_SECS: z.coerce.number().int().min(10).max(300).default(85).transform((v) => Math.min(v, PROXY_SAFE_SECS)),
 });
 
 export type Config = z.infer<typeof schema>;
@@ -247,6 +286,7 @@ export function describe(cfg: Config): Record<string, unknown> {
 		openaiBaseUrl: cfg.OPENAI_BASE_URL || "(api.openai.com)",
 		publicUrl: cfg.PUBLIC_URL,
 		allowedOrigins: cfg.ALLOWED_ORIGINS,
+		trustProxy: cfg.TRUST_PROXY,
 		agentOrgBinding: cfg.AGENT_ORG_BINDING,
 		retention: `files ${cfg.FILE_TTL_DAYS}d, conversations ${cfg.CONVERSATION_TTL_DAYS}d`,
 		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на кластер, проверка ответа клиенту ${cfg.RATE_LIMIT_QUALITY_REVIEW_PER_MIN}/min (до ${cfg.QUALITY_REVIEW_TIMEOUT_SECS} с)`,

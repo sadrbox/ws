@@ -62,7 +62,8 @@ const { Form: PurchasesForm, List: PurchasesList } = createTradeDocForm({
         sourceItemsParentField: "purchaseUuid",
         mapFields: mapPaymentFromBasis,
         mapItems: () => [],
-        existingCheckEndpoint: "cash-expense-orders",
+        // Платёж: новый на каждую частичную оплату, сумма — остаток (И21).
+        paidByEndpoint: "cash-expense-orders",
       },
     },
   ],

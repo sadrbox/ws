@@ -10,7 +10,7 @@ import { FC } from "react";
 import { translate } from "src/i18";
 import { useQueryClient } from "@tanstack/react-query";
 import IconButton from "src/components/IconButton/IconButton";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
@@ -26,7 +26,7 @@ const DeleteDocumentButton: FC<{
   /** Доп. колбэк после успешного удаления (например, обновить связанные данные). */
   onDeleted?: () => void;
 }> = ({ endpoint, uuid, paneId, onDeleted }) => {
-  const { actions: { confirm }, windows: { requestClose } } = useAppContext();
+  const { actions: { confirm }, windows: { requestClose } } = useAppActions();
   const queryClient = useQueryClient();
 
   if (!uuid) return null;

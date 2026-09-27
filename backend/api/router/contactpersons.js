@@ -7,6 +7,7 @@ import { enrichWithOwnerName } from "../../utils/resolveOwnerName.js";
 import { idSearchCondition } from "../../utils/searchId.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { clampLimit, sendError, buildFilterWhere } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -42,8 +43,8 @@ router.get("/contactpersons", async (req, res) => {
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
@@ -89,25 +90,9 @@ router.get("/contactpersons", async (req, res) => {
 			};
 		}
 
-		const ALLOWED_OPERATORS = ["contains", "equals", "gte", "lte", "gt", "lt"];
-		const SKIP_KEYS = ["searchBy", "dateRange"];
-		const filterWhereClause = {};
-		for (const [field, conditions] of Object.entries(filter)) {
-			if (SKIP_KEYS.includes(field)) continue;
-			if (!conditions || typeof conditions !== "object") continue;
-			for (const [operator, value] of Object.entries(conditions)) {
-				if (!ALLOWED_OPERATORS.includes(operator)) continue;
-				if (!filterWhereClause[field]) filterWhereClause[field] = {};
-				if (operator === "contains") {
-					filterWhereClause[field] = {
-						contains: String(value),
-						mode: "insensitive",
-					};
-				} else {
-					filterWhereClause[field][operator] = value;
-				}
-			}
-		}
+		// Фильтры — по схеме модели: неизвестное поле, кривая дата или число → 400, а не 500 из Prisma
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		const filterWhereClause = buildFilterWhere("contactPerson", filter);
 
 		// ── Фильтрация по ownerType + ownerUuid ────
 		const fkFilter = {};
@@ -150,8 +135,9 @@ router.get("/contactpersons", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /contactpersons error:", error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: "GET /contactpersons" });
 	}
 });
 

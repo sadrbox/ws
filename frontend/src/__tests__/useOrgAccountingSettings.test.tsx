@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 // Мок API-клиента: возвращает результат, заданный per-test.
-const mockGet = vi.fn();
+const mockGet = vi.fn<(...args: unknown[]) => Promise<unknown>>();
 vi.mock("src/services/api/client", () => ({
   api: {
     get: (...args: unknown[]) => mockGet(...args),
@@ -163,6 +163,25 @@ describe("useOrgAccountingSettings", () => {
     expect(mockGet).toHaveBeenCalledWith("/organization-accounting-settings/active", {
       params: {},
     });
+  });
+
+  it("второй потребитель и возврат в окно не перезапрашивают настройки (аудит 26.09, О4)", async () => {
+    mockGet.mockResolvedValue({ success: true, item: buildItem({ useVat: true, vatRate: 12 }) });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client }, children);
+    const first = renderHook(() => useOrgAccountingSettings("org-1", "2026-07-01"), { wrapper });
+    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
+    expect(mockGet).toHaveBeenCalledTimes(1);
+
+    // Вторая форма документа той же организации и даты — из кэша.
+    const second = renderHook(() => useOrgAccountingSettings("org-1", "2026-07-01"), { wrapper });
+    expect(second.result.current.isVatEnabled).toBe(true);
+    // Alt-Tab: браузер сообщает о возврате фокуса в окно.
+    window.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it("item=null когда сервер вернул null (нет настроек)", async () => {

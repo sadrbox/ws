@@ -10,13 +10,13 @@
 
 import { FC, useCallback } from "react";
 import { useNetworkStatus } from "src/hooks/useOfflineSync";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import OfflineSyncJournal from "src/components/OfflineSyncJournal";
 import styles from "./OfflineIndicator.module.scss";
 
 const OfflineIndicator: FC = () => {
   const { isOnline, badgeCount, isSyncing } = useNetworkStatus();
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
 
   const openJournal = useCallback(() => {
     addPane({

@@ -38,8 +38,9 @@ import {
 	createSchedule, deleteSchedule, fetchBases, fetchSchedules, fetchServers, runSchedule, updateSchedule,
 	type OnecSchedule,
 } from "src/services/onec/api";
-import { CapabilityGuard, QueryError, reportBatchStart, useOnecWrite } from "./shared";
-import { attachBatch, startOp } from "./progress";
+import { reportBatchStart, useOnecWrite } from "./shared";
+import { CapabilityGuard, QueryError } from "./sharedUi";
+import { startBatchOp } from "./progress";
 import styles from "./OneCAdmin.module.scss";
 
 /** Что умеет расписание. Оба типа — долгие операции над самой базой. */
@@ -176,13 +177,12 @@ export const SchedulesTab: FC = () => {
 	 */
 	const runNow = useMutation({
 		mutationFn: async (s: OnecSchedule) => {
-			const op = startOp({
+			// Отказ постановки закрывает запись реестра — не вечное «Выполняется» (И26).
+			const r = await startBatchOp({
 				kind: "update", title: `${translate("onecSchedRunNow")}: ${s.name}`,
 				target: `${translate("onecTabBases")}: ${s.baseKeys.length}`,
 				total: s.baseKeys.length, scope: { bases: s.baseKeys },
-			});
-			const r = await runSchedule(s.id);
-			attachBatch(op, r.batchId, r.total);
+			}, () => runSchedule(s.id));
 			reportBatchStart(r, translate("onecTabSchedules"));
 			return r;
 		},

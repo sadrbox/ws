@@ -14,19 +14,23 @@ import { useDebounceValue } from "src/hooks/useDebounceValue";
 import { useCellFieldState } from "src/hooks/useDirtyHighlight";
 import { useFormRequiredScope } from "src/hooks/useFormRequired";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import SelectPaneWrapper from "./SelectPaneWrapper";
 import { setPendingHighlight } from "src/utils/listHighlight";
 import FieldActionButton from "./FieldActionButton";
 import { Icon } from "src/components/IconButton/icons";
 import type { IconName } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
+import { showToast } from "src/components/UIToast";
 import type { FieldVariant } from "./index";
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type LookupActionType = "clear" | "open" | "quickselect" | "list";
+
+/** Метка «подсказки получены быстрым выбором» (а не поиском по тексту). */
+const QUICK_RESULTS = Symbol("quick");
 
 // Карта тип-действия → иконка из общего реестра + подпись.
 // fieldActions описывают только тип, обработчик, состояние и tooltip —
@@ -216,13 +220,14 @@ const LookupField: FC<LookupFieldProps> = ({
   // Подавляем неиспользуемые переменные совместимости
   void _columns;
 
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
 
   const cellState = useCellFieldState();
   const formRequired = useFormRequiredScope();
   const isTable = variant === 'table';
   const generatedId = useId();
   const uid = id ?? generatedId;
+  const listboxId = `${generatedId}-listbox`;
   const tail = name.includes('_') ? name.slice(name.lastIndexOf('_') + 1) : name;
   const isEmpty = !value;
   const isFormRequired = !isTable && formRequired.requiredKeys.has(tail);
@@ -260,6 +265,40 @@ const LookupField: FC<LookupFieldProps> = ({
   const pendingEnterRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedText = useDebounceValue(inputText, 300);
+
+  // ── Гонки запросов (аудит 26.09, И10) ─────────────────────────────────
+  // Общий номер запроса для поиска и «Быстрого выбора»: применяется ответ только
+  // ПОСЛЕДНЕГО запроса. Раньше поздний ответ быстрого выбора затирал отфильтрованный
+  // список, и Enter выбирал чужую запись.
+  const requestSeqRef = useRef(0);
+  // «Быстрый выбор» ещё актуален: ввод текста делает его ответ устаревшим.
+  const quickActiveRef = useRef(false);
+  // Для какого текста получены текущие подсказки (QUICK_RESULTS — быстрый выбор).
+  // Enter берёт подсказку, только если она получена для ТЕКУЩЕГО текста: «Ив» → дописали
+  // «л» → сразу Enter выбирал «Иванов» из прошлой выдачи.
+  const suggestionsForRef = useRef<string | symbol | null>(null);
+  // Поиск упал (5xx/400): это ошибка, а не «Ничего не найдено» с «Создать» (вело к дублям).
+  const [searchError, setSearchError] = useState(false);
+  // Принудительный повтор поиска для того же текста (Enter по устаревшим подсказкам).
+  const [searchNonce, setSearchNonce] = useState(0);
+  // Колбэки и параметры — через ref: инлайн-функции владельца не должны перезапускать
+  // поиск на каждый его рендер (до 200 записей на ререндер формы).
+  const getSuggestionLabelRef = useRef(getSuggestionLabel);
+  getSuggestionLabelRef.current = getSuggestionLabel;
+  const searchTransformRef = useRef(searchTransform);
+  searchTransformRef.current = searchTransform;
+  const extraParamsRef = useRef(extraParams);
+  extraParamsRef.current = extraParams;
+  // Смена фильтра (организация, владелец) — повод искать заново: ключ по содержимому.
+  const extraParamsKey = JSON.stringify(extraParams ?? {});
+  const reportSearchError = useCallback((err: unknown) => {
+    setSearchError(true);
+    const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string } | undefined;
+    // 403 клиент API тостит сам (см. services/api/client) — второй тост не нужен.
+    if (e?.response?.status === 403) return;
+    const msg = e?.response?.data?.message || e?.message || "";
+    showToast(`Не удалось выполнить поиск${msg ? `: ${msg}` : ""}`, "error");
+  }, []);
 
   // ── Portal dropdown position (for table variant) ──────────────────────
   // Список рендерится порталом в body с position:fixed, поэтому координаты
@@ -321,54 +360,62 @@ const LookupField: FC<LookupFieldProps> = ({
 
   // Запрос подсказок при изменении debounced текста
   useEffect(() => {
+    const seq = ++requestSeqRef.current;
     // Не ищем если текст совпадает с уже выбранным значением
     if (!debouncedText || debouncedText === displayValue) {
+      suggestionsForRef.current = debouncedText;
       setSuggestions([]);
+      setSearchError(false);
       setIsLoading(false);
       return;
     }
-    const searchText = searchTransform ? searchTransform(debouncedText) : debouncedText;
-    let cancelled = false;
+    const transform = searchTransformRef.current;
+    const searchText = transform ? transform(debouncedText) : debouncedText;
+    const params = extraParamsRef.current;
     setIsLoading(true);
 
-    if (!searchText && searchTransform) {
+    const apply = (items: LookupItem[]) => {
+      if (seq !== requestSeqRef.current) return; // пришёл ответ устаревшего запроса
+      suggestionsForRef.current = debouncedText;
+      setSearchError(false);
+      setSuggestions(items);
+      // Поле уже без фокуса (Tab ушёл дальше) — список не открываем.
+      if (document.activeElement === inputRef.current) setIsDropdownOpen(true);
+      setActiveIndex(items.length > 0 ? 0 : -1);
+    };
+    const fail = (err: unknown) => {
+      if (seq !== requestSeqRef.current) return;
+      suggestionsForRef.current = debouncedText;
+      setSuggestions([]);
+      reportSearchError(err);
+    };
+    const done = () => { if (seq === requestSeqRef.current) setIsLoading(false); };
+
+    if (!searchText && transform) {
       // Transform вернул "" — загружаем все записи и фильтруем на клиенте
       // по getSuggestionLabel (или displayField), чтобы поиск по лейблу работал.
-      fetchList<LookupItem>(endpoint, undefined, { limit: 200, ...extraParams })
+      fetchList<LookupItem>(endpoint, undefined, { limit: 200, ...params })
         .then((result) => {
-          if (cancelled) return;
-          const all = result.items;
-          const filtered = all.filter((item) => {
-            const label = getSuggestionLabel
-              ? getSuggestionLabel(item)
-              : asText(item[displayField]);
+          const labelOf = getSuggestionLabelRef.current;
+          const filtered = result.items.filter((item) => {
+            const label = labelOf ? labelOf(item) : asText(item[displayField]);
             // Слово-ориентированный матч по видимой метке (см. matchesAllWords).
             return matchesAllWords(label, debouncedText);
           });
-          setSuggestions(filtered);
-          setIsDropdownOpen(true);
-          setActiveIndex(filtered.length > 0 ? 0 : -1);
+          apply(filtered);
         })
-        .catch(() => { if (!cancelled) setSuggestions([]); })
-        .finally(() => { if (!cancelled) setIsLoading(false); });
+        .catch(fail)
+        .finally(done);
     } else if (searchText) {
-      fetchList<LookupItem>(endpoint, undefined, { search: searchText, limit: 10, ...extraParams })
-        .then((result) => {
-          if (cancelled) return;
-          const items = result.items;
-          setSuggestions(items);
-          setIsDropdownOpen(true);
-          setActiveIndex(items.length > 0 ? 0 : -1);
-        })
-        .catch(() => { if (!cancelled) setSuggestions([]); })
-        .finally(() => { if (!cancelled) setIsLoading(false); });
+      fetchList<LookupItem>(endpoint, undefined, { search: searchText, limit: 10, ...params })
+        .then((result) => apply(result.items))
+        .catch(fail)
+        .finally(done);
     } else {
       setSuggestions([]);
       setIsLoading(false);
     }
-
-    return () => { cancelled = true; };
-  }, [debouncedText, endpoint, displayValue, searchTransform, getSuggestionLabel, displayField]);
+  }, [debouncedText, endpoint, displayValue, displayField, extraParamsKey, searchNonce, reportSearchError]);
 
   // Click-outside: закрытие dropdown
   useEffect(() => {
@@ -392,8 +439,13 @@ const LookupField: FC<LookupFieldProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [value, displayValue, allowFreeText]);
 
+  // Двойной щелчок «Выбрать из списка» открывал две панели выбора.
+  const openModalAtRef = useRef(0);
   const handleOpenModal = useCallback(() => {
     if (disabled) return;
+    const now = Date.now();
+    if (now - openModalAtRef.current < 800) return;
+    openModalAtRef.current = now;
     // «Выбор из списка»: подсветить/активировать текущее выбранное значение в списке
     // (activeRow), как это делает «Показать в списке».
     if (value) setPendingHighlight(endpoint, value);
@@ -435,17 +487,27 @@ const LookupField: FC<LookupFieldProps> = ({
     inputRef.current?.focus();
     setQsOpened(true);
     setIsLoading(true);
+    const seq = ++requestSeqRef.current;
+    quickActiveRef.current = true;
     fetchList<LookupItem>(endpoint, undefined, { limit: 200, ...extraParams })
       .then((result) => {
+        // Устарел: после нажатия начали печатать (или пошёл новый запрос).
+        if (seq !== requestSeqRef.current || !quickActiveRef.current) return;
         const items = result.items;
+        suggestionsForRef.current = QUICK_RESULTS;
+        setSearchError(false);
         setSuggestions(items);
         setIsDropdownOpen(true);
         // Первый элемент сразу выделен — Up/Down навигация + Enter работают.
         setActiveIndex(items.length > 0 ? 0 : -1);
       })
-      .catch(() => setSuggestions([]))
-      .finally(() => setIsLoading(false));
-  }, [disabled, endpoint, extraParams]);
+      .catch((err: unknown) => {
+        if (seq !== requestSeqRef.current || !quickActiveRef.current) return;
+        setSuggestions([]);
+        reportSearchError(err);
+      })
+      .finally(() => { if (seq === requestSeqRef.current) setIsLoading(false); });
+  }, [disabled, endpoint, extraParams, reportSearchError]);
 
   const handleSelectItem = useCallback((item: LookupItem) => {
     const uuid = item.uuid as string;
@@ -556,6 +618,8 @@ const LookupField: FC<LookupFieldProps> = ({
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setQsOpened(false); // ввод текста — это уже не «быстрый выбор»
+    quickActiveRef.current = false; // ответ быстрого выбора теперь устарел
+    setSearchError(false);
     setInputText(val);
     // Если пользователь стирает текст — очистить выбранное значение
     if (!val && value) {
@@ -577,7 +641,19 @@ const LookupField: FC<LookupFieldProps> = ({
   }, [value, onSelect, onClear, allowFreeText, onTextChange]);
 
   // Навигация клавишами в dropdown
+  // Текст поля, соответствующий текущему значению (для отката набранного без выбора).
+  const committedText = value ? (displayValue || "") : "";
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Escape закрывает список (верхний слой) и откатывает набранный без выбора текст.
+    // Окно-модалка и ячейка таблицы этот Escape пропускают (aria-expanded="true").
+    if (e.key === "Escape" && isDropdownOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDropdownOpen(false);
+      pendingEnterRef.current = false;
+      if (!allowFreeText) setInputText(committedText);
+      return;
+    }
     if (!isDropdownOpen || suggestions.length === 0) {
       if (e.key === "ArrowDown") {
         // Стрелка вниз — активировать «Быстрый выбор» (inline dropdown)
@@ -611,6 +687,18 @@ const LookupField: FC<LookupFieldProps> = ({
     } else if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
+      // Подсказки получены для ДРУГОГО текста (прошлый поиск или быстрый выбор до ввода) —
+      // не выбираем из них: ждём ответ для текущего текста (отложенный Enter).
+      const settled = !isLoading && debouncedText === inputText;
+      const stale = suggestionsForRef.current === QUICK_RESULTS
+        ? !qsOpened
+        : suggestionsForRef.current !== inputText;
+      if (stale || !settled) {
+        pendingEnterRef.current = true;
+        // Текст уже «устоялся», нового запроса сам по себе не будет — запускаем.
+        if (stale && settled) setSearchNonce((n) => n + 1);
+        return;
+      }
       if (activeIndex >= 0 && activeIndex < suggestions.length) {
         // handleSelectItem уже инициирует onAfterSelect (фокус на следующее поле).
         handleSuggestionClick(suggestions[activeIndex]);
@@ -619,12 +707,8 @@ const LookupField: FC<LookupFieldProps> = ({
         // Подтверждение без выбора — перейти на следующее поле.
         onEnterKey?.();
       }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDropdownOpen(false);
     }
-  }, [isDropdownOpen, suggestions, activeIndex, inputText, displayValue, isLoading, debouncedText, disabled, handleSuggestionClick, handleQuickSelect, onEnterKey]);
+  }, [isDropdownOpen, suggestions, activeIndex, inputText, displayValue, isLoading, debouncedText, disabled, handleSuggestionClick, handleQuickSelect, onEnterKey, allowFreeText, committedText, qsOpened]);
 
   // Разрешение отложенного Enter: как только поиск завершился — выбираем точное
   // совпадение по тексту (иначе первое), либо переходим дальше, если совпадений нет.
@@ -778,6 +862,8 @@ const LookupField: FC<LookupFieldProps> = ({
             role="combobox"
             aria-expanded={isDropdownOpen}
             aria-autocomplete="list"
+            aria-controls={isDropdownOpen ? listboxId : undefined}
+            aria-activedescendant={isDropdownOpen && activeIndex >= 0 && activeIndex < suggestions.length ? `${listboxId}-opt-${activeIndex}` : undefined}
             onFocus={() => {
               // При фокусе — если есть текст и нет выбранного значения, открыть dropdown
               if (inputText && !value && suggestions.length > 0) {
@@ -791,6 +877,11 @@ const LookupField: FC<LookupFieldProps> = ({
                 return;
               }
               setIsDropdownOpen(false);
+              // Набрали «Рог» и ушли Tab без выбора: значение осталось прежним — текст
+              // откатываем к нему, иначе на экране «Рог», а сохранится старое (И15).
+              if (!allowFreeText && !pendingEnterRef.current && inputText !== committedText) {
+                setInputText(committedText);
+              }
             }}
             className={styles.FieldString}
             autoComplete="off"
@@ -844,8 +935,8 @@ const LookupField: FC<LookupFieldProps> = ({
         </div>
 
         {/* ── Autocomplete dropdown ───────────────────────────────────── */}
-        {isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && !isTable && (
-          <div className={styles.LookupDropdown} ref={dropdownRef}>
+        {isDropdownOpen && (suggestions.length > 0 || isLoading || searchError || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && !isTable && (
+          <div className={styles.LookupDropdown} ref={dropdownRef} id={listboxId} role="listbox">
             {isLoading && suggestions.length === 0 && (
               <div className={styles.LookupDropdownLoading}>{translate("searching")}</div>
             )}
@@ -855,6 +946,9 @@ const LookupField: FC<LookupFieldProps> = ({
               return (
                 <div
                   key={(item.uuid as string | undefined) ?? idx}
+                  id={`${listboxId}-opt-${idx}`}
+                  role="option"
+                  aria-selected={idx === activeIndex}
                   className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
                   onMouseDown={(e) => {
                     if (e.button !== 0) return; // только ЛКМ (ПКМ/СКМ не выбирают)
@@ -869,9 +963,9 @@ const LookupField: FC<LookupFieldProps> = ({
               );
             })}
             {!isLoading && suggestions.length === 0 && (
-              <div className={styles.LookupDropdownLoading}>{translate("nothingFound")}</div>
+              <div className={styles.LookupDropdownLoading}>{searchError ? "Ошибка поиска — повторите позже" : translate("nothingFound")}</div>
             )}
-            {canCreate && (
+            {canCreate && !searchError && (
               <div className={styles.LookupDropdownCreateWrapper}>
                 <button type="button" className={styles.LookupDropdownCreate}
                   onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); handleCreateItem(); }}>
@@ -887,10 +981,12 @@ const LookupField: FC<LookupFieldProps> = ({
       </div>
 
       {/* ── Portal dropdown for table variant ──────────────────────────── */}
-      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && dropdownPos && createPortal(
+      {isTable && isDropdownOpen && (suggestions.length > 0 || isLoading || searchError || (canCreate && (qsOpened || (inputText.trim() !== "" && inputText !== displayValue)))) && dropdownPos && createPortal(
         <div
           className={styles.LookupDropdown}
           ref={dropdownRef}
+          id={listboxId}
+          role="listbox"
           style={{
             position: "fixed",
             left: dropdownPos.left,
@@ -912,6 +1008,9 @@ const LookupField: FC<LookupFieldProps> = ({
             return (
               <div
                 key={(item.uuid as string | undefined) ?? idx}
+                id={`${listboxId}-opt-${idx}`}
+                role="option"
+                aria-selected={idx === activeIndex}
                 className={`${styles.LookupDropdownItem} ${idx === activeIndex ? styles.LookupDropdownItemActive : ""}`}
                 onMouseDown={(e) => {
                   if (e.button !== 0) return; // только ЛКМ (ПКМ/СКМ не выбирают)
@@ -926,9 +1025,9 @@ const LookupField: FC<LookupFieldProps> = ({
             );
           })}
           {!isLoading && suggestions.length === 0 && (
-            <div className={styles.LookupDropdownLoading}>{translate("nothingFound")}</div>
+            <div className={styles.LookupDropdownLoading}>{searchError ? "Ошибка поиска — повторите позже" : translate("nothingFound")}</div>
           )}
-          {canCreate && (
+          {canCreate && !searchError && (
             <div className={styles.LookupDropdownCreateWrapper}>
               <button type="button" className={styles.LookupDropdownCreate}
                 onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); handleCreateItem(); }}>

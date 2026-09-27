@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { translate } from "src/i18";
 import type { BonusRow } from "src/services/quality/api";
 import {
-	bonusExportAoa, bonusExportFileName, bonusRows, measureKindLabel, measureKindOptions, needsConfirmation, roleLabel, validateMeasure, violationsSummary,
+	bonusExportAoa, bonusExportFileName, bonusRows, isMonthOver, measureDateIso, measureKindLabel, measureKindOptions, needsConfirmation, roleLabel, validateMeasure, violationsSummary,
 } from "src/models/QualityBonus/bonus";
 
 const row = (userUuid: string, extra: Partial<BonusRow> = {}): BonusRow => ({
@@ -92,5 +92,38 @@ describe("выгрузка в Excel", () => {
 	it("имя файла: открытый месяц — «предварительно»", () => {
 		expect(bonusExportFileName("2026-09", true)).toBe("bonus_2026-09.xlsx");
 		expect(bonusExportFileName("2026-09", false)).toBe("bonus_2026-09_preliminary.xlsx");
+	});
+});
+
+describe("закрытие месяца — только прошедшего (И23)", () => {
+	it("текущий и будущие месяцы закрыть нельзя, прошедшие — можно", () => {
+		expect(isMonthOver("2026-09", "2026-09")).toBe(false);
+		expect(isMonthOver("2026-10", "2026-09")).toBe(false);
+		expect(isMonthOver("2027-01", "2026-12")).toBe(false);
+		expect(isMonthOver("2026-08", "2026-09")).toBe(true);
+		expect(isMonthOver("2025-12", "2026-01")).toBe(true);
+	});
+
+	it("неразобранный месяц не закрывается", () => {
+		expect(isMonthOver("", "2026-09")).toBe(false);
+		expect(isMonthOver("2026-08", "")).toBe(false);
+	});
+});
+
+describe("дата меры — конец местного дня (И24, «мер нет»)", () => {
+	it("мера в день нарушения не раньше самого нарушения", () => {
+		const at = measureDateIso("2026-09-02", 5);
+		expect(at).toBe("2026-09-02T18:59:59.999Z");
+		// Выявлено 02.09 в 14:00 по Алматы — сервер сравнивает моменты «мера ≥ первое нарушение».
+		expect(new Date(at as string) >= new Date("2026-09-02T09:00:00Z")).toBe(true);
+	});
+
+	it("мера накануне нарушения — раньше него", () => {
+		expect(new Date(measureDateIso("2026-09-01", 5) as string) < new Date("2026-09-02T00:30:00+05:00")).toBe(true);
+	});
+
+	it("мусор — не дата", () => {
+		expect(measureDateIso("", 5)).toBeNull();
+		expect(measureDateIso("02.09.2026", 5)).toBeNull();
 	});
 });

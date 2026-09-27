@@ -16,7 +16,7 @@ import Toolbar from "src/components/Toolbar";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { FieldSelect } from "src/components/Field";
 import { getModelColumns } from "src/components/Table/services";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { useQualityMe } from "src/hooks/useQualityMe";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
@@ -51,7 +51,7 @@ const AREA_BY_COLUMN = new Map<string, QualityArea>(QUALITY_AREAS.map((a) => [ar
 const Dot: FC<{ tone: DotTone }> = ({ tone }) => <span className={cx(styles.Dot, styles[tone])} aria-hidden />;
 
 export const QualityChiefDashboard: FC<Partial<TPane>> = ({ uniqId }) => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const { me, isController, isLoading: meLoading } = useQualityMe();
 	const [groupUuid, setGroupUuid] = useState("");
 	const [primaryFor, setPrimaryFor] = useState<ChiefClientRow | null>(null);

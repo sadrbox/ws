@@ -8,7 +8,13 @@
 //   * server-side fallback при отказе модели по safety-классификатору: запрос уходит на
 //     резервную модель по категории отказа, чтобы бухгалтер не получил «пустой» ответ;
 //   * ответ модели сохраняется в raw — на следующем ходе история воспроизводится байт в байт
-//     (thinking-блоки нужно возвращать неизменными на той же модели).
+//     (thinking-блоки нужно возвращать неизменными на той же модели);
+//   * кэш-точка и на ПОСЛЕДНЕМ сообщении (И29 аудита 26.09): раунды одного хода (до 8) и следующий ход читают
+//     уже отправленную историю из кэша, а не оплачивают её заново целиком;
+//   * СТРИМИНГ с общим сроком (Н9 аудита 26.09). Раньше был обычный запрос с таймаутом 120 с и двумя повторами:
+//     длинный ответ (maxTokens 16000) обрывался по таймауту и повторялся — до 6 минут и тройной оплаты за один
+//     раунд. Теперь повторы SDK касаются только установки соединения (до первых байт ответа), а сам ответ
+//     читается потоком без повторов и не дольше общего срока хода модели.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { noteLlmError, noteLlmSuccess } from "./health.ts";
@@ -19,8 +25,14 @@ export type AnthropicOptions = {
 	apiKey: string;
 	model: string;
 	effort?: "low" | "medium" | "high" | "xhigh" | "max";
+	/** Сколько ждать начала ответа (заголовков потока); на это время действуют повторы SDK. */
+	connectTimeoutMs?: number;
+	/** Общий срок одного вызова модели, включая чтение потока. Повторов после начала ответа нет. */
 	timeoutMs?: number;
 };
+
+/** Общий срок вызова модели по умолчанию: длиннее самого длинного осмысленного ответа, короче «навсегда». */
+export const LLM_CALL_TIMEOUT_MS = 300_000;
 
 type Block = Anthropic.Beta.BetaContentBlockParam | Anthropic.Beta.BetaContentBlock;
 
@@ -29,11 +41,15 @@ export class AnthropicProvider implements LLMProvider {
 	private readonly client: Anthropic;
 	private readonly model: string;
 	private readonly effort: NonNullable<AnthropicOptions["effort"]>;
+	private readonly callTimeoutMs: number;
 
 	constructor(opts: AnthropicOptions) {
-		this.client = new Anthropic({ apiKey: opts.apiKey, timeout: opts.timeoutMs ?? 120_000, maxRetries: 2 });
+		// `timeout` клиента в потоке — ожидание ПЕРВЫХ байт ответа: повторы (429, 5xx, обрыв соединения) дёшевы,
+		// пока модель не начала отвечать, и за них не платят дважды.
+		this.client = new Anthropic({ apiKey: opts.apiKey, timeout: opts.connectTimeoutMs ?? 60_000, maxRetries: 2 });
 		this.model = opts.model;
 		this.effort = opts.effort ?? "medium";
+		this.callTimeoutMs = opts.timeoutMs ?? LLM_CALL_TIMEOUT_MS;
 	}
 
 	async chat(req: LLMRequest): Promise<LLMResponse> {
@@ -52,24 +68,37 @@ export class AnthropicProvider implements LLMProvider {
 			...(req.systemExtra ? [{ type: "text" as const, text: req.systemExtra }] : []),
 		];
 
+		const messages = req.messages.map(toParam);
+		if (req.cacheable) markLastForCache(messages);
+
 		let response: Anthropic.Beta.BetaMessage;
+		const ctrl = new AbortController();
+		const timer = setTimeout(() => ctrl.abort(), this.callTimeoutMs);
+		const onAbort = () => ctrl.abort();
+		req.signal?.addEventListener("abort", onAbort, { once: true });
 		try {
-			response = await this.client.beta.messages.create({
+			const stream = this.client.beta.messages.stream({
 				model: this.model,
 				max_tokens: req.maxTokens ?? 4096,
 				system,
 				// Вызов без инструментов (проверка ответа клиенту: текст → JSON) — без поля вовсе, как и у OpenAI.
 				...(tools.length ? { tools } : {}),
-				messages: req.messages.map(toParam),
+				messages,
 				thinking: { type: "adaptive" },
 				output_config: { effort: this.effort },
 				betas: ["server-side-fallback-2026-07-01"],
 				fallbacks: "default",
-			} as Anthropic.Beta.MessageCreateParamsNonStreaming);
+			} as unknown as Anthropic.Beta.MessageCreateParamsNonStreaming, { signal: ctrl.signal });
+			response = await stream.finalMessage();
 		} catch (e) {
-			const err = mapError(e);
+			const err = ctrl.signal.aborted && !(e instanceof Anthropic.APIError && e.status)
+				? new LLMError("LLM_TIMEOUT", `Модель не ответила за ${Math.round(this.callTimeoutMs / 1000)} с`, true)
+				: mapError(e);
 			noteLlmError(err.code, err.message);
 			throw err;
+		} finally {
+			clearTimeout(timer);
+			req.signal?.removeEventListener("abort", onAbort);
 		}
 		noteLlmSuccess();
 
@@ -95,6 +124,29 @@ export class AnthropicProvider implements LLMProvider {
 				cacheWrite: response.usage.cache_creation_input_tokens ?? undefined,
 			},
 		};
+	}
+}
+
+/**
+ * Кэш-точка на последнем блоке последнего сообщения (И29 аудита 26.09). Системный промпт и инструменты кэшировались
+ * и раньше, а история — нет: каждый раунд хода и каждый следующий ход оплачивали её целиком. Точек всего три
+ * (инструменты, система, история) — в пределах четырёх, которые разрешает API.
+ */
+export function markLastForCache(messages: Anthropic.Beta.BetaMessageParam[]): void {
+	const last = messages[messages.length - 1];
+	if (!last) return;
+	if (typeof last.content === "string") {
+		if (!last.content) return;
+		last.content = [{ type: "text", text: last.content, cache_control: { type: "ephemeral" } }];
+		return;
+	}
+	const blocks = last.content as Anthropic.Beta.BetaContentBlockParam[];
+	// Блок рассуждений кэш-точкой быть не может — берём последний обычный.
+	for (let i = blocks.length - 1; i >= 0; i--) {
+		const b = blocks[i] as { type?: string };
+		if (b.type === "thinking" || b.type === "redacted_thinking") continue;
+		blocks[i] = { ...blocks[i], cache_control: { type: "ephemeral" } } as Anthropic.Beta.BetaContentBlockParam;
+		return;
 	}
 }
 

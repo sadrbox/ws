@@ -13,6 +13,7 @@ import auditStyles from "./ActivityHistories.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
+import { useAppAuth } from "src/app/context";
 import { renderAuditCell, summarizeDiff } from "./renderAuditCell";
 import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import Notice from "src/components/Notice";
@@ -192,7 +193,11 @@ interface ActivityHistoriesListProps {
   ownerField?: string;
 }
 
-const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => (
+const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSelectItem, ownerUuid, ownerField }) => {
+  // Запись журнала действий поштучно удаляет только суперадмин (сервер отвечает 403 остальным —
+  // аудит 26.09); чистка по сроку — POST /prune из настроек. Остальным кнопки «Удалить» нет.
+  const isSuperAdmin = !!useAppAuth().user?.isSuperAdmin;
+  return (
   <ModelList
     endpoint={MODEL_ENDPOINT}
     listName="ActivityHistoriesList"
@@ -208,10 +213,12 @@ const ActivityHistoriesList: FC<ActivityHistoriesListProps> = ({ variant, onSele
     renderCell={renderAuditCell}
     // Записи журнала порождает аудит-middleware, а не пользователь: POST-роут создания
     // из UI отсутствует (POST /activityhistories — это приём событий 1С), поэтому
-    // «Добавить» просто падала. Удаление админу оставляем (роут DELETE /:id есть).
+    // «Добавить» просто падала. Удаление (роут DELETE /:id) — только суперадмину.
     hideAdd
+    hideAddDelete={!isSuperAdmin}
   />
-);
+  );
+};
 
 ActivityHistoriesList.displayName = "ActivityHistoriesList";
 export { ActivityHistoriesList, ActivityHistoriesForm };

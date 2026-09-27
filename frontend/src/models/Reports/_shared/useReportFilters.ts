@@ -2,6 +2,7 @@
 // (фильтры применяются по кнопке, отчёт грузится по `applied`). Убирает повтор
 // usePersistentState×N + applied + handleGenerate в каждом отчёте.
 import { useEffect, useRef, useState } from "react";
+import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { usePersistentState } from "src/hooks/usePersistentState";
 
 export interface ReportFiltersConfig<F extends Record<string, unknown>> {
@@ -54,8 +55,24 @@ export function useReportFilters<F extends Record<string, unknown>>(
 		setFields((prev) => ({ ...prev, [key]: value }));
 	const patch = (p: Partial<F>) => setFields((prev) => ({ ...prev, ...p }));
 
+	/*
+	 * «СФОРМИРОВАТЬ» — ВСЕГДА СВЕЖИЙ ЗАПРОС (аудит 26.09, И21). Ключ запроса отчёта — это
+	 * applied, поэтому повторное нажатие с теми же фильтрами давало тот же ключ, и react-query
+	 * отдавал кэш (staleTime 2 мин): после проведения документа ОСВ и карточка показывали
+	 * старые цифры. Запросы, чей ключ заканчивается этими фильтрами, помечаем устаревшими —
+	 * активный перезапрашивается сразу, неактивный — при переходе на него.
+	 */
+	const queryClient = useQueryClient();
 	const generateDisabled = canApply ? !canApply(fields) : false;
-	const handleGenerate = () => { if (!generateDisabled) setApplied({ ...fields }); };
+	const handleGenerate = () => {
+		if (generateDisabled) return;
+		const next = { ...fields };
+		const nextHash = hashKey([next]);
+		void queryClient.invalidateQueries({
+			predicate: (q) => q.queryKey.length > 0 && hashKey([q.queryKey[q.queryKey.length - 1]]) === nextHash,
+		});
+		setApplied(next);
+	};
 
 	return { fields, setField, patch, applied, handleGenerate, generateDisabled };
 }

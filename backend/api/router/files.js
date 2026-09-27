@@ -2,10 +2,139 @@ import express from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma/prisma-client.js";
 import { getQuotas } from "../../services/quotas.js";
+import { checkOwnership, orgIsAccessible } from "../../utils/auth.js";
+import { getInstallation } from "../../services/installation.js";
+import { modeAllowsShared } from "../../services/recordScope.js";
 
 const router = express.Router();
+
+/*
+ * ЧЕЙ ФАЙЛ — РЕШАЕТ ЕГО ВЛАДЕЛЕЦ (Б6 аудита 26.09).
+ *
+ * Файл привязан к записи-владельцу (`ownerType` + `ownerUuid`); поля организации у него долго не
+ * было. Раньше это значило «ничей» — список всех файлов, скачивание, удаление и правка
+ * по uuid работали через организации, а загрузить можно было к любой чужой записи. Теперь
+ * доступ к файлу = доступ к его владельцу: запись владельца → её организация → `checkOwnership`.
+ *
+ * Владелец «global» (общий список «Файлы»): новые файлы кладутся с ownerUuid = организация
+ * загрузившего, то есть это «общие файлы организации». Старые «global/global» — действительно
+ * общие: читаются там, где режим установки допускает общие записи (не на общем сервере), а
+ * менять и удалять их может только суперадмин.
+ *
+ * Неизвестный вид владельца — доступ только суперадмину: забытый вид не должен стать дырой.
+ *
+ * КОЛОНКА ОРГАНИЗАЦИИ (миграция 20260926200000_attached_files_organization) — для выборок: список
+ * «Файлы» берёт файлы доступных организаций одним запросом и проверяет владельца только у строк без
+ * организации (общие записи, старые файлы). Доступ к КОНКРЕТНОМУ файлу по-прежнему решает владелец.
+ * Колонку используем, только если её знает клиент Prisma И она есть в базе: выкладка идёт в три шага
+ * (prisma generate, migrate deploy, перезапуск), и файлы не должны ломаться, если их перепутать.
+ *
+ * Проверить потом: суммарная квота хранилища организации (services/quotas.js) — теперь это
+ * SUM("fileSize") по колонке; сама квота и её настройка — отдельная задача.
+ */
+const FILE_ORG_KNOWN = (Prisma.dmmf?.datamodel?.models ?? [])
+	.find((m) => m.name === "AttachedFile")?.fields.some((f) => f.name === "organizationUuid") ?? false;
+let fileOrgInDb = null;
+
+/** Готова ли колонка организации файла (клиент знает поле и миграция применена). */
+export async function fileOrgColumnReady(db = prisma) {
+	if (!FILE_ORG_KNOWN) return false;
+	if (fileOrgInDb !== null) return fileOrgInDb;
+	try {
+		const rows = await db.$queryRaw`SELECT 1 FROM information_schema.columns WHERE table_name = 'attached_files' AND column_name = 'organizationUuid' LIMIT 1`;
+		fileOrgInDb = rows.length > 0;
+		return fileOrgInDb;
+	} catch {
+		return false; // не кэшируем: проверим при следующем запросе
+	}
+}
+
+/** Параметры запроса к attachedFile: без колонки, пока миграция не применена. */
+async function fileOpts() {
+	return FILE_ORG_KNOWN && !(await fileOrgColumnReady()) ? { omit: { organizationUuid: true } } : {};
+}
+const OWNER_KINDS = {
+	organization: { model: "organization", orgs: (r) => [r.uuid], select: { uuid: true } },
+	counterparty: { model: "counterparty" },
+	contract: { model: "contract" },
+	contactperson: { model: "contactPerson" },
+	employee: { model: "employee", allowShared: false },
+	product: { model: "product" },
+	todo: { model: "todo", allowShared: false },
+	edo_document: {
+		model: "edoDocument",
+		orgs: (r) => [r.senderOrgUuid, r.receiverOrgUuid].filter(Boolean),
+		select: { senderOrgUuid: true, receiverOrgUuid: true },
+	},
+};
+const LEGACY_GLOBAL = "global";
+
+function operatorSees(req) {
+	return !!req.user?.isSuperAdmin && req.user?.operatorDataAccess !== false;
+}
+
+/**
+ * Доступен ли владелец файла. mode: "read" | "write".
+ * Кэш `memo` — для списка, где у многих файлов один владелец.
+ */
+export async function ownerAccessible(req, ownerType, ownerUuid, mode = "read", memo = null) {
+	if (operatorSees(req)) return true;
+	const type = String(ownerType ?? "");
+	const uuid = String(ownerUuid ?? "");
+	if (!type || !uuid) return false;
+	const key = `${type}:${uuid}:${mode}`;
+	if (memo?.has(key)) return memo.get(key);
+	let ok = false;
+	if (type === "global") {
+		if (uuid === LEGACY_GLOBAL) {
+			ok = mode === "read" && modeAllowsShared((await getInstallation())?.mode ?? null);
+		} else {
+			ok = orgIsAccessible(req, uuid);
+		}
+	} else if (OWNER_KINDS[type]) {
+		const kind = OWNER_KINDS[type];
+		const row = await prisma[kind.model].findUnique({
+			where: { uuid },
+			select: kind.select ?? { organizationUuid: true },
+		}).catch(() => null);
+		if (row) {
+			ok = kind.orgs
+				? kind.orgs(row).some((o) => orgIsAccessible(req, o))
+				: checkOwnership(row, req, "organizationUuid", { allowShared: kind.allowShared ?? true });
+		}
+	}
+	memo?.set(key, ok);
+	return ok;
+}
+
+/** Организация записи-владельца — для колонки файла. null — общая запись или владелец неизвестен. */
+export async function ownerOrganization(ownerType, ownerUuid) {
+	const type = String(ownerType ?? "");
+	const uuid = String(ownerUuid ?? "");
+	if (type === "global") return uuid === LEGACY_GLOBAL ? null : uuid;
+	const kind = OWNER_KINDS[type];
+	if (!kind || !uuid) return null;
+	const row = await prisma[kind.model].findUnique({ where: { uuid }, select: kind.select ?? { organizationUuid: true } }).catch(() => null);
+	if (!row) return null;
+	return kind.orgs ? kind.orgs(row)[0] ?? null : row.organizationUuid ?? null;
+}
+
+/** Файл по uuid, если его владелец доступен; иначе null (ответ 404, существование не раскрываем). */
+async function findAccessibleFile(req, uuid, mode = "read") {
+	const file = await prisma.attachedFile.findUnique({ where: { uuid: String(uuid) }, ...(await fileOpts()) });
+	if (!file || file.deletedAt) return null;
+	return (await ownerAccessible(req, file.ownerType, file.ownerUuid, mode)) ? file : null;
+}
+
+/** Убрать загруженные multer файлы с диска (отказ после приёма). */
+function dropUploaded(req) {
+	for (const f of [req.file, ...(req.files?.file ?? []), ...(req.files?.thumbnail ?? [])]) {
+		if (f?.path) fs.unlink(f.path, () => {});
+	}
+}
 
 const UPLOAD_DIR = path.resolve("uploads/files");
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -35,12 +164,18 @@ router.get("/files", async (req, res) => {
 				.json({ success: false, message: "ownerType и ownerUuid обязательны" });
 		}
 
+		// Файлы чужого владельца — пустой список, а не 403: существование записи не раскрываем.
+		if (!(await ownerAccessible(req, ownerType, ownerUuid, "read"))) {
+			return res.status(200).json({ success: true, items: [], total: 0 });
+		}
 		const items = await prisma.attachedFile.findMany({
 			where: {
 				ownerType: String(ownerType),
 				ownerUuid: String(ownerUuid),
+				deletedAt: null,
 			},
 			orderBy: { uploadedAt: "desc" },
+			...(await fileOpts()),
 		});
 
 		return res.status(200).json({
@@ -58,12 +193,31 @@ router.get("/files", async (req, res) => {
 // GET /files/all — ВСЕ прикреплённые файлы (для общего списка «Файлы» в меню).
 // Объявлен ДО "/files/download/:uuid", чтобы "all" не принялся за :uuid.
 // ============================================
-router.get("/files/all", async (_req, res) => {
+router.get("/files/all", async (req, res) => {
 	try {
-		const items = await prisma.attachedFile.findMany({
-			where: { deletedAt: null },
+		// Только файлы доступных владельцев (раньше — файлы всех организаций установки). С колонкой
+		// организации — одним запросом: файлы доступных организаций сразу, а строки без организации
+		// (общие записи, старые файлы) — с проверкой владельца.
+		const opts = await fileOpts();
+		const orgs = operatorSees(req) ? null : [...new Set([req.user?.organizationUuid, ...(req.user?.allowedOrgUuids ?? [])].filter(Boolean))];
+		const byColumn = orgs !== null && (await fileOrgColumnReady());
+		const all = await prisma.attachedFile.findMany({
+			where: {
+				deletedAt: null,
+				...(byColumn ? { OR: [{ organizationUuid: { in: orgs } }, { organizationUuid: null }] } : {}),
+			},
 			orderBy: { uploadedAt: "desc" },
+			...opts,
 		});
+		const memo = new Map();
+		const items = [];
+		for (const f of all) {
+			if (byColumn && f.organizationUuid) {
+				items.push(f);
+				continue;
+			}
+			if (await ownerAccessible(req, f.ownerType, f.ownerUuid, "read", memo)) items.push(f);
+		}
 		return res.status(200).json({ success: true, items, total: items.length });
 	} catch (error) {
 		console.error("GET /files/all error:", error);
@@ -88,10 +242,27 @@ router.post("/files", uploadFields, async (req, res) => {
 		req.file = req.files?.file?.[0];
 		const thumb = req.files?.thumbnail?.[0];
 		if (!ownerType || !ownerUuid || !req.file) {
+			dropUploaded(req);
 			return res.status(400).json({
 				success: false,
 				message: "ownerType, ownerUuid и file обязательны",
 			});
+		}
+
+		// Общий список «Файлы» кладёт файл в организацию загрузившего, а не во «всеобщие».
+		let effOwnerUuid = String(ownerUuid);
+		if (ownerType === "global") {
+			const org = req.user?.organizationUuid ?? null;
+			if (!org && !operatorSees(req)) {
+				dropUploaded(req);
+				return res.status(400).json({ success: false, message: "Не выбрана организация" });
+			}
+			effOwnerUuid = org ?? LEGACY_GLOBAL;
+		}
+		// Прикрепить можно только к доступной записи (раньше — к любой, в т.ч. чужой).
+		if (!(await ownerAccessible(req, ownerType, effOwnerUuid, "write"))) {
+			dropUploaded(req);
+			return res.status(404).json({ success: false, message: "Владелец файла не найден" });
 		}
 
 		/*
@@ -110,6 +281,7 @@ router.post("/files", uploadFields, async (req, res) => {
 		if (quotaOrg) {
 			const { fileMb } = await getQuotas(quotaOrg);
 			if (fileMb && req.file.size > fileMb * 1024 * 1024) {
+				dropUploaded(req);
 				return res.status(413).json({
 					success: false,
 					code: "QUOTA_EXCEEDED",
@@ -145,10 +317,13 @@ router.post("/files", uploadFields, async (req, res) => {
 			}
 		}
 
+		const colReady = await fileOrgColumnReady();
 		const item = await prisma.attachedFile.create({
+			...(await fileOpts()),
 			data: {
+				...(colReady ? { organizationUuid: await ownerOrganization(ownerType, effOwnerUuid) } : {}),
 				ownerType,
-				ownerUuid,
+				ownerUuid: effOwnerUuid,
 				fileName,
 				filePath: req.file.filename,
 				fileSize: req.file.size,
@@ -159,6 +334,7 @@ router.post("/files", uploadFields, async (req, res) => {
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		dropUploaded(req);
 		console.error("POST /files error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -173,9 +349,7 @@ router.post("/files", uploadFields, async (req, res) => {
 // ============================================
 router.get("/files/thumb/:uuid", async (req, res) => {
 	try {
-		const file = await prisma.attachedFile.findUnique({
-			where: { uuid: req.params.uuid },
-		});
+		const file = await findAccessibleFile(req, req.params.uuid, "read");
 		if (!file) return res.status(404).json({ success: false, message: "Файл не найден" });
 
 		const original = path.resolve(UPLOAD_DIR, file.filePath);
@@ -203,9 +377,7 @@ router.get("/files/thumb/:uuid", async (req, res) => {
 // ============================================
 router.get("/files/download/:uuid", async (req, res) => {
 	try {
-		const file = await prisma.attachedFile.findUnique({
-			where: { uuid: req.params.uuid },
-		});
+		const file = await findAccessibleFile(req, req.params.uuid, "read");
 		if (!file) {
 			return res
 				.status(404)
@@ -239,9 +411,7 @@ router.get("/files/download/:uuid", async (req, res) => {
 // ============================================
 router.delete("/files/:uuid", async (req, res) => {
 	try {
-		const file = await prisma.attachedFile.findUnique({
-			where: { uuid: req.params.uuid },
-		});
+		const file = await findAccessibleFile(req, req.params.uuid, "write");
 		if (!file) {
 			return res
 				.status(404)
@@ -266,7 +436,7 @@ router.delete("/files/:uuid", async (req, res) => {
 			fs.unlinkSync(thumbPath);
 		}
 
-		await prisma.attachedFile.delete({ where: { uuid: req.params.uuid } });
+		await prisma.attachedFile.delete({ where: { uuid: req.params.uuid }, ...(await fileOpts()) });
 
 		return res.status(200).json({ success: true, message: "Файл удалён" });
 	} catch (error) {
@@ -283,9 +453,7 @@ router.delete("/files/:uuid", async (req, res) => {
 // ============================================
 router.patch("/files/:uuid", async (req, res) => {
 	try {
-		const file = await prisma.attachedFile.findUnique({
-			where: { uuid: req.params.uuid },
-		});
+		const file = await findAccessibleFile(req, req.params.uuid, "write");
 		if (!file) {
 			return res.status(404).json({ success: false, message: "Файл не найден" });
 		}
@@ -301,6 +469,7 @@ router.patch("/files/:uuid", async (req, res) => {
 			const item = await prisma.attachedFile.update({
 				where: { uuid: file.uuid },
 				data: { comment: "main" },
+				...(await fileOpts()),
 			});
 			return res.status(200).json({ success: true, item });
 		}
@@ -308,6 +477,7 @@ router.patch("/files/:uuid", async (req, res) => {
 		const item = await prisma.attachedFile.update({
 			where: { uuid: file.uuid },
 			data: { comment: comment ?? file.comment },
+			...(await fileOpts()),
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

@@ -1,5 +1,5 @@
 import { FC, useCallback, useEffect, useState } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { LoadingSpinner } from "src/components/UI";
 import type { TPane } from "src/app/types";
 
@@ -25,7 +25,7 @@ import type { TPane } from "src/app/types";
 import { getByEndpoint } from "src/registry/modelRegistry";
 
 const SelectPaneWrapper: FC<Partial<TPane>> = ({ data, onSelectResult, uniqId }) => {
-  const { windows: { requestClose } } = useAppContext();
+  const { windows: { requestClose } } = useAppActions();
 
   const paneData = data as {
     endpoint?: string;

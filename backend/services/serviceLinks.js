@@ -53,14 +53,47 @@ export async function servicedOrgsFor(userUuid, { now = new Date(), db = prisma 
 		.map((l) => ({ organizationUuid: l.clientOrgUuid, linkUuid: l.uuid, profile: l.profile, modules: allowedModules(l) }));
 }
 
+/**
+ * Профили, которые можно просить для обслуживания. `owner` — власть над доступом клиента
+ * (пользователи, права): фирма ведёт учёт, но доступом клиента не распоряжается (К2).
+ */
+export const SERVICE_PROFILES_FORBIDDEN = ["owner"];
+
+/**
+ * Нужно ли новое согласие клиента после правки связи (Б2 аудита 26.09).
+ *
+ * Раньше повторный POST менял профиль, модули и срок у УЖЕ подтверждённой связи, не трогая
+ * состояние: клиент согласился на «бухгалтера до конца года», а фирма молча расширяла доступ.
+ * Теперь любое изменение условий (профиль, модули, срок) и любое «возобновление» неактивной
+ * связи возвращает её в `requested` — доступ снова открывает только клиент. Правка одной
+ * заметки согласия не требует.
+ */
+export function linkNeedsReconfirm(existing, next) {
+	if (!existing) return false;
+	if (existing.state !== "active") return true;
+	const norm = (v) => (v == null || v === "" ? null : v);
+	const time = (v) => (v ? new Date(v).getTime() : null);
+	return norm(existing.profile) !== norm(next.profile)
+		|| norm(existing.modules) !== norm(next.modules)
+		|| time(existing.validUntil) !== time(next.validUntil);
+}
+
 /** Завести или обновить связь. Клиент подтверждает отдельно — см. confirmLink. */
 export async function upsertLink({ serviceOrgUuid, clientOrgUuid, profile = "service_accountant", modules = null, validUntil = null, note = null }) {
 	if (serviceOrgUuid === clientOrgUuid) throw new Error("Организация не может обслуживать сама себя");
 	if (!findProfile(profile)) throw new Error(`Неизвестный профиль прав: ${profile}`);
+	if (SERVICE_PROFILES_FORBIDDEN.includes(profile)) throw new Error(`Профиль «${profile}» нельзя выдать обслуживающей фирме`);
+	const existing = await prisma.serviceLink.findUnique({
+		where: { serviceOrgUuid_clientOrgUuid: { serviceOrgUuid, clientOrgUuid } },
+	});
+	const reconfirm = linkNeedsReconfirm(existing, { profile, modules, validUntil });
 	return prisma.serviceLink.upsert({
 		where: { serviceOrgUuid_clientOrgUuid: { serviceOrgUuid, clientOrgUuid } },
 		create: { serviceOrgUuid, clientOrgUuid, profile, modules, validUntil, note, state: "requested" },
-		update: { profile, modules, validUntil, note },
+		update: {
+			profile, modules, validUntil, note,
+			...(reconfirm ? { state: "requested", confirmedAt: null, confirmedByUuid: null } : {}),
+		},
 	});
 }
 
@@ -134,6 +167,6 @@ export async function providersOf(clientOrgUuid) {
 }
 
 export default {
-	LINK_STATES, STAFF_ROLES, linkIsLive, allowedModules, servicedOrgsFor,
+	LINK_STATES, STAFF_ROLES, SERVICE_PROFILES_FORBIDDEN, linkIsLive, allowedModules, linkNeedsReconfirm, servicedOrgsFor,
 	upsertLink, confirmLink, setLinkState, assignStaff, unassignStaff, clientsOf, providersOf,
 };

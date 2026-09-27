@@ -612,6 +612,43 @@ export class AgentService {
 	}
 
 	/**
+	 * Экземпляры и владельцы токена СРАЗУ ДЛЯ СПИСКА агентов (аудит 26.09): панель опрашивает список раз в 15 с, и
+	 * по два запроса на каждого агента (liveInstances + owner) были классическим N+1.
+	 */
+	async instancesOf(agentIds: readonly string[], secs: number, liveSecs: number): Promise<Map<string, {
+		instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: Date; live: boolean;
+	}[]>> {
+		const out = new Map<string, { instanceId: string; version: string | null; remoteAddr: string | null; lastSeenAt: Date; live: boolean }[]>();
+		if (!agentIds.length) return out;
+		const r = await this.db.query<{
+			agent_id: string; instance_id: string; version: string | null; remote_addr: string | null; last_seen_at: Date; live: boolean;
+		}>(
+			`SELECT agent_id::text AS agent_id, instance_id, version, remote_addr, last_seen_at,
+			        (last_seen_at > now() - ($3 || ' seconds')::interval) AS live
+			   FROM agent_instances
+			  WHERE agent_id = ANY($1::uuid[]) AND last_seen_at > now() - ($2 || ' seconds')::interval
+			  ORDER BY last_seen_at DESC`,
+			[[...agentIds], String(secs), String(liveSecs)],
+		);
+		for (const x of r.rows) {
+			const list = out.get(x.agent_id) ?? [];
+			list.push({ instanceId: x.instance_id, version: x.version, remoteAddr: x.remote_addr, lastSeenAt: x.last_seen_at, live: x.live });
+			out.set(x.agent_id, list);
+		}
+		return out;
+	}
+
+	async ownersOf(agentIds: readonly string[]): Promise<Map<string, { instanceId: string | null; seenAt: Date | null }>> {
+		const out = new Map<string, { instanceId: string | null; seenAt: Date | null }>();
+		if (!agentIds.length) return out;
+		const r = await this.db.query<{ id: string; owner_instance_id: string | null; owner_seen_at: Date | null }>(
+			`SELECT id::text AS id, owner_instance_id, owner_seen_at FROM agents WHERE id = ANY($1::uuid[])`, [[...agentIds]],
+		);
+		for (const x of r.rows) out.set(x.id, { instanceId: x.owner_instance_id, seenAt: x.owner_seen_at });
+		return out;
+	}
+
+	/**
 	 * Убрать давно замолчавшие экземпляры.
 	 *
 	 * Каждый перезапуск службы добавляет строку и не убирает прежнюю: за месяц работы это

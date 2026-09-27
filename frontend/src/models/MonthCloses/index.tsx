@@ -42,6 +42,7 @@ import ModelList from "src/components/ModelList";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import DocumentEntriesButton from "src/components/AccountingEntries/DocumentEntriesButton";
 import { validateDocumentFields, formatValidationErrors } from "src/utils/validatePostedDocument";
+import { monthCloseDefaultDate, previousMonthPeriod } from "./monthCloseDates";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 
 const ENDPOINT = "month-closes";
@@ -91,11 +92,10 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     const data = paneProps.data as { uuid?: string; organizationUuid?: string; organizationName?: string } | undefined;
     if (data?.uuid) return undefined;
     const init = { ...DEFAULT_FIELDS };
-    init.date = isoToLocalInput(new Date().toISOString());
-    // Период по умолчанию — предыдущий месяц (обычно закрывают завершившийся).
-    const now = new Date();
-    const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-    init.period = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
+    // Период по умолчанию — предыдущий месяц (обычно закрывают завершившийся), а дата —
+    // конец этого периода, а не «сейчас» (У6, см. monthCloseDates.ts).
+    init.period = previousMonthPeriod();
+    init.date = monthCloseDefaultDate(init.period);
     const range = monthPeriodToRange(init.period);
     init.periodStart = range.start ?? "";
     init.periodEnd = range.end ?? "";
@@ -147,12 +147,18 @@ const MonthClosesForm: FC<Partial<TPane>> = (paneProps) => {
     buildPaneLabel: (saved: LabelSource) => makeDocLabel(LIST_NAME, translate("docType_month_close"), saved, "date"),
   });
 
-  // Выбор месяца → пересчёт границ периода.
+  // Выбор месяца → пересчёт границ периода. Дата, стоявшая на конце прежнего периода (или
+  // пустая), переезжает на конец нового; дату, введённую вручную, не трогаем.
   const handlePeriodChange = useCallback((e: { target: { value: string } }) => {
     const period = e.target.value;
     const range = monthPeriodToRange(period);
-    form.setFields({ period, periodStart: range.start ?? "", periodEnd: range.end ?? "" } as Partial<TFields>);
-  }, [form.setFields]);
+    const cur = form.store.getSnapshot().fields;
+    const followsPeriod = !cur.date || cur.date === monthCloseDefaultDate(cur.period);
+    form.setFields({
+      period, periodStart: range.start ?? "", periodEnd: range.end ?? "",
+      ...(followsPeriod ? { date: monthCloseDefaultDate(period) } : {}),
+    } as Partial<TFields>);
+  }, [form.setFields, form.store]);
 
   // Финрезультат периода: обороты счёта 5610 (Кт−Дт = прибыль) за период.
   // Подгружается для сохранённого проведённого документа.

@@ -16,6 +16,37 @@
 
 const r = (n, p = 100) => Math.round((Number(n) || 0) * p) / p;
 
+const timeOf = (d) => (d instanceof Date ? d.getTime() : new Date(d).getTime());
+
+/**
+ * ЕДИНЫЙ ПОРЯДОК ДВИЖЕНИЙ РЕГИСТРА (У8 аудита 26.09): (дата, приход раньше расхода,
+ * тип документа, id документа, id движения).
+ *
+ * Раньше при равной дате очерёдность решал `documentId` — но это id из РАЗНЫХ таблиц:
+ * поступление с id 500 и продажа с id 20, проведённые в одну минуту, выстраивались
+ * «продажа, потом поступление», и себестоимость продажи выходила 0. Теперь в один момент
+ * приходы идут раньше расходов (товар, поступивший в ту же минуту, уже на складе), а
+ * среди документов одного направления порядок детерминирован (тип + id), одинаков для
+ * проводок (accountingPosting), снапшотов (costSnapshot) и отчётов.
+ */
+export function compareMovements(a, b) {
+	const t = timeOf(a.date ?? a.t) - timeOf(b.date ?? b.t);
+	if (t !== 0) return t;
+	const dir = (a.movementType === "out" ? 1 : 0) - (b.movementType === "out" ? 1 : 0);
+	if (dir !== 0) return dir;
+	const ta = a.documentType ?? "";
+	const tb = b.documentType ?? "";
+	if (ta !== tb) return ta < tb ? -1 : 1;
+	const d = (a.documentId ?? 0) - (b.documentId ?? 0);
+	if (d !== 0) return d;
+	return (a.id ?? 0) - (b.id ?? 0);
+}
+
+/** Отсортировать движения (копия) по единому порядку регистра. */
+export function sortMovements(movements) {
+	return [...(movements ?? [])].sort(compareMovements);
+}
+
 /** Состояние одного склада по товару. */
 function newState() {
 	return { qty: 0, value: 0, avg: 0, layers: [] }; // layers: [{ qty, unit }] для ФИФО
@@ -31,7 +62,7 @@ function totals(states) {
 /**
  * Проиграть движения одного товара и вернуть агрегаты периода.
  *
- * @param {Array} movements — движения товара, отсортированы (date, documentId, id).
+ * @param {Array} movements — движения товара в едином порядке регистра (sortMovements).
  *   Каждое: { date, movementType:"in"|"out", quantity, amount, documentType, warehouseUuid }.
  * @param {object} opts
  * @param {"AVERAGE"|"FIFO"} opts.method
@@ -125,4 +156,4 @@ export function replayProductCosting(movements, { method = "AVERAGE", from = nul
 	};
 }
 
-export default { replayProductCosting };
+export default { replayProductCosting, compareMovements, sortMovements };

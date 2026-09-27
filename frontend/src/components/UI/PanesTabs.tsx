@@ -2,7 +2,7 @@
 import { FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import styles from "../../styles/main.module.scss";
 import { translate } from 'src/i18';
-import { useAppContext } from 'src/app/context';
+import { useAppActions, useAppPanes } from 'src/app/context';
 import { IconButton } from 'src/components/Toolbar';
 import type { TPane } from 'src/app/types';
 import { orderPanes } from 'src/app/paneOrder';
@@ -172,13 +172,13 @@ const PaneTabsMore: FC<{
 
 export const PanesTabs: FC = () => {
 
-  const context = useAppContext();
-  const { activePane, setActivePane, requestClose, paneOrder } = context.windows;
+  const { panes: openPanes, activePane, paneOrder } = useAppPanes();
+  const { setActivePane, requestClose } = useAppActions().windows;
   // Ряд вкладок идёт по последней активации: активная первой, прежняя первая — второй
   // (см. app/paneOrder). Массив панелей остаётся в порядке открытия — он задаёт DOM пейнов.
   const panes = useMemo(
-    () => orderPanes(context.windows.panes, paneOrder),
-    [context.windows.panes, paneOrder],
+    () => orderPanes(openPanes, paneOrder),
+    [openPanes, paneOrder],
   );
 
   // Определяем, есть ли активная selector-панель → блокировка остальных вкладок

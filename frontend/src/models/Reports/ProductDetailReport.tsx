@@ -21,6 +21,8 @@ import reportCss from "./report.module.scss?inline";
 interface MovementRow {
   date: string; direction: "in" | "out";
   docType: string; docId: number; docUuid: string;
+  /** Номер документа — когда сервер его отдаёт. */
+  docNumber?: string | null;
   counterpartyName: string; quantity: number; price: number; amount: number;
 }
 interface Filters extends Record<string, unknown> {
@@ -111,7 +113,8 @@ const ProductDetailReport: FC<ProductDetailReportProps> = ({
           <Td col="date">{row.date}</Td>
           <Td col="name">
             <DrillLink onOpen={() => drill.toDocument(row.docType, row.docUuid)}>
-              {DOC_TYPE_LABELS[row.docType] ?? row.docType} №{row.docId}
+              {/* Внутренний id в подписи не показываем (И22): «№» — только номер документа. */}
+              {DOC_TYPE_LABELS[row.docType] ?? row.docType}{row.docNumber ? ` № ${row.docNumber}` : ""}
             </DrillLink>
           </Td>
           <Td col="name">{row.counterpartyName}</Td>

@@ -20,13 +20,27 @@ import type { TOpenModelFormProps, TableApi } from "src/components/Table";
 
 interface UseSubTableKeyboardNavOptions {
   readonly: boolean;
+  /**
+   * Запреты — те же, что у кнопок тулбара (аудит 26.09, И8). Раньше клавиши проверяли
+   * только readonly: в предпросмотре позиций (disabled) Insert делал POST строки в
+   * сохранённый документ, Delete — DELETE на сервере; при блокировке основания
+   * (disableAdd/disableDelete) Insert добавлял строки.
+   */
+  disabled?: boolean;
+  disableAdd?: boolean;
+  disableDelete?: boolean;
+  hideAddDelete?: boolean;
+  /**
+   * Спрашивать подтверждение Delete здесь. В немедленном режиме (без deferRemoteChanges)
+   * удаление идёт через useModelDelete, который спрашивает сам — второй вопрос не нужен.
+   */
+  confirmDelete?: boolean;
   inlineEditing: boolean;
   columns: TColumn[];
   /** Проп onInlineAdd (используется лишь как признак доступности добавления). */
   onInlineAdd?: unknown;
   defaultNewRow?: unknown;
   handleInlineAdd: () => Promise<void> | void;
-  handleDelete: (selectedRowIds: Set<number>, tableRows: TDataItem[]) => Promise<void> | void;
   confirm: (message: string) => Promise<boolean> | boolean;
   openModelForm: (formProps: TOpenModelFormProps) => void;
   displayRowsRef: RefObject<TDataItem[]>;
@@ -35,13 +49,16 @@ interface UseSubTableKeyboardNavOptions {
 }
 
 export function useSubTableKeyboardNav({
-  readonly, inlineEditing, columns,
+  readonly, disabled = false, disableAdd = false, disableDelete = false, hideAddDelete = false,
+  confirmDelete = true, inlineEditing, columns,
   onInlineAdd: onInlineAddProp, defaultNewRow,
-  handleInlineAdd, handleDelete, confirm, openModelForm,
+  handleInlineAdd, confirm, openModelForm,
   displayRowsRef, containerRef, tableApiRef,
 }: UseSubTableKeyboardNavOptions) {
   const handleContainerKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
     if (readonly) return;
+    const canAdd = !disabled && !disableAdd && !hideAddDelete;
+    const canDelete = !disabled && !disableDelete && !hideAddDelete;
     const target = e.target as HTMLElement | null;
     const isInputTarget = target instanceof HTMLInputElement && !target.disabled && target.type !== "checkbox";
     const isSelectTarget = target instanceof HTMLSelectElement && !target.disabled;
@@ -55,7 +72,9 @@ export function useSubTableKeyboardNav({
     // на контейнер таблицы, чтобы клавиатурная навигация (Up/Down/Left/Right
     // /Insert/Delete/Home/End/PgUp/PgDn) продолжала работать. Без этого
     // фокус остаётся «нигде», и события клавиатуры не достигают onKeyDown.
-    if (e.key === "Escape" && (isInputTarget || isTextAreaTarget || isSelectTarget)) {
+    // Открытый список поля (лукап, период) Escape сначала закрывает сам — из
+    // ячейки не выходим, иначе набранный текст поиска оставался в ячейке.
+    if (e.key === "Escape" && !isLookupOpen && (isInputTarget || isTextAreaTarget || isSelectTarget)) {
       e.preventDefault();
       e.stopPropagation();
       (target as HTMLElement).blur();
@@ -95,6 +114,12 @@ export function useSubTableKeyboardNav({
     // только когда фокус на контейнере таблицы.
     if (e.key === "Insert" && !isInputTarget && !isTextAreaTarget && !isSelectTarget) {
       if (!onInlineAddProp && !defaultNewRow) return;
+      if (!canAdd) {
+        // Кнопка погашена — и клавиша ничего не делает (Table ниже тоже не должна).
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       void (async () => {
@@ -130,24 +155,27 @@ export function useSubTableKeyboardNav({
     if (e.key === "Delete" && !isInputTarget && !isTextAreaTarget && !isSelectTarget) {
       const rows = displayRowsRef.current;
       if (rows.length === 0) return;
-      const selectedIds = new Set<number>();
-      const selectedTrs = container.querySelectorAll<HTMLTableRowElement>(
-        'tbody tr[data-selected="true"][data-row-id]'
-      );
-      selectedTrs.forEach((tr) => {
-        const id = Number(tr.getAttribute("data-row-id"));
-        if (Number.isFinite(id)) selectedIds.add(id);
-      });
+      if (!canDelete) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Отмеченное — по МОДЕЛИ выбора таблицы, а не по DOM: виртуализация рисует
+      // не все строки, и при «выбраны все» из 100 клавиша удаляла 28 (аудит 26.09, И12).
+      const selectedIds = tableApi?.getSelectedIds() ?? new Set<number>();
       if (selectedIds.size === 0) return;
       e.preventDefault();
       e.stopPropagation();
       void (async () => {
-        const message = selectedIds.size === 1
-          ? "Удалить выбранную строку?"
-          : `Удалить выбранные строки (${selectedIds.size} шт.)?`;
-        const ok = await confirm(message);
-        if (!ok) return;
-        await handleDelete(selectedIds, rows);
+        if (confirmDelete) {
+          const message = selectedIds.size === 1
+            ? "Удалить выбранную строку?"
+            : `Удалить выбранные строки (${selectedIds.size} шт.)?`;
+          const ok = await confirm(message);
+          if (!ok) return;
+        }
+        // Тем же путём, что кнопка «Удалить»: активная строка переходит на соседнюю.
+        await tableApi?.deleteSelected();
       })();
       return;
     }
@@ -327,7 +355,11 @@ export function useSubTableKeyboardNav({
     e.preventDefault();
     e.stopPropagation();
     (target).blur();
-  }, [readonly, inlineEditing, onInlineAddProp, defaultNewRow, handleInlineAdd, handleDelete, confirm, columns, openModelForm]);
+  }, [
+    readonly, disabled, disableAdd, disableDelete, hideAddDelete, confirmDelete,
+    inlineEditing, onInlineAddProp, defaultNewRow, handleInlineAdd, confirm, columns, openModelForm,
+    displayRowsRef, containerRef, tableApiRef,
+  ]);
 
   return handleContainerKeyDown;
 }

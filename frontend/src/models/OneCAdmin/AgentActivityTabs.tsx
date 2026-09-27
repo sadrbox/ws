@@ -13,7 +13,7 @@ import { reportError } from "src/services/errors/route";
 import { getFormatDate } from "src/utils/datetime";
 import { cancelCommands, fetchAgentAudit, fetchAgentCommands, fetchBusinessHealth } from "src/services/onec/api";
 import { withOp } from "./progress";
-import { QueryError } from "./shared";
+import { QueryError } from "./sharedUi";
 import { auditEventLabel, auditDetailsText, commandStateLabel, commandStateTone, healthBaseState, healthScalars } from "./agentActivityView";
 import { formatDuration } from "./queueStats";
 import styles from "./OneCAdmin.module.scss";

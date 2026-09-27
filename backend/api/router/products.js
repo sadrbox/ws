@@ -5,6 +5,7 @@ import { tenantFilter, checkOwnership, directoryScope } from "../../utils/auth.j
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { findBarcodeOwner } from "../../utils/barcodeUniqueness.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { clampLimit, sendError, buildFilterWhere } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -26,8 +27,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawCursor = req.query.cursor;
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res
@@ -77,6 +78,20 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			),
 		);
 
+		// Бренд и единица — по той же причине ОТДЕЛЬНЫМИ запросами (раздел 5 аудита 26.09): условие
+		// `brand: { name: … }` внутри OR — это тот же подзапрос по связи, и он снова выключал trgm-индексы
+		// products (полный проход таблицы на каждый символ в лукапе). Справочники маленькие: находим
+		// их uuid и подставляем `brandUuid/unitOfMeasureUuid in […]` — по ним у products есть индексы.
+		const REF_HIT_LIMIT = 1000;
+		const refHits = (model) => Promise.all(
+			searchWords.map((w) =>
+				prisma[model]
+					.findMany({ where: { name: { contains: w, mode: "insensitive" } }, select: { uuid: true }, take: REF_HIT_LIMIT })
+					.then((rows) => rows.map((r) => r.uuid)),
+			),
+		);
+		const [brandHits, unitHits] = searchWords.length ? await Promise.all([refHits("brand"), refHits("unitOfMeasure")]) : [[], []];
+
 		let searchWhere = {};
 		if (searchWords.length > 0)
 			searchWhere = {
@@ -88,33 +103,17 @@ router.get(`/${ROUTE}`, async (req, res) => {
 					// Список Номенклатуры ищет СЕРВЕРОМ (см. useModelListState), поэтому здесь
 					// обязано покрываться всё, что пользователь видит в колонках, — иначе поиск
 					// по бренду/единице молча перестал бы работать.
-					orConditions.push({ brand: { name: like } });
-					orConditions.push({ unitOfMeasure: { name: like } });
+					if (brandHits[i].length) orConditions.push({ brandUuid: { in: brandHits[i] } });
+					if (unitHits[i].length) orConditions.push({ unitOfMeasureUuid: { in: unitHits[i] } });
 					const idNum = idSearchCondition(w);
 					if (idNum) orConditions.push(idNum);
 					return { OR: orConditions };
 				}),
 			};
 
-		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
-		const filterWhere = {};
-		for (const [field, conds] of Object.entries(filter)) {
-			if (
-				["searchBy", "dateRange"].includes(field) ||
-				!conds ||
-				typeof conds !== "object"
-			)
-				continue;
-			for (const [op, val] of Object.entries(conds)) {
-				if (!ALLOWED.includes(op)) continue;
-				if (op === "contains")
-					filterWhere[field] = { contains: String(val), mode: "insensitive" };
-				else {
-					if (!filterWhere[field]) filterWhere[field] = {};
-					filterWhere[field][op] = val;
-				}
-			}
-		}
+		// Фильтры — по схеме модели: неизвестное поле, кривая дата или число → 400, а не 500 из Prisma
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		const filterWhere = buildFilterWhere("product", filter);
 
 		const baseWhere = { ...searchWhere, ...filterWhere, ...(await directoryScope(req, "Product")) };
 		// Поиск по ВЛОЖЕННЫМ таблицам товара: «[штрихкод: 333]» ищет и в основном
@@ -149,8 +148,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 
@@ -158,6 +158,10 @@ router.get(`/${ROUTE}`, async (req, res) => {
 // Объявлен ДО `/:id`. Штрих-коды и цены группируются по товару на клиенте.
 router.get(`/${ROUTE}/export-full`, async (req, res) => {
 	try {
+		// Проверить потом: выгрузка целиком — до 100 тыс. товаров со ВСЕЙ историей цен в памяти воркера
+		// (Н3 аудита 26.09). Общий предел списков (utils/listQuery.js) к ней не применён намеренно — это
+		// выгрузка, а не страница списка. Нужен потоковый вывод (курсор + NDJSON/CSV) и последняя цена
+		// по типу вместо всей истории; до того — не звать на больших справочниках.
 		const items = await prisma[MODEL].findMany({
 			where: { ...tenantFilter(req) },
 			orderBy: { name: "asc" },

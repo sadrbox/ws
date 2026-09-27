@@ -39,9 +39,11 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { withStableIds } from "src/utils/stableRowId";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
+import { PaneActiveProvider } from "src/hooks/usePaneActive";
 import { fetchServers } from "src/services/onec/api";
 import { getOnecServer, setOnecServer } from "src/services/onec/serverScope";
-import { ReadonlyNotice, QueryError, useAgents } from "./shared";
+import { useAgents } from "./shared";
+import { ReadonlyNotice, QueryError } from "./sharedUi";
 import { clusterOptions, clusterRows, clusterSubtitle, pickCluster } from "./clustersView";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
@@ -58,7 +60,7 @@ const columns = (): TColumn[] => ([
 	{ identifier: "clusterAddress", type: "string", width: "260px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 ] as unknown as TColumn[]);
 
-export const OneCClustersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
+const ClustersPaneBody: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const qc = useQueryClient();
 	/*
 	 * Наблюдение за командами — на уровне раздела, а не вкладки: команда со вкладки «Базы» идёт минутами, и
@@ -246,5 +248,12 @@ export const OneCClustersList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 		</>
 	);
 };
+
+/** Корень панели: опросы внутри идут, только пока панель на экране (О4 аудита 26.09). */
+export const OneCClustersList: FC<{ uniqId?: string }> = ({ uniqId }) => (
+	<PaneActiveProvider uniqId={uniqId}>
+		<ClustersPaneBody uniqId={uniqId} />
+	</PaneActiveProvider>
+);
 
 export default OneCClustersList;

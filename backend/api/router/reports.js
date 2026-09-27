@@ -1,9 +1,12 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter, canAccessModel } from "../../utils/auth.js";
+import { canAccessModel } from "../../utils/auth.js";
 import { reportSubject } from "../../utils/routeSubjects.js";
 import { resolveCostingMethod } from "../../services/accountingPosting.js";
-import { replayProductCosting } from "../../services/costingReplay.js";
+import { replayProductCosting, sortMovements } from "../../services/costingReplay.js";
+import { reportOrgs, reportSingleOrg, orgWhere, respondReportScopeError } from "../../services/reportScope.js";
+import { dateRangeWhere, startOfLocalDay, endOfLocalDay, orgTimeZone, respondBadDateError, BadDateError } from "../../services/periodBounds.js";
+import { r2 } from "../../services/money.js";
 
 const router = express.Router();
 
@@ -64,127 +67,153 @@ const COST_BEARING_IN_DOCS = new Set([
 	"sale_return",
 	"inventory_transfer",
 ]);
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+const num = (v) => Number(v ?? 0) || 0;
 
+// Аудит 26.09 (Б6, У5): организация из запроса ПЕРЕСЕКАЕТСЯ с доступными (reportOrgs —
+// чужая → 403), а не перезаписывает tenantFilter; сутки периода — местные (periodBounds).
 function buildDocWhere(req, { dateFrom, dateTo, organizationUuid } = {}) {
-	const where = { posted: true, ...tenantFilter(req) };
-	if (dateFrom || dateTo) {
-		where.date = {};
-		if (dateFrom) where.date.gte = new Date(dateFrom);
-		if (dateTo) where.date.lte = new Date(dateTo + "T23:59:59.999Z");
-	}
-	if (organizationUuid) where.organizationUuid = organizationUuid;
+	const orgs = reportOrgs(req, organizationUuid);
+	const where = { posted: true, deletedAt: null, ...orgWhere(orgs) };
+	const range = dateRangeWhere(dateFrom, dateTo, orgTimeZone(orgs?.[0] ?? null));
+	if (range) where.date = range;
 	return where;
+}
+
+/**
+ * То же условие для сырого SQL по таблице документов с псевдонимом `alias`: проведён,
+ * не удалён, организации отчёта, местный период, контрагент. null — заведомо пусто.
+ */
+function docSql(req, alias, { dateFrom, dateTo, organizationUuid, counterpartyUuid } = {}, params) {
+	const orgs = reportOrgs(req, organizationUuid);
+	if (orgs !== null && orgs.length === 0) return null;
+	const conds = [`${alias}."posted" = true`, `${alias}."deletedAt" IS NULL`];
+	if (orgs !== null) { params.push(orgs); conds.push(`${alias}."organizationUuid" = ANY($${params.length}::text[])`); }
+	const range = dateRangeWhere(dateFrom, dateTo, orgTimeZone(orgs?.[0] ?? null));
+	if (range?.gte) { params.push(range.gte.toISOString()); conds.push(`${alias}."date" >= $${params.length}::timestamp`); }
+	if (range?.lte) { params.push(range.lte.toISOString()); conds.push(`${alias}."date" <= $${params.length}::timestamp`); }
+	if (counterpartyUuid) { params.push(String(counterpartyUuid)); conds.push(`${alias}."counterpartyUuid" = $${params.length}`); }
+	return conds.join(" AND ");
+}
+
+/** Общий ответ на ошибки параметров отчёта. true — ответ отправлен. */
+function respondReportError(err, res) {
+	return respondBadDateError(err, res) || respondReportScopeError(err, res);
+}
+
+/** Имена товаров и единиц измерения одним запросом на каждый справочник. */
+async function productAndUomNames(productUuids, uomUuids) {
+	const [products, uoms] = await Promise.all([
+		productUuids.length ? prisma.product.findMany({ where: { uuid: { in: productUuids } }, select: { uuid: true, name: true } }) : [],
+		uomUuids.length ? prisma.unitOfMeasure.findMany({ where: { uuid: { in: uomUuids } }, select: { uuid: true, name: true } }) : [],
+	]);
+	return { productName: new Map(products.map((p) => [p.uuid, p.name])), uomName: new Map(uoms.map((u) => [u.uuid, u.name])) };
 }
 
 // ─── GET /reports/sales-by-product ───────────────────────────────────────────
 // Params: dateFrom, dateTo, organizationUuid, counterpartyUuid
+//
+// Агрегаты в SQL (аудит 26.09): раньше грузились все продажи периода и ВСЕ их строки
+// с товаром и единицей (год — сотни тысяч объектов) плюс IN-список uuid продаж на
+// десятки тысяч параметров. Теперь строки суммируются GROUP BY по товару, себестоимость —
+// GROUP BY по субконто «Номенклатура» проводок 7010.
 router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
+		const filter = { dateFrom, dateTo, organizationUuid, counterpartyUuid };
 
-		const saleWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
-		if (counterpartyUuid) saleWhere.counterpartyUuid = counterpartyUuid;
-
-		const sales = await prisma.sale.findMany({
-			where: saleWhere,
-			select: { uuid: true, organization: { select: { name: true } } },
-		});
-
-		const saleUuids = sales.map((s) => s.uuid);
+		// У каждого запроса — свой список параметров: неиспользованный параметр Postgres
+		// не может типизировать и отвергает запрос.
+		const saleParams = [];
+		const saleCond = docSql(req, "s", filter, saleParams); // чужая организация → 403
 		const orgName = organizationUuid
-			? (sales.find((s) => s.organization)?.organization?.name ?? "")
+			? ((await prisma.organization.findUnique({ where: { uuid: String(organizationUuid) }, select: { name: true } }))?.name ?? "")
 			: "";
+		if (!saleCond) return res.json({ success: true, items: [], orgName });
+		const retParams = [];
+		const retCond = docSql(req, "s", filter, retParams);
+		const costParams = [];
+		const costSaleCond = docSql(req, "s", filter, costParams);
+		const costRetCond = docSql(req, "s", filter, costParams);
 
-		if (saleUuids.length === 0) return res.json({ success: true, items: [], orgName });
+		const [saleRows, returnRows, costRows] = await Promise.all([
+			prisma.$queryRawUnsafe(
+				`SELECT i."productUuid" AS product_uuid, MIN(i."unitOfMeasureUuid") AS uom_uuid,
+				        SUM(i."quantity")::text AS qty, SUM(i."amount")::text AS amount,
+				        SUM(i."exciseAmount")::text AS excise, SUM(i."vatAmount")::text AS vat,
+				        SUM(i."amountWithoutVat")::text AS no_tax
+				   FROM "sale_items" i JOIN "sales" s ON s."uuid" = i."saleUuid"
+				  WHERE i."deletedAt" IS NULL AND ${saleCond}
+				  GROUP BY i."productUuid"`,
+				...saleParams,
+			),
+			prisma.$queryRawUnsafe(
+				`SELECT i."productUuid" AS product_uuid, MIN(i."unitOfMeasureUuid") AS uom_uuid,
+				        SUM(i."quantity")::text AS qty, SUM(i."amount")::text AS amount,
+				        SUM(COALESCE(i."amountWithoutVat", i."amount"))::text AS no_tax,
+				        SUM(COALESCE(i."exciseAmount", 0))::text AS excise
+				   FROM "sale_return_items" i JOIN "sale_returns" s ON s."uuid" = i."saleReturnUuid"
+				  WHERE i."deletedAt" IS NULL AND ${retCond}
+				  GROUP BY i."productUuid"`,
+				...retParams,
+			),
+			// ── Себестоимость проданного: из ПРОВОДОК, а не пересчётом ───────────
+			// Дт 7010 Кт 1330 при реализации и обратная Дт 1330 Кт 7010 при возврате.
+			// Проводки формируются на проведении по фактической политике организации
+			// (ФИФО/средняя), поэтому отчёт всегда сходится с ОСВ и карточкой счёта.
+			// Номенклатура — с той стороны проводки, где стоит 7010 (она есть на обеих).
+			prisma.$queryRawUnsafe(
+				`SELECT a."objectUuid" AS product_uuid,
+				        SUM(CASE WHEN e."debitAccountCode" = '${COGS_ACCOUNT_CODE}' THEN e."amount" ELSE -e."amount" END)::text AS cost
+				   FROM "accounting_entries" e
+				   JOIN "accounting_entry_analytics" a
+				     ON a."accountingEntryUuid" = e."uuid" AND a."subkontoType" = 'Nomenclature' AND a."objectUuid" IS NOT NULL
+				    AND a."side" = CASE WHEN e."debitAccountCode" = '${COGS_ACCOUNT_CODE}' THEN 'debit' ELSE 'credit' END
+				  WHERE ('${COGS_ACCOUNT_CODE}' IN (e."debitAccountCode", e."creditAccountCode"))
+				    AND (
+				      (e."documentType" = 'sale' AND EXISTS (SELECT 1 FROM "sales" s WHERE s."uuid" = e."documentUuid" AND ${costSaleCond}))
+				      OR (e."documentType" = 'sale_return' AND EXISTS (SELECT 1 FROM "sale_returns" s WHERE s."uuid" = e."documentUuid" AND ${costRetCond}))
+				    )
+				  GROUP BY a."objectUuid"`,
+				...costParams,
+			),
+		]);
 
-		const items = await prisma.saleItem.findMany({
-			where: { saleUuid: { in: saleUuids }, deletedAt: null },
-			include: {
-				product: { select: { uuid: true, name: true } },
-				unitOfMeasure: { select: { name: true } },
-			},
-			orderBy: { id: "asc" },
-		});
+		const productUuids = [...new Set([...saleRows, ...returnRows].map((r) => r.product_uuid).filter(Boolean))];
+		const uomUuids = [...new Set([...saleRows, ...returnRows].map((r) => r.uom_uuid).filter(Boolean))];
+		const { productName, uomName } = await productAndUomNames(productUuids, uomUuids);
+		const costByProduct = new Map(costRows.map((c) => [c.product_uuid, num(c.cost)]));
 
 		const map = new Map();
-		for (const item of items) {
-			const key = item.productUuid ?? "__no_product__";
+		const ensure = (r) => {
+			const key = r.product_uuid ?? "__no_product__";
 			if (!map.has(key)) {
 				map.set(key, {
-					productUuid: item.productUuid,
-					productName: item.product?.name ?? "—",
-					uom: item.unitOfMeasure?.name ?? "",
+					productUuid: r.product_uuid ?? null,
+					productName: (r.product_uuid && productName.get(r.product_uuid)) || "—",
+					uom: (r.uom_uuid && uomName.get(r.uom_uuid)) || "",
 					qtySale: 0, qtyReturn: 0, amountSale: 0, amountReturn: 0,
 					exciseAmountSale: 0, vatAmountSale: 0, amountNoTaxSale: 0,
+					amountNoTaxReturn: 0, exciseAmountReturn: 0,
 				});
 			}
-			const row = map.get(key);
-			row.qtySale += Number(item.quantity);
-			row.amountSale += Number(item.amount);
-			row.exciseAmountSale += Number(item.exciseAmount);
-			row.vatAmountSale += Number(item.vatAmount);
-			row.amountNoTaxSale += Number(item.amountWithoutVat);
+			return map.get(key);
+		};
+		for (const r of saleRows) {
+			const row = ensure(r);
+			row.qtySale += num(r.qty);
+			row.amountSale += num(r.amount);
+			row.exciseAmountSale += num(r.excise);
+			row.vatAmountSale += num(r.vat);
+			row.amountNoTaxSale += num(r.no_tax);
 		}
-
-		// ── Возвраты от покупателя за тот же период ──────────────────────────
-		const returnWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
-		if (counterpartyUuid) returnWhere.counterpartyUuid = counterpartyUuid;
-		const saleReturns = await prisma.saleReturn.findMany({ where: returnWhere, select: { uuid: true } });
-		const returnUuids = saleReturns.map((r) => r.uuid);
-
-		if (returnUuids.length > 0) {
-			const returnItems = await prisma.saleReturnItem.findMany({
-				where: { saleReturnUuid: { in: returnUuids }, deletedAt: null },
-				include: { product: { select: { uuid: true, name: true } }, unitOfMeasure: { select: { name: true } } },
-			});
-			for (const item of returnItems) {
-				const key = item.productUuid ?? "__no_product__";
-				if (!map.has(key)) {
-					map.set(key, {
-						productUuid: item.productUuid,
-						productName: item.product?.name ?? "—",
-						uom: item.unitOfMeasure?.name ?? "",
-						qtySale: 0, qtyReturn: 0, amountSale: 0, amountReturn: 0,
-						exciseAmountSale: 0, vatAmountSale: 0, amountNoTaxSale: 0,
-						amountNoTaxReturn: 0,
-					});
-				}
-				const row = map.get(key);
-				row.qtyReturn += Number(item.quantity);
-				row.amountReturn += Number(item.amount);
-				row.amountNoTaxReturn = (row.amountNoTaxReturn ?? 0) + Number(item.amountWithoutVat ?? item.amount);
-				// Акциз возврата — чтобы вычесть его симметрично акцизу реализации.
-				row.exciseAmountReturn = (row.exciseAmountReturn ?? 0) + Number(item.exciseAmount ?? 0);
-			}
-		}
-
-		// ── Себестоимость проданного: из ПРОВОДОК, а не пересчётом ───────────
-		// Дт 7010 Кт 1330 при реализации и обратная Дт 1330 Кт 7010 при возврате.
-		// Проводки формируются на проведении по фактической политике организации
-		// (ФИФО/средняя), поэтому отчёт всегда сходится с ОСВ и карточкой счёта.
-		const costByProduct = new Map();
-		const docUuids = [...saleUuids, ...returnUuids];
-		if (docUuids.length > 0) {
-			const entries = await prisma.accountingEntry.findMany({
-				where: {
-					documentUuid: { in: docUuids },
-					OR: [{ debitAccountCode: COGS_ACCOUNT_CODE }, { creditAccountCode: COGS_ACCOUNT_CODE }],
-				},
-				select: {
-					amount: true,
-					debitAccountCode: true,
-					analytics: { where: { subkontoType: "Nomenclature" }, select: { objectUuid: true } },
-				},
-			});
-			for (const e of entries) {
-				const productUuid = e.analytics.find((a) => a.objectUuid)?.objectUuid;
-				if (!productUuid) continue;
-				// Дт 7010 — себестоимость списана; Кт 7010 — возвращена (сторно).
-				const sign = e.debitAccountCode === COGS_ACCOUNT_CODE ? 1 : -1;
-				costByProduct.set(productUuid, (costByProduct.get(productUuid) ?? 0) + sign * Number(e.amount));
-			}
+		for (const r of returnRows) {
+			const row = ensure(r);
+			row.qtyReturn += num(r.qty);
+			row.amountReturn += num(r.amount);
+			row.amountNoTaxReturn += num(r.no_tax);
+			// Акциз возврата — чтобы вычесть его симметрично акцизу реализации.
+			row.exciseAmountReturn += num(r.excise);
 		}
 
 		const rows = Array.from(map.values())
@@ -227,6 +256,7 @@ router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"),
 
 		return res.json({ success: true, items: rows, orgName });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/sales-by-product error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -239,10 +269,6 @@ router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"),
 // массив `monthly` + `amountNet` (для ABC), а коэффициент вариации и классы
 // X/Y/Z и A/B/C считает фронт (см. XYZReport.tsx).
 // Params: dateFrom, dateTo, organizationUuid, counterpartyUuid
-function ymKey(d) {
-	const dt = new Date(d);
-	return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 function enumerateMonths(fromYm, toYm) {
 	const out = [];
 	let [y, m] = fromYm.split("-").map(Number);
@@ -257,41 +283,63 @@ function enumerateMonths(fromYm, toYm) {
 router.get("/reports/sales-by-product-xyz", requireReportAccess("sales-by-product-xyz"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
+		const filter = { dateFrom, dateTo, organizationUuid, counterpartyUuid };
+		const orgs = reportOrgs(req, organizationUuid); // чужая организация → 403
+		const tz = orgTimeZone(orgs?.[0] ?? null);
 
-		const saleWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
-		if (counterpartyUuid) saleWhere.counterpartyUuid = counterpartyUuid;
-		const returnWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
-		if (counterpartyUuid) returnWhere.counterpartyUuid = counterpartyUuid;
-
-		const [sales, saleReturns] = await Promise.all([
-			prisma.sale.findMany({ where: saleWhere, select: { uuid: true, date: true, organization: { select: { name: true } } } }),
-			prisma.saleReturn.findMany({ where: returnWhere, select: { uuid: true, date: true } }),
+		// Помесячно — агрегатом в SQL, месяц МЕСТНЫЙ (аудит 26.09): раньше грузились все
+		// продажи и все их строки, а месяц брался по UTC (продажа 01.06 00:30 по Алматы
+		// попадала в май). "date" хранится как UTC без пояса → AT TIME ZONE 'UTC' → пояс.
+		const monthly = async (itemTable, docTable, fk) => {
+			const params = [];
+			const cond = docSql(req, "s", filter, params);
+			if (!cond) return [];
+			params.push(tz);
+			return prisma.$queryRawUnsafe(
+				`SELECT i."productUuid" AS product_uuid, MIN(i."unitOfMeasureUuid") AS uom_uuid,
+				        to_char((s."date" AT TIME ZONE 'UTC') AT TIME ZONE $${params.length}, 'YYYY-MM') AS ym,
+				        SUM(i."quantity")::text AS qty, SUM(i."amount")::text AS amount
+				   FROM "${itemTable}" i JOIN "${docTable}" s ON s."uuid" = i."${fk}"
+				  WHERE i."deletedAt" IS NULL AND ${cond}
+				  GROUP BY i."productUuid", ym`,
+				...params,
+			);
+		};
+		const [saleRows, returnRows] = await Promise.all([
+			monthly("sale_items", "sales", "saleUuid"),
+			monthly("sale_return_items", "sale_returns", "saleReturnUuid"),
 		]);
 
-		const orgName = organizationUuid ? (sales.find((s) => s.organization)?.organization?.name ?? "") : "";
-		const saleUuids = sales.map((s) => s.uuid);
-		const returnUuids = saleReturns.map((r) => r.uuid);
-		if (saleUuids.length === 0 && returnUuids.length === 0) {
+		const orgName = organizationUuid
+			? ((await prisma.organization.findUnique({ where: { uuid: String(organizationUuid) }, select: { name: true } }))?.name ?? "")
+			: "";
+		if (!saleRows.length && !returnRows.length) {
 			return res.json({ success: true, items: [], months: [], orgName });
 		}
 
-		const saleDate = new Map(sales.map((s) => [s.uuid, s.date]));
-		const retDate = new Map(saleReturns.map((r) => [r.uuid, r.date]));
-
-		// Полный список месяцев периода: границы — из фильтра, иначе из фактических дат.
-		const allDates = [...sales.map((s) => s.date), ...saleReturns.map((r) => r.date)];
-		const fromYm = ymKey(dateFrom || allDates.reduce((a, b) => (a < b ? a : b)));
-		const toYm = ymKey(dateTo || allDates.reduce((a, b) => (a > b ? a : b)));
+		// Полный список месяцев периода: границы — из фильтра, иначе из фактических месяцев.
+		const allYm = [...saleRows, ...returnRows].map((r) => r.ym).sort();
+		const localYm = (v) => {
+			const d = startOfLocalDay(v, tz);
+			if (!d) throw new BadDateError("date", v);
+			return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit" }).format(d).slice(0, 7);
+		};
+		const fromYm = dateFrom ? localYm(dateFrom) : allYm[0];
+		const toYm = dateTo ? localYm(endOfLocalDay(dateTo, tz)) : allYm[allYm.length - 1];
 		const months = enumerateMonths(fromYm, toYm);
 
+		const productUuids = [...new Set([...saleRows, ...returnRows].map((r) => r.product_uuid).filter(Boolean))];
+		const uomUuids = [...new Set([...saleRows, ...returnRows].map((r) => r.uom_uuid).filter(Boolean))];
+		const { productName, uomName } = await productAndUomNames(productUuids, uomUuids);
+
 		const map = new Map();
-		const ensure = (item) => {
-			const key = item.productUuid ?? "__no_product__";
+		const ensure = (r) => {
+			const key = r.product_uuid ?? "__no_product__";
 			if (!map.has(key)) {
 				map.set(key, {
-					productUuid: item.productUuid,
-					productName: item.product?.name ?? "—",
-					uom: item.unitOfMeasure?.name ?? "",
+					productUuid: r.product_uuid ?? null,
+					productName: (r.product_uuid && productName.get(r.product_uuid)) || "—",
+					uom: (r.uom_uuid && uomName.get(r.uom_uuid)) || "",
 					amountNet: 0,
 					byMonth: new Map(),
 				});
@@ -299,28 +347,15 @@ router.get("/reports/sales-by-product-xyz", requireReportAccess("sales-by-produc
 			return map.get(key);
 		};
 		const addQty = (row, ym, qty) => row.byMonth.set(ym, (row.byMonth.get(ym) ?? 0) + qty);
-
-		if (saleUuids.length > 0) {
-			const items = await prisma.saleItem.findMany({
-				where: { saleUuid: { in: saleUuids }, deletedAt: null },
-				include: { product: { select: { name: true } }, unitOfMeasure: { select: { name: true } } },
-			});
-			for (const it of items) {
-				const row = ensure(it);
-				addQty(row, ymKey(saleDate.get(it.saleUuid)), Number(it.quantity));
-				row.amountNet += Number(it.amount);
-			}
+		for (const r of saleRows) {
+			const row = ensure(r);
+			addQty(row, r.ym, num(r.qty));
+			row.amountNet += num(r.amount);
 		}
-		if (returnUuids.length > 0) {
-			const rItems = await prisma.saleReturnItem.findMany({
-				where: { saleReturnUuid: { in: returnUuids }, deletedAt: null },
-				include: { product: { select: { name: true } }, unitOfMeasure: { select: { name: true } } },
-			});
-			for (const it of rItems) {
-				const row = ensure(it);
-				addQty(row, ymKey(retDate.get(it.saleReturnUuid)), -Number(it.quantity));
-				row.amountNet -= Number(it.amount);
-			}
+		for (const r of returnRows) {
+			const row = ensure(r);
+			addQty(row, r.ym, -num(r.qty));
+			row.amountNet -= num(r.amount);
 		}
 
 		const items = Array.from(map.values())
@@ -336,6 +371,7 @@ router.get("/reports/sales-by-product-xyz", requireReportAccess("sales-by-produc
 
 		return res.json({ success: true, items, months, orgName });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/sales-by-product-xyz error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -356,29 +392,40 @@ router.get("/reports/sales-by-product-xyz", requireReportAccess("sales-by-produc
 // Params: dateFrom, dateTo, organizationUuid, warehouseUuid
 router.get("/reports/material-statement", requireReportAccess("material-statement"), async (req, res) => {
 	try {
-		const { dateFrom, dateTo, organizationUuid, warehouseUuid } = req.query;
+		const { dateFrom, dateTo, warehouseUuid } = req.query;
 
-		// Фильтр регистра: tenant + явная орг/склад. Дата — до конца dateTo
-		// включительно (движения после периода не загружаем; начальный остаток
-		// формируется движениями ДО dateFrom).
-		const where = { ...tenantFilter(req) };
-		if (organizationUuid) where.organizationUuid = organizationUuid;
+		// Отчёт — по ОДНОЙ организации (аудит 26.09, Б6): без параметра раньше суммировались
+		// все организации, а выручка считалась вовсе без фильтра организации. Себестоимость
+		// считается по учётной политике организации — смешивать их бессмысленно.
+		const organizationUuid = reportSingleOrg(req, req.query.organizationUuid);
+		const tz = orgTimeZone(organizationUuid);
+		const from = dateFrom ? startOfLocalDay(dateFrom, tz) : null;
+		if (dateFrom && !from) throw new BadDateError("dateFrom", dateFrom);
+		const to = dateTo ? endOfLocalDay(dateTo, tz) : null;
+		if (dateTo && !to) throw new BadDateError("dateTo", dateTo);
+
+		// Фильтр регистра: организация + склад. Дата — до конца dateTo включительно
+		// (движения после периода не загружаем; начальный остаток формируется движениями
+		// ДО dateFrom).
+		// Проверить потом: остаток на начало брать из product_cost_snapshot/агрегата, а
+		// построчно читать только движения периода (backend_performance п. 7).
+		const where = { organizationUuid };
 		if (warehouseUuid) where.warehouseUuid = warehouseUuid;
-		if (dateTo) where.date = { lte: new Date(dateTo + "T23:59:59.999Z") };
+		if (to) where.date = { lte: to };
 
-		const movements = await prisma.productRegister.findMany({
+		// Порядок ОБЯЗАН совпадать с себестоимостью в проводках — единый порядок регистра
+		// (sortMovements: при равной дате приход раньше расхода, затем тип и id документа).
+		const movements = sortMovements(await prisma.productRegister.findMany({
 			where,
 			include: {
 				product: { select: { uuid: true, name: true, sku: true } },
 				unitOfMeasure: { select: { name: true } },
 			},
-			// Порядок ОБЯЗАН совпадать с ФИФО проводок: (date, documentId, id).
 			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
-		});
+		}));
 
-		const from = dateFrom ? new Date(dateFrom) : null;
 		// Метод — тот, что действовал на конец периода (учётная политика по дате).
-		const method = await resolveCostingMethod(organizationUuid || null, dateTo ? new Date(dateTo) : null);
+		const method = await resolveCostingMethod(organizationUuid, to);
 
 		// ── Выручка периода по товарам — ИЗ СТРОК ДОКУМЕНТОВ ────────────────────
 		// Из регистра её взять нельзя: у расхода реализации amount — это
@@ -394,10 +441,10 @@ router.get("/reports/material-statement", requireReportAccess("material-statemen
 				sale: {
 					posted: true,
 					deletedAt: null,
-					...(organizationUuid ? { organizationUuid } : {}),
+					organizationUuid,
 					...(warehouseUuid ? { warehouseUuid } : {}),
-					...(from || dateTo
-						? { date: { ...(from ? { gte: from } : {}), ...(dateTo ? { lte: new Date(dateTo + "T23:59:59.999Z") } : {}) } }
+					...(from || to
+						? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
 						: {}),
 				},
 			},
@@ -458,6 +505,7 @@ router.get("/reports/material-statement", requireReportAccess("material-statemen
 
 		return res.json({ success: true, items });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/material-statement error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -473,13 +521,14 @@ router.get("/reports/material-statement", requireReportAccess("material-statemen
 router.get("/reports/inventory-batches", requireReportAccess("inventory-batches"), async (req, res) => {
 	try {
 		const { organizationUuid, warehouseUuid, productUuid, dateTo } = req.query;
-		const where = { ...tenantFilter(req) };
-		if (organizationUuid) where.organizationUuid = organizationUuid;
+		const orgs = reportOrgs(req, organizationUuid); // чужая организация → 403 (Б6)
+		const where = { ...orgWhere(orgs) };
 		if (warehouseUuid) where.warehouseUuid = warehouseUuid;
 		if (productUuid) where.productUuid = productUuid;
-		if (dateTo) where.date = { lte: new Date(dateTo + "T23:59:59.999Z") };
+		const range = dateRangeWhere(null, dateTo, orgTimeZone(orgs?.[0] ?? null));
+		if (range) where.date = range;
 
-		const movements = await prisma.productRegister.findMany({
+		const movements = sortMovements(await prisma.productRegister.findMany({
 			where,
 			include: {
 				product: { select: { uuid: true, name: true, sku: true } },
@@ -487,7 +536,7 @@ router.get("/reports/inventory-batches", requireReportAccess("inventory-batches"
 				warehouse: { select: { name: true } },
 			},
 			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
-		});
+		}));
 
 		// Партии физически привязаны к складу → группируем по товар+склад.
 		const byKey = new Map();
@@ -547,6 +596,7 @@ router.get("/reports/inventory-batches", requireReportAccess("inventory-batches"
 		items.sort((a, b) => a.productName.localeCompare(b.productName, "ru") || a.warehouseName.localeCompare(b.warehouseName, "ru"));
 		return res.json({ success: true, items });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/inventory-batches error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -561,41 +611,22 @@ router.get("/reports/product-movements", requireReportAccess("product-movements"
 		if (!productUuid) return res.status(400).json({ success: false, message: "productUuid обязателен" });
 
 		const docWhere = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
+		const tz = orgTimeZone(organizationUuid || null);
 
-		const [purchases, sales] = await Promise.all([
-			prisma.purchase.findMany({
-				where: docWhere,
-				select: { uuid: true, id: true, date: true, counterparty: { select: { name: true } } },
-			}),
-			prisma.sale.findMany({
-				where: docWhere,
-				select: { uuid: true, id: true, date: true, counterparty: { select: { name: true } } },
-			}),
-		]);
-
-		const purchaseMap = new Map(purchases.map((d) => [d.uuid, d]));
-		const saleMap = new Map(sales.map((d) => [d.uuid, d]));
-
+		// Строки ТОЛЬКО этого товара с условием на документ через связь — раньше грузились
+		// все закупки и продажи периода ради одного товара (backend_performance п. 22).
+		const docSelect = { uuid: true, id: true, number: true, date: true, counterparty: { select: { name: true } } };
 		const [purchaseItems, saleItems] = await Promise.all([
-			purchases.length > 0
-				? prisma.purchaseItem.findMany({
-						where: {
-							purchaseUuid: { in: purchases.map((p) => p.uuid) },
-							productUuid,
-							deletedAt: null,
-						},
-					})
-				: [],
-			sales.length > 0
-				? prisma.saleItem.findMany({
-						where: {
-							saleUuid: { in: sales.map((s) => s.uuid) },
-							productUuid,
-							deletedAt: null,
-						},
-					})
-				: [],
+			prisma.purchaseItem.findMany({
+				where: { productUuid, deletedAt: null, purchase: docWhere },
+				include: { purchase: { select: docSelect } },
+			}),
+			prisma.saleItem.findMany({
+				where: { productUuid, deletedAt: null, sale: docWhere },
+				include: { sale: { select: docSelect } },
+			}),
 		]);
+		const localDate = (d) => (d ? new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d)) : "");
 
 		// Fetch product name
 		const product = await prisma.product.findUnique({
@@ -606,13 +637,14 @@ router.get("/reports/product-movements", requireReportAccess("product-movements"
 		const rows = [];
 
 		for (const item of purchaseItems) {
-			const doc = purchaseMap.get(item.purchaseUuid);
+			const doc = item.purchase;
 			if (!doc) continue;
 			rows.push({
-				date: doc.date?.toISOString().slice(0, 10) ?? "",
+				date: localDate(doc.date),
 				direction: "in",
 				docType: "purchase",
 				docId: doc.id,
+				docNumber: doc.number ?? null,
 				docUuid: doc.uuid,
 				counterpartyName: doc.counterparty?.name ?? "",
 				quantity: Number(item.quantity),
@@ -622,13 +654,14 @@ router.get("/reports/product-movements", requireReportAccess("product-movements"
 		}
 
 		for (const item of saleItems) {
-			const doc = saleMap.get(item.saleUuid);
+			const doc = item.sale;
 			if (!doc) continue;
 			rows.push({
-				date: doc.date?.toISOString().slice(0, 10) ?? "",
+				date: localDate(doc.date),
 				direction: "out",
 				docType: "sale",
 				docId: doc.id,
+				docNumber: doc.number ?? null,
 				docUuid: doc.uuid,
 				counterpartyName: doc.counterparty?.name ?? "",
 				quantity: Number(item.quantity),
@@ -645,6 +678,7 @@ router.get("/reports/product-movements", requireReportAccess("product-movements"
 			productName: product?.name ?? productUuid,
 		});
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/product-movements error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -657,7 +691,6 @@ router.get("/reports/product-movements", requireReportAccess("product-movements"
 router.get("/reports/sales-by-manager", requireReportAccess("sales-by-manager"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid } = req.query;
-		const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 		const where = buildDocWhere(req, { dateFrom, dateTo, organizationUuid });
 
 		const [sales, returns] = await Promise.all([
@@ -696,9 +729,9 @@ router.get("/reports/sales-by-manager", requireReportAccess("sales-by-manager"),
 
 		// Себестоимость (COGS) по менеджеру: проводки 7010 реализаций/возвратов
 		// привязаны к документу → менеджер документа (на 7010 субконто менеджера нет).
-		const eWhere = { ...tenantFilter(req), documentType: { in: ["sale", "sale_return"] }, OR: [{ debitAccountCode: "7010" }, { creditAccountCode: "7010" }] };
-		if (organizationUuid) eWhere.organizationUuid = organizationUuid;
-		if (dateFrom || dateTo) { eWhere.date = {}; if (dateFrom) eWhere.date.gte = new Date(dateFrom); if (dateTo) eWhere.date.lte = new Date(dateTo + "T23:59:59.999Z"); }
+		const eWhere = { documentType: { in: ["sale", "sale_return"] }, OR: [{ debitAccountCode: "7010" }, { creditAccountCode: "7010" }] };
+		if (where.organizationUuid) eWhere.organizationUuid = where.organizationUuid; // те же организации, что у документов
+		if (where.date) eWhere.date = where.date;
 		const cogsEntries = await prisma.accountingEntry.findMany({ where: eWhere, select: { amount: true, debitAccountCode: true, documentType: true, documentUuid: true } });
 		const sUuids = [...new Set(cogsEntries.filter((e) => e.documentType === "sale").map((e) => e.documentUuid))];
 		const rUuids = [...new Set(cogsEntries.filter((e) => e.documentType === "sale_return").map((e) => e.documentUuid))];
@@ -739,6 +772,7 @@ router.get("/reports/sales-by-manager", requireReportAccess("sales-by-manager"),
 
 		return res.json({ success: true, items: rows, totals });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/sales-by-manager error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -761,25 +795,16 @@ const PERF_DOC_TABLES = [
 	"payroll_calculations", "payroll_payments",
 ];
 
-/** Массив uuid организаций для raw-SQL изоляции (null = суперадмин, видит всё). */
-function allowedOrgArray(req) {
-	if (req.user?.isSuperAdmin) return null;
-	if (req.user?.organizationUuid) return [req.user.organizationUuid];
-	if (req.user?.allowedOrgUuids?.length) return req.user.allowedOrgUuids;
-	return []; // ни активной, ни разрешённых — не видит ничего
-}
-
 router.get("/reports/user-performance", requireReportAccess("user-performance"), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid } = req.query;
-		const from = dateFrom ? new Date(dateFrom) : null;
-		const to = dateTo ? new Date(dateTo + "T23:59:59.999Z") : null;
-
-		// Изоляция: явная орг из фильтра ∩ доступные пользователю.
-		let orgs = allowedOrgArray(req);
-		if (organizationUuid) {
-			orgs = orgs === null ? [organizationUuid] : orgs.filter((o) => o === organizationUuid);
-		}
+		// Изоляция: явная орг из фильтра ∩ доступные пользователю (чужая → 403); без
+		// параметра — как tenantFilter (у суперадмина — с учётом режима поддержки).
+		const orgs = reportOrgs(req, organizationUuid);
+		// Сутки — местные (аудит 26.09, У5).
+		const range = dateRangeWhere(dateFrom, dateTo, orgTimeZone(orgs?.[0] ?? null));
+		const from = range?.gte ?? null;
+		const to = range?.lte ?? null;
 
 		// ── Документы по автору (союз таблиц) ──────────────────────────────────
 		// $1 dateFrom, $2 dateTo, $3 orgs[] — переиспользуются во всех подзапросах.
@@ -792,7 +817,7 @@ router.get("/reports/user-performance", requireReportAccess("user-performance"),
 			`SELECT uid, COUNT(*)::int AS docs FROM (
 				${PERF_DOC_TABLES.map(subquery).join("\n\t\t\t\tUNION ALL\n\t\t\t\t")}
 			) u WHERE uid IS NOT NULL GROUP BY uid`;
-		const docRows = await prisma.$queryRawUnsafe(docSql, from, to, orgs);
+		const docRows = await prisma.$queryRawUnsafe(docSql, from ? from.toISOString() : null, to ? to.toISOString() : null, orgs);
 
 		// ── Задачи по исполнителю ──────────────────────────────────────────────
 		const taskWhere = { deletedAt: null };
@@ -869,6 +894,7 @@ router.get("/reports/user-performance", requireReportAccess("user-performance"),
 
 		return res.json({ success: true, items });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /reports/user-performance error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}

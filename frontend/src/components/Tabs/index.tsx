@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useId } from "react";
 import styles from "./Tabs.module.scss";
 
 export type TabAccessLevel = "full" | "readonly" | "none";
@@ -42,6 +42,12 @@ const Tabs: React.FC<TypeTabs> = ({
   // скролл-контейнер таблицы внутри активной вкладки (для клавиатурной
   // навигации SubTable: Up/Down/Left/Right/Insert/Delete/Home/End/PgUp/PgDn).
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // id вкладок и панелей — уникальные на экземпляр: панелей с Tabs открыто много, и
+  // `tab-main` повторялся между ними, а aria-controls вёл на несуществующий id.
+  const uid = useId();
+  const tabDomId = (id: string) => `${uid}-tab-${id}`;
+  const panelDomId = (id: string) => `${uid}-panel-${id}`;
 
   const handleTabClick = useCallback((tabId: string) => {
     setActiveTab(tabId);
@@ -69,7 +75,26 @@ const Tabs: React.FC<TypeTabs> = ({
         target?.focus({ preventScroll: true });
       });
     });
-  }, []);
+    // setActiveTab — в зависимостях: иначе обработчик замыкал первый onTabChange (аудит 26.09, О8).
+  }, [setActiveTab]);
+
+  // Клавиатура по паттерну tablist: ←/→ — соседняя вкладка, Home/End — первая/последняя.
+  // Вкладка активируется сразу, фокус переходит на её заголовок (аудит 26.09, И17).
+  const handleTabKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+    const ids = tabs.map((t) => t.id);
+    const idx = ids.indexOf(activeTab);
+    let next = idx;
+    if (e.key === "ArrowLeft") next = idx <= 0 ? ids.length - 1 : idx - 1;
+    else if (e.key === "ArrowRight") next = idx < 0 || idx >= ids.length - 1 ? 0 : idx + 1;
+    else if (e.key === "Home") next = 0;
+    else next = ids.length - 1;
+    e.preventDefault();
+    const id = ids[next];
+    if (id === undefined) return;
+    setActiveTab(id);
+    tabRefs.current[id]?.focus();
+  }, [tabs, activeTab, setActiveTab]);
 
   // Если нет табов или массив пустой (после хуков — иначе rules-of-hooks).
   if (!tabs || tabs.length === 0) {
@@ -81,24 +106,23 @@ const Tabs: React.FC<TypeTabs> = ({
   }
 
   return (
-    <div
-      className={styles.TabsWrapper}
-      role="tablist"
-    >
+    <div className={styles.TabsWrapper}>
       {/* Tab Headers — скрываем если таб только один */}
       {tabs.length > 1 && (
-        <div className={styles.TabsHeader}>
+        <div className={styles.TabsHeader} role="tablist" onKeyDown={handleTabKeyDown}>
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
 
             return (
               <button
                 key={tab.id}
-                id={`tab-${tab.id}`}
+                ref={(el) => { tabRefs.current[tab.id] = el; }}
+                id={tabDomId(tab.id)}
+                type="button"
                 className={`${styles.TabsLabel} ${isActive ? styles.active : ''}`}
                 role="tab"
                 aria-selected={isActive}
-                aria-controls={`panel-${tab.id}`}
+                aria-controls={panelDomId(tab.id)}
                 tabIndex={isActive ? 0 : -1}
                 onClick={() => handleTabClick(tab.id)}
               >
@@ -123,9 +147,10 @@ const Tabs: React.FC<TypeTabs> = ({
             <div
               key={tab.id}
               ref={(el) => { panelRefs.current[tab.id] = el; }}
+              id={panelDomId(tab.id)}
               className={`${styles.TabsBodyWrapper} ${isActive ? styles.active : ''}`}
               role="tabpanel"
-              aria-labelledby={`tab-${tab.id}`}
+              aria-labelledby={tabs.length > 1 ? tabDomId(tab.id) : undefined}
             >
               {tab.component}
             </div>

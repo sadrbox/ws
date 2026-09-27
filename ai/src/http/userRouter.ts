@@ -9,6 +9,7 @@
 
 import { describeAgentBases, type AgentBasesStore } from "../agents/agentBases.ts";
 import { Router } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
 import { requireErpUser } from "../auth/index.ts";
@@ -40,6 +41,8 @@ export function userRouter(deps: {
 	const audit = deps.audit ?? null;
 	const db = deps.db ?? erp;
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "маршрут пользователя ERP");
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
 	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN }));
 
@@ -110,7 +113,8 @@ export function userRouter(deps: {
 			   LEFT JOIN base_tokens t ON t.base_id = b.id AND t.organization_uuid = $1
 			   -- base_organizations.base_id — text (миграция 040), bases.id — uuid: без приведения Postgres
 			   -- откажется сравнивать их вовсе.
-			   LEFT JOIN base_organizations o ON o.base_id = b.id::text AND $2 <> '' AND o.bin = $2
+			   -- Только одобренные (Б11 аудита 26.09): БИН, который база лишь заявила, ещё не делает её базой организации.
+			   LEFT JOIN base_organizations o ON o.base_id = b.id::text AND $2 <> '' AND o.bin = $2 AND o.approved_at IS NOT NULL
 			  WHERE t.id IS NOT NULL OR o.bin IS NOT NULL
 			  GROUP BY b.key, b.name, s.name, b.disabled_at, o.bin, o.name, o.updated_at, b.last_seen_at
 			  ORDER BY b.key`,
@@ -190,6 +194,12 @@ export function userRouter(deps: {
 			const cmd = await queue.enqueue({
 				agentId: target.agent.id, organizationUuid: target.agent.organizationUuid, baseKey: target.baseKey,
 				type, payload, userUuid: u.uuid, ttlSeconds: Math.max(cfg.ORG_FINANCE_TIMEOUT_SECS * 2, 120),
+				/*
+				 * ПОВТОР ПРИСОЕДИНЯЕТСЯ К ИДУЩЕМУ ЧТЕНИЮ (аудит 26.09). Без номера запроса «повторите чтение» после
+				 * таймаута ставило ещё две тяжёлые команды поверх незавершённых — 1С считала одно и то же по кругу.
+				 * Номер — по организации, типу, дате и пятиминутке: свежий запрос позже снова читает свежие числа.
+				 */
+				requestId: `fin:${type}:${bin}:${onDate}:${Math.floor(Date.now() / 300_000)}`,
 			});
 			await audit?.write({ event: "onec.finance", organizationUuid: org, userUuid: u.uuid, agentId: target.agent.id, commandId: cmd.id, details: { type, bin } });
 			const done = await queue.waitResult(cmd.id, waitMs);

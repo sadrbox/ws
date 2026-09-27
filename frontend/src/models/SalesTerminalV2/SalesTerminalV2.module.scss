@@ -31,6 +31,12 @@
 	background: var(--t-bg);
 	color: var(--t-ink);
 	box-sizing: border-box;
+
+	// Корень фокусируем (tabIndex=-1), чтобы F9/F4 слушались только внутри терминала;
+	// рамка фокуса на всём экране не нужна.
+	&:focus {
+		outline: none;
+	}
 }
 
 // Тёмная тема: те же роли, другие значения. Синий подсвечен — на графите исходный
@@ -666,6 +672,22 @@
 	flex-direction: column;
 	gap: 12px;
 	padding: 16px;
+}
+
+// Свёрнутая «Информация о продаже»: строка-кнопка, возвращающая карточку.
+.CardReopen {
+	padding: 8px 12px;
+	border: 1px dashed var(--t-border);
+	border-radius: var(--t-radius);
+	background: transparent;
+	color: var(--t-ink-2);
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 
 // Подсказка-указатель, а не предупреждение: тон спокойный, акцент только слева.

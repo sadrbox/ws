@@ -11,7 +11,7 @@
 import { useCallback, useState } from "react";
 import type { RefillFormHandle } from "src/utils/createFromBasis";
 import type { TDataItem } from "src/components/Table/types";
-import { runBasisRefill, type OrgDependentField } from "src/utils/createFromBasis";
+import { runBasisRefill, reportBasisRefillError, type OrgDependentField } from "src/utils/createFromBasis";
 import type { UserDefaultsMap } from "src/hooks/useUserDefaults";
 
 export interface UseRefillFromBasisArgs {
@@ -59,7 +59,9 @@ export function useRefillFromBasis(args: UseRefillFromBasisArgs): {
         allItemsRef, setBasisItems, bumpItemsTableKey,
       });
     } catch (e) {
-      console.error("[refill] failed", e);
+      // runBasisRefill сам показывает свои ошибки; сюда долетает лишь непредвиденное —
+      // показываем тем же путём, а не только в консоль (И22).
+      reportBasisRefillError(e);
     } finally {
       setIsRefilling(false);
     }

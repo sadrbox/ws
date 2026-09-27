@@ -23,8 +23,9 @@
  * иначе таблицы извлекаются из живого DOM через XLSX.utils.table_to_sheet.
  */
 import { FC, useCallback, useRef, type ReactNode } from "react";
-import * as XLSX from "xlsx";
 import type { WorkBook } from "xlsx";
+import { loadXlsx, type XlsxModule } from "src/utils/loadXlsx";
+import { reportError } from "src/services/errors/route";
 import { usePrintDocument } from "src/components/PrintLayout/usePrintDocument";
 import { usePaneHeaderActions } from "src/hooks/usePaneToolbar";
 import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Toolbar/SaveDropdownButton";
@@ -113,7 +114,7 @@ function download(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function extractWorkbookFromDom(el: HTMLElement): WorkBook | null {
+function extractWorkbookFromDom(XLSX: XlsxModule, el: HTMLElement): WorkBook | null {
   const tables = el.querySelectorAll<HTMLTableElement>("table");
   if (!tables.length) return null;
   const wb = XLSX.utils.book_new();
@@ -160,20 +161,29 @@ const ReportPane: FC<ReportPaneProps> = ({
   }, [canExport, printNode, layout, title, fileBaseName, orientation, sheetFit, layoutStyles]);
 
   // ── XLSX / XLS export ────────────────────────────────────────────────────
+  // xlsx грузится только здесь, в момент выгрузки (utils/loadXlsx, аудит 26.09, О2): раньше
+  // статический импорт тянул 138 КБ gzip при открытии любого отчёта.
   const handleExport = useCallback((format: "xlsx" | "xls") => {
     if (!canExport) return;
-    const wb = workbook ?? (layoutRef.current ? extractWorkbookFromDom(layoutRef.current) : null);
-    if (!wb) {
-      alert(translate("printDocumentExportError"));
-      return;
-    }
-    const bookType = format === "xls" ? "biff8" : "xlsx";
-    const mime = format === "xls"
-      ? "application/vnd.ms-excel"
-      : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    const ab = XLSX.write(wb, { type: "array", bookType }) as ArrayBuffer;
-    download(new Blob([ab], { type: mime }), `${fileBaseName}.${format}`);
-  }, [canExport, workbook, fileBaseName]);
+    void (async () => {
+      try {
+        const XLSX = await loadXlsx();
+        const wb = workbook ?? (layoutRef.current ? extractWorkbookFromDom(XLSX, layoutRef.current) : null);
+        if (!wb) {
+          alert(translate("printDocumentExportError"));
+          return;
+        }
+        const bookType = format === "xls" ? "biff8" : "xlsx";
+        const mime = format === "xls"
+          ? "application/vnd.ms-excel"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const ab = XLSX.write(wb, { type: "array", bookType }) as ArrayBuffer;
+        download(new Blob([ab], { type: mime }), `${fileBaseName}.${format}`);
+      } catch (e) {
+        reportError(e, { source: title ?? fileBaseName, fallback: translate("printDocumentExportError") });
+      }
+    })();
+  }, [canExport, workbook, fileBaseName, title]);
 
   // ── Кнопки в шапке панели ────────────────────────────────────────────────
   const saveOptions: SaveDropdownOption[] = [

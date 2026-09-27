@@ -7,7 +7,7 @@
  */
 import { translate } from "src/i18";
 import type { ChipTone } from "src/components/StateChip";
-import type { OnecBase } from "src/services/onec/api";
+import type { OnecBase, SessionsLockResult } from "src/services/onec/api";
 import { getFormatDate } from "src/utils/datetime";
 
 export type SessionsLockView = {
@@ -54,4 +54,31 @@ export function sessionsLockView(base: LockFields | null | undefined): SessionsL
 		label: translate(inactive ? "onecSessionsLockInactive" : v ? "onecSessionsLockOn" : "onecSessionsLockOff"),
 		details: parts.join(". "),
 	};
+}
+
+/**
+ * ИТОГ «ЗАКРЫТЬ/ОТКРЫТЬ ВХОД» — ПО ОТВЕТУ, А НЕ ПО ФАКТУ ОТВЕТА (И26 аудита 26.09).
+ *
+ * Общий разбор для вкладки «Сеансы» и карточки базы: карточка раньше писала «Выполнено», даже
+ * когда вход не закрыт. Порядок проверок — как был во «Сеансах» (П10, П30):
+ *   - кластер не отдал состояние после записи (`unverified`) — «не проверено», а не «применено»;
+ *   - прочитанное состояние не то, что просили — «не применено»;
+ *   - включили, а вход не закрыт (осталось окно прошлой блокировки) или прежнее сброшено не всё —
+ *     предупреждение словами агента или нашими;
+ *   - иначе — успех.
+ */
+export function lockOutcome(r: SessionsLockResult | null | undefined, enabled: boolean): { tone: "success" | "warning"; text: string } {
+	const echo = r?.state?.lock;
+	if (r?.unverified?.includes("enabled")) return { tone: "warning", text: r.caveat || translate("onecLockUnverified") };
+	if (echo && echo.enabled !== enabled) return { tone: "warning", text: translate("onecLockNotApplied") };
+	if (enabled && (r?.warning || echo?.active === false || (r?.reset && r.reset !== "all"))) {
+		return {
+			tone: "warning",
+			text: [
+				r?.warning || (echo?.active === false ? translate("onecLockNotActive") : translate("onecLockEnabled")),
+				r?.reset && r.reset !== "all" ? (r.note || translate("onecLockResetPartial")) : "",
+			].filter(Boolean).join(". "),
+		};
+	}
+	return { tone: "success", text: translate(enabled ? "onecLockEnabled" : "onecLockDisabled") };
 }

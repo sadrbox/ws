@@ -119,7 +119,13 @@ const IN_BASE = (a: string) => `COALESCE(${a}.in_base, ${a}.base_key IS NOT NULL
  * агенту и получали отказ, сжигая повторы. Место держится, пока в снимке процессов агента есть процесс этой
  * команды (`commandId`, агент 01:06), и ещё 90 с после отказа — на задержку heartbeat.
  */
-export const TIMEOUT_STILL_RUNNING = (a: string) => `(${a}.state = 'failed' AND ${a}.error->>'code' = 'TIMEOUT' AND (
+/*
+ * Не старше суток (аудит 26.09): без предела условие проверялось по ВСЕЙ истории агента на каждом цикле опроса
+ * (выборка росла линейно). Процесс команды, живой спустя сутки после TIMEOUT, место уже не держит — тот же потолок,
+ * что у продления выполняемых команд (RUNNING_LEASE_CAP_SECS); по пределу работает индекс commands_agent_finished_idx.
+ */
+export const TIMEOUT_STILL_RUNNING = (a: string) => `(${a}.state = 'failed' AND ${a}.error->>'code' = 'TIMEOUT'
+	AND ${a}.finished_at > now() - interval '24 hours' AND (
 	${a}.finished_at > now() - interval '90 seconds'
 	OR EXISTS (SELECT 1 FROM agents ag, jsonb_array_elements(ag.processes) pr
 	            WHERE ag.id = ${a}.agent_id AND pr->>'commandId' = ${a}.id)))`;
@@ -129,7 +135,13 @@ export const TIMEOUT_STILL_RUNNING = (a: string) => `(${a}.state = 'failed' AND 
  * тоже, ещё `grace` секунд: агент мог продолжать работу, и выдать ему вторую команду внутрь базы
  * поверх первой значит повторить заклинивание, от которого место и защищает.
  */
-const OCCUPIES = (a: string, graceParam: string) => `(${a}.state = 'dispatched' OR (
+/*
+ * ВЫДАННАЯ С ИСТЁКШИМ СРОКОМ — КАК ИСТЁКШАЯ (Н4 аудита 26.09). Просрочку в `expired` переводит таймер, но пока он
+ * не дошёл (или не работал вовсе, как было до 26.09 — только из опросов панели), выданная команда без ответа
+ * держала место базы вечно: потерянный ответ закрывал базу для чата и ночных проверок, пока кто-то не открывал
+ * панель. Теперь она держит место ровно столько же, сколько истёкшая: срок + `grace`.
+ */
+const OCCUPIES = (a: string, graceParam: string) => `((${a}.state = 'dispatched' AND ${a}.expires_at > now() - make_interval(secs => ${graceParam}::int)) OR (
 	${a}.state = 'expired' AND ${a}.dispatched_at IS NOT NULL AND ${a}.result_status IS NULL
 	AND ${a}.error->>'code' = 'COMMAND_EXPIRED'
 	AND ${a}.finished_at > now() - make_interval(secs => ${graceParam}::int)) OR ${TIMEOUT_STILL_RUNNING(a)})`;
@@ -397,10 +409,35 @@ export class CommandQueue {
 			            THEN $1::text
 			            ELSE 'Агент забрал команду, но не ответил за отведённое ей время. Связь тут ни при чём: проверьте базу и журнал агента — операция могла идти дольше своего срока.'
 			          END))
-			  WHERE state IN ('queued', 'dispatched') AND expires_at < now()`,
+			  WHERE state IN ('queued', 'dispatched') AND expires_at < now()
+			  RETURNING id, agent_id`,
 			[QUEUE_TIMEOUT_MESSAGE],
 		);
+		// Ждущие результата узнают сразу, а место базы освободилось — будим опрос агента.
+		for (const x of r.rows as { id: string; agent_id: string }[]) {
+			this.bell.emit("result:" + x.id);
+			this.bell.emit(x.agent_id);
+		}
 		return r.rowCount ?? 0;
+	}
+
+	/** Когда последний раз снималась просрочка — чтобы опросы панели не делали это чаще, чем нужно. */
+	private lastSweepAt = 0;
+
+	/**
+	 * СНЯТЬ ПРОСРОЧЕННОЕ И «НЕКОМУ ЗАБРАТЬ» — ПО ТАЙМЕРУ (Н4 аудита 26.09).
+	 *
+	 * Раньше это делали только опросы панели (`GET /commands/:id`, `/batches`): никто не открыл панель — потерянная
+	 * выданная команда навсегда занимала место базы, и чат с ночными проверками получали «база занята». Теперь
+	 * сервис зовёт это раз в полминуты сам, а опросы панели — не чаще `minIntervalMs` (каждый вызов — два UPDATE).
+	 */
+	async sweep(silentSecs: number, minIntervalMs = 0): Promise<{ overdue: number; orphaned: number }> {
+		const now = Date.now();
+		if (minIntervalMs > 0 && now - this.lastSweepAt < minIntervalMs) return { overdue: 0, orphaned: 0 };
+		this.lastSweepAt = now;
+		const overdue = await this.expireOverdue();
+		const orphaned = await this.expireOrphaned(silentSecs);
+		return { overdue, orphaned };
 	}
 
 	/**
@@ -431,6 +468,9 @@ export class CommandQueue {
 
 	/** Отменить всё, что ещё не начато, в задании: групповую операцию останавливают целиком. */
 	async cancelBatch(batchId: string, by: string): Promise<number> {
+		// Отметка остановки (аудит 26.09): выданная команда задания, вернувшая «база занята», больше не повторяется
+		// (retryBusy) — раньше остановленное задание продолжалось своими повторами.
+		await this.db.query(`UPDATE command_batches SET canceled_at = COALESCE(canceled_at, now()) WHERE id = $1`, [batchId]);
 		const r = await this.db.query<{ id: string }>(
 			`SELECT id FROM commands WHERE batch_id = $1 AND state = 'queued'`, [batchId],
 		);
@@ -511,18 +551,40 @@ export class CommandQueue {
 		 * сериализует только опросы ОДНОГО агента.
 		 */
 		const client = await this.db.connect();
+		let batch: WireCommand[];
 		try {
 			await client.query("BEGIN");
 			await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`agent-dispatch:${agentId}`]);
-			const batch = await this.dispatchLocked(client, agentId, instanceId, parallel);
+			batch = await this.dispatchLocked(client, agentId, instanceId, parallel);
 			await client.query("COMMIT");
-			return batch;
 		} catch (e) {
 			await client.query("ROLLBACK").catch(() => {});
 			throw e;
 		} finally {
 			client.release();
 		}
+		/*
+		 * УЧЁТНЫЕ ДАННЫЕ — ПОСЛЕ ТРАНЗАКЦИИ (аудит 26.09). Раньше они подставлялись внутри неё, а authResolver брал
+		 * СВОИ соединения из того же пула: десять одновременных выдач держали все десять соединений и ждали
+		 * одиннадцатое — взаимная блокировка без срока. Выдача уже записана; пароль нужен только ответу агенту.
+		 */
+		return this.withAuth(agentId, batch);
+	}
+
+	/** Подставить учётные записи баз в выданные команды (только в ответ агенту — в БД пароль не пишется). */
+	private async withAuth(agentId: string, wire: WireCommand[]): Promise<WireCommand[]> {
+		if (!this.authResolver || !wire.length) return wire;
+		const keys = [...new Set(wire.map((c) => c.baseKey).filter((k): k is string => !!k))];
+		if (!keys.length) return wire;
+		const auth = await this.authResolver(agentId, keys);
+		if (!auth.size) return wire;
+		for (const c of wire) {
+			const a = c.baseKey ? auth.get(c.baseKey) : undefined;
+			// `auth` в payload = «если свой администратор не прошёл, войди этим».
+			// Порядок попыток задаёт агент, см. контракт.
+			if (a) c.payload = { ...c.payload, auth: a };
+		}
+		return wire;
 	}
 
 	/** Сама выдача: считает свободные места и забирает команды. Вызывается внутри транзакции с замком на агента. */
@@ -587,21 +649,7 @@ export class CommandQueue {
 			...(c.expires_at ? { expiresAt: new Date(c.expires_at).toISOString() } : {}),
 		}));
 
-		// Учётные данные баз — только в выдаче, по одному запросу на пачку команд.
-		if (this.authResolver) {
-			const keys = [...new Set(wire.map((c) => c.baseKey).filter((k): k is string => !!k))];
-			if (keys.length) {
-				const auth = await this.authResolver(agentId, keys);
-				if (auth.size) {
-					for (const c of wire) {
-						const a = c.baseKey ? auth.get(c.baseKey) : undefined;
-						// `auth` в payload = «если свой администратор не прошёл, войди этим».
-						// Порядок попыток задаёт агент, см. контракт.
-						if (a) c.payload = { ...c.payload, auth: a };
-					}
-				}
-			}
-		}
+		// Учётные данные баз подставляются после транзакции — см. dispatchQueued/withAuth.
 		return wire;
 	}
 	private waitForBell(agentId: string, ms: number): Promise<void> {
@@ -669,6 +717,8 @@ export class CommandQueue {
 			    SELECT * FROM commands
 			     WHERE id = $1 AND state = 'failed' AND batch_id IS NOT NULL
 			       AND retried_by IS NULL AND attempt < $3
+			       -- Остановленное задание не продолжается повторами (аудит 26.09).
+			       AND NOT EXISTS (SELECT 1 FROM command_batches b WHERE b.id = commands.batch_id AND b.canceled_at IS NOT NULL)
 			 ), ins AS (
 			    INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload,
 			                          user_uuid, conversation_id, expires_at, priority, batch_id,
@@ -758,6 +808,21 @@ export class CommandQueue {
 	async get(id: string): Promise<CommandRow | null> {
 		const r = await this.db.query<CommandRow>(`SELECT * FROM commands WHERE id = $1`, [id]);
 		return r.rows[0] ?? null;
+	}
+
+	/**
+	 * БАЗЫ, В КОТОРЫХ СЕЙЧАС ИДЁТ ОБСЛУЖИВАНИЕ (P2 отчёта очереди, аудит 26.09): незавершённые команды агентов
+	 * кластера — выгрузка, загрузка, проверка, обновление, блокировка входа. Очередь выстраивает команды одной базы
+	 * только в пределах ОДНОГО агента, а ночные проверки учёта идут через бизнес-агента: без этой выборки проверка
+	 * и выгрузка шли в одну базу одновременно — отказы проверок и IB_BUSY у выгрузки. Ключи — в нижнем регистре.
+	 */
+	async basesUnderMaintenance(): Promise<Set<string>> {
+		const r = await this.db.query<{ key: string }>(
+			`SELECT DISTINCT lower(c.base_key) AS key
+			   FROM commands c JOIN agents a ON a.id = c.agent_id
+			  WHERE c.state IN ('queued', 'dispatched') AND c.base_key IS NOT NULL AND a.role = 'admin'`,
+		);
+		return new Set(r.rows.map((x) => x.key));
 	}
 
 	/** Ждёт завершения команды до timeoutMs — для синхронных вызовов из диалога. */

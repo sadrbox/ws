@@ -31,7 +31,7 @@ import ProductImagesField from "./ProductImagesField";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "src/components/Button";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { ProductPriceCorrection } from "src/models/ProductPriceProcessing";
 import Notice from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
@@ -359,7 +359,7 @@ interface ProductPricesTableProps {
 }
 
 const ProductPricesTable: FC<ProductPricesTableProps> = ({ productUuid, productName = "", disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows }) => {
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
   // Открыть обработку «Корректировка цен» с фильтром по этому товару (история цен).
   const openCorrection = useCallback(() => {
     if (!productUuid) return;

@@ -22,6 +22,7 @@
 import { FC, useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { PaneActiveProvider } from "src/hooks/usePaneActive";
 import { asText } from "src/utils/asText";
 import { buildUserCreate } from "./userUpdate";
 import Table from "src/components/Table";
@@ -37,7 +38,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import {
 	fetchBases, type BatchType, type OnecBase, fetchRoles, fetchSessions
 } from "src/services/onec/api";
@@ -126,13 +127,13 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 	reader.readAsDataURL(file);
 });
 
-export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
+const GroupCommandWizardBody: FC<Partial<TPane>> = (paneProps) => {
 	const data = (paneProps.data ?? {}) as TDataItem;
 	const op = asText(data.op) as GroupOp;
 	const perms = useOnecPermissions();
 	const spec = GROUP_OPS[op];
 	const qc = useQueryClient();
-	const { requestClose } = useAppContext().windows;
+	const { requestClose } = useAppActions().windows;
 
 	const bases = useQuery({ queryKey: ["onec", "bases"], queryFn: fetchBases });
 	const items = useMemo(() => bases.data?.items ?? [], [bases.data]);
@@ -464,6 +465,13 @@ export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => {
 		</div>
 	);
 };
+
+/** Корень панели: опросы внутри идут, только пока панель на экране (О4 аудита 26.09). */
+export const GroupCommandWizard: FC<Partial<TPane>> = (paneProps) => (
+	<PaneActiveProvider uniqId={paneProps.uniqId}>
+		<GroupCommandWizardBody {...paneProps} />
+	</PaneActiveProvider>
+);
 GroupCommandWizard.displayName = "GroupCommandWizard";
 
 /**
@@ -473,7 +481,7 @@ GroupCommandWizard.displayName = "GroupCommandWizard";
  * поправить, не закрываясь, — но не подменяет собой выбор, сделанный в списке.
  */
 export function useOpenGroupCommand() {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	return (op: GroupOp, baseKeys: string[], presetName = "") => {
 		addPane({
 			label: `${translate(GROUP_OPS[op].title)}`,

@@ -27,17 +27,24 @@ interface NoteRow {
 
 const qk = (endpoint: string, uuid: string) => ["notes", endpoint, uuid];
 
+// Бейдж и окно заметок читают ОДИН запрос под одним ключом (аудит 26.09, О4): раньше бейдж
+// держал свой ключ «…, count» и тот же GET notes уходил дважды — при открытии окна и после
+// каждой правки. Бейдж берёт из общего списка только длину (select).
+const fetchNotes = async (endpoint: string, uuid: string): Promise<NoteRow[]> => {
+  const r = await apiClient.get<{ items?: NoteRow[] }>("notes", { params: { entityType: endpoint, entityUuid: uuid } });
+  return r.data?.items ?? [];
+};
+const countOf = (items: NoteRow[]) => items.length;
+
 const NotesButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }) => {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   // Бейдж-счётчик заметок (лёгкий, всегда активен при сохранённой записи).
   const { data: count = 0 } = useQuery({
-    queryKey: [...qk(endpoint, uuid ?? ""), "count"],
-    queryFn: async () => {
-      const r = await apiClient.get<{ items?: NoteRow[] }>("notes", { params: { entityType: endpoint, entityUuid: uuid } });
-      return (r.data?.items ?? []).length;
-    },
+    queryKey: qk(endpoint, uuid ?? ""),
+    queryFn: () => fetchNotes(endpoint, uuid ?? ""),
+    select: countOf,
     enabled: !!uuid,
     staleTime: 30_000,
   });
@@ -61,8 +68,8 @@ const NotesButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }
           uuid={uuid}
           onClose={() => setOpen(false)}
           invalidate={() => {
+            // Префикс: список (он же бейдж) и прикреплённые задачи.
             void queryClient.invalidateQueries({ queryKey: qk(endpoint, uuid) });
-            void queryClient.invalidateQueries({ queryKey: [...qk(endpoint, uuid), "count"] });
           }}
         />
       )}
@@ -71,24 +78,19 @@ const NotesButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }
 };
 
 const NotesModal: FC<{ endpoint: string; uuid: string; onClose: () => void; invalidate: () => void }> = ({ endpoint, uuid, onClose, invalidate }) => {
-  const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // Тот же список, что посчитан в бейдже: если он свежий (срок как у бейджа), окно
+  // открывается без запроса; своя правка сбрасывает кэш сразу (refresh).
   const { data: notes = [], isLoading } = useQuery({
     queryKey: qk(endpoint, uuid),
-    queryFn: async () => {
-      const r = await apiClient.get<{ items?: NoteRow[] }>("notes", { params: { entityType: endpoint, entityUuid: uuid } });
-      return r.data?.items ?? [];
-    },
-    staleTime: 0,
+    queryFn: () => fetchNotes(endpoint, uuid),
+    staleTime: 30_000,
   });
 
-  const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: qk(endpoint, uuid) });
-    invalidate();
-  }, [queryClient, endpoint, uuid, invalidate]);
+  const refresh = invalidate;
 
   const add = useCallback(async () => {
     const body = text.trim();

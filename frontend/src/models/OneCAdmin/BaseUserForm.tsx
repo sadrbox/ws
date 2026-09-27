@@ -17,7 +17,7 @@
 import { ValueList, ValueRow } from "src/components/ValueList";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
@@ -45,9 +45,9 @@ import {
 } from "src/services/onec/api";
 import { formStoreAPI } from "src/hooks/useFormStore";
 import { setPaneBusy, setPaneIsEditMode } from "src/hooks/paneFormState";
-import {
-	QueryError, useAgents, useOnecPermissions,
-} from "./shared";
+import { reportBatchStart, useAgents, useOnecPermissions } from "./shared";
+import { QueryError } from "./sharedUi";
+import { nothingQueued, sumBatchStarts } from "./batchStart";
 import { deniedText, sectionAllows } from "./onecPermissions";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import {
@@ -87,7 +87,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 	 */
 	const [userName, setUserName] = useState(asText(row.userName) || asText(row.name));
 	const qc = useQueryClient();
-	const { addPane, requestClose, updatePaneLabel } = useAppContext().windows;
+	const { addPane, requestClose, updatePaneLabel } = useAppActions().windows;
 	const openOnecBase = useOpenOnecBase();
 
 	const [baseKey, setBaseKey] = useState(asText(row.baseKey));
@@ -453,7 +453,11 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 				showToast(translate("onecNothingToApply"), "warning");
 				return;
 			}
-			showToast(`${translate("onecBatchQueued")}: ${r.length}`, "success");
+			// Итог словами: всё встало — успех, часть — предупреждение, ничего (агент не на связи,
+			// queued: 0) — ошибка с причиной (И26). При нуле черновик и пароль остаются: повторить.
+			const sum = sumBatchStarts(r);
+			reportBatchStart(sum, translate("onecUser"));
+			if (nothingQueued(sum)) return;
 			setDraft(new Map());
 			// Пароль записан — в поле ему больше не место: иначе он ушёл бы и следующей записью.
 			setForm((f) => ({ ...f, password: "" }));
@@ -856,7 +860,7 @@ BaseUserForm.displayName = "BaseUserForm";
 
 /** Открыть карточку «Пользователь базы» отдельным пейном. */
 export function useOpenBaseUser() {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	return (userName: string, baseKey: string) => addPane({
 		label: `${translate("onecBaseUserCard")}: ${userName}${baseKey ? ` — ${baseKey}` : ""}`,
 		component: BaseUserForm as never,

@@ -76,6 +76,9 @@ const businessSnapshot = (row: Record<string, unknown>): string => {
  */
 export const applyEditMarker = (r: PendingRow, patch: Record<string, unknown>): PendingRow => {
   if (r._pendingAction === "create") return { ...r, ...patch };
+  // Строка помечена на удаление — поздняя правка (автоподбор цены, ГТД) её НЕ
+  // «воскрешает»: иначе delete превращался в update (аудит 26.09, И12).
+  if (r._pendingAction === "delete") return r;
   // Базовый снимок: при первом редактировании = текущее (чистое) состояние строки.
   const baseline = r._pendingAction ? r._baseline : businessSnapshot(r);
   const next: PendingRow = { ...r, ...patch, _pendingAction: "update" };
@@ -242,7 +245,11 @@ export function computeDisplayRows(params: {
 
 /** Сравнение по бизнес-id (uuid приоритетнее, fallback на числовой id) */
 export function isSameRow(a: TDataItem, b: TDataItem): boolean {
-  return (!!a.uuid && a.uuid === b.uuid) || a.id === b.id;
+  // Оба uuid известны — решают только они: временные id новых строк могли совпасть
+  // (строка из «Несохранённых» и только что добавленная), и правка одной переписывала
+  // другую (аудит 26.09, И12). По id — лишь когда uuid нет хотя бы у одной.
+  if (a.uuid && b.uuid) return a.uuid === b.uuid;
+  return a.id === b.id;
 }
 
 /**

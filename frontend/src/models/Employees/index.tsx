@@ -12,8 +12,8 @@ import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
 import { Field, FieldNumber, FieldSelect, FieldDate } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
-import { useAppContext } from "src/app/context";
-import { getFormatDateOnly } from "src/utils/datetime";
+import { useAppActions } from "src/app/context";
+import { getFormatDateOnly, isoToLocalInput } from "src/utils/datetime";
 import LookupField from "src/components/Field/LookupField";
 import { ContactsTable } from "../Contacts";
 import EmployeeHistoryForm from "./EmployeeHistoryForm";
@@ -233,7 +233,7 @@ export interface EmployeeHistoryTableProps {
 const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
   employeeUuid, disabled = false, deferRemoteChanges = false, onItemsChange, initialPendingRows,
 }) => {
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
   const queryClient = useQueryClient();
   const eventTypeMap = useMemo(() => Object.fromEntries(EVENT_TYPE_OPTIONS.map(o => [o.value, o.label])), []);
   // Сортировка события по подписи, а не по ключу `hire`/`fire`.
@@ -296,7 +296,7 @@ const EmployeeHistoryTable: FC<EmployeeHistoryTableProps> = ({
   }, [addPane, employeeUuid, queryClient]);
 
   const defaultNewRow = useMemo(() => ({
-    eventDate: new Date().toISOString().slice(0, 10),
+    eventDate: isoToLocalInput(new Date()).slice(0, 10),
     eventType: "hire",
     salary: null,
     positionUuid: null,

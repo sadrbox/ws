@@ -33,6 +33,11 @@ const INTERACTIVE = 'button, a[href], input[type="checkbox"], input[type="radio"
 const EDGE = 28;
 /** Предельная скорость самопрокрутки, px за кадр. */
 const MAX_SPEED = 28;
+/**
+ * Порог начала протягивания, px от точки нажатия. Без него дрожание руки при щелчке у границы
+ * строки переходило на соседнюю строку и ЗАМЕНЯЛО уже набранную мультиотметку (аудит 26.09, И17).
+ */
+const DRAG_THRESHOLD = 6;
 
 export interface RowDragSelectOptions {
 	scrollRef: RefObject<HTMLDivElement | null>;
@@ -55,6 +60,9 @@ interface DragState {
 	base: SelectionState;
 	lastX: number;
 	lastY: number;
+	/** Точка нажатия — для порога DRAG_THRESHOLD. */
+	startX: number;
+	startY: number;
 	active: boolean;
 }
 
@@ -176,6 +184,7 @@ export function useRowDragSelect(options: RowDragSelectOptions): void {
 			const id = rowUnderPointer(container, e.clientX, e.clientY);
 			if (!s.active) {
 				if (id === null || id === s.anchor) return;
+				if (Math.hypot(e.clientX - s.startX, e.clientY - s.startY) < DRAG_THRESHOLD) return;
 				s.active = true;
 				prevUserSelect = document.body.style.userSelect;
 				document.body.style.userSelect = "none";
@@ -218,7 +227,7 @@ export function useRowDragSelect(options: RowDragSelectOptions): void {
 			if (drag) finish(false);
 			drag = {
 				anchor, current: anchor, additive: e.ctrlKey || e.metaKey, base: optionsRef.current.selectionRef.current,
-				lastX: e.clientX, lastY: e.clientY, active: false,
+				lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, active: false,
 			};
 			document.addEventListener("mousemove", onMove, true);
 			document.addEventListener("mouseup", onUp, true);

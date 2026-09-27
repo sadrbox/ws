@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppAuth } from "src/app/context";
 
 export type AccessLevel = "full" | "readonly" | "none";
 
@@ -27,7 +27,7 @@ export interface AccessPermissionResult {
  *   - Если записи нет → "none"
  */
 export function useAccessPermission(modelName: string): AccessPermissionResult {
-	const user = useAppContext().auth.user;
+	const user = useAppAuth().user;
 
 	return useMemo(() => {
 		if (!user) return { accessLevel: "none" as const, canRead: false, canWrite: false };

@@ -6,7 +6,7 @@
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import type { TPane } from "src/app/types";
 import { Button } from "src/components/Button";
 import PrintDocumentPane from "src/components/PrintPreview/PrintDocumentPane";
@@ -27,7 +27,7 @@ const fmt = (v: number | null | undefined): string =>
   new Intl.NumberFormat("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v ?? 0));
 
 const FiscalReceiptPane: FC<Partial<TPane>> = (paneProps) => {
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
   const data = (paneProps.data ?? {}) as {
     receipt?: ReceiptShape; items?: FiscalReceiptItem[]; organizationName?: string; bin?: string;
   };

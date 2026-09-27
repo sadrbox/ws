@@ -38,6 +38,14 @@ export function useConfirm() {
   const resolveRef = useRef<((value: boolean) => void) | null>(null);
 
   const confirm = useCallback((message: string): Promise<boolean> => {
+    // Второй confirm, пока открыт первый, заменяет окно — промис первого
+    // иначе висел бы вечно (ждущий код не завершается). Первый считаем
+    // отменённым: окно с его вопросом пользователь уже не увидит.
+    const prev = resolveRef.current;
+    if (prev) {
+      resolveRef.current = null;
+      prev(false);
+    }
     return new Promise<boolean>((resolve) => {
       resolveRef.current = resolve;
 

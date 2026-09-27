@@ -36,7 +36,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { withStableIds } from "src/utils/stableRowId";
 import { asText } from "src/utils/asText";
 import { fetchBaseTokens, revokeBaseToken, rotateBaseToken, type BaseToken } from "src/services/onec/api";
-import { QueryError } from "src/models/OneCAdmin/shared";
+import { QueryError } from "src/models/OneCAdmin/sharedUi";
 import admin from "src/models/OneCAdmin/OneCAdmin.module.scss";
 
 /** Колонка «База» — только в сводном режиме: в карточке базы она одна и та же во всех строках. */

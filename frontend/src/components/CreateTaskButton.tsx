@@ -6,13 +6,13 @@ import { FC, useCallback } from "react";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import apiClient from "src/services/api/client";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { asText } from "src/utils/asText";
 
 const CreateTaskButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }) => {
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
 
   const createTask = useCallback(async () => {
     if (!uuid) return;

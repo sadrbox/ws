@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { translate } from "src/i18";
 import {
-	CANCEL_CODES, MIN_RESULT_LENGTH, eventDetails, eventLabel, historyRows, isKindLocked, kindLabel, kindOptions,
+	CANCEL_CODES, MIN_RESULT_LENGTH, deadlineDueMs, deadlineForServer, deadlineToField, eventDetails, eventLabel, historyRows,
+	isKindLocked, kindLabel, kindOptions,
 	needsResult, priorityOptions, reactionOverdue, resultError, statusOptions, todoActions, todoFormError,
 	transitionError, watcherViews, type StatusLike,
 } from "src/models/Todos/todoRules";
@@ -177,5 +178,38 @@ describe("история задачи", () => {
 		]);
 		expect(w[0]).toMatchObject({ name: "Иванова", reason: translate("todoWatcherTransfer") });
 		expect(w[1].name).toBe("u2");
+	});
+});
+
+// У5 аудита 26.09: срок задачи — местный день, а не полночь UTC (05:00 по Алматы).
+describe("срок задачи — местная дата", () => {
+	const ALMATY = 5 * 60;
+
+	it("срок в поле — местная дата момента, а не UTC-срез", () => {
+		// 29.09 20:00Z — это уже 30.09 01:00 по Алматы.
+		expect(deadlineToField("2026-09-29T20:00:00.000Z", ALMATY)).toBe("2026-09-30");
+		expect(deadlineToField(null, ALMATY)).toBe("");
+	});
+
+	it("новый срок уходит концом местного дня: SLA не эскалирует утром того же дня", () => {
+		const iso = deadlineForServer("2026-09-30", "", ALMATY) as string;
+		expect(iso).toBe("2026-09-30T18:59:59.999Z");
+		expect(Date.parse(iso) > Date.parse("2026-09-30T05:05:00+05:00")).toBe(true);
+	});
+
+	it("неизменённый срок не отправляется: 18:00 по SLA не переезжает на 05:00", () => {
+		expect(deadlineForServer("2026-09-30", "2026-09-30T13:00:00.000Z", ALMATY)).toBeUndefined();
+	});
+
+	it("срок убрали — null; не было и нет — не отправляем", () => {
+		expect(deadlineForServer("", "2026-09-30T13:00:00.000Z", ALMATY)).toBeNull();
+		expect(deadlineForServer("", "", ALMATY)).toBeUndefined();
+	});
+
+	it("срок, записанный голой датой (00:00Z), истекает в конце местного дня", () => {
+		expect(deadlineDueMs("2026-09-30T00:00:00.000Z", ALMATY)).toBe(Date.parse("2026-09-30T18:59:59.999Z"));
+		// Точный момент (SLA) — как есть.
+		expect(deadlineDueMs("2026-09-30T13:00:00.000Z", ALMATY)).toBe(Date.parse("2026-09-30T13:00:00.000Z"));
+		expect(deadlineDueMs(null, ALMATY)).toBeNull();
 	});
 });

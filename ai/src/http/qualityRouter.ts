@@ -26,6 +26,7 @@
 //   504 LLM_TIMEOUT      — модель не уложилась в QUALITY_REVIEW_TIMEOUT_SECS.
 
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import { z } from "zod";
 import type { Db } from "../db/pool.ts";
 import type { Config } from "../config.ts";
@@ -103,6 +104,8 @@ export function qualityRouter(deps: {
 	const audit = deps.audit ?? null;
 	const now = deps.now ?? (() => new Date());
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "маршрут проверки ответа");
 
 	/** Отказ промиса — ответ 500, а не повисший запрос: express 4 асинхронных отказов не ловит. */
 	const wrap = (h: (req: Request, res: Response, next: NextFunction) => unknown): RequestHandler => (req, res, next) => {

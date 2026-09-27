@@ -12,6 +12,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import AvatarUpload from "src/components/AvatarUpload";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
+import { useAppAuth } from "src/app/context";
 import { useFormStore } from "src/hooks/useFormStore";
 import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { FormRequiredScope } from "src/hooks/useFormRequired";
@@ -49,6 +50,9 @@ interface UserServerRecord {
 const UsersForm: FC<Partial<TPane>> = (paneProps) => {
   const { canWrite } = useAccessPermission("User");
   const queryClient = useQueryClient();
+  // Пароль существующему пользователю задаёт только суперадмин (сервер иначе отвечает 403
+  // PASSWORD_CHANGE_FORBIDDEN, аудит 26.09); свой пароль меняется в настройках со старым паролем.
+  const isSuperAdmin = !!useAppAuth().user?.isSuperAdmin;
 
   // refetchType: "active" — ждём завершение refetch смонтированной SubTable,
   // чтобы useFormStore.submit() очистил pending-строки только после
@@ -81,7 +85,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
         username: fd.username.trim(),
         employeeUuid: fd.employeeUuid || null,
       };
-      if (fd.password?.trim()) payload.password = fd.password.trim();
+      if (fd.password?.trim() && (!fd.uuid || isSuperAdmin)) payload.password = fd.password.trim();
       return payload;
     },
     buildPaneLabel: (saved: LabelSource & { username?: string | null }) => makePaneLabel("UsersList", "Пользователи", saved, saved.username ?? undefined),
@@ -104,9 +108,9 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
                   <Group className={styles.w1of2}>
                     <Field label={translate("loginLabel")} name={`${form.formUid}_username`} minWidth={FIELD_WIDTH.number} value={form.fields.username} onChange={e => form.setField("username", e.target.value)} disabled={form.isLoading} required />
                   </Group>
-                  <Group className={styles.w1of2}>
+                  {(!form.isEditMode || isSuperAdmin) && <Group className={styles.w1of2}>
                     <Field label={form.isEditMode ? translate("newPassword") : translate("password")} name={`${form.formUid}_password`} minWidth={FIELD_WIDTH.number} value={form.fields.password} onChange={e => form.setField("password", e.target.value)} disabled={form.isLoading} />
-                  </Group>
+                  </Group>}
                 </GroupRow>
                 <Group>
                   <FormLookup form={form} field="employee" endpoint="employees" displayField="fullName" minWidth={FIELD_WIDTH.xl} />
@@ -143,7 +147,7 @@ const UsersForm: FC<Partial<TPane>> = (paneProps) => {
       });
     }
     return result;
-  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights]);
+  }, [form.formUid, form.fields, form.isLoading, form.isEditMode, form.setField, form.setFields, accessRights, isSuperAdmin]);
 
   return (
     <FormRequiredScope requiredKeys={["username"]} active={form.meta.headerValidationFailed}>

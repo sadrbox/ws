@@ -14,6 +14,7 @@ import Modal from "src/components/Modal";
 import CellActionButton from "./CellActionButton";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./SerialNumbersCell.module.scss";
+import { useProductTracking, type RowProductTracking } from "./productTracking";
 
 export interface SerialCellProps {
   productUuid: string;
@@ -35,6 +36,8 @@ export interface SerialCellProps {
   originIssueDocUuid?: string;
   /** Дата документа — учёт по сериям не применяется задним числом (serialTrackingSince). */
   documentDate?: string | null;
+  /** Карточка товара из строки документа: признаки учёта берутся из неё без запроса. */
+  product?: RowProductTracking | null;
   disabled?: boolean;
 }
 
@@ -45,41 +48,29 @@ interface SerialRow {
   receiptLabel?: string | null;
 }
 
-const qkFlag = (uuid: string) => ["product-serial-flag", uuid];
-const qkCount = (docUuid: string, productUuid: string, mode: string) => ["serial-count", mode, docUuid, productUuid];
+// Склад и основание — параметры запроса счётчика, поэтому и часть ключа: иначе после смены
+// склада в шапке бейдж показывал бы число серий прежнего.
+const qkCount = (docUuid: string, productUuid: string, mode: string, warehouseUuid?: string, originIssueDocUuid?: string) =>
+  ["serial-count", mode, docUuid, productUuid, warehouseUuid ?? "", originIssueDocUuid ?? ""];
 
-export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, originIssueDocUuid, documentDate, disabled }) => {
+export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, docType, docUuid, mode, organizationUuid, warehouseUuid, toWarehouseUuid, originIssueDocUuid, documentDate, product, disabled }) => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  // Учитывается ли товар по сериям НА ДАТУ ЭТОГО ДОКУМЕНТА (кэш по товару).
+  // Учитывается ли товар по сериям НА ДАТУ ЭТОГО ДОКУМЕНТА (признаки — из строки или один
+  // запрос на товар, см. productTracking).
   //
   // Учёт не применяется ЗАДНИМ ЧИСЛОМ: контроль действует только для документов с
   // датой >= serialTrackingSince (момент включения флага). Точно тот же инвариант
   // держит бэкенд (services/serialNumbers.js → serialTrackedProducts). Без этой
   // проверки старый документ показывал бы красное «0/150» и требовал серии, хотя
   // сохранению это уже не мешает — UI пугал бы несуществующей проблемой.
-  const { data: trackState } = useQuery({
-    queryKey: [...qkFlag(productUuid), documentDate ?? ""],
-    queryFn: async (): Promise<{ ok: boolean; since: string | null }> => {
-      const r = await apiClient.get<{ item?: { trackSerialNumbers?: boolean; serialTrackingSince?: string | null } }>(`products/${productUuid}`);
-      const item = r.data?.item;
-      if (item?.trackSerialNumbers !== true) return { ok: false, since: null };
-      const since = item.serialTrackingSince ? new Date(item.serialTrackingSince) : null;
-      if (!since) return { ok: true, since: null };
-      // Новый документ (даты ещё нет) — считаем «сейчас»: учёт действует.
-      const docAt = documentDate ? new Date(documentDate) : new Date();
-      // since возвращаем только для «документ старше включения учёта» — на нём строится подсказка.
-      return docAt >= since ? { ok: true, since: null } : { ok: false, since: item.serialTrackingSince ?? null };
-    },
-    enabled: !!productUuid,
-    staleTime: 5 * 60_000,
-  });
+  const trackState = useProductTracking(productUuid, "serial", product, documentDate);
   const tracked = trackState?.ok === true;
 
   // Текущее число серий, привязанных к строке (для бейджа).
   const { data: count = 0 } = useQuery({
-    queryKey: qkCount(docUuid, productUuid, mode),
+    queryKey: qkCount(docUuid, productUuid, mode, warehouseUuid, originIssueDocUuid),
     queryFn: async () => {
       if (mode === "receipt") {
         const r = await apiClient.get<{ items?: SerialRow[] }>("serialnumbers/receipt", { params: { docType, docUuid, productUuid } });
@@ -93,11 +84,15 @@ export const SerialNumbersCell: FC<SerialCellProps> = ({ productUuid, quantity, 
       return (r.data?.items ?? []).filter((s) => s.issueDocUuid === docUuid).length;
     },
     enabled: !!productUuid && !!docUuid && tracked === true,
-    staleTime: 0,
+    // Не 0: строки таблицы виртуализированы и при прокрутке монтируются заново — с нулевым
+    // сроком каждая перезапрашивала счётчик. Своё изменение (сохранение в модалке)
+    // сбрасывает кэш сразу (invalidate), а чужое подтянется через минуту.
+    staleTime: 60_000,
   });
 
   const invalidate = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: qkCount(docUuid, productUuid, mode) });
+    // Префикс без склада и основания: сбросить счётчик строки при любых параметрах.
+    void queryClient.invalidateQueries({ queryKey: ["serial-count", mode, docUuid, productUuid] });
   }, [queryClient, docUuid, productUuid, mode]);
 
   // Прочерк означал три разные вещи и ни одну не объяснял: товар не на учёте,
@@ -176,7 +171,10 @@ const SerialModal: FC<Omit<SerialCellProps, "disabled"> & { onClose: () => void;
   });
 
   const textValue = text ?? (receipt.data ? receipt.data.join("\n") : "");
-  const pickedSet = picked ?? new Set((available.data ?? []).filter((s) => s.issueDocUuid === docUuid).map((s) => s.uuid));
+  const pickedSet = useMemo(
+    () => picked ?? new Set((available.data ?? []).filter((s) => s.issueDocUuid === docUuid).map((s) => s.uuid)),
+    [picked, available.data, docUuid],
+  );
 
   const save = useCallback(async () => {
     setSaving(true); setError("");

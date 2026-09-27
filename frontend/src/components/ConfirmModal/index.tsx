@@ -7,6 +7,10 @@ import { translate } from "src/i18";
 /**
  * ConfirmModal now uses shared Modal component so it benefits from
  * focus-trap, centralized ESC handling and body scroll lock.
+ *
+ * Сообщение выводится ТЕКСТОМ (переносы — white-space: pre-wrap): в него
+ * подставляются имена файлов, пользователей, записей — HTML из них не
+ * исполняется (аудит 26.09, Б7). Экранировать на стороне вызова НЕ нужно.
  */
 const ConfirmModal: FC<ConfirmState> = ({ isOpen, message, onConfirm, onCancel }) => {
   if (!isOpen) return null;
@@ -22,7 +26,7 @@ const ConfirmModal: FC<ConfirmState> = ({ isOpen, message, onConfirm, onCancel }
       ]}
     >
       <div>
-        <p style={{ margin: 0, whiteSpace: "pre-wrap" }} dangerouslySetInnerHTML={{ __html: message }} />
+        <p style={{ margin: 0, whiteSpace: "pre-wrap" }} data-testid="confirm-message">{message}</p>
       </div>
     </Modal>
   );

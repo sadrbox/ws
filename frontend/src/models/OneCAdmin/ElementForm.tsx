@@ -18,7 +18,7 @@
  */
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import ModelForm from "src/components/ModelForm";
 import Modal from "src/components/Modal";
 import Table from "src/components/Table";
@@ -41,9 +41,8 @@ import {
 } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { useOpenOnecBase } from "src/models/OneCBases";
-import {
-	QueryError, isApplicable, publishLabel, reportBatchStart, useOnecPermissions,
-} from "./shared";
+import { isApplicable, publishLabel, reportBatchStart, useOnecPermissions } from "./shared";
+import { QueryError } from "./sharedUi";
 import { deniedText, sectionAllows } from "./onecPermissions";
 import { attachBatch, startOp } from "./progress";
 import main from "src/styles/main.module.scss";
@@ -239,7 +238,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
-	const { requestClose } = useAppContext().windows;
+	const { requestClose } = useAppActions().windows;
 	const closeCard = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
@@ -463,7 +462,7 @@ ElementForm.displayName = "ElementForm";
 
 /** Открыть форму элемента отдельным пейном — двойным щелчком по строке сводки. */
 export function useOpenElement(kind: ElementKind) {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	/**
 	 * `baseKey` — открыть элемент В КОНКРЕТНОЙ БАЗЕ: она сразу отмечена, роли и реквизиты
 	 * взяты из неё. Без него открывается группа (одно имя во всех базах).

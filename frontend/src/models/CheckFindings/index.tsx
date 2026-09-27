@@ -25,7 +25,7 @@ import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import { Group, GroupCol } from "src/components/UI";
 import { getFormatNumerical, getModelColumns } from "src/components/Table/services";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useFormNotices } from "src/hooks/useFormNotices";
 import { openFormByEndpoint } from "src/registry/formRegistry";
@@ -78,7 +78,7 @@ const fmtAmount = (v: unknown): string => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CheckFindingsList: FC<ListProps> = ({ variant, data }) => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const [filter, setFilter] = useState<FindingsFilter>(() => ({
 		...EMPTY_FINDINGS_FILTER,
 		...pickFindingsFilter(data as Record<string, unknown> | undefined),
@@ -185,8 +185,8 @@ const DEFAULT_FIELDS: TFields = {
 };
 
 export const CheckFindingsForm: FC<Partial<TPane>> = (paneProps) => {
-	const { addPane } = useAppContext().windows;
-	const { confirm } = useAppContext().actions;
+	const { addPane } = useAppActions().windows;
+	const { confirm } = useAppActions().actions;
 	const queryClient = useQueryClient();
 	const [showException, setShowException] = useState(false);
 	const [actionNotices, setActionNotices] = useState<NoticeItem[]>([]);
@@ -424,7 +424,7 @@ CheckRunsList.displayName = "CheckRunsList";
  * текст отказа 1С в ячейке не прочитать. Отсюда же — находки этой проверки у клиента.
  */
 export const CheckRunForm: FC<Partial<TPane>> = ({ uniqId, data }) => {
-	const { addPane, requestClose } = useAppContext().windows;
+	const { addPane, requestClose } = useAppActions().windows;
 	const run = useMemo(() => (data ?? {}) as Partial<CheckRun>, [data]);
 	const summary = useMemo(() => run.summary ?? {}, [run]);
 	const name = `check_run_${asText(run.uuid)}`;

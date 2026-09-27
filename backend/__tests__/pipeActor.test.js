@@ -57,7 +57,8 @@ test("пользователя нет → создаётся, но войти п
 	trash.users.push(r.uuid);
 
 	assert.equal(r.created, true);
-	const u = await prisma.user.findUnique({ where: { uuid: r.uuid } });
+	// Пароль — явным select: клиент Prisma скрывает его по умолчанию (prisma/prisma-client.js).
+	const u = await prisma.user.findUnique({ where: { uuid: r.uuid }, select: { password: true } });
 	assert.equal(u.password, null, "пароля нет → это лишь «автор» событий, а не учётка для входа");
 
 	const again = await resolveUser({ user: { userName: username } });

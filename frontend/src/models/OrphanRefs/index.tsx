@@ -8,7 +8,7 @@
 import { FC, useState, useCallback } from "react";
 import { Button } from "src/components/Button";
 import { GroupCol } from "src/components/UI";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
@@ -168,7 +168,7 @@ const OrphanGroupBlock: FC<{
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const OrphanRefsForm: FC<Partial<TPane>> = () => {
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
   const [groups, setGroups] = useState<OrphanGroup[] | null>(null);
   const [totalViolations, setTotalViolations] = useState(0);
   const [isScanning, setIsScanning] = useState(false);

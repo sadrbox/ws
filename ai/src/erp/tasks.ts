@@ -10,6 +10,7 @@
 // он написан для человека. Сетевой сбой отделён от отказа: «ERP не ответила» и «ERP отказала» —
 // разные причины, и лечатся они по-разному.
 
+import { createHash } from "node:crypto";
 import type { Logger } from "../logger.ts";
 
 export type ErpTask = {
@@ -99,13 +100,38 @@ export type ErpTaskStatus = { code: string; name: string; isFinal: boolean; sort
 /** Кто пишет: имя пользователя 1С. ERP найдёт его или заведёт — как у событий `/pipe`. */
 export type ErpActor = { bin: string; user: { name: string } };
 
+/**
+ * ИМЯ АВТОРА ИЗ 1С — С ПОМЕТКОЙ БАЗЫ (Б11 аудита 26.09).
+ *
+ * ERP ищет автора по имени пользователя ГЛОБАЛЬНО (backend/services/pipeActor.js), а имя приходит в теле запроса
+ * из 1С. Голое «ivanov» находило сотрудника фирмы с этим логином: держатель токена любой базы действовал от его
+ * имени — правил и убирал его заметки, напоминал и оценивал задачи (метрики стандарта качества E17). Пометка
+ * базы, которую берём из ТОКЕНА, а не из тела, разводит пространства имён: автор из 1С никогда не совпадёт с
+ * пользователем панели и с пользователем другой базы. Внутри одной базы различать пользователей может только
+ * сама база — токен у неё один на всех.
+ */
+export function onecActorName(userName: string | null | undefined, baseKey: string): string {
+	const name = String(userName ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 150) || "Пользователь 1С";
+	return `${name} (1С: ${baseKey})`;
+}
+
 export class ErpUnavailable extends Error {}
+/**
+ * ERP не ответила за отведённое время (Н9 аудита 26.09). Отдельно от обрыва соединения: запрос ДОШЁЛ, и ERP, скорее
+ * всего, продолжает его разбирать — повторять такую посылку нельзя, иначе второй приём пойдёт поверх первого.
+ */
+export class ErpTimeout extends ErpUnavailable {}
 export class ErpRefused extends Error {
 	readonly status: number;
 	constructor(status: number, message: string) {
 		super(message);
 		this.status = status;
 	}
+}
+
+/** Ключ посылки результатов проверок: организация, база и время прогона базы — одна посылка, один ключ. */
+export function checkResultsKey(body: Pick<ErpCheckResults, "bin" | "baseKey" | "agentId" | "startedAt">): string {
+	return `checks:${createHash("sha256").update(`${body.bin}|${body.baseKey}|${body.agentId}|${body.startedAt}`).digest("hex").slice(0, 40)}`;
 }
 
 export class ErpTasks {
@@ -139,8 +165,8 @@ export class ErpTasks {
 		sourceType?: string | null; sourceUuid?: string | null; sourceLabel?: string | null;
 		/** Вид задачи (СК1.1); не задан — ERP ставит `task`. */
 		kind?: ErpTaskKind;
-	}): Promise<ErpTask> {
-		return (await this.call<{ item: ErpTask }>("POST", "/bpai/tasks", { ...actor, ...task })).item;
+	}, opts: { idempotencyKey?: string | null } = {}): Promise<ErpTask> {
+		return (await this.call<{ item: ErpTask }>("POST", "/bpai/tasks", { ...actor, ...task }, this.timeoutMs, opts.idempotencyKey)).item;
 	}
 
 	/**
@@ -173,9 +199,12 @@ export class ErpTasks {
 	 * находками; сервис их только пишет в журнал. Канал не настроен — отказ своими словами: «задачи недоступны»
 	 * здесь сбивало бы с толку.
 	 */
-	async sendCheckResults(body: ErpCheckResults): Promise<Record<string, unknown>> {
+	async sendCheckResults(body: ErpCheckResults, opts: { idempotencyKey?: string | null } = {}): Promise<Record<string, unknown>> {
 		if (!this.enabled) throw new ErpRefused(503, "Результаты проверок учёта некуда отправить: служебный канал ERP не настроен (ERP_API_KEY)");
-		const r = await this.call<{ data?: Record<string, unknown> }>("POST", "/bpai/checks/results", body, Math.max(this.timeoutMs, CHECK_RESULTS_TIMEOUT_MS));
+		// Ключ посылки (Н9 аудита 26.09): повтор той же посылки ERP узнаёт по нему и не принимает дважды.
+		const key = opts.idempotencyKey ?? checkResultsKey(body);
+		const r = await this.call<{ data?: Record<string, unknown> }>("POST", "/bpai/checks/results", { ...body, idempotencyKey: key },
+			Math.max(this.timeoutMs, CHECK_RESULTS_TIMEOUT_MS), key);
 		return r.data ?? {};
 	}
 
@@ -205,26 +234,43 @@ export class ErpTasks {
 		return (await this.call<{ items: ErpTaskStatus[] }>("GET", "/bpai/task-statuses")).items;
 	}
 
-	private async call<T>(method: string, path: string, body?: unknown, timeoutMs = this.timeoutMs): Promise<T> {
+	private async call<T>(method: string, path: string, body?: unknown, timeoutMs = this.timeoutMs, idempotencyKey?: string | null): Promise<T> {
 		if (!this.enabled) throw new ErpRefused(503, "Задачи и заметки недоступны: служебный канал ERP не настроен");
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 		let res: Response;
+		let data: { success?: boolean; message?: string } | null;
 		try {
-			res = await fetch(`${this.base}${path}`, {
-				method,
-				headers: { "X-Api-Key": this.key, Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
-				body: body === undefined ? undefined : JSON.stringify(body),
-				signal: ctrl.signal,
-			});
-		} catch (e) {
-			this.log.warn({ err: e instanceof Error ? e.message : String(e), path }, "ERP не ответила");
-			throw new ErpUnavailable("ERP не отвечает — задачи и заметки сейчас недоступны");
+			try {
+				res = await fetch(`${this.base}${path}`, {
+					method,
+					headers: {
+						"X-Api-Key": this.key, Accept: "application/json",
+						...(body === undefined ? {} : { "Content-Type": "application/json" }),
+						...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+					},
+					body: body === undefined ? undefined : JSON.stringify(body),
+					signal: ctrl.signal,
+				});
+			} catch (e) {
+				this.log.warn({ err: e instanceof Error ? e.message : String(e), path, timeout: ctrl.signal.aborted }, "ERP не ответила");
+				throw ctrl.signal.aborted
+					? new ErpTimeout("ERP не ответила вовремя — запрос мог быть принят; повторять его сразу нельзя")
+					: new ErpUnavailable("ERP не отвечает — задачи и заметки сейчас недоступны");
+			}
+			/*
+			 * ТЕЛО ОТВЕТА — ПОД ТЕМ ЖЕ СРОКОМ (аудит 26.09). Раньше таймер снимался сразу после заголовков, а чтение тела
+			 * не ограничивалось ничем: зависшее тело оставляло ночной прогон проверок «идущим» до перезапуска, и все
+			 * следующие ночи тик отвечал «занят».
+			 */
+			data = (await res.json().catch(() => {
+				if (ctrl.signal.aborted) throw new ErpTimeout("ERP не дослала ответ вовремя — запрос мог быть принят; повторять его сразу нельзя");
+				return null;
+			})) as { success?: boolean; message?: string } | null;
 		} finally {
 			clearTimeout(timer);
 		}
 
-		const data = (await res.json().catch(() => null)) as { success?: boolean; message?: string } | null;
 		if (!res.ok || !data?.success) {
 			const message = data?.message ?? `ERP отказала (HTTP ${res.status})`;
 			// Ключ и путь — в журнал, наружу только текст ERP: он написан для человека.

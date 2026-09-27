@@ -3,7 +3,7 @@
 // stub: фейковые данные для разработки). НЕ юридически значимо в stub-режиме.
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership, requireOwnedRecord } from "../../utils/auth.js";
 import { handleDelete } from "../../utils/checkReferences.js";
 import { getFiscalProvider, qrToDataUrl, respondFiscalError } from "../../services/fiscal/index.js";
 
@@ -20,7 +20,7 @@ async function loadSourceDoc(documentType, documentUuid) {
 	const cfg = SOURCE[documentType];
 	if (!cfg || !documentUuid) return null;
 	const doc = await prisma[cfg.model].findUnique({ where: { uuid: documentUuid } });
-	if (!doc) return null;
+	if (!doc || doc.deletedAt) return null;
 	const rawItems = await prisma[cfg.itemModel].findMany({
 		where: { [cfg.parentField]: documentUuid, deletedAt: null },
 		include: { product: { select: { name: true } } },
@@ -50,8 +50,16 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		const method = ["cash", "card", "kaspi"].includes(paymentMethod) ? paymentMethod : "cash";
 
 		const loaded = await loadSourceDoc(documentType, documentUuid);
-		if (!loaded) return res.status(404).json({ success: false, message: "Документ не найден" });
+		// Документ чужой организации — «не найден», как и несуществующий (аудит 26.09).
+		if (!loaded || !checkOwnership(loaded.doc, req, "organizationUuid", { allowShared: false })) {
+			return res.status(404).json({ success: false, message: "Документ не найден" });
+		}
 		const { doc, items } = loaded;
+		// Чек — только по проведённому документу (И4 аудита 26.09): иначе черновик продажи, не
+		// прошедший проведение (остаток, закрытый период), уходил в ОФД как состоявшаяся продажа.
+		if (!doc.posted) {
+			return res.status(409).json({ success: false, message: "Чек можно пробить только по проведённому документу" });
+		}
 
 		// Идемпотентность: незавершённый/успешный чек по документу — возвращаем его.
 		const existing = await prisma.fiscalReceipt.findFirst({
@@ -102,7 +110,9 @@ router.post(`/${ROUTE}/:id/check-payment`, async (req, res) => {
 		const n = Number(p);
 		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const receipt = await prisma.fiscalReceipt.findUnique({ where: w });
-		if (!receipt) return res.status(404).json({ success: false, message: "Чек не найден" });
+		if (!receipt || !checkOwnership(receipt, req, "organizationUuid", { allowShared: false })) {
+			return res.status(404).json({ success: false, message: "Чек не найден" });
+		}
 		if (receipt.status !== "payment_pending") return res.status(200).json({ success: true, item: await withQr(receipt) });
 
 		const provider = getFiscalProvider(receipt.provider);
@@ -177,7 +187,9 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 		const n = Number(p);
 		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const item = await prisma.fiscalReceipt.findUnique({ where: w, include: { organization: { select: { name: true } } } });
-		if (!item) return res.status(404).json({ success: false, message: "Не найдено" });
+		if (!item || !checkOwnership(item, req, "organizationUuid", { allowShared: false })) {
+			return res.status(404).json({ success: false, message: "Не найдено" });
+		}
 		return res.status(200).json({ success: true, item: await withQr(item) });
 	} catch (error) {
 		console.error(`GET /${ROUTE}/:id error:`, error);
@@ -185,6 +197,6 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-router.delete(`/${ROUTE}/:id`, (req, res) => handleDelete({ req, res, prisma, modelName: "fiscalReceipt", softDelete: true }));
+router.delete(`/${ROUTE}/:id`, requireOwnedRecord("fiscalReceipt"), (req, res) => handleDelete({ req, res, prisma, modelName: "fiscalReceipt", softDelete: true }));
 
 export default router;

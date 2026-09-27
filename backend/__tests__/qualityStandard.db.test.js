@@ -39,6 +39,10 @@ before(async () => {
 		await prisma.accessRight.create({ data: { userUuid: u.uuid, organizationUuid: firm.uuid, role: u === owner ? "admin" : "member" } });
 		await prisma.accessRight.create({ data: { userUuid: u.uuid, organizationUuid: client.uuid, role: "member" } });
 	}
+	// Владелец фирмы работает в клиенте рядовым участником: админство фирмы прав в клиенте не даёт
+	// (Б2 аудита 26.09), поэтому отчёту по пользователям клиента нужно явное право — как в жизни.
+	// Удаляется каскадом вместе с пользователем.
+	await prisma.accessPermission.create({ data: { userUuid: owner.uuid, organizationUuid: client.uuid, modelName: "User", accessLevel: "readonly" } });
 	// До назначения фирмы правила молчат (сбрасываем настройку — база могла остаться от прошлых прогонов).
 	await setFirmOrgSetting(null);
 	_resetSettingsCache();
@@ -55,7 +59,7 @@ before(async () => {
 	app.use("/bpai", bpaiRouter);
 	app.use("/api/v1", (req, _res, next) => {
 		const u = users[req.headers["x-as"] || "acc"];
-		req.user = { uuid: u.uuid, username: u.username, isSuperAdmin: false, organizationUuid: client.uuid, allowedOrgUuids: [firm.uuid, client.uuid], isOrgAdmin: false, isAnyOrgAdmin: u === owner };
+		req.user = { uuid: u.uuid, username: u.username, isSuperAdmin: false, organizationUuid: client.uuid, allowedOrgUuids: [firm.uuid, client.uuid], isOrgAdmin: false, isAnyOrgAdmin: u === owner, adminOrgUuids: u === owner ? [firm.uuid] : [] };
 		next();
 	});
 	for (const r of routers) app.use("/api/v1", r.default);

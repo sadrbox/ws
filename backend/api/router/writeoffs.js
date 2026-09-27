@@ -4,17 +4,17 @@ import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
-import { syncItemsFromParent } from "./_documentItemsFactory.js";
-import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
-import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
+import { removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, releaseIssuedSerials } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
-import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
+import { commitDocumentHeader, recomputeAfterDelete } from "../../services/documentCommit.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -34,7 +34,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawLimit = req.query.limit;
 		const rawCursor = req.query.cursor;
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res.status(400).json({ success: false, message: "Некорректный параметр cursor" });
@@ -97,8 +98,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (cursorNumber === null) total = await prisma[MODEL].count({ where: baseWhere });
 		return res.status(200).json({ success: true, items, nextCursor, hasMore, ...(total !== undefined ? { total } : {}) });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 
@@ -193,19 +195,18 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			await assertDocumentBatches({ docType: DOC_TYPE, docUuid: existing.uuid, itemModel: "writeOffItem", parentField: "writeOffUuid" });
 			// Расходный документ: остаток не должен уходить в минус (до записи проведения).
 			const warehouseUuid = data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
-			await assertStockForPosting(DOC_TYPE, existing.uuid, { warehouseUuid });
+			// Предпроверка остатка до записи (окончательная — в транзакции commitDocumentHeader).
+			await assertStockForPosting(DOC_TYPE, existing.uuid, { warehouseUuid, date: data.date ?? undefined });
 			await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		}
-		const item = await prisma[MODEL].update({ where: w, data, include: INCLUDE });
-		await syncItemsFromParent("writeOffItem", "writeOffUuid", item.uuid, item);
-		await reconcileDocumentRegister(DOC_TYPE, item.uuid);
-		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
-		// Ввод задним числом делает COGS последующих документов устаревшим —
-		// пересчитываем хвост истории (не трогая закрытый период).
-		await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: item.date });
-		// amount пересчитан в reconcile по фактической себестоимости — отдаём свежую запись.
-		const fresh = await prisma[MODEL].findUnique({ where: { uuid: item.uuid }, include: INCLUDE });
-		return res.status(200).json({ success: true, item: fresh ?? item });
+		// Шапка, строки, контроль остатка, регистр и проводки — одной транзакцией под
+		// блокировкой документа (У2/У4 аудита 26.09). Запись читается после фиксации —
+		// amount пересчитан в регистре по фактической себестоимости.
+		const item = await commitDocumentHeader({
+			documentType: DOC_TYPE, model: MODEL, uuid: existing.uuid, data, existing,
+			itemModel: "writeOffItem", parentField: "writeOffUuid", include: INCLUDE,
+		});
+		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
@@ -225,6 +226,9 @@ const onDeleted = async (doc) => {
 	await removeDocumentRegister(DOC_TYPE, doc.uuid);
 	await removeDocumentEntries(DOC_TYPE, doc.uuid);
 	await releaseIssuedSerials(DOC_TYPE, doc.uuid);
+	// Удаление проведённого списания задним числом меняет себестоимость последующих
+	// документов — пересчёт хвоста (в фоне).
+	await recomputeAfterDelete(doc);
 };
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>

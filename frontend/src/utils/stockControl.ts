@@ -35,13 +35,49 @@ export interface CheckStockPayload {
 	organizationUuid?: string | null;
 	/** Дата документа (настройки историчны). */
 	date?: string | null;
-	items: Array<{ productUuid?: string | null; quantity?: number | string | null }>;
+	/**
+	 * Основание документа. Реализация на основании резерва не должна упираться в собственный
+	 * резерв (У8): сервер (check-availability) исключает резерв-основание из «зарезервировано».
+	 */
+	basisDocumentType?: string | null;
+	basisDocumentUuid?: string | null;
+	/** isService — строка-услуга, если вызывающий это знает: такие строки на остаток не проверяются. */
+	items: Array<{ productUuid?: string | null; quantity?: number | string | null; isService?: boolean | null }>;
 }
 
 interface CheckStockResponse {
 	success: boolean;
 	ok: boolean;
 	shortages: StockShortage[];
+}
+
+/**
+ * УСЛУГИ СКЛАД НЕ ДВИГАЮТ — и на остаток не проверяются (аудит 26.09, У8).
+ *
+ * Предпроверка сервера (check-availability) считает остаток и по услугам, хотя гард
+ * проведения их пропускает: реализацию со строкой «Доставка» при включённом (по умолчанию)
+ * контроле было не провести — «нужно 1, доступно 0». Поэтому строки, про которые известно,
+ * что это услуга, в запрос не идут, а дефициты сверяются с карточкой товара.
+ */
+export function withoutServiceShortages(
+	shortages: StockShortage[],
+	serviceUuids: ReadonlySet<string>,
+): StockShortage[] {
+	return shortages.filter((s) => !(s.productUuid && serviceUuids.has(s.productUuid)));
+}
+
+/** Какие из товаров — услуги (по карточке). Не удалось прочитать карточку — не услуга. */
+async function loadServiceUuids(productUuids: string[]): Promise<Set<string>> {
+	const unique = Array.from(new Set(productUuids.filter(Boolean)));
+	const flags = await Promise.all(unique.map(async (uuid) => {
+		try {
+			const resp = await api.get<{ item?: { isService?: boolean | null } }>(`/products/${uuid}`);
+			return resp?.item?.isService === true ? uuid : null;
+		} catch {
+			return null;
+		}
+	}));
+	return new Set(flags.filter((u): u is string => !!u));
 }
 
 /**
@@ -53,11 +89,18 @@ export async function checkStockAvailability(
 	payload: CheckStockPayload,
 ): Promise<StockShortage[]> {
 	try {
+		const items = payload.items
+			.filter((it) => it.isService !== true)
+			.map(({ productUuid, quantity }) => ({ productUuid, quantity }));
+		if (!items.length) return [];
 		const resp = await api.post<CheckStockResponse>(
 			"/product-register/check-availability",
-			payload,
+			{ ...payload, items },
 		);
-		return Array.isArray(resp?.shortages) ? resp.shortages : [];
+		const shortages = Array.isArray(resp?.shortages) ? resp.shortages : [];
+		if (!shortages.length) return [];
+		const services = await loadServiceUuids(shortages.map((s) => s.productUuid ?? ""));
+		return withoutServiceShortages(shortages, services);
 	} catch {
 		return [];
 	}

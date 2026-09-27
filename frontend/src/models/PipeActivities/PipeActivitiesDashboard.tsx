@@ -13,6 +13,7 @@ import { apiClient } from "src/services/api/client";
 import { translate } from "src/i18";
 import styles from "./PipeActivitiesDashboard.module.scss";
 import main from "src/styles/main.module.scss";
+import { isoToLocalInput } from "src/utils/datetime";
 
 interface Cat { key: string | null; count: number }
 interface Stats {
@@ -23,7 +24,8 @@ interface Stats {
   byDay: { day: string; count: number }[];
 }
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Дата по часовому поясу приложения, а не по UTC (аудит 26.09).
+const iso = (d: Date) => isoToLocalInput(d).slice(0, 10);
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 const fmtInt = (n: number) => (Number(n) || 0).toLocaleString("ru-RU");
 

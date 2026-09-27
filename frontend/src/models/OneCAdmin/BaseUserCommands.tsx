@@ -24,15 +24,15 @@ import Notice from "src/components/Notice";
 import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import FieldToggle from "src/components/Field/FieldToggle";
-import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import { runBatch, type BatchType } from "src/services/onec/api";
+import { runBatch, type BatchStart, type BatchType } from "src/services/onec/api";
 import RolesPicker from "./RolesPicker";
 import { attachBatch, finishOp, startOp, type OpKind } from "./progress";
 import { useOpenBaseUser } from "./BaseUserForm";
 import {
-	useOnecErrorActions, useOnecPermissions,
+	reportBatchStart, useOnecErrorActions, useOnecPermissions,
 } from "./shared";
+import { nothingQueued } from "./batchStart";
 import { sectionAllows } from "./onecPermissions";
 import { buildUserCreate } from "./userUpdate";
 import styles from "./OneCAdmin.module.scss";
@@ -74,8 +74,10 @@ export const BaseUserCommands: FC<{
 
 	const actionsFor = useOnecErrorActions();
 
-	const done = () => {
-		showToast(translate("onecBatchQueued"), "success");
+	const done = (r: BatchStart) => {
+		// «queued: 0» (агент не на связи) — не зелёный успех: причина словами, окно с вводом остаётся (И26).
+		reportBatchStart(r, translate("onecUser"));
+		if (nothingQueued(r)) return;
 		// Кэш реестра не сбрасываем сразу после постановки — в нём ещё прежнее: перечитает
 		// окончание задания (attachBatch → refreshAfterWork, R7-П1).
 		onDone?.();

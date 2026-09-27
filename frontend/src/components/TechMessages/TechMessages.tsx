@@ -31,7 +31,7 @@ import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
-import { useAppContext } from "src/app/context";
+import { useAppPanes } from "src/app/context";
 import { useIsMobileLayout } from "src/hooks/useIsMobileLayout";
 import {
 	APP_SCOPE, clearNoticeHistory, isClearable, setTechMessagesOpen, setTechMessagesPlacement,
@@ -113,7 +113,7 @@ const Announcer: FC = () => {
 };
 
 export const TechMessages: FC = () => {
-	const { activePane } = useAppContext().windows;
+	const { activePane } = useAppPanes();
 	const open = useTechMessagesOpen();
 	/*
 	 * ГДЕ СТОИТ ОБЛАСТЬ — справа или внизу. Разметку задаёт рабочее пространство (оно одно

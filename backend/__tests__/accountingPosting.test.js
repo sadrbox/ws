@@ -19,6 +19,7 @@ import {
 	reconcileDocumentEntries,
 	removeDocumentEntries,
 	filterPostedEntries,
+	purgeOrphanEntries,
 	PostingValidationError,
 	ACC,
 } from "../services/accountingPosting.js";
@@ -307,7 +308,7 @@ test("Интеграция: reconcile проведённого поступле�
 });
 
 // ─── Защитный фильтр отчётов: проводки только проведённых документов ──────────
-test("Защита: проводки осиротевшего (распроведённого) документа исключаются и удаляются", async (t) => {
+test("Защита: проводки осиротевшего (распроведённого) документа исключаются из отчёта, удаляет их purgeOrphanEntries", async (t) => {
 	if (!fx.orgUuid || !fx.cpUuid || !fx.productUuid || !fx.userUuid) return t.skip("нет фикстур");
 
 	const doc = await prisma.purchase.create({
@@ -333,9 +334,13 @@ test("Защита: проводки осиротевшего (распрове�
 		const kept = await filterPostedEntries(entries.map((e) => ({ ...e })));
 		assert.equal(kept.length, 0, "проводки непроведённого документа не попадают в отчёт");
 
-		// … и самоисцелить БД (физически удалить осиротевшую проводку).
+		// … но НЕ удалять её на чтении (аудит 26.09: запись на пути GET гонялась с
+		// проведением) — самоисцеление вынесено в purgeOrphanEntries (фон/ручной запуск).
 		entries = await prisma.accountingEntry.findMany({ where: { documentType: "purchase", documentUuid: doc.uuid } });
-		assert.equal(entries.length, 0, "осиротевшая проводка удалена из БД");
+		assert.equal(entries.length, 1, "фильтр отчёта ничего не удаляет");
+		await purgeOrphanEntries({ organizationUuid: fx.orgUuid });
+		entries = await prisma.accountingEntry.findMany({ where: { documentType: "purchase", documentUuid: doc.uuid } });
+		assert.equal(entries.length, 0, "осиротевшая проводка удалена purgeOrphanEntries");
 	} finally {
 		await removeDocumentEntries("purchase", doc.uuid);
 		await prisma.purchaseItem.delete({ where: { uuid: item.uuid } }).catch(() => {});

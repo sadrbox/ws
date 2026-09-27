@@ -22,7 +22,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { orgIsAccessible } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
-import { qualityContext, canSee, canDecide, canManage, userNames, orgNames } from "../../services/quality/access.js";
+import { qualityContext, canSee, canDecide, canManage, userNames, orgNames, disputeResolveDenied } from "../../services/quality/access.js";
 import { getQualitySettings } from "../../services/quality/settings.js";
 import { ensureStandardItems, closedMonths } from "../../services/quality/violations.js";
 import { MEASURE_KINDS } from "../../services/quality/bonusRules.js";
@@ -101,7 +101,9 @@ router.get("/standard-violations/:id", handler("GET /standard-violations/:id", a
 	const v = await findVisible(req, ctx, req.params.id);
 	if (!v) return fail(res, 404, "Запись не найдена");
 	const [item] = await decorate([v], ctx.firmOrgUuid);
-	res.json({ success: true, item: { ...item, canDecide: canDecide(ctx, v.userUuid), isMine: v.userUuid === ctx.userUuid } });
+	// Флаг для кнопки «Решить» — правило одно с resolve-dispute (уровень выше подтвердившего).
+	const canResolveDispute = v.status === "disputed" && !(await disputeResolveDenied(ctx, v));
+	res.json({ success: true, item: { ...item, canDecide: canDecide(ctx, v.userUuid), isMine: v.userUuid === ctx.userUuid, canResolveDispute } });
 }));
 
 // ── Создание вручную ─────────────────────────────────────────────────────────
@@ -250,10 +252,12 @@ router.post("/standard-violations/:id/resolve-dispute", handler("POST /standard-
 	const v = await findVisible(req, ctx, req.params.id);
 	if (!v) return fail(res, 404, "Запись не найдена");
 	if (v.status !== "disputed") return fail(res, 409, "Возражения по записи нет");
-	if (!canDecide(ctx, v.userUuid)) return fail(res, 403, "Решает главбух, руководитель или администратор");
-	// «Решает следующий уровень»: не тот, кто подтверждал (кроме администратора). В маленькой фирме уровня
-	// выше может не быть — тогда решает администратор фирмы (решено 25.09).
-	if (v.decidedByUuid === ctx.userUuid && !ctx.isAdmin) return fail(res, 403, "По возражению решает не тот, кто подтверждал нарушение, а уровень выше");
+	// «Решает следующий уровень» — не подтвердивший и не его коллега того же уровня (главбух за
+	// главбуха, руководитель за руководителя); администратор фирмы — всегда: в маленькой фирме уровня
+	// выше может не быть (решено 25.09). Правило — services/quality/access.js, оно же даёт фронту
+	// флаг canResolveDispute в GET /:id (аудит 26.09, И24).
+	const denied = await disputeResolveDenied(ctx, v);
+	if (denied) return fail(res, 403, denied);
 	const decision = req.body?.decision === "rejected" ? "rejected" : req.body?.decision === "confirmed" ? "confirmed" : null;
 	if (!decision) return fail(res, 400, "Решение: confirmed или rejected");
 	const note = text(req.body?.note);

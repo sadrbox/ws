@@ -281,7 +281,12 @@ const App: React.FC = () => {
   // Управление панелями
   // ────────────────────────────────────────────────
 
+  // addPane и setActivePane читают панели через зеркала (panesRef/activePaneIdRef), а не
+  // из замыкания: иначе их ссылка менялась на каждое переключение вкладки, а вместе с ней —
+  // пропсы всех списков и форм, получивших addPane (аудит 26.09, О3).
   const addPane = useCallback((options: Partial<TPane>) => {
+    const panes = panesRef.current;
+    const activePaneId = activePaneIdRef.current;
     if (!options.component) {
       console.warn("[addPane] Component is required");
       return "";
@@ -348,8 +353,11 @@ const App: React.FC = () => {
 
     // Опидатель: панель, активная в момент открытия. При закрытии этой панели
     // вернёмся к нему (напр. форма, из поля «Основание» которой открыт документ).
+    // Пока восстанавливается сессия, опидатель не выводится: восстановленные панели
+    // открываются подряд, и «активной в момент открытия» была бы просто предыдущая из списка.
     if (!options.isSelector) {
-      const opener = options.openerPaneId ?? (activePaneId && activePaneId !== uniqId ? activePaneId : undefined);
+      const opener = options.openerPaneId
+        ?? (restoreDoneRef.current && activePaneId && activePaneId !== uniqId ? activePaneId : undefined);
       if (opener) newPane.openerPaneId = opener;
     }
 
@@ -368,7 +376,7 @@ const App: React.FC = () => {
     setNavbarItems((prev) => prev.map((n) => ({ ...n, isActive: false })));
 
     return uniqId;
-  }, [panes, activePaneId, setActivePaneId]);
+  }, [setActivePaneId]);
 
   /** Закрытие панели.
    * force=true — принудительно, без guards (после сохранения).
@@ -435,6 +443,7 @@ const App: React.FC = () => {
   }, [promotePane]);
 
   const setActivePane = useCallback((uniqId: string) => {
+    const panes = panesRef.current;
     // Блокировка: если есть selector-панель, разрешаем переключение
     // только на selector и его дочерние панели
     const selectorPane = panes.find((p) => p.isSelector);
@@ -447,7 +456,7 @@ const App: React.FC = () => {
     if (panes.some((p) => p.uniqId === uniqId)) {
       setActivePaneId(uniqId);
     }
-  }, [panes, setActivePaneId]);
+  }, [setActivePaneId]);
 
   const updatePaneLabel = useCallback((uniqId: string, label: string) => {
     setPanes(prev => prev.map(p => p.uniqId === uniqId ? { ...p, label } : p));

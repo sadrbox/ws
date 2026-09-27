@@ -13,14 +13,14 @@
  */
 import { useCallback, useMemo, type ComponentType } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { translate } from "src/i18";
 import { useModelDelete } from "src/hooks/useModelDelete";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import type { TDataItem } from "src/components/Table/types";
 
 export function useQualityListActions(endpoint: string, listName: string, FormComponent: ComponentType<Record<string, unknown>>) {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const queryClient = useQueryClient();
 
 	/** Перечитать список (и все запросы этого раздела): ключ ModelList начинается с endpoint. */

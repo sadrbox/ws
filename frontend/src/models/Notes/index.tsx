@@ -28,7 +28,7 @@ import { withStableIds } from "src/utils/stableRowId";
 import { asText } from "src/utils/asText";
 import { getByEndpoint } from "src/registry/modelRegistry";
 import { restorePane } from "src/app/paneRestore";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import apiClient from "src/services/api/client";
 import main from "src/styles/main.module.scss";
 
@@ -52,7 +52,7 @@ const columns = (): TColumn[] => ([
 ] as unknown as TColumn[]);
 
 export const NotesList: FC = () => {
-	const { windows } = useAppContext();
+	const { windows } = useAppActions();
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), COMPONENT));
 	const [search, setSearch] = useState("");
 

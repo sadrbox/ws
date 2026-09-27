@@ -14,6 +14,8 @@ vi.mock("src/services/offlineDataService", () => ({
 // ради Fast Refresh) — мокаем именно этот путь, иначе LookupField падает без провайдера.
 vi.mock("src/app/context", () => ({
 	useAppContext: () => ({ windows: { addPane: vi.fn() } }),
+	// LookupField берёт стабильные действия (useAppActions) — см. app/context.
+	useAppActions: () => ({ windows: { addPane: vi.fn() } }),
 }));
 vi.mock("src/hooks/useDirtyHighlight", () => ({
 	useFieldDirty: () => ({}),

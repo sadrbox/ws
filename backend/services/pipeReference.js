@@ -18,13 +18,55 @@
 //
 // КОНФЛИКТ: 1С — источник истины, поля перезаписываются присланными (решение владельца).
 //
+// ГРАНИЦА ОРГАНИЗАЦИИ (аудит 26.09, п. 10 отчёта инспекции маршрутов). Раньше поиск шёл по ВСЕЙ
+// базе (БИН, штрихкод, артикул, имя), а найденной записи проставлялась организация-отправитель —
+// событие одной фирмы «забирало» себе контрагентов, товары и склады другой. Теперь:
+//   - искать и трогать можно только записи организации-отправителя (и общие — там, где режим
+//     установки их допускает, services/recordScope.js); склады — только свои;
+//   - организацию существующей записи событие НЕ меняет никогда;
+//   - элемент, уже сопоставленный с записью чужой организации, и БИН, занятый чужим
+//     контрагентом, — это applyStatus=error с объяснением, а не перенос;
+//   - карточки ДРУГИХ организаций (справочник «Организации») правятся только в режиме group
+//     (один владелец холдинга); на общем сервере событие меняет лишь саму организацию-отправителя.
+//
 // Итог применения возвращается вызывающему и пишется в pipe_activity
 // (applyStatus/applyModel/applyUuid/applyMessage), чтобы «Входящие 1С» показывали,
 // что произошло с каждым событием.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { getInstallation } from "./installation.js";
+import { modeAllowsShared } from "./recordScope.js";
 
 const SOURCE = "1C";
+
+/**
+ * Условие «запись в пределах отправителя» для поиска по естественному ключу.
+ * null — искать негде (нет организации-отправителя и общие записи недопустимы).
+ */
+function senderScopeWhere(ctx, { strict = false } = {}) {
+	const or = [];
+	if (ctx.orgUuid) or.push({ organizationUuid: ctx.orgUuid });
+	if (!strict && ctx.sharedAllowed) or.push({ organizationUuid: null });
+	return or.length ? { OR: or } : null;
+}
+
+/**
+ * Можно ли событию организации-отправителя трогать найденную запись (обновить, привязать).
+ * scope книги: "self" — карточка организации, "org" — запись организации (может быть общей),
+ * "orgStrict" — только своей организации (склады), "global" — справочник установки (единицы).
+ */
+export function senderMayTouch(scope, row, ctx) {
+	if (!row) return false;
+	switch (scope) {
+		case "global": return true;
+		case "self": return (!!ctx.orgUuid && row.uuid === ctx.orgUuid) || !!ctx.sharedAllowed;
+		case "org":
+			if (ctx.orgUuid && row.organizationUuid === ctx.orgUuid) return true;
+			return row.organizationUuid == null && !!ctx.sharedAllowed;
+		case "orgStrict": return !!ctx.orgUuid && row.organizationUuid === ctx.orgUuid;
+		default: return false;
+	}
+}
 
 /** Первое непустое значение из props по нескольким возможным именам реквизита. */
 function pick(props, ...names) {
@@ -52,6 +94,7 @@ function normalizeBin(v) {
 const REF_BOOKS = {
 	Организации: {
 		model: "organization",
+		scope: "self",
 		build: (props, ctx) => {
 			// БИН обязателен (Organization.bin — NOT NULL @unique). Если 1С не прислала
 			// его в реквизитах, берём БИН организации-отправителя события.
@@ -71,6 +114,7 @@ const REF_BOOKS = {
 
 	Контрагенты: {
 		model: "counterparty",
+		scope: "org",
 		build: (props, ctx) => {
 			// БИН у контрагента НЕОБЯЗАТЕЛЕН: 1С шлёт физлиц и розницу без него, а раньше
 			// такие события отбивались с «Не хватает обязательных реквизитов» — справочник
@@ -93,15 +137,17 @@ const REF_BOOKS = {
 			// создала бы второго «Иванова» рядом с уже заведённым вручную. Имя — ключ
 			// слабый, поэтому только точное совпадение и только при отсутствии БИН.
 			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
-			if (!name) return null;
+			const scope = senderScopeWhere(ctx);
+			if (!name || !scope) return null;
 			return prisma.counterparty.findFirst({
-				where: { name, bin: null, organizationUuid: ctx.orgUuid ?? undefined, deletedAt: null },
+				where: { name, bin: null, deletedAt: null, ...scope },
 			});
 		},
 	},
 
 	Номенклатура: {
 		model: "product",
+		scope: "org",
 		build: (props, ctx) => {
 			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
 			if (!name) return null; // Product.name — NOT NULL
@@ -115,19 +161,21 @@ const REF_BOOKS = {
 		// Штрихкод уникален среди активных (partial-unique index), артикул — нет,
 		// поэтому по sku привязываемся только при однозначном совпадении.
 		findNatural: async (props, ctx) => {
+			const scope = senderScopeWhere(ctx);
+			if (!scope) return null;
 			const barcode = pick(props, "Штрихкод", "ШтрихКод");
 			if (barcode) {
-				const byBarcode = await prisma.product.findFirst({ where: { barcode, deletedAt: null } });
+				const byBarcode = await prisma.product.findFirst({ where: { barcode, deletedAt: null, ...scope } });
 				if (byBarcode) return byBarcode;
 			}
 			const sku = pick(props, "Артикул", "Код");
 			if (sku) {
-				const bySku = await prisma.product.findMany({ where: { sku, deletedAt: null }, take: 2 });
+				const bySku = await prisma.product.findMany({ where: { sku, deletedAt: null, ...scope }, take: 2 });
 				if (bySku.length === 1) return bySku[0];
 			}
 			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
 			if (name) {
-				const byName = await prisma.product.findMany({ where: { name, deletedAt: null }, take: 2 });
+				const byName = await prisma.product.findMany({ where: { name, deletedAt: null, ...scope }, take: 2 });
 				if (byName.length === 1) return byName[0];
 			}
 			return null;
@@ -136,6 +184,8 @@ const REF_BOOKS = {
 
 	Склады: {
 		model: "warehouse",
+		// Склад — физический объект юрлица: общим не бывает ни в каком режиме (recordScope.js).
+		scope: "orgStrict",
 		build: (props, ctx) => {
 			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
 			if (!name) return null;
@@ -143,14 +193,16 @@ const REF_BOOKS = {
 		},
 		findNatural: async (props, ctx) => {
 			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
-			if (!name) return null;
-			const rows = await prisma.warehouse.findMany({ where: { name, deletedAt: null }, take: 2 });
+			const scope = senderScopeWhere(ctx, { strict: true });
+			if (!name || !scope) return null;
+			const rows = await prisma.warehouse.findMany({ where: { name, deletedAt: null, ...scope }, take: 2 });
 			return rows.length === 1 ? rows[0] : null;
 		},
 	},
 
 	ЕдиницыИзмерения: {
 		model: "unitOfMeasure",
+		scope: "global",
 		build: (props, ctx) => {
 			const name = pick(props, "Наименование", "Название") ?? ctx.objectName;
 			if (!name) return null;
@@ -177,11 +229,12 @@ export const supportedRefBooks = () => Object.keys(REF_BOOKS);
  * Применить входящее событие 1С к справочнику.
  *
  * @param {object} body — тело события (как пришло на POST /pipe).
+ * @param {{ mode?: string|null }} [opts] — режим установки (для тестов; по умолчанию из настроек).
  * @returns {Promise<{status:string, model?:string, uuid?:string, message?:string}>}
  *   status: created | updated | linked | skipped | error.
  *   Никогда не бросает: приём события не должен падать из-за проблем сопоставления.
  */
-export async function applyPipeReference(body) {
+export async function applyPipeReference(body, opts = {}) {
 	try {
 		const object = body?.object ?? {};
 		const objectType = String(object.type ?? "");
@@ -207,9 +260,12 @@ export async function applyPipeReference(body) {
 			? await prisma.organization.findUnique({ where: { bin: senderBin }, select: { uuid: true } })
 			: null;
 
+		const mode = opts.mode !== undefined ? opts.mode : ((await getInstallation())?.mode ?? null);
 		const ctx = {
 			senderBin,
 			orgUuid: senderOrg?.uuid ?? null,
+			// Общие записи (без организации) — только там, где режим установки их допускает.
+			sharedAllowed: modeAllowsShared(mode),
 			objectName: null, // имя элемента 1С шлёт в props; object.name — это ИМЯ СПРАВОЧНИКА
 		};
 
@@ -222,15 +278,32 @@ export async function applyPipeReference(body) {
 				message: "Не хватает обязательных реквизитов (БИН / Наименование) — создать нельзя",
 			};
 		}
+		// Без организации-отправителя запись организации создать можно только общей — там, где
+		// общие записи допустимы; склад общим не бывает вовсе.
+		if (!ctx.orgUuid && (book.scope === "orgStrict" || (book.scope === "org" && !ctx.sharedAllowed))) {
+			return {
+				status: "error",
+				model,
+				message: "Не определена организация-отправитель (нет БИН организации в событии) — элемент некуда положить",
+			};
+		}
+		// Организацию существующей записи событие не меняет (см. шапку файла).
+		const { organizationUuid: _keepOrg, ...updateData } = cleanUndefined(data);
+		const foreign = (what) => ({
+			status: "error",
+			model,
+			message: `${what} принадлежит другой организации — событие не применено`,
+		});
 
 		// 1) Уже сопоставлен ранее → обновляем (1С — источник истины).
 		const linked = await prisma[model].findFirst({
 			where: { externalSource: SOURCE, externalId },
 		});
 		if (linked) {
+			if (!senderMayTouch(book.scope, linked, ctx)) return foreign("Элемент 1С уже сопоставлен с записью, которая");
 			const updated = await prisma[model].update({
 				where: { uuid: linked.uuid },
-				data: cleanUndefined(data),
+				data: updateData,
 			});
 			return { status: "updated", model, uuid: updated.uuid };
 		}
@@ -239,14 +312,24 @@ export async function applyPipeReference(body) {
 		//    ключу — иначе интеграция продублировала бы наш справочник.
 		const natural = await book.findNatural(props, ctx);
 		if (natural) {
+			// БИН контрагента и организации уникален на всю базу — поиск по нему находит и чужих.
+			if (!senderMayTouch(book.scope, natural, ctx)) return foreign("Запись с таким БИН");
 			const updated = await prisma[model].update({
 				where: { uuid: natural.uuid },
-				data: { ...cleanUndefined(data), externalSource: SOURCE, externalId },
+				data: { ...updateData, externalSource: SOURCE, externalId },
 			});
 			return { status: "linked", model, uuid: updated.uuid };
 		}
 
-		// 3) Не нашли — создаём новый элемент справочника.
+		// 3) Не нашли — создаём новый элемент справочника. Карточку ДРУГОЙ организации событие
+		//    заводит только в режиме group: на общем сервере это заняло бы чужой БИН.
+		if (book.scope === "self" && !ctx.sharedAllowed && data.bin !== ctx.senderBin) {
+			return {
+				status: "error",
+				model,
+				message: "Организацию с другим БИН событие 1С не создаёт (режим установки не допускает)",
+			};
+		}
 		const created = await prisma[model].create({
 			data: { ...cleanUndefined(data), externalSource: SOURCE, externalId },
 		});
@@ -267,4 +350,4 @@ function cleanUndefined(obj) {
 	return out;
 }
 
-export default { applyPipeReference, supportedRefBooks };
+export default { applyPipeReference, supportedRefBooks, senderMayTouch };

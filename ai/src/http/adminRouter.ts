@@ -11,8 +11,9 @@
 // через диалог пользователя (chat), где действуют whitelist tools и подтверждения §17.
 
 import { Router } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import { z } from "zod";
-import type { Config } from "../config.ts";
+import { PROXY_SAFE_SECS, type Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import { requireAdmin } from "../auth/index.ts";
 import type { AgentService } from "../agents/service.ts";
@@ -44,6 +45,8 @@ export function adminRouter(deps: {
 }) {
 	const { cfg, log, agents, queue, audit, agentBases } = deps;
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "маршрут администратора");
 	r.use(requireAdmin(cfg.AGENT_ADMIN_KEY));
 
 	r.post("/agents", async (req, res) => {
@@ -124,7 +127,8 @@ export function adminRouter(deps: {
 	});
 
 	r.get("/commands/:id", async (req, res) => {
-		const waitMs = Math.min(Number.parseInt(String(req.query.wait ?? "0"), 10) || 0, 120) * 1000;
+		// Не дольше предела прокси (аудит 26.09): 120 с переваливали за ~100 с cloudflared — обрыв без ответа.
+		const waitMs = Math.min(Number.parseInt(String(req.query.wait ?? "0"), 10) || 0, PROXY_SAFE_SECS) * 1000;
 		const cmd = waitMs ? await queue.waitResult(req.params.id, waitMs) : await queue.get(req.params.id);
 		if (!cmd) {
 			res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Команда не найдена" } });

@@ -8,12 +8,12 @@
 import { FC } from "react";
 import { translate } from "src/i18";
 import IconButton from "src/components/IconButton/IconButton";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { setPendingHighlight } from "src/utils/listHighlight";
 import { openListByRef } from "src/registry/formRegistry";
 
 const ShowInJournalButton: FC<{ endpoint: string; uuid?: string }> = ({ endpoint, uuid }) => {
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
   if (!uuid) return null;
   return (
     <IconButton

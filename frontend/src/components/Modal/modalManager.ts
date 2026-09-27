@@ -3,8 +3,19 @@ let listenerAttached = false;
 let screenRef: { current: HTMLElement | null } | null = null;
 let prevBodyOverflow: string | null = null;
 
+/**
+ * Escape нажат в поле с ОТКРЫТЫМ списком (лукап, период): закрыть надо самый верхний
+ * слой — список, а не всё окно с введёнными данными. Слушатель стоит на window в фазе
+ * захвата и срабатывает раньше поля, поэтому такой Escape пропускаем (аудит 26.09, И14).
+ */
+function isInsideOpenPopup(e: KeyboardEvent): boolean {
+	const t = (e.target instanceof Element ? e.target : null) ?? document.activeElement;
+	return !!t?.closest('[role="combobox"][aria-expanded="true"]');
+}
+
 const handleKey = (e: KeyboardEvent) => {
 	if (e.key === "Escape" && stack.length > 0) {
+		if (isInsideOpenPopup(e)) return;
 		e.preventDefault();
 		e.stopPropagation();
 		const top = stack[stack.length - 1];

@@ -1,10 +1,37 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { idSearchCondition } from "../../utils/searchId.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, orgIsAccessible, isAdminOfOrg } from "../../utils/auth.js";
+import { buildOrganizationSeed } from "../../services/orgFromOnec.js";
 
 const router = express.Router();
+
+/*
+ * ОРГАНИЗАЦИЯ ПО :id — ТОЛЬКО СВОЯ (Б6 аудита 26.09).
+ *
+ * У Organization нет поля `organizationUuid`, и общий `checkOwnership` видел в этом «глобальную
+ * запись»: GET/PUT/DELETE чужой организации проходили, а перебор числовых id отдавал и её
+ * `inviteCode` — пропуск в чужую фирму через /auth/join. Теперь организация по :id видна, только
+ * если она доступна пользователю; код приглашения отдаётся лишь её администраторам; менять
+ * реквизиты — те, у кого есть право (middleware) И организация доступна; удалять — только её
+ * администратор.
+ */
+async function findAccessibleOrg(req, param) {
+	const n = Number(param);
+	const where = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(param) };
+	const item = await prisma.organization.findUnique({ where });
+	if (!item || !orgIsAccessible(req, item.uuid)) return null;
+	return item;
+}
+
+/** Убрать код приглашения, если вызывающий не администратор этой организации. */
+export function stripInvite(req, org) {
+	if (!org || isAdminOfOrg(req, org.uuid)) return org;
+	const { inviteCode: _omit, ...rest } = org;
+	return rest;
+}
 
 // ============================================
 // GET /organizations — курсорная пагинация
@@ -16,8 +43,7 @@ router.get("/organizations", async (req, res) => {
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
@@ -43,6 +69,7 @@ router.get("/organizations", async (req, res) => {
 				if (sortObj && typeof sortObj === "object") {
 					for (const [field, dir] of Object.entries(sortObj)) {
 						if (dir !== "asc" && dir !== "desc") continue;
+						if (field === "inviteCode") continue; // код приглашения — не для сортировки-оракула
 						if (field.includes(".")) {
 							const parts = field.split(".");
 							let nested = { [parts[parts.length - 1]]: dir };
@@ -95,6 +122,8 @@ router.get("/organizations", async (req, res) => {
 
 		for (const [field, conditions] of Object.entries(filter)) {
 			if (SKIP_KEYS.includes(field)) continue;
+			// Фильтр по коду приглашения с `total` в ответе подбирал бы код посимвольно.
+			if (field === "inviteCode") continue;
 			if (!conditions || typeof conditions !== "object") continue;
 
 			for (const [operator, value] of Object.entries(conditions)) {
@@ -133,7 +162,7 @@ router.get("/organizations", async (req, res) => {
 			queryOptions.skip = 1;
 		}
 
-		const items = await prisma.organization.findMany(queryOptions);
+		const items = (await prisma.organization.findMany(queryOptions)).map((o) => stripInvite(req, o));
 
 		const hasMore = items.length === limitNumber;
 		const nextCursor = hasMore ? items[items.length - 1].id : null;
@@ -151,11 +180,8 @@ router.get("/organizations", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /organizations error:", error);
-		return res.status(500).json({
-			success: false,
-			message: "Ошибка сервера при получении организаций",
-		});
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера при получении организаций", label: "GET /organizations" });
 	}
 });
 
@@ -164,17 +190,7 @@ router.get("/organizations", async (req, res) => {
 // ============================================
 router.get("/organizations/:id", async (req, res) => {
 	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-
-		const item = isNumeric
-			? await prisma.organization.findUnique({
-					where: { id: numId },
-				})
-			: await prisma.organization.findUnique({
-					where: { uuid: param },
-				});
+		const item = await findAccessibleOrg(req, req.params.id);
 
 		if (!item) {
 			return res
@@ -182,7 +198,7 @@ router.get("/organizations/:id", async (req, res) => {
 				.json({ success: false, message: "Организация не найдена" });
 		}
 
-		return res.status(200).json({ success: true, item });
+		return res.status(200).json({ success: true, item: stripInvite(req, item) });
 	} catch (error) {
 		console.error("GET /organizations/:id error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -228,14 +244,80 @@ router.post("/organizations", async (req, res) => {
 });
 
 // ============================================
+// POST /organizations/from-onec — организация из реквизитов базы 1С
+// ============================================
+/*
+ * Кнопка «Создать организацию» в одобрении заявки на подключение базы 1С («Управление 1С» → «Расширение
+ * БухПроф AI»): организации базы в ERP нет, а одобрить заявку без неё нельзя. Реквизиты пришли в заявке
+ * (services/orgFromOnec.js); здесь — организация вместе с контактами, контактными лицами и банковскими счетами
+ * одной транзакцией.
+ *
+ * ТОЛЬКО АДМИНИСТРАТОР BUHPROF. Заявки одобряет он один, а маршрут создаёт сразу четыре вида записей: право
+ * «создавать организации» не должно открывать запись банковских счетов и контактов в обход их собственных прав.
+ */
+router.post("/organizations/from-onec", async (req, res) => {
+	if (!req.user?.isSuperAdmin) {
+		return res.status(403).json({ success: false, message: "Создать организацию из заявки 1С может только администратор BuhProf" });
+	}
+	try {
+		const seed = buildOrganizationSeed(req.body);
+		if (seed.error) return res.status(400).json({ success: false, message: seed.error });
+
+		const existing = await prisma.organization.findUnique({ where: { bin: seed.org.bin }, select: { uuid: true, name: true, deletedAt: true } });
+		if (existing) {
+			return res.status(409).json({
+				success: false,
+				message: existing.deletedAt
+					? `Организация с БИН ${seed.org.bin} помечена на удаление — восстановите её, а не создавайте новую`
+					: `Организация с БИН ${seed.org.bin} уже есть в ERP: ${existing.name ?? existing.uuid}`,
+				item: { uuid: existing.uuid, name: existing.name },
+			});
+		}
+
+		const codes = [...new Set(seed.accounts.map((a) => a.currencyCode).filter(Boolean))];
+		const currencies = codes.length
+			? await prisma.currency.findMany({ where: { code: { in: codes }, deletedAt: null }, select: { uuid: true, code: true } })
+			: [];
+		const currencyByCode = new Map(currencies.map((c) => [c.code, c.uuid]));
+
+		const item = await prisma.$transaction(async (tx) => {
+			const org = await tx.organization.create({ data: seed.org });
+			// Вложенные записи принадлежат самой организации, а не активной организации того, кто нажал кнопку.
+			const owner = { ownerType: "organization", ownerUuid: org.uuid, organizationUuid: org.uuid };
+			if (seed.contacts.length) await tx.contact.createMany({ data: seed.contacts.map((c) => ({ ...c, ...owner })) });
+			if (seed.persons.length) await tx.contactPerson.createMany({ data: seed.persons.map((p) => ({ ...p, ...owner })) });
+			if (seed.accounts.length) {
+				await tx.bankAccount.createMany({
+					data: seed.accounts.map(({ currencyCode, ...a }) => ({ ...a, ...owner, currencyUuid: currencyByCode.get(currencyCode) ?? null })),
+				});
+			}
+			return org;
+		});
+
+		return res.status(201).json({
+			success: true,
+			item: stripInvite(req, item),
+			created: { contacts: seed.contacts.length, contactPersons: seed.persons.length, bankAccounts: seed.accounts.length },
+		});
+	} catch (error) {
+		if (error.code === "P2002") {
+			return res.status(409).json({ success: false, message: "Организация с таким БИН уже существует" });
+		}
+		console.error("POST /organizations/from-onec error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+});
+
+// ============================================
 // PUT /organizations/:id
 // ============================================
 router.put("/organizations/:id", async (req, res) => {
 	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-		const whereClause = isNumeric ? { id: numId } : { uuid: param };
+		const existing = await findAccessibleOrg(req, req.params.id);
+		if (!existing) {
+			return res.status(404).json({ success: false, message: "Организация не найдена" });
+		}
+		const whereClause = { uuid: existing.uuid };
 
 		const { bin, name, legalName, vatSeries, vatNumber, enterpriseCategory } = req.body;
 		const data = {};
@@ -263,7 +345,7 @@ router.put("/organizations/:id", async (req, res) => {
 			data,
 		});
 
-		return res.status(200).json({ success: true, item });
+		return res.status(200).json({ success: true, item: stripInvite(req, item) });
 	} catch (error) {
 		if (error.code === "P2002") {
 			return res.status(409).json({
@@ -284,7 +366,34 @@ router.put("/organizations/:id", async (req, res) => {
 // ============================================
 // DELETE /organizations/:id
 // ============================================
-router.delete("/organizations/:id", (req, res) =>
+// Удалять организацию может только её администратор (или суперадмин); проверка ДО общего
+// обработчика, который считает Organization «глобальной» записью.
+async function requireOrgAdmin(req, res, next) {
+	try {
+		const org = await findAccessibleOrg(req, req.params.id);
+		if (!org) return res.status(404).json({ success: false, message: "Организация не найдена" });
+		if (!isAdminOfOrg(req, org.uuid)) return res.status(403).json({ success: false, message: "Удалить организацию может только её администратор" });
+		return next();
+	} catch (error) {
+		console.error("DELETE /organizations/:id error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+}
+async function requireOrgAdminBatch(req, res, next) {
+	try {
+		const uuids = Array.isArray(req.body?.uuids) ? req.body.uuids.map(String) : null;
+		if (!uuids) return next();
+		if (uuids.some((u) => !orgIsAccessible(req, u) || !isAdminOfOrg(req, u))) {
+			return res.status(404).json({ success: false, message: "Часть организаций не найдена — удаление не выполнено" });
+		}
+		return next();
+	} catch (error) {
+		console.error("POST /organizations/batch-delete error:", error);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
+}
+
+router.delete("/organizations/:id", requireOrgAdmin, (req, res) =>
 	handleDelete({
 		req,
 		res,
@@ -294,7 +403,7 @@ router.delete("/organizations/:id", (req, res) =>
 	}),
 );
 
-router.post("/organizations/batch-delete", (req, res) =>
+router.post("/organizations/batch-delete", requireOrgAdminBatch, (req, res) =>
 	handleBatchDelete({ req, res, prisma, modelName: "organization" }),
 );
 

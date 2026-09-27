@@ -18,7 +18,7 @@ import { startOp } from "src/models/OneCAdmin/progress";
 import { useOnecWrite } from "src/models/OneCAdmin/shared";
 import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import ModelList from "src/components/ModelList";
 import ModelForm from "src/components/ModelForm";
 import Table from "src/components/Table";
@@ -27,6 +27,8 @@ import { Button } from "src/components/Button";
 import main from "src/styles/main.module.scss";
 import dense from "./OneCBases.module.scss";
 import { translate } from "src/i18";
+import { PaneActiveProvider } from "src/hooks/usePaneActive";
+import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
@@ -38,10 +40,8 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
 	awaitPublicationsCheck, checkBasesDb, setSessionsLock, fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBasesAndPublications, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
 } from "src/services/onec/api";
-import {
-	EchoDelayNotice, QueryError, ReadonlyNotice, publishLabel, unreachableReason, unreachableShort,
-	useAgents, useBaseContentCheck,
-} from "src/models/OneCAdmin/shared";
+import { publishLabel, unreachableReason, unreachableShort, useAgents, useBaseContentCheck } from "src/models/OneCAdmin/shared";
+import { EchoDelayNotice, QueryError, ReadonlyNotice } from "src/models/OneCAdmin/sharedUi";
 import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
@@ -54,7 +54,7 @@ import { dbCheckProblem, publicationsProblem, rejectedReportText } from "src/mod
 import { noteNotice } from "src/components/TechMessages/store";
 import { useNoticeScope, useScopeObject } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
-import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
+import { lockOutcome, sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
 import { checkDbOutcome } from "src/models/OneCAdmin/checkBasesDb";
 import BaseMaintenance from "./BaseMaintenance";
 import { onBaseTabRequest, requestBaseTab, takeBaseTab, type BaseOpenAt } from "./openAt";
@@ -451,7 +451,7 @@ const configLabel = (row: TDataItem): string => {
  * `data`, а не в корне пропсов: читать props как строку — значит получить пустые поля
  * и пустой ключ базы, с которым запросы уходят в `/bases//extensions`.
  */
-export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
+const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 	const opened = (paneProps.data ?? {}) as TDataItem;
 	/*
 	 * КАРТОЧКА ЧИТАЕТ РЕЕСТР, А НЕ ТОЛЬКО СНИМОК, С КОТОРЫМ ЕЁ ОТКРЫЛИ.
@@ -485,8 +485,8 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	const tabs = useBaseTabs(row, openAt);
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
-	const { requestClose } = useAppContext().windows;
-	const { confirm } = useAppContext().actions;
+	const { requestClose } = useAppActions().windows;
+	const { confirm } = useAppActions().actions;
 	const close = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
 	}, [requestClose, paneProps.uniqId]);
@@ -612,10 +612,27 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 	 */
 	const lockRunning = useRunningCommand(["CLUSTER_SET_SESSIONS_LOCK"], key);
 	const setLock = useMutation({
-		mutationFn: (enabled: boolean) => withOp(
-			{ kind: "update", title: translate(enabled ? "onecSessionsLockCloseShort" : "onecSessionsLockOpenShort"), target: key },
-			() => setSessionsLock(key, enabled),
-		),
+		mutationFn: async (enabled: boolean) => {
+			const op = startOp({
+				kind: "update", title: translate(enabled ? "onecSessionsLockCloseShort" : "onecSessionsLockOpenShort"),
+				target: key, total: 1, scope: { bases: [key] },
+			});
+			try {
+				const r = await setSessionsLock(key, enabled);
+				/*
+				 * «ВЫПОЛНЕНО» — ТОЛЬКО ЕСЛИ ВХОД ДЕЙСТВИТЕЛЬНО ЗАКРЫТ/ОТКРЫТ (И26 аудита 26.09). Карточка писала
+				 * «Выполнено» на любой ответ: и когда кластер не подтвердил запись, и когда осталось окно прошлой
+				 * блокировки. Разбор ответа — общий со вкладкой «Сеансы».
+				 */
+				const out = lockOutcome(r, enabled);
+				finishOp(op, out.tone === "warning" ? { warning: out.text } : undefined);
+				showToast(out.text, out.tone);
+				return r;
+			} catch (e) {
+				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
+				throw e;
+			}
+		},
 		onSuccess: () => {
 			void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] });
 			void cardQc.invalidateQueries({ queryKey: ["onec-bases"] });
@@ -882,6 +899,13 @@ export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => {
 		/>
 	);
 };
+
+/** Корень панели: опросы внутри идут, только пока панель на экране (О4 аудита 26.09). */
+export const OneCBasesForm: FC<Partial<TPane>> = (paneProps) => (
+	<PaneActiveProvider uniqId={paneProps.uniqId}>
+		<OneCBasesFormBody {...paneProps} />
+	</PaneActiveProvider>
+);
 OneCBasesForm.displayName = "OneCBasesForm";
 
 /**
@@ -893,7 +917,7 @@ OneCBasesForm.displayName = "OneCBasesForm";
  * у вызывающего часто только ключ.
  */
 export function useOpenOnecBase() {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const qc = useQueryClient();
 	return (base: string | TDataItem) => {
 		const key = typeof base === "string" ? base : asText(base.baseKey);
@@ -910,10 +934,14 @@ export function useOpenOnecBase() {
 /** Вкладки предпросмотра в split-виде — те же, что и в форме. */
 const PreviewTabs: FC<{ row: TDataItem }> = ({ row }) => <>{useBaseTabs(row)[0].component}</>;
 
-export const OneCBasesList: FC<{
+type OneCBasesListProps = {
 	variant?: TTableVariant;
 	onSelectItem?: (item: TDataItem) => void;
-}> = ({ variant, onSelectItem }) => {
+	/** Есть, когда список открыт своей панелью; встроенный во вкладку — наследует её активность. */
+	uniqId?: string;
+};
+
+const OneCBasesListBody: FC<OneCBasesListProps> = ({ variant, onSelectItem }) => {
 	// Платформа: у баз она пуста (агент не заполняет поле в срезе), поэтому подставляем
 	// версию сервера, за который отвечает админ-агент, — см. карточку базы.
 	const agents = useAgents();
@@ -1049,6 +1077,13 @@ export const OneCBasesList: FC<{
 	/>
 	);
 };
+
+/** Корень списка: опрос агентов идёт, только пока панель на экране (О4 аудита 26.09). */
+export const OneCBasesList: FC<OneCBasesListProps> = (props) => (
+	<PaneActiveProvider uniqId={props.uniqId}>
+		<OneCBasesListBody {...props} />
+	</PaneActiveProvider>
+);
 OneCBasesList.displayName = "OneCBasesList";
 
 export default OneCBasesList;

@@ -63,6 +63,19 @@ export async function telegramStatus(userUuid) {
 	return { enabled: telegramEnabled(), botName: botName() || null, linked: !!link?.chatId, linkedAt: link?.linkedAt ?? null };
 }
 
+/**
+ * СРОК ЖИЗНИ КОДА ПРИВЯЗКИ (Б14 аудита 26.09). Раньше код жил бессрочно: утёкшая или
+ * забытая ссылка (история браузера, пересланный скриншот) через месяц привязывала ЧУЖОЙ чат к
+ * уведомлениям пользователя — с названиями задач и нарушений. Код годен 30 минут с выдачи
+ * (updatedAt строки выставляется при выдаче кода).
+ */
+export const LINK_CODE_TTL_MS = 30 * 60 * 1000;
+
+export function linkCodeExpired(link, now = Date.now()) {
+	const issued = link?.updatedAt ? new Date(link.updatedAt).getTime() : NaN;
+	return !Number.isFinite(issued) || now - issued > LINK_CODE_TTL_MS;
+}
+
 /** Одноразовый код привязки и ссылка на бота. */
 export async function createLinkCode(userUuid) {
 	const code = crypto.randomBytes(12).toString("hex");
@@ -96,7 +109,9 @@ export async function pollTelegramUpdates() {
 		const m = /^\/start\s+([a-f0-9]{24})$/i.exec(text);
 		if (!m || !chatId) continue;
 		const link = await prisma.userTelegramLink.findUnique({ where: { linkCode: m[1] } });
-		if (!link) {
+		if (!link || linkCodeExpired(link)) {
+			// Просроченный код гасим, чтобы он не сработал и потом.
+			if (link) await prisma.userTelegramLink.update({ where: { uuid: link.uuid }, data: { linkCode: null } }).catch(() => {});
 			await sendTelegram(chatId, "Код привязки не найден или устарел. Получите новую ссылку в ERP: «Качество → Мои уведомления».");
 			continue;
 		}
@@ -108,4 +123,4 @@ export async function pollTelegramUpdates() {
 	return linked ? `telegram: привязано ${linked}` : undefined;
 }
 
-export default { telegramEnabled, botName, sendTelegram, sendTelegramToUser, telegramStatus, createLinkCode, unlinkTelegram, pollTelegramUpdates };
+export default { telegramEnabled, botName, sendTelegram, sendTelegramToUser, telegramStatus, createLinkCode, unlinkTelegram, pollTelegramUpdates, linkCodeExpired, LINK_CODE_TTL_MS };

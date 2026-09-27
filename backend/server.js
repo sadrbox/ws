@@ -15,6 +15,9 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { getLocalIP } from "./utils/module.js";
+import { installAsyncErrorHandling, installUnhandledRejectionGuard } from "./utils/asyncErrors.js";
+import { isClientInputError } from "./utils/listQuery.js";
+import { prisma } from "./prisma/prisma-client.js";
 import {
 	authMiddleware,
 	tenantMiddleware,
@@ -126,8 +129,10 @@ import dealsRouter from "./api/router/deals.js";
 import backupRouter from "./api/router/backup.js";
 import { runBackup, listBackups } from "./services/backup.js";
 import { pruneAuditLog, retentionDays } from "./services/auditLog.js";
+import { purgeOrphanEntries } from "./services/accountingPosting.js";
 import { registerTask, startScheduler } from "./services/scheduler.js";
-import { withClusterLock } from "./services/clusterLock.js";
+import { withClusterLock, closeClusterLocks } from "./services/clusterLock.js";
+import { pruneIdempotencyKeys } from "./services/idempotency.js";
 import openapiRouter from "./api/router/openapi.js";
 import waWebhookRouter from "./api/router/waWebhook.js";
 import waRouter from "./api/router/wa.js";
@@ -152,6 +157,18 @@ import documentNumberSettingsRouter from "./api/router/documentnumbersettings.js
 import documentNumberRouter from "./api/router/documentNumber.js";
 import priceTypesRouter from "./api/router/pricetypes.js";
 import productPricesRouter from "./api/router/productprices.js";
+
+/*
+ * ОТКЛОНЁННЫЙ ПРОМИС ОБРАБОТЧИКА НЕ РОНЯЕТ ВОРКЕР (Н1 аудита 26.09).
+ *
+ * Express 4 не смотрит на промис, который возвращает async-обработчик: `await` вне try (сбой БД
+ * в SSE-потоке, режиме поддержки, eGov) был необработанным отклонением, и Node 24 завершал процесс
+ * — а EventSource переподключается раз в 3 с, так что один сбой БД становился циклом падений.
+ * Теперь такое отклонение идёт в глобальный обработчик ошибок (ответ 500), а отклонение вне
+ * запросов (фоновая задача, забытый `void`) пишется в журнал без падения. См. utils/asyncErrors.js.
+ */
+installAsyncErrorHandling();
+installUnhandledRejectionGuard();
 
 const app = express();
 
@@ -292,10 +309,25 @@ const apiLimiter = rateLimit({
 });
 app.use("/api/", apiLimiter);
 
-// Rate limiting по организации — дополнительная защита от утечки данных между тенантами
+/*
+ * Rate limiting по организации — один арендатор не должен забирать сервер у остальных.
+ *
+ * МОНТИРУЕТСЯ ПОСЛЕ tenantMiddleware (Б14 аудита 26.09): стоял раньше авторизации, где `req.user`
+ * ещё нет, `skip` был всегда true — предел не работал вовсе (проверено: 8 из 8 запросов при max=3).
+ * Ожив, он начал бы резать и честную работу: панель с десятком вкладок опрашивает сервер десятки
+ * раз в минуту, а прежние 600 в минуту на ВСЮ организацию — это пятеро таких пользователей.
+ * Поэтому умолчание — 3000 в минуту на организацию (у каждого IP ещё свой общий предел выше), и
+ * оно настраивается: ORG_RATE_LIMIT_PER_MINUTE, 0 — выключить. В кластере счётчик у каждого
+ * воркера свой — фактический предел до четырёх раз выше.
+ */
+const ORG_RATE_LIMIT = (() => {
+	const raw = process.env.ORG_RATE_LIMIT_PER_MINUTE;
+	const n = raw === undefined || raw === "" ? 3000 : Number(raw);
+	return Number.isInteger(n) && n >= 0 ? n : 3000;
+})();
 const orgLimiter = rateLimit({
 	windowMs: 1 * 60 * 1000, // 1 минута
-	max: 600, // 600 запросов от одной организации в минуту
+	max: ORG_RATE_LIMIT, // запросов от одной организации в минуту
 	standardHeaders: true,
 	legacyHeaders: false,
 	keyGenerator: (req) => {
@@ -305,13 +337,12 @@ const orgLimiter = rateLimit({
 		const ip = ipKeyGenerator(req.ip || ""); // нормализует IPv6 (подсеть) и IPv4-mapped
 		return `ip:${ip}`;
 	},
-	skip: (req) => !req.user, // пропускаем неаутентифицированные запросы
+	skip: (req) => !req.user || ORG_RATE_LIMIT === 0, // неаутентифицированные — под apiLimiter
 	message: {
 		success: false,
 		message: "Слишком много запросов от организации, попробуйте позже",
 	},
 });
-app.use("/api/v1", orgLimiter);
 
 // Более жёсткий лимит для авторизации (защита от brute-force паролей)
 const authLimiter = rateLimit({
@@ -376,6 +407,15 @@ app.use((req, res, next) => {
 	next();
 });
 
+// Открытые ответы — для остановки процесса (gracefulShutdown ниже): SSE-потоки сами не кончаются
+// никогда, и закрыть их при остановке может только сервер.
+const openResponses = new Set();
+app.use((req, res, next) => {
+	openResponses.add(res);
+	res.on("close", () => openResponses.delete(res));
+	next();
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. HEALTH CHECK (без авторизации)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -423,6 +463,8 @@ app.use(openapiRouter);
 
 app.use("/api/v1", authMiddleware);
 app.use("/api/v1", tenantMiddleware);
+// Предел по организации — здесь, когда организация пользователя уже известна (см. orgLimiter).
+app.use("/api/v1", orgLimiter);
 app.use("/api/v1", accessPermissionMiddleware);
 // Сквозной журнал действий (E1.2): пишет create/update/delete с diff. Строго
 // после проверки прав — незаконные запросы до сюда не доходят.
@@ -593,18 +635,35 @@ app.use((_req, res) => {
 // 8. ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.use((err, _req, res, _next) => {
-	console.error("Global error handler:", err);
+app.use((err, req, res, next) => {
+	// Ответ уже начат (SSE-поток, выгрузка) — дописать в него JSON нельзя. Express сам закроет
+	// соединение; нам — только журнал.
+	if (res.headersSent) {
+		console.error(`Global error handler (ответ уже начат) ${req.method} ${req.path}:`, err);
+		return next(err);
+	}
 
 	// CORS ошибки
 	if (err.message === "Запрещено CORS-политикой") {
 		return res.status(403).json({ success: false, message: err.message });
 	}
 
-	const statusCode = err.status || 500;
+	// Ошибка ввода (кривая дата, неизвестное поле фильтра, значение не того типа) — 400, а не 500
+	// (Н10 аудита 26.09): см. utils/listQuery.js. Текст ошибки Prisma наружу не отдаём — он
+	// раскрывает схему; BadRequestError пишется для пользователя и отдаётся как есть.
+	if (isClientInputError(err)) {
+		return res.status(400).json({
+			success: false,
+			message: err.expose ? err.message : "Некорректные параметры запроса",
+		});
+	}
+
+	console.error("Global error handler:", err);
+	// body-parser и http-errors кладут код в `status` или `statusCode` (битый JSON — 400, 413 — большое тело).
+	const statusCode = Number(err.status || err.statusCode) || 500;
 	res.status(statusCode).json({
 		success: false,
-		message: statusCode === 500 ? "Внутренняя ошибка сервера" : err.message,
+		message: statusCode >= 500 ? "Внутренняя ошибка сервера" : err.message,
 		...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
 	});
 });
@@ -641,6 +700,21 @@ const server = app.listen(port, () => {
 			return r.deleted ? `удалено записей журнала: ${r.deleted}` : undefined;
 		},
 	});
+	// Учёт (аудит 26.09): раз в сутки снимаем «осиротевшие» проводки — документов, которые
+	// не проведены или удалены (легаси, сид, сбой вне транзакции). Раньше это делал сам отчёт
+	// при чтении — запись на GET в гонке с проведением. По организациям, каждый документ под
+	// своей блокировкой; между воркерами — общий лок планировщика. ACCOUNTING_PURGE_ORPHANS=off — выкл.
+	registerTask({
+		name: "accounting-purge-orphans",
+		intervalMs: process.env.ACCOUNTING_PURGE_ORPHANS === "off" ? 0 : 24 * 3_600_000,
+		initialDelayMs: 5 * 60_000,
+		run: async () => {
+			const orgs = await prisma.organization.findMany({ where: { deletedAt: null }, select: { uuid: true } });
+			let purged = 0;
+			for (const o of orgs) purged += await purgeOrphanEntries({ organizationUuid: o.uuid });
+			return purged ? `снято осиротевших проводок документов: ${purged}` : undefined;
+		},
+	});
 	// E17 «Стандарт качества»: правила по срокам, регламентные задачи, находки проверок учёта,
 	// посещаемость, привязка Telegram. Все идемпотентны (ruleKey/dedupKey) — повтор не плодит дублей.
 	// QUALITY_JOBS=off выключает их разом (например, на копии базы для отладки).
@@ -652,6 +726,14 @@ const server = app.listen(port, () => {
 	registerTask({ name: "telegram-poll", intervalMs: qualityOn && telegramEnabled() ? 30_000 : 0, initialDelayMs: 15_000, run: () => pollTelegramUpdates() });
 	// Однократное объявление о новых правилах задач (флаг в AppSetting; повторные тики — пустые).
 	registerTask({ name: "quality-announce", intervalMs: qualityOn ? 6 * 3_600_000 : 0, initialDelayMs: 120_000, run: () => runAnnouncement() });
+	// Ключи идемпотентности служебных каналов (services/idempotency.js): старше IDEMPOTENCY_TTL_DAYS — вон.
+	registerTask({
+		name: "idempotency-prune", intervalMs: 6 * 3_600_000, initialDelayMs: 3 * 60_000,
+		run: async () => {
+			const n = await pruneIdempotencyKeys();
+			return n ? `удалено ключей идемпотентности: ${n}` : undefined;
+		},
+	});
 	/*
 	 * Блокировка между процессами: в проде воркеров четыре, и без неё бэкап делался бы
 	 * четырежды одновременно. На одиночном процессе она просто всегда достаётся первому.
@@ -659,19 +741,55 @@ const server = app.listen(port, () => {
 	startScheduler({ withLock: (name, run) => withClusterLock(name, run, (m, e) => console.warn(m, e)) });
 });
 
-// Graceful shutdown
+/*
+ * Graceful shutdown (Н8 аудита 26.09).
+ *
+ * `server.close()` ждёт, пока закончатся ВСЕ соединения, а SSE-поток (чат, уведомления) не
+ * кончается никогда — выход всегда шёл по запасному таймеру, а pm2 с умолчанием kill_timeout 1,6 с
+ * убивал воркер раньше него, обрывая идущие запросы на середине. Теперь:
+ *   1. перестаём принимать соединения;
+ *   2. SSE-потоки закрываем сами — браузер переподключится (retry 3 с) к живому воркеру;
+ *   3. простаивающие keep-alive соединения закрываем сразу и потом раз в секунду;
+ *   4. идущие запросы дорабатывают, после — отключаемся от БД и выходим;
+ *   5. не уложились за SHUTDOWN_TIMEOUT_MS — рвём оставшиеся соединения и выходим с ошибкой.
+ * pm2 ждёт дольше (kill_timeout 15 с в ecosystem.config.js).
+ */
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+let shuttingDown = false;
+
+const isEventStream = (res) =>
+	String(res.req?.headers?.accept || "").includes("text/event-stream")
+	|| String(res.getHeader?.("content-type") || "").startsWith("text/event-stream");
+
 const gracefulShutdown = (signal) => {
+	if (shuttingDown) return;
+	shuttingDown = true;
 	console.log(`${signal} received: closing HTTP server`);
-	server.close(() => {
+
+	// Принудительное завершение, если запросы не уложились в срок.
+	setTimeout(() => {
+		console.error("Forced shutdown after timeout");
+		server.closeAllConnections?.();
+		process.exit(1);
+	}, SHUTDOWN_TIMEOUT_MS);
+
+	server.close(async () => {
 		console.log("HTTP server closed");
+		await Promise.allSettled([prisma.$disconnect(), closeClusterLocks()]);
 		process.exit(0);
 	});
 
-	// Принудительное завершение через 10 секунд
-	setTimeout(() => {
-		console.error("Forced shutdown after timeout");
-		process.exit(1);
-	}, 10_000);
+	let streams = 0;
+	for (const res of openResponses) {
+		if (!isEventStream(res)) continue;
+		streams++;
+		res.end();
+		res.socket?.end?.();
+	}
+	if (streams) console.log(`closed SSE streams: ${streams}`);
+	server.closeIdleConnections?.();
+	// Соединение, дождавшееся конца своего запроса, становится простаивающим уже после close().
+	setInterval(() => server.closeIdleConnections?.(), 1_000).unref();
 };
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

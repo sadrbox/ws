@@ -1,13 +1,16 @@
 // Панели главбуха и руководителя (E17 СК4), динамика первички (СК3.4), выборка консультаций
 // (СК7.3). Только чтение.
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma/prisma-client.js";
-import { AREAS, areaOf, areaState, exceptionActive } from "./findingRules.js";
+import { AREAS, areaOf, areaState } from "./findingRules.js";
 import { computeBonusResults, windowMonths } from "./bonusRules.js";
 import { reviewConsultation } from "./consultationRules.js";
 import { getQualitySettings } from "./settings.js";
 import { userNames, orgNames } from "./access.js";
 import { loadStatuses } from "./todos.js";
 import { addMonths, localParts, localToUtc, monthBounds } from "./time.js";
+import { deadlineDueAt } from "./taskRules.js";
+import { orgTimeZone } from "../periodBounds.js";
 
 const DAY = 86_400_000;
 
@@ -25,11 +28,33 @@ export async function chiefDashboard(ctx, { groupUuid = null, now = new Date() }
 
 	const statuses = await loadStatuses();
 	const finals = statuses.filter((s) => s.isFinal).map((s) => s.code);
-	const [findings, runs, tasks, kn, receipts] = await Promise.all([
-		prisma.checkFinding.findMany({ where: { organizationUuid: { in: orgIds }, resolvedAt: null }, select: { organizationUuid: true, checkCode: true, severity: true, exceptionAt: true, exceptionUntil: true } }),
+	const tz = orgTimeZone(ctx.firmOrgUuid);
+	// Просрочена: точный момент истечения (срок голой датой — конец местного дня, см. taskRules.js).
+	const overdueTask = (t) => !!t.deadline && deadlineDueAt(t.deadline, tz) < now;
+	/*
+	 * Н6/раздел 5 аудита 26.09. Было: все открытые находки и задачи клиентов одним списком и для
+	 * КАЖДОГО клиента — проход по всему списку (клиенты × находки, клиенты × задачи), плюс вся
+	 * история выписок КН ради последней. Стало: находки считаются в базе (groupBy по клиенту,
+	 * проверке и важности; действующие исключения отсеяны в WHERE), задачи раскладываются по
+	 * клиентам один раз, из выписок КН база отдаёт только последнюю по клиенту (DISTINCT ON).
+	 */
+	const [findingCounts, runs, tasks, kn, receipts] = await Promise.all([
+		prisma.checkFinding.groupBy({
+			by: ["organizationUuid", "checkCode", "severity"],
+			where: {
+				organizationUuid: { in: orgIds }, resolvedAt: null, severity: { not: "info" },
+				// exceptionActive(): исключение поставлено и не истекло — такие находки не считаем.
+				OR: [{ exceptionAt: null }, { exceptionUntil: { lte: now } }],
+			},
+			_count: { _all: true },
+		}),
 		prisma.checkRun.groupBy({ by: ["organizationUuid"], where: { organizationUuid: { in: orgIds }, status: { not: "error" } }, _max: { createdAt: true } }),
 		prisma.todo.findMany({ where: { organizationUuid: { in: orgIds }, deletedAt: null, status: { notIn: finals.length ? finals : ["done"] } }, select: { organizationUuid: true, kind: true, deadline: true, acceptedAt: true, reactionDueAt: true, checkCode: true } }),
-		prisma.knStatement.findMany({ where: { organizationUuid: { in: orgIds }, deletedAt: null }, orderBy: { createdAt: "desc" }, select: { organizationUuid: true, onDate: true, comparison: true } }),
+		prisma.$queryRaw`
+			SELECT DISTINCT ON ("organizationUuid") "organizationUuid", "onDate", "comparison"
+			FROM "kn_statements"
+			WHERE "organizationUuid" IN (${Prisma.join(orgIds)}) AND "deletedAt" IS NULL
+			ORDER BY "organizationUuid", "createdAt" DESC`,
 		prisma.primaryDocsReceipt.findMany({ where: { organizationUuid: { in: orgIds }, deletedAt: null, month: addMonths(localParts(now, settings.tzOffsetMinutes).ym, -1) }, select: { organizationUuid: true, complete: true, receivedAt: true } }),
 	]);
 	const names = await orgNames(orgIds);
@@ -45,31 +70,32 @@ export async function chiefDashboard(ctx, { groupUuid = null, now = new Date() }
 	});
 	const lastError = new Map();
 	for (const e of errors) if (!lastError.has(e.organizationUuid)) lastError.set(e.organizationUuid, e);
-	const latestKn = new Map();
-	for (const k of kn) if (!latestKn.has(k.organizationUuid)) latestKn.set(k.organizationUuid, k);
+	const latestKn = new Map(kn.map((k) => [k.organizationUuid, k]));
+	const findingsByOrg = groupByOrg(findingCounts);
+	const tasksByOrg = groupByOrg(tasks);
+	const receiptsByOrg = groupByOrg(receipts);
 
 	const rows = clients.map((c) => {
 		const org = c.clientOrganizationUuid;
 		const areaAgg = Object.fromEntries(AREAS.map((a) => [a, { errors: 0, warnings: 0, overdue: 0, openTasks: 0 }]));
-		for (const f of findings) {
-			if (f.organizationUuid !== org || f.severity === "info" || exceptionActive(f, now)) continue;
+		for (const f of findingsByOrg.get(org) ?? []) {
 			const a = areaAgg[areaOf(f.checkCode)];
-			if (f.severity === "error") a.errors++;
-			else a.warnings++;
+			if (f.severity === "error") a.errors += f._count._all;
+			else a.warnings += f._count._all;
 		}
-		const orgTasks = tasks.filter((t) => t.organizationUuid === org);
-		for (const t of orgTasks.filter((x) => x.kind === "check_finding" && x.checkCode)) {
+		const orgTasks = tasksByOrg.get(org) ?? [];
+		for (const t of orgTasks) {
+			if (t.kind !== "check_finding" || !t.checkCode) continue;
 			const a = areaAgg[areaOf(t.checkCode)];
 			a.openTasks++;
-			if (t.deadline && t.deadline < now) a.overdue++;
+			if (overdueTask(t)) a.overdue++;
 		}
 		const k = latestKn.get(org);
 		if (k?.comparison?.mismatches) areaAgg.taxes.errors += k.comparison.mismatches;
 		const hasData = lastRun.has(org);
 		const areas = Object.fromEntries(AREAS.map((a) => [a, { ...areaAgg[a], state: areaState({ ...areaAgg[a], hasData: hasData || (a === "taxes" && !!k) }) }]));
 		const requests = orgTasks.filter((t) => t.kind === "client_request");
-		const overdue = orgTasks.filter((t) => t.deadline && t.deadline < now).length;
-		const receipt = receipts.find((r) => r.organizationUuid === org) || null;
+		const overdue = orgTasks.filter(overdueTask).length;
 		return {
 			organizationUuid: org,
 			name: names.get(org) ?? org,
@@ -87,12 +113,39 @@ export async function chiefDashboard(ctx, { groupUuid = null, now = new Date() }
 				state: areaState({ errors: requests.filter((t) => !t.acceptedAt && t.reactionDueAt && t.reactionDueAt < now).length, openTasks: requests.length }),
 			},
 			deadlines: { overdue, open: orgTasks.length, state: areaState({ overdue, openTasks: 0 }) },
-			primaryDocs: receipt ? { received: true, complete: receipt.complete, receivedAt: receipt.receivedAt } : { received: false },
+			primaryDocs: primaryDocsState(receiptsByOrg.get(org)),
 			kn: k ? { onDate: k.onDate, mismatches: k.comparison?.mismatches ?? null } : null,
 		};
 	});
 	rows.sort((a, b) => a.groupName.localeCompare(b.groupName, "ru") || a.name.localeCompare(b.name, "ru"));
 	return { areas: AREAS, clients: rows, consultations: await consultationsForReview(orgIds, settings, now) };
+}
+
+/**
+ * Состояние первички клиента за месяц по ВСЕМ его поступлениям. Первичка приходит частями, и
+ * каждая часть — своя запись; «получена полностью» ставится на той, что закрыла месяц. Раньше
+ * бралась одна запись (какая попадётся), и при закрытом месяце панель показывала «частично».
+ */
+export function primaryDocsState(rows) {
+	if (!rows?.length) return { received: false };
+	let complete = false;
+	let receivedAt = null;
+	for (const r of rows) {
+		if (r.complete) complete = true;
+		if (r.receivedAt && (!receivedAt || r.receivedAt > receivedAt)) receivedAt = r.receivedAt;
+	}
+	return { received: true, complete, receivedAt };
+}
+
+/** Разложить строки по организации за один проход. */
+export function groupByOrg(rows) {
+	const out = new Map();
+	for (const r of rows) {
+		const list = out.get(r.organizationUuid);
+		if (list) list.push(r);
+		else out.set(r.organizationUuid, [r]);
+	}
+	return out;
 }
 
 /**
@@ -160,7 +213,7 @@ export async function managerDashboard(ctx, { month }) {
 		prisma.violationMeasure.findMany({ where: { organizationUuid: ctx.firmOrgUuid, userUuid: { in: uids }, deletedAt: null } }),
 		userNames(uids),
 	]);
-	const results = computeBonusResults({ month, staff: staff.map((s) => ({ ...s, userName: names.get(s.userUuid) })), violations, measures, settings });
+	const results = computeBonusResults({ month, staff: staff.map((s) => ({ ...s, userName: names.get(s.userUuid) })), violations, measures, settings, tz: orgTimeZone(ctx.firmOrgUuid) });
 	const byUser = new Map(results.map((r) => [r.userUuid, r]));
 	return {
 		month,

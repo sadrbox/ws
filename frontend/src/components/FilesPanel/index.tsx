@@ -9,7 +9,7 @@ import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { FileViewerPane } from "src/models/Files/FileViewerPane";
 import UploadProgress, { formatFileSize } from "./UploadProgress";
 
@@ -51,7 +51,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
   const [searchValue, setSearchValue] = useState("");
   const [sortState, setSortState] = useState<Record<string, "asc" | "desc">>({ uploadedAt: "desc" });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { windows: { addPane }, actions } = useAppContext();
+  const { windows: { addPane }, actions } = useAppActions();
 
   // Открыть файл в просмотрщике (DocViewport) отдельной панелью.
   const openInViewer = useCallback((file: TDataItem) => {

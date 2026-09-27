@@ -5,13 +5,16 @@
 // periodEnd считается закрытым: дотированные документы организации с датой ≤
 // границы нельзя создавать / изменять / удалять. Граница = максимальный periodEnd
 // среди проведённых (posted=true, не удалённых) закрытий организации, взятый на
-// КОНЕЦ дня (23:59:59.999) — согласованно с правилом закрытия, которое суммирует
-// обороты до конца последнего дня периода (см. accountingPosting.js → month_close).
+// КОНЕЦ дня (23:59:59.999) В ПОЯСЕ ОРГАНИЗАЦИИ — той же функцией periodBounds, что и
+// правило закрытия (см. accountingPosting.js → month_close), чтобы граница запрета и
+// обороты закрытия совпадали до миллисекунды (У5 аудита 26.09).
 //
 // Escape-hatch: сам month_close ИСКЛЮЧён из проверки (его нет в PERIOD_LOCKED_MODELS),
 // чтобы можно было переоткрыть период — удалить/распровести закрытие и закрыть заново.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { endOfLocalDay, orgTimeZone } from "./periodBounds.js";
+import { onCacheInvalidate } from "./cacheBus.js";
 
 // Prisma-модели дотированных документов, попадающих под блокировку. БЕЗ monthClose.
 export const PERIOD_LOCKED_MODELS = new Set([
@@ -38,10 +41,19 @@ export const PERIOD_LOCKED_MODELS = new Set([
 const BOUNDARY_TTL_MS = 5000;
 const boundaryCache = new Map(); // orgUuid → { value: Date|null, ts: number }
 
-/** Сбросить кэш границ (вызывать при изменении month_close, если нужно мгновенно). */
-export function invalidateClosedBoundary(orgUuid = null) {
+function invalidateLocal(orgUuid) {
 	if (orgUuid) boundaryCache.delete(orgUuid);
 	else boundaryCache.clear();
+}
+
+// Кэш живёт в каждом воркере (Н7 аудита 26.09): сброс рассылается всем через шину, иначе
+// соседний воркер до 5 с пропускал бы правку только что закрытого периода.
+const broadcastInvalidate = onCacheInvalidate("closedBoundary", invalidateLocal);
+
+/** Сбросить кэш границ (вызывать при изменении month_close) — во всех воркерах. */
+export function invalidateClosedBoundary(orgUuid = null) {
+	invalidateLocal(orgUuid);
+	broadcastInvalidate(orgUuid);
 }
 
 /**
@@ -54,22 +66,16 @@ export async function getClosedBoundary(orgUuid, client = prisma) {
 	const cached = boundaryCache.get(orgUuid);
 	if (cached && Date.now() - cached.ts < BOUNDARY_TTL_MS) return cached.value;
 
-	let value = null;
-	try {
-		const agg = await client.monthClose.aggregate({
-			where: { organizationUuid: orgUuid, posted: true, deletedAt: null },
-			_max: { periodEnd: true },
-		});
-		const end = agg?._max?.periodEnd ?? null;
-		if (end) {
-			value = new Date(end);
-			value.setHours(23, 59, 59, 999); // включительно по последний день периода
-		}
-	} catch (err) {
-		// Нет таблицы/ошибка — считаем период открытым (не блокируем по ошибке инфраструктуры).
-		console.error("getClosedBoundary error:", err);
-		value = null;
-	}
+	// Ошибку БД НЕ глушим (У9 аудита 26.09): раньше сбой запроса означал «период открыт»,
+	// и правка закрытого месяца проходила ровно тогда, когда проверить её было нечем.
+	// Теперь сбой уходит вызывающему — запрос получает ошибку, а в кэш ничего не пишется.
+	const agg = await client.monthClose.aggregate({
+		where: { organizationUuid: orgUuid, posted: true, deletedAt: null },
+		_max: { periodEnd: true },
+	});
+	const end = agg?._max?.periodEnd ?? null;
+	// Включительно по последний день периода — конец местных суток организации.
+	const value = end ? endOfLocalDay(end, orgTimeZone(orgUuid)) : null;
 	boundaryCache.set(orgUuid, { value, ts: Date.now() });
 	return value;
 }
@@ -83,11 +89,9 @@ export class PeriodLockedError extends Error {
 	}
 }
 
-const fmtDate = (d) => {
-	const dd = String(d.getDate()).padStart(2, "0");
-	const mm = String(d.getMonth() + 1).padStart(2, "0");
-	return `${dd}.${mm}.${d.getFullYear()}`;
-};
+// Дата границы для сообщения — местная дата организации, а не сервера.
+const fmtDate = (d, tz) =>
+	new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 
 /**
  * Бросает PeriodLockedError, если документ организации `orgUuid` с датой `date`
@@ -102,7 +106,7 @@ export async function assertPeriodOpen(orgUuid, date, client = prisma) {
 	if (isNaN(d.getTime())) return;
 	if (d.getTime() <= boundary.getTime()) {
 		throw new PeriodLockedError(
-			`Период закрыт: дата документа ≤ даты запрета изменений (${fmtDate(boundary)}). ` +
+			`Период закрыт: дата документа ≤ даты запрета изменений (${fmtDate(boundary, orgTimeZone(orgUuid))}). ` +
 			`Распроведите или удалите документ «Закрытие месяца», чтобы изменить этот период.`,
 		);
 	}

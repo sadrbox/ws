@@ -1117,6 +1117,11 @@ export type AgentEnrollment = {
 	agentId: string | null; tokenDeliveredAt: string | null; createdAt: string; expiresAt: string;
 	/** Та же служба уже подключалась — одобрение отдаст ей того же агента с новым токеном. */
 	previousAgentId: string | null;
+	/**
+	 * Сколько ЕЩЁ ожидающих заявок у той же службы (Б11 аудита 26.09): повтор без секрета заводит новую, одобрение
+	 * одной отклоняет остальные — одобрять надо строго по продиктованному коду. Нет поля — сервис старее панели.
+	 */
+	pendingSiblings?: number;
 };
 
 export const fetchEnrollments = (params: { state?: EnrollmentState | ""; q?: string } = {}) => {
@@ -1141,6 +1146,27 @@ export type RegistrationState = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 
 export type ErpOrganization = { uuid: string; name: string; bin: string | null };
 
+/**
+ * Реквизиты организации из базы 1С — приходят в заявке (26.09, контракт «Реквизиты организаций в заявке»), уже
+ * разобранные сервисом. У заявок старых расширений их нет (`null`/нет поля).
+ */
+export type OnecOrgDetails = {
+	legalName: string | null; kind: "legal" | "individual" | null; kbe: string | null;
+	vatSeries: string | null; vatNumber: string | null; vatDate: string | null;
+	okedCode: string | null; okedName: string | null;
+	legalAddress: string | null; actualAddress: string | null;
+	phones: string[]; emails: string[]; website: string | null;
+	director: { fullName: string; position: string | null } | null;
+	chiefAccountant: { fullName: string; position: string | null } | null;
+	bankAccounts: { iban: string; bik: string | null; bankName: string | null; currency: string | null; isPrimary: boolean }[];
+};
+
+export type RegistrationOrganization = {
+	id?: string | null; name?: string | null; bin?: string | null; details?: OnecOrgDetails | null;
+	/** Организация ERP с тем же БИН, если есть. */
+	erp: ErpOrganization | null;
+};
+
 export type BaseRegistration = {
 	id: string; code: string; state: RegistrationState; note: string | null;
 	base: {
@@ -1151,7 +1177,7 @@ export type BaseRegistration = {
 	user: { id?: string | null; name?: string | null } | null;
 	contact: string | null; comment: string | null;
 	/** Организации базы; `erp` — организация ERP с тем же БИН, если есть. */
-	organizations: { id?: string | null; name?: string | null; bin?: string | null; erp: ErpOrganization | null }[];
+	organizations: RegistrationOrganization[];
 	ip: string | null; repeats: number; createdAt: string; expiresAt: string;
 	decidedBy: string | null; decidedAt: string | null; organizationUuid: string | null; baseKey: string | null;
 	tokenDelivered: boolean;
@@ -1175,6 +1201,27 @@ export const approveRegistration = (id: string, body: { organizationUuid: string
 
 export const rejectRegistration = (id: string, note: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/registrations/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ note }) });
+
+// ── Организации баз, ждущие одобрения (Б11 аудита 26.09) ────────────────────────────────────────────────
+
+/**
+ * БИН, который база назвала сама (форма чата присылает список организаций): действует — открывает базе задачи и
+ * заметки этой организации в ERP — только после одобрения администратором BuhProf. `baseKey`/`baseName`/`server`
+ * пусты, если базы уже нет в реестре.
+ */
+export type PendingBaseOrganization = {
+	baseId: string; baseKey: string | null; baseName: string | null; server: string | null;
+	bin: string; name: string | null; onecId: string | null; requestedAt: string; updatedAt: string;
+};
+
+export const fetchPendingBaseOrganizations = () =>
+	aiFetch<{ items: PendingBaseOrganization[] }>("/v1/onec/base-organizations/pending");
+
+/** Одобрить — БИН начинает действовать; отклонить — ожидающая запись удаляется (назовёт снова — встанет снова). */
+export const decideBaseOrganization = (baseId: string, bin: string, action: "approve" | "reject") =>
+	aiFetch<{ ok: boolean }>(
+		`/v1/onec/base-organizations/${encodeURIComponent(baseId)}/${encodeURIComponent(bin)}/${action}`, { method: "POST" },
+	);
 
 /*
  * ОТКАЗЫ ЧАТА ОТДЕЛЬНОЙ ФУНКЦИЕЙ БОЛЬШЕ НЕ ЧИТАЮТСЯ (23.09). Их показывала таблица под токенами базы, а с

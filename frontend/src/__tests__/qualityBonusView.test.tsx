@@ -81,10 +81,21 @@ describe("Итоги месяца", () => {
 
 	it("нарушения раскрываются под строкой сотрудника", async () => {
 		setup();
-		const toggle = await screen.findByRole("button", { name: `${translate("violationItemShort")} 3` });
+		// Под нагрузкой полного прогона таблица рисуется дольше секунды по умолчанию: ждём данных, затем строку.
+		await screen.findByText(translate("bonusNo"), undefined, { timeout: 5000 });
+		const toggle = await screen.findByRole("button", { name: `${translate("violationItemShort")} 3` }, { timeout: 5000 });
 		expect(screen.queryByText("Обращение не принято в срок")).toBeNull();
 		fireEvent.click(toggle);
 		expect(await screen.findByText("Обращение не принято в срок")).toBeTruthy();
+	});
+
+	// И23: текущий месяц (он выбран по умолчанию) закрыть нельзя — в него ещё идут выявления.
+	it("текущий месяц не закрывается: кнопка недоступна", async () => {
+		setup();
+		await screen.findByText(translate("bonusNo"));
+		const btn = screen.getByRole<HTMLButtonElement>("button", { name: translate("bonusCloseMonth") });
+		expect(btn.disabled).toBe(true);
+		expect(btn.title).toBe(translate("bonusCloseNotOver"));
 	});
 
 	it("закрытие с нерешёнными кандидатами — повтор с подтверждением (force)", async () => {
@@ -93,6 +104,9 @@ describe("Итоги месяца", () => {
 			.mockResolvedValueOnce({ success: true });
 		setup();
 		await screen.findByText(translate("bonusNo"));
+		// Закрывается прошедший месяц: на месяц назад стрелкой в поле периода.
+		fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowLeft" });
+		await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("button", { name: translate("bonusCloseMonth") }).disabled).toBe(false));
 		fireEvent.click(screen.getByRole("button", { name: translate("bonusCloseMonth") }));
 		await waitFor(() => expect(api.closeBonusMonth).toHaveBeenCalledTimes(2));
 		expect(api.closeBonusMonth.mock.calls[0]).toEqual([expect.stringMatching(/^\d{4}-\d{2}$/)]);

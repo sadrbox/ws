@@ -1,7 +1,12 @@
 import express from "express";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { idSearchCondition } from "../../utils/searchId.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { getQuotas, exceeds } from "../../services/quotas.js";
+import { isAdminOfOrg } from "../../utils/auth.js";
+import { clampLimit } from "../../utils/listQuery.js";
+import { grantMembership, normalizeRole } from "../../services/orgMembership.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -13,18 +18,112 @@ const AVATAR_DIR = path.resolve("uploads/avatars");
 if (!fs.existsSync(AVATAR_DIR)) {
 	fs.mkdirSync(AVATAR_DIR, { recursive: true });
 }
+// Имя файла — только сервера: расширение из белого списка, а не из `originalname` клиента;
+// SVG не принимаем вовсе (это документ со скриптами, а не картинка).
+const AVATAR_EXT = { "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp" };
 const avatarStorage = multer.diskStorage({
 	destination: (_req, _file, cb) => cb(null, AVATAR_DIR),
-	filename: (_req, file, cb) => cb(null, `user_${Date.now()}_${file.originalname}`),
+	filename: (_req, file, cb) => cb(null, `user_${Date.now()}_${crypto.randomBytes(4).toString("hex")}${AVATAR_EXT[file.mimetype] ?? ".img"}`),
 });
 const avatarUpload = multer({
 	storage: avatarStorage,
 	limits: { fileSize: 5 * 1024 * 1024 },
 	fileFilter: (_req, file, cb) => {
-		if (file.mimetype.startsWith("image/")) cb(null, true);
-		else cb(new Error("Только изображения"));
+		if (AVATAR_EXT[file.mimetype]) cb(null, true);
+		else cb(new Error("Только изображения PNG, JPEG, GIF или WebP"));
 	},
 });
+
+/*
+ * ПОЛЬЗОВАТЕЛИ: ЧТО ВИДНО И ЧТО МОЖНО (Б3 аудита 26.09).
+ *
+ * Раньше список отдавал всех пользователей установки с карточкой сотрудника (ИИН), карточка —
+ * хэш пароля и секрет 2FA, а PUT/DELETE работали по любому id: админ своей фирмы менял пароль
+ * суперадмину. Теперь:
+ *   - видно — себя и тех, кто состоит в доступных организациях; суперадмин — всех;
+ *   - секреты (пароль, секрет 2FA) не выбираются из базы для ответа никогда: только явный select;
+ *   - filter и sort — по белому списку полей (раньше по `password` можно было подбирать хэш:
+ *     `total` в ответе работал как оракул);
+ *   - править и удалять — администратор организации, где состоит пользователь (удалять —
+ *     только если все его организации под рукой этого администратора), суперадмина — только
+ *     суперадмин; чужой пароль задаёт только суперадмин (свой — /auth/change-password);
+ *   - пароль пишется только хэшем bcrypt.
+ */
+// ИИН остаётся: колонка списка пользователей его показывает, а видны только свои пользователи.
+const SAFE_EMPLOYEE_SELECT = {
+	uuid: true, fullName: true, firstName: true, lastName: true, middleName: true, iin: true,
+	organizationUuid: true, avatarPath: true,
+};
+const EMPLOYEE_SORT_FIELDS = ["fullName", "lastName", "firstName", "middleName", "iin"];
+const SAFE_USER_SELECT = {
+	id: true,
+	uuid: true,
+	username: true,
+	email: true,
+	employeeUuid: true,
+	avatarPath: true,
+	organizationUuid: true,
+	twoFactorEnabled: true,
+	createdAt: true,
+	updatedAt: true,
+	employee: { select: SAFE_EMPLOYEE_SELECT },
+};
+/** Поля, по которым разрешены filter и sort. Секретов здесь нет и быть не должно. */
+export const USER_QUERY_FIELDS = ["id", "uuid", "username", "email", "employeeUuid", "createdAt", "updatedAt"];
+
+/**
+ * Условие «пользователь виден вызывающему». null — видны все (суперадмин, если ему открыты данные).
+ *
+ * Видны участники ВСЕХ доступных организаций (членство и обслуживание), а не только активной:
+ * сотрудник фирмы, работающий в клиенте, назначает исполнителем коллегу по фирме — тот в клиенте
+ * не состоит. Посторонние организации установки при этом не видны.
+ */
+export function userVisibilityWhere(req) {
+	if (req.user?.isSuperAdmin && req.user?.operatorDataAccess !== false) return null;
+	const orgs = [...new Set([req.user?.organizationUuid, ...(req.user?.allowedOrgUuids ?? [])].filter(Boolean))];
+	return { OR: [{ accessRights: { some: { organizationUuid: { in: orgs } } } }, { uuid: req.user?.uuid ?? "__none__" }] };
+}
+
+/** Найти пользователя по id/uuid С УЧЁТОМ видимости; null — нет или не виден (404). */
+async function findVisibleUser(req, param, select = { uuid: true, isSuperAdmin: true, accessRights: { select: { organizationUuid: true } } }) {
+	const n = Number(param);
+	const key = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(param) };
+	const vis = userVisibilityWhere(req);
+	return prisma.user.findFirst({ where: vis ? { AND: [key, vis] } : key, select });
+}
+
+/**
+ * Кого администратор может ДОБАВИТЬ в свою организацию: видимого ему пользователя или ещё ни
+ * в одной организации не состоящего (только что заведённого). Раньше годился любой id — и
+ * перебором числовых id посторонние пользователи втягивались в чужую фирму.
+ */
+async function findAddableUser(req, param) {
+	const visible = await findVisibleUser(req, param, { uuid: true });
+	if (visible) return visible;
+	const n = Number(param);
+	const key = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(param) };
+	return prisma.user.findFirst({ where: { AND: [key, { accessRights: { none: {} } }, { isSuperAdmin: false }] }, select: { uuid: true } });
+}
+
+/**
+ * Распоряжается ли вызывающий этим пользователем: суперадмин — всеми; админ организации —
+ * пользователями, состоящими в его организации; суперадмина трогает только суперадмин.
+ * @param {"edit"|"delete"} mode — удалять можно, только если ВСЕ организации пользователя
+ *   под рукой вызывающего: иначе админ одной фирмы стёр бы сотрудника другой.
+ */
+export function canManageUser(req, target, mode = "edit") {
+	if (req.user?.isSuperAdmin) return true;
+	if (!target || target.isSuperAdmin) return false;
+	const orgs = (target.accessRights ?? []).map((r) => r.organizationUuid);
+	if (!orgs.length) return false;
+	return mode === "delete"
+		? orgs.every((o) => isAdminOfOrg(req, o))
+		: orgs.some((o) => isAdminOfOrg(req, o));
+}
+
+async function hashPassword(raw) {
+	return bcrypt.hash(raw, 12);
+}
 
 // ============================================
 // GET /users — курсорная пагинация
@@ -36,8 +135,7 @@ router.get("/users", async (req, res) => {
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
@@ -63,7 +161,11 @@ router.get("/users", async (req, res) => {
 				if (sortObj && typeof sortObj === "object") {
 					for (const [field, dir] of Object.entries(sortObj)) {
 						if (dir !== "asc" && dir !== "desc") continue;
-						orderBy.push({ [field]: dir });
+						// Только белый список: сортировка по секретному полю — тот же оракул, что и фильтр.
+						if (USER_QUERY_FIELDS.includes(field)) orderBy.push({ [field]: dir });
+						else if (field.startsWith("employee.") && EMPLOYEE_SORT_FIELDS.includes(field.slice(9))) {
+							orderBy.push({ employee: { [field.slice(9)]: dir } });
+						}
 					}
 				}
 			} catch {}
@@ -117,6 +219,11 @@ router.get("/users", async (req, res) => {
 		for (const [field, conditions] of Object.entries(filter)) {
 			if (SKIP_KEYS.includes(field)) continue;
 			if (!conditions || typeof conditions !== "object") continue;
+			// Белый список полей: раньше `filter[password][gte]=…` вместе с `total` позволял
+			// подобрать хэш пароля и секрет 2FA посимвольно.
+			if (!USER_QUERY_FIELDS.includes(field)) {
+				return res.status(400).json({ success: false, message: `Неизвестное поле фильтра «${field}»` });
+			}
 
 			for (const [operator, value] of Object.entries(conditions)) {
 				if (!ALLOWED_OPERATORS.includes(operator)) continue;
@@ -133,10 +240,12 @@ router.get("/users", async (req, res) => {
 		}
 
 		// ── Итоговый where ────────────────────────────────────────────────────
+		const visibility = userVisibilityWhere(req);
 		const baseWhere = {
 			...searchWhereClause,
 			...dateRangeFilter,
 			...filterWhereClause,
+			...(visibility ? { AND: [...(searchWhereClause.AND ?? []), visibility] } : {}),
 		};
 
 		const queryOptions = {
@@ -144,11 +253,7 @@ router.get("/users", async (req, res) => {
 			where: baseWhere,
 			orderBy,
 			select: {
-				id: true,
-				uuid: true,
-				username: true,
-				employeeUuid: true,
-				employee: true,
+				...SAFE_USER_SELECT,
 				// Пароль читаем, но НАРУЖУ НЕ ОТДАЁМ (см. ниже): из него нужен один бит —
 				// «под этой учётной записью вообще можно войти».
 				password: true,
@@ -197,19 +302,8 @@ router.get("/users", async (req, res) => {
 // ============================================
 router.get("/users/:id", async (req, res) => {
 	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
-
-		const item = isNumeric
-			? await prisma.user.findUnique({
-					where: { id: numId },
-					include: { employee: true },
-				})
-			: await prisma.user.findUnique({
-					where: { uuid: param },
-					include: { employee: true },
-				});
+		// Видимость — как у списка; наружу — только безопасные поля (без хэша и секрета 2FA).
+		const item = await findVisibleUser(req, req.params.id, SAFE_USER_SELECT);
 
 		if (!item) {
 			return res
@@ -262,19 +356,34 @@ router.post("/users", async (req, res) => {
 			}
 		}
 
-		const item = await prisma.user.create({
-			data: {
-				username: username.trim(),
-				password: password?.trim() || "",
-				employeeUuid: employeeUuid || null,
-			},
-			select: {
-				id: true,
-				uuid: true,
-				username: true,
-				employeeUuid: true,
-				employee: true,
-			},
+		/*
+		 * НОВЫЙ ПОЛЬЗОВАТЕЛЬ СРАЗУ В ОРГАНИЗАЦИИ ТОГО, КТО ЕГО ЗАВЁЛ (Б3 аудита 26.09).
+		 *
+		 * Список пользователей теперь показывает только состоящих в доступных организациях, и
+		 * заведённый без связи пропал бы из виду у собственного создателя. Администратор может
+		 * добавлять людей только в активную организацию (как и в /access-rights), поэтому связь
+		 * с ней — единственно возможный итог; права не выдаём (profile: null) — как и раньше,
+		 * их проставляет администратор. Суперадмин заводит пользователей без организации.
+		 */
+		const ownerOrg = req.user?.isSuperAdmin ? null : (req.user?.organizationUuid ?? null);
+		if (!req.user?.isSuperAdmin && !isAdminOfOrg(req, ownerOrg)) {
+			return res.status(403).json({ success: false, message: "Заводить пользователей может администратор организации" });
+		}
+
+		// Пароль — только хэшем: открытый текст в базе раньше лежал до первого входа.
+		const rawPassword = typeof password === "string" ? password.trim() : "";
+		const hashed = rawPassword ? await hashPassword(rawPassword) : "";
+		const item = await prisma.$transaction(async (tx) => {
+			const created = await tx.user.create({
+				data: {
+					username: username.trim(),
+					password: hashed,
+					employeeUuid: employeeUuid || null,
+				},
+				select: SAFE_USER_SELECT,
+			});
+			if (ownerOrg) await grantMembership(tx, { userUuid: created.uuid, organizationUuid: ownerOrg, role: "member", profile: null });
+			return created;
 		});
 
 		return res.status(201).json({ success: true, item });
@@ -295,27 +404,35 @@ router.post("/users", async (req, res) => {
 // ============================================
 router.put("/users/:id", async (req, res) => {
 	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
+		const target = await findVisibleUser(req, req.params.id);
+		if (!target) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+		if (!canManageUser(req, target, "edit")) {
+			return res.status(403).json({ success: false, message: "Править этого пользователя может администратор его организации" });
+		}
 
 		const { username, password, employeeUuid } = req.body;
 		const data = {};
 		if (username !== undefined) data.username = username?.trim() ?? null;
-		if (password !== undefined && password.trim())
-			data.password = password.trim();
+		if (typeof password === "string" && password.trim()) {
+			// Чужой пароль задаёт только суперадмин; свой меняют через /auth/change-password
+			// (со старым паролем) — иначе украденная сессия меняла бы пароль без него.
+			if (!req.user?.isSuperAdmin) {
+				return res.status(403).json({
+					success: false,
+					code: "PASSWORD_CHANGE_FORBIDDEN",
+					message: "Задать пароль другому пользователю может только суперадминистратор; свой пароль меняется в настройках",
+				});
+			}
+			data.password = await hashPassword(password.trim());
+		}
 		if (employeeUuid !== undefined) data.employeeUuid = employeeUuid || null;
 
 		const item = await prisma.user.update({
-			where: isNumeric ? { id: numId } : { uuid: param },
+			where: { uuid: target.uuid },
 			data,
-			select: {
-				id: true,
-				uuid: true,
-				username: true,
-				employeeUuid: true,
-				employee: true,
-			},
+			select: SAFE_USER_SELECT,
 		});
 
 		return res.status(200).json({ success: true, item });
@@ -324,6 +441,9 @@ router.put("/users/:id", async (req, res) => {
 			return res
 				.status(404)
 				.json({ success: false, message: "Пользователь не найден" });
+		}
+		if (error.code === "P2002") {
+			return res.status(409).json({ success: false, message: "Пользователь с таким логином уже существует" });
 		}
 		console.error("PUT /users/:id error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -335,13 +455,21 @@ router.put("/users/:id", async (req, res) => {
 // ============================================
 router.delete("/users/:id", async (req, res) => {
 	try {
-		const param = req.params.id;
-		const numId = Number(param);
-		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;
+		const target = await findVisibleUser(req, req.params.id);
+		if (!target) {
+			return res.status(404).json({ success: false, message: "Пользователь не найден" });
+		}
+		if (target.uuid === req.user?.uuid) {
+			return res.status(409).json({ success: false, message: "Нельзя удалить собственную учётную запись" });
+		}
+		if (!canManageUser(req, target, "delete")) {
+			return res.status(403).json({
+				success: false,
+				message: "Пользователь состоит и в других организациях — уберите его из своей организации на вкладке «Организации»",
+			});
+		}
 
-		await prisma.user.delete({
-			where: isNumeric ? { id: numId } : { uuid: param },
-		});
+		await prisma.user.delete({ where: { uuid: target.uuid } });
 
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
@@ -349,6 +477,9 @@ router.delete("/users/:id", async (req, res) => {
 			return res
 				.status(404)
 				.json({ success: false, message: "Пользователь не найден" });
+		}
+		if (error.code === "P2003") {
+			return res.status(409).json({ success: false, message: "Невозможно удалить — пользователь указан в документах" });
 		}
 		console.error("DELETE /users/:id error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
@@ -359,12 +490,14 @@ router.delete("/users/:id", async (req, res) => {
 router.post("/users/:id/avatar", avatarUpload.single("avatar"), async (req, res) => {
 	try {
 		if (!req.file) return res.status(400).json({ success: false, message: "Файл не передан" });
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-
-		const existing = await prisma.user.findUnique({ where: w });
-		if (existing?.avatarPath) {
+		// Аватар — свой или того, кем распоряжаешься; иначе загруженный файл убираем с диска.
+		const existing = await findVisibleUser(req, req.params.id, { uuid: true, isSuperAdmin: true, avatarPath: true, accessRights: { select: { organizationUuid: true } } });
+		if (!existing || (existing.uuid !== req.user?.uuid && !canManageUser(req, existing, "edit"))) {
+			fs.unlink(req.file.path, () => {});
+			return res.status(existing ? 403 : 404).json({ success: false, message: existing ? "Нет доступа" : "Не найдено" });
+		}
+		const w = { uuid: existing.uuid };
+		if (existing.avatarPath) {
 			const oldPath = path.resolve(AVATAR_DIR, existing.avatarPath);
 			if (oldPath.startsWith(AVATAR_DIR) && fs.existsSync(oldPath)) {
 				fs.unlinkSync(oldPath);
@@ -374,7 +507,7 @@ router.post("/users/:id/avatar", avatarUpload.single("avatar"), async (req, res)
 		const item = await prisma.user.update({
 			where: w,
 			data: { avatarPath: req.file.filename },
-			include: { employee: true },
+			select: SAFE_USER_SELECT,
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -387,10 +520,7 @@ router.post("/users/:id/avatar", avatarUpload.single("avatar"), async (req, res)
 // ── GET avatar ──────────────────────────────────────────────────────────
 router.get("/users/:id/avatar", async (req, res) => {
 	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		const user = await prisma.user.findUnique({ where: w });
+		const user = await findVisibleUser(req, req.params.id, { avatarPath: true });
 		if (!user?.avatarPath) return res.status(404).json({ success: false, message: "Аватар не найден" });
 		const filePath = path.resolve(AVATAR_DIR, user.avatarPath);
 		if (!filePath.startsWith(AVATAR_DIR) || !fs.existsSync(filePath)) {
@@ -406,11 +536,13 @@ router.get("/users/:id/avatar", async (req, res) => {
 // ── DELETE avatar ───────────────────────────────────────────────────────
 router.delete("/users/:id/avatar", async (req, res) => {
 	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		const existing = await prisma.user.findUnique({ where: w });
-		if (existing?.avatarPath) {
+		const existing = await findVisibleUser(req, req.params.id, { uuid: true, isSuperAdmin: true, avatarPath: true, accessRights: { select: { organizationUuid: true } } });
+		if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+		if (existing.uuid !== req.user?.uuid && !canManageUser(req, existing, "edit")) {
+			return res.status(403).json({ success: false, message: "Нет доступа" });
+		}
+		const w = { uuid: existing.uuid };
+		if (existing.avatarPath) {
 			const filePath = path.resolve(AVATAR_DIR, existing.avatarPath);
 			if (filePath.startsWith(AVATAR_DIR) && fs.existsSync(filePath)) {
 				fs.unlinkSync(filePath);
@@ -419,7 +551,7 @@ router.delete("/users/:id/avatar", async (req, res) => {
 		const item = await prisma.user.update({
 			where: w,
 			data: { avatarPath: null },
-			include: { employee: true },
+			select: SAFE_USER_SELECT,
 		});
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -437,20 +569,17 @@ router.delete("/users/:id/avatar", async (req, res) => {
 // GET /users/:id/organizations — список орг пользователя
 router.get("/users/:id/organizations", async (req, res) => {
 	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
+		const target = await findVisibleUser(req, req.params.id, { uuid: true });
+		if (!target) return res.status(404).json({ success: false, message: "Пользователь не найден" });
 
-		// Проверяем права: суперадмин или org-admin видит пользователей своей орг
+		// Суперадмин видит все членства; остальные — только в доступных им организациях:
+		// в каких ещё фирмах состоит человек, постороннему знать незачем.
 		const isSuperAdmin = req.user?.isSuperAdmin;
-		const isOrgAdmin = req.user?.isOrgAdmin;
-
 		const items = await prisma.accessRight.findMany({
 			where: {
-				user: w,
-				// Org-admin видит только своих пользователей
-				...(!isSuperAdmin && isOrgAdmin
-					? { organizationUuid: req.user.organizationUuid }
+				userUuid: target.uuid,
+				...(!isSuperAdmin
+					? { organizationUuid: { in: [req.user?.organizationUuid, ...(req.user?.allowedOrgUuids ?? [])].filter(Boolean) } }
 					: {}),
 			},
 			include: {
@@ -471,10 +600,8 @@ router.get("/users/:id/organizations", async (req, res) => {
 // POST /users/:id/organizations — добавить организацию пользователю
 router.post("/users/:id/organizations", async (req, res) => {
 	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
-		const { organizationUuid, role = "member" } = req.body;
+		const { organizationUuid } = req.body;
+		const role = normalizeRole(req.body.role ?? "member");
 
 		if (!organizationUuid) {
 			return res.status(400).json({ success: false, message: "organizationUuid обязателен" });
@@ -499,7 +626,7 @@ router.post("/users/:id/organizations", async (req, res) => {
 			}
 		}
 
-		const targetUser = await prisma.user.findUnique({ where: w, select: { uuid: true } });
+		const targetUser = await findAddableUser(req, req.params.id);
 		if (!targetUser) {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
 		}
@@ -522,6 +649,7 @@ router.post("/users/:id/organizations", async (req, res) => {
 
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (error.code === "P2003") return res.status(404).json({ success: false, message: "Организация не найдена" });
 		console.error("POST /users/:id/organizations error:", error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -530,17 +658,18 @@ router.post("/users/:id/organizations", async (req, res) => {
 // PUT /users/:id/organizations/:orgUuid — изменить роль
 router.put("/users/:id/organizations/:orgUuid", async (req, res) => {
 	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const { orgUuid } = req.params;
-		const { role } = req.body;
-
-		if (!role) {
+		if (!req.body.role) {
 			return res.status(400).json({ success: false, message: "role обязателен" });
 		}
+		const role = normalizeRole(req.body.role);
 
+		// Менять роль в организации может только её администратор (раньше — кто угодно с правом
+		// User: понизить админов чужой фирмы или записать произвольную роль).
 		const isSuperAdmin = req.user?.isSuperAdmin;
+		if (!isSuperAdmin && !isAdminOfOrg(req, orgUuid)) {
+			return res.status(403).json({ success: false, message: "Нет доступа" });
+		}
 		if (!isSuperAdmin && role === "admin") {
 			return res.status(403).json({
 				success: false,
@@ -548,7 +677,7 @@ router.put("/users/:id/organizations/:orgUuid", async (req, res) => {
 			});
 		}
 
-		const targetUser = await prisma.user.findUnique({ where: w, select: { uuid: true } });
+		const targetUser = await findVisibleUser(req, req.params.id, { uuid: true });
 		if (!targetUser) {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
 		}
@@ -580,9 +709,6 @@ router.put("/users/:id/organizations/:orgUuid", async (req, res) => {
 // DELETE /users/:id/organizations/:orgUuid — убрать организацию у пользователя
 router.delete("/users/:id/organizations/:orgUuid", async (req, res) => {
 	try {
-		const p = req.params.id;
-		const n = Number(p);
-		const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 		const { orgUuid } = req.params;
 
 		const isSuperAdmin = req.user?.isSuperAdmin;
@@ -593,7 +719,7 @@ router.delete("/users/:id/organizations/:orgUuid", async (req, res) => {
 			return res.status(403).json({ success: false, message: "Нет доступа" });
 		}
 
-		const targetUser = await prisma.user.findUnique({ where: w, select: { uuid: true } });
+		const targetUser = await findVisibleUser(req, req.params.id, { uuid: true });
 		if (!targetUser) {
 			return res.status(404).json({ success: false, message: "Пользователь не найден" });
 		}

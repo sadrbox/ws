@@ -20,7 +20,7 @@ import { Button } from "src/components/Button";
 import { FormArea, Group, GroupCol } from "src/components/UI";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { useQualityMe } from "src/hooks/useQualityMe";
 import { routeError } from "src/services/errors/route";
@@ -49,7 +49,7 @@ const ATTENDANCE_KEYS: Record<string, string> = {
 
 export const QualitySettingsView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const queryClient = useQueryClient();
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const { me, canManage } = useQualityMe();
 	const q = useQuery({ queryKey: SETTINGS_KEY, queryFn: fetchQualitySettings, staleTime: 30_000 });
 	const saved = q.data?.settings as SettingsWithEffective | undefined;

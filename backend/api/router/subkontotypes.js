@@ -5,19 +5,31 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { invalidateRefCache } from "../../services/refCache.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 const MODEL = "subkontoType";
 const ROUTE = "subkonto-types";
 
 // E3: запись в справочник субконто сбрасывает L2-кэш resolveSubkontoType.
-router.use((req, _res, next) => { if (req.method !== "GET") invalidateRefCache("subkontoType"); next(); });
+// Только для СВОИХ путей (роутер смонтирован на /api/v1, и без проверки пути сброс — теперь ещё и
+// рассылка по всем воркерам — шёл на каждый POST соседних роутеров) и дважды: до записи и после
+// ответа. Сброс только «до» оставлял окно: запрос, пришедший между сбросом и фиксацией записи,
+// снова клал в кэш старое значение на весь TTL (Н7 аудита 26.09).
+router.use((req, res, next) => {
+	if (req.method !== "GET" && req.path.startsWith(`/${ROUTE}`)) {
+		invalidateRefCache("subkontoType");
+		res.on("finish", () => invalidateRefCache("subkontoType"));
+	}
+	next();
+});
 const TEXT_FIELDS = ["code", "name"];
 
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const rawLimit = req.query.limit;
-		const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 		const words = search ? search.split(/\s+/).filter(Boolean) : [];
 		const searchWhere = words.length
@@ -30,8 +42,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const total = await prisma[MODEL].count({ where: baseWhere });
 		return res.status(200).json({ success: true, items, nextCursor: null, hasMore: false, total });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

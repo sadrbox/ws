@@ -10,6 +10,7 @@ import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodL
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -29,7 +30,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawLimit = req.query.limit;
 		const rawCursor = req.query.cursor;
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res.status(400).json({ success: false, message: "Некорректный параметр cursor" });
@@ -92,8 +94,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (cursorNumber === null) total = await prisma[MODEL].count({ where: baseWhere });
 		return res.status(200).json({ success: true, items, nextCursor, hasMore, ...(total !== undefined ? { total } : {}) });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

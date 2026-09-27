@@ -38,6 +38,7 @@ import { agentRouter } from "./http/agentRouter.ts";
 import { adminRouter } from "./http/adminRouter.ts";
 import { userRouter } from "./http/userRouter.ts";
 import { onecChatRouter } from "./http/onecChatRouter.ts";
+import { isBadInput } from "./http/safeRouter.ts";
 import { BaseTokenStore } from "./bases/tokens.ts";
 import { BaseChatExchangeStore } from "./bases/chatExchange.ts";
 import { TurnKeyStore } from "./chat/turnKeys.ts";
@@ -53,6 +54,7 @@ import { OpenAIBankExtractor } from "./bank/extract_openai.ts";
 import type { StatementExtractor } from "./bank/extract.ts";
 import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
+import { recoverInterruptedTurns } from "./chat/recovery.ts";
 import { BankExtractor, RetryingExtractor } from "./bank/extract.ts";
 import { StatementStore } from "./bank/store.ts";
 import { PurchaseDocumentStore } from "./purchase/store.ts";
@@ -162,6 +164,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	const workflow = llm
 		? new ChatWorkflow({ db, log, llm, agents, queue, audit, confirmWrite: cfg.CONFIRM_WRITE,
 			commandTimeoutMs: cfg.CHAT_COMMAND_TIMEOUT_SECS * 1000, maxToolRounds: cfg.CHAT_MAX_TOOL_ROUNDS, bank, purchases, files,
+			historyMaxChars: cfg.CHAT_HISTORY_MAX_CHARS, extractParallel: cfg.CHAT_EXTRACT_PARALLEL,
 			serverTools: serverTools({ tasks: erpTasks, baseOrgs }),
 			orgBin: async (uuid) => {
 				const r = await erp.query<{ bin: string | null }>(`SELECT bin FROM organizations WHERE uuid = $1`, [uuid]);
@@ -192,10 +195,36 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// своей же БД. Решение «пора» и защита от двойного прогона — в onec/schedules.ts.
 	// Первый проход НЕ на старте: сервис перезапускают днём, и отложенный на минуту тик
 	// не отличим от обычного, зато не делает работу в момент запуска.
-	const maintenance = () => runDueSchedules({ agents, queue, batches, bases: baseRegistry, schedules, audit, log })
-		.then((r) => { if (r.started || r.failed) log.info(r, "расписание обслуживания: проход"); })
-		.catch((e) => log.warn({ err: e }, "расписание обслуживания"));
+	// Тики не накладываются (Н9 аудита 26.09): проход по сотне баз с медленной БД мог длиться дольше минуты, и
+	// следующий тик шёл поверх него.
+	let maintenanceBusy = false;
+	// Режим organizations (C11): ночной запуск идёт только на серверы организации расписания.
+	const serversOf = cfg.ONEC_SERVER_SCOPE === "organizations"
+		? async (org: string) => new Set((await baseRegistry.listServers()).filter((x) => x.organizationUuid === org).map((x) => x.id))
+		: null;
+	const maintenance = () => {
+		if (maintenanceBusy) return;
+		maintenanceBusy = true;
+		runDueSchedules({ agents, queue, batches, bases: baseRegistry, schedules, audit, log, serversOf })
+			.then((r) => { if (r.started || r.failed) log.info(r, "расписание обслуживания: проход"); })
+			.catch((e) => log.warn({ err: e }, "расписание обслуживания"))
+			.finally(() => { maintenanceBusy = false; });
+	};
 	setInterval(maintenance, 60_000).unref();
+
+	// ── Просрочка команд — по таймеру (Н4 аудита 26.09) ────────────────────────
+	// Раньше её снимали только опросы панели: потерянный ответ агента без открытой панели навсегда занимал место
+	// базы — чат и ночные проверки получали «база занята». Полминуты — меньше любого срока команды.
+	let sweepBusy = false;
+	const sweep = () => {
+		if (sweepBusy) return;
+		sweepBusy = true;
+		queue.sweep(cfg.AGENT_OFFLINE_AFTER_SECS * 2)
+			.then((r) => { if (r.overdue || r.orphaned) log.info(r, "очередь: закрыты просроченные команды"); })
+			.catch((e) => log.warn({ err: e }, "очередь: снятие просрочки"))
+			.finally(() => { sweepBusy = false; });
+	};
+	setInterval(sweep, 30_000).unref();
 
 	// ── Ночные проверки учёта в базах клиентов (E17, СК2.2) ──────────────────
 	// Тот же шаг в минуту, что у обслуживания: решение «пора» и защита от второго прогона за ночь — в самом
@@ -225,8 +254,9 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 
 	const app = express();
 	app.disable("x-powered-by");
-	// За cloudflared: реальный IP клиента — в X-Forwarded-For.
-	app.set("trust proxy", true);
+	// За cloudflared: реальный IP клиента — в X-Forwarded-For, но только от доверенного прокси (TRUST_PROXY):
+	// `true` брал левую запись заголовка, которую пишет сам клиент (Б11 аудита 26.09).
+	app.set("trust proxy", cfg.TRUST_PROXY);
 	app.use(helmet());
 	/*
 	 * ПРЕДЕЛ ТЕЛА — РАЗНЫЙ У ДВУХ ЧАТОВ. Веб-чат ERP шлёт вложения (PDF выписок) прямо в JSON, base64: ему
@@ -298,6 +328,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	app.use("/v1/onec-chat", onecChatRouter({
 		workflow, tokens: baseTokens, erp, log, version: VERSION, tasks: erpTasks, baseOrgs,
 		maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, maxAttachments: cfg.CHAT_ATTACHMENTS_MAX,
+		maxTurnAttachmentBytes: cfg.CHAT_ATTACHMENTS_TURN_MAX_MB * 1048576,
 		chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN,
 		// Вложение отдельным запросом, ключ хода и смена токена базы: каждая часть включается своей
 		// зависимостью, и GET /ping объявляет ровно то, что включено (features).
@@ -333,6 +364,11 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 			res.status(413).json({ success: false, error: { code: "PAYLOAD_TOO_LARGE", message: `Тело запроса больше предела установки (${cfg.JSON_BODY_MAX_MB} МБ)` } });
 			return;
 		}
+		// Негодный идентификатор (строка не UUID в колонку uuid) — ошибка запроса, а не сервиса (аудит 26.09).
+		if (isBadInput(err)) {
+			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Некорректный идентификатор в запросе" } });
+			return;
+		}
 		log.error({ err, path: req.path, method: req.method }, "необработанная ошибка");
 		res.status(500).json({ success: false, error: { code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера" } });
 	});
@@ -347,6 +383,9 @@ async function main(): Promise<void> {
 
 	const { db, erp } = createPools(cfg.DATABASE_URL, cfg.ERP_DATABASE_URL, log);
 	await migrate(db, log);
+
+	// Ходы, оборванные прошлым запуском, — закрыть до приёма запросов (Н9 аудита 26.09).
+	await recoverInterruptedTurns(db, log).catch((e) => log.warn({ err: e }, "восстановление оборванных ходов"));
 
 	const { app, queue } = createApp({ cfg, log, db, erp });
 	const server = app.listen(cfg.PORT, () => log.info({ port: cfg.PORT }, "слушаю"));

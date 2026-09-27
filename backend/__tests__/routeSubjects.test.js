@@ -17,23 +17,63 @@ import { ROUTE_SUBJECTS, REPORT_SUBJECTS, SUBJECT_KINDS, subjectOf, reportSubjec
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTER_DIR = path.join(root, "api", "router");
 
+/*
+ * СКАНЕР ВИДИТ И ШАБЛОННЫЕ ПУТИ (Б12 аудита 26.09). Раньше регулярка брала только пути в
+ * двойных кавычках, а половина роутеров объявляет их как `/${ROUTE}` или строит на фабриках
+ * (`createDocumentHeaderRouter({ ROUTE: "month-closes" })`) — около двадцати сегментов
+ * (`access-rights`, `user-defaults`, `month-closes`…) не проверялись вовсе, и тест был зелёным
+ * при открытых маршрутах. Теперь:
+ *   - константы файла (`const ROUTE = "taxes"`) подставляются в шаблон;
+ *   - сегменты фабрик берутся из вызова (`ROUTE:` / `route:`);
+ *   - шаблон, который не удалось разрешить, — сам по себе ошибка: слепое пятно не должно
+ *     молча прятать маршрут.
+ */
+const FACTORY_CALLS = ["createDocumentHeaderRouter(", "createDocumentItemsRouter(", "createCashOrderRouter("];
+
 /** Первые сегменты всех объявленных путей: router.get("/products/:id") → "products". */
-function declaredSegments() {
-	const files = [...readdirSync(ROUTER_DIR).filter((f) => f.endsWith(".js")).map((f) => path.join(ROUTER_DIR, f)),
+export function declaredSegments(fileList = null) {
+	const files = fileList ?? [...readdirSync(ROUTER_DIR).filter((f) => f.endsWith(".js")).map((f) => path.join(ROUTER_DIR, f)),
 		path.join(root, "api", "v1.js")];
 	const segs = new Map();
+	const unresolved = [];
+	const add = (first, file) => {
+		if (!first || first.startsWith(":")) return;
+		if (!segs.has(first)) segs.set(first, []);
+		segs.get(first).push(path.basename(file));
+	};
 	for (const file of files) {
 		const txt = readFileSync(file, "utf8");
-		for (const m of txt.matchAll(/\.(?:get|post|put|patch|delete)\(\s*"(\/[^"]*)"/g)) {
-			const seg = m.group?.[1] ?? m[1];
-			const first = seg.replace(/^\/+/, "").split("/")[0];
-			if (!first || first.startsWith(":")) continue;
-			if (!segs.has(first)) segs.set(first, []);
-			segs.get(first).push(path.basename(file));
+		const base = path.basename(file);
+		// Фабрики объявляют пути от параметра — сами по себе сегментов не дают.
+		const isFactory = /^_.*Factory\.js$/.test(base);
+		const consts = {};
+		for (const m of txt.matchAll(/const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*["']([^"'`$]*)["']/g)) consts[m[1]] = m[2];
+		for (const m of txt.matchAll(/\.(?:get|post|put|patch|delete)\(\s*(["'`])(\/[^"'`]*)\1/g)) {
+			let seg = m[2];
+			if (m[1] === "`") {
+				seg = seg.replace(/\$\{(\w+)\}/g, (all, name) => consts[name] ?? all);
+				if (seg.includes("${")) {
+					if (!isFactory) unresolved.push(`${base}: ${m[2]}`);
+					continue;
+				}
+			}
+			add(seg.replace(/^\/+/, "").split("/")[0], file);
+		}
+		if (FACTORY_CALLS.some((c) => txt.includes(c))) {
+			for (const m of txt.matchAll(/\b(?:ROUTE|route)\s*:\s*["']([^"']+)["']/g)) add(m[1], file);
 		}
 	}
-	return segs;
+	return Object.assign(segs, { unresolved });
 }
+
+test("сканер разрешает шаблонные пути и видит фабрики", () => {
+	const segs = declaredSegments();
+	assert.deepEqual(segs.unresolved, [], `пути, которые сканер не понял (опишите константой): ${segs.unresolved.join("; ")}`);
+	// Опорные сегменты из шаблонов и фабрик — если сканер снова ослепнет, упадёт здесь.
+	for (const s of ["access-rights", "user-defaults", "taxes", "month-closes", "purchaseitems", "cash-receipt-orders", "bank-statements"]) {
+		assert.ok(segs.has(s), `сканер не видит сегмент ${s}`);
+	}
+});
 
 test("каждый маршрут описан: либо модель прав, либо предмет с объяснением", () => {
 	const segs = declaredSegments();

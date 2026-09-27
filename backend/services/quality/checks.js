@@ -14,15 +14,20 @@
 import { prisma } from "../../prisma/prisma-client.js";
 import { getQualitySettings, getFirmOrgSetting } from "./settings.js";
 import { normalizeFinding, planFindingsSync, checkTitle, compareFindings, exceptionActive, standardItemFor, findingDeadlineDays, compareKn } from "./findingRules.js";
-import { responsibleForClient, firmOrgForUser, groupOfClient, orgNames } from "./access.js";
+import { responsibleForClient, firmOrgForUser, groupOfClient, orgNames, loadGroups } from "./access.js";
 import { getWorkOptions } from "./calendar.js";
 import { addWorkingDays } from "./workTime.js";
 import { createCandidate } from "./violations.js";
 import { notifyUser, notifyMany } from "./notify.js";
 import { loadStatuses, doneStatus, logEvent } from "./todos.js";
 import { detectSelfCheckViolations } from "./checklists.js";
+import { splitSeenUpdates } from "./ingestPlan.js";
+import { firmScope } from "./scope.js";
+import { sentNotificationKeys, existingRuleKeys, manyKeys, freshRecipients } from "./dedupBatch.js";
 
 const asDate = (v) => (v && !Number.isNaN(new Date(v).getTime()) ? new Date(v) : null);
+/** Находок на страницу в фоновом правиле (обход всех, а не первых N). */
+const FINDINGS_PAGE = 500;
 
 /**
  * Принять итоги прогона по одной организации.
@@ -41,85 +46,106 @@ export async function ingestCheckResults(organizationUuid, body) {
 		const req = run.request || {};
 		const data = run.ok ? run.data || {} : null;
 		const status = run.ok ? (["ok", "findings", "skipped"].includes(data.status) ? data.status : "findings") : "error";
-		// Повторная доставка той же посылки (ai повторяет отправку после сетевого сбоя): ответ
-		// 1С с тем же моментом чтения уже принят — второй прогон и второй раунд находок не нужны.
 		const readAt = asDate(data?.readAt);
-		if (readAt && (await prisma.checkRun.findFirst({ where: { organizationUuid, checkCode: check, readAt }, select: { id: true } }))) {
+
+		// Находки: нормализуем, отбрасывая кривые строки поштучно (до транзакции — это чистый расчёт).
+		const incoming = [];
+		if (run.ok && status !== "skipped") {
+			for (const raw of Array.isArray(data.findings) ? data.findings : []) {
+				const n = normalizeFinding(raw);
+				if (n.ok) incoming.push(n.value);
+				else counters.rejected++;
+			}
+		}
+
+		/*
+		 * ОДНА ПРОВЕРКА — ОДНА ТРАНЗАКЦИЯ (Н6 аудита 26.09). Прогон записывался до находок, а повтор
+		 * посылки отсекался по readAt: сбой посреди приёма оставлял прогон «принятым», а находки —
+		 * недосинхронизированными до следующей ночи (повтор ai отсекался как дубль). Теперь прогон,
+		 * находки и их устранение фиксируются вместе или не фиксируются вовсе, и повтор примет всё
+		 * заново. Две посылки одной проверки одного клиента разом (повтор ai после обрыва) идут друг
+		 * за другом: транзакционная блокировка по (клиент, проверка), дубль отсекается под ней.
+		 * Уведомления и кандидаты — после фиксации: откат не должен оставлять разосланного.
+		 */
+		const result = await prisma.$transaction(async (tx) => {
+			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`check-ingest:${organizationUuid}:${check}`}))`;
+			if (readAt && (await tx.checkRun.findFirst({ where: { organizationUuid, checkCode: check, readAt }, select: { id: true } }))) {
+				return { duplicate: true };
+			}
+			const checkRun = await tx.checkRun.create({
+				data: {
+					organizationUuid,
+					baseKey: body.baseKey || null,
+					checkCode: check,
+					checkVersion: Number.isInteger(data?.version) ? data.version : null,
+					scope: run.scope || null,
+					status,
+					truncated: !!data?.truncated,
+					total: Number.isFinite(data?.total) ? data.total : Array.isArray(data?.findings) ? data.findings.length : 0,
+					summary: data?.summary ?? undefined,
+					params: data?.params ?? req.params ?? undefined,
+					periodFrom: asDate(data?.from ?? req.from),
+					periodTo: asDate(data?.to ?? req.to),
+					onDate: asDate(data?.onDate ?? req.onDate),
+					errorCode: run.ok ? null : String(run.error?.code || "ERROR").slice(0, 100),
+					errorMessage: run.ok ? null : String(run.error?.message || "").slice(0, 2000),
+					skipReason: data?.skipReason ? String(data.skipReason).slice(0, 1000) : null,
+					durationMs: Number.isFinite(data?.durationMs) ? Math.round(data.durationMs) : null,
+					readAt,
+				},
+			});
+			if (!run.ok || status === "skipped") return { synced: false };
+
+			const existing = await tx.checkFinding.findMany({
+				where: { organizationUuid, checkCode: check },
+				select: { uuid: true, fingerprint: true, resolvedAt: true, firstSeenAt: true, severity: true, title: true, factDate: true, amount: true, data: true },
+			});
+			const plan = planFindingsSync({ existing, incoming, complete: !data.truncated });
+			const now = new Date();
+			// Новые — одним INSERT; уже существующая (гонка с другим приёмом) пропускается, а не роняет запрос.
+			const created = plan.create.length
+				? await tx.checkFinding.createManyAndReturn({
+					data: plan.create.map((f) => ({ organizationUuid, checkCode: check, fingerprint: f.fingerprint, severity: f.severity, title: f.title, factDate: f.factDate, amount: f.amount, data: f.data, firstSeenAt: now, lastSeenAt: now, lastRunUuid: checkRun.uuid })),
+					skipDuplicates: true,
+				})
+				: [];
+			// Увиденные снова без изменений — одним UPDATE; целиком — только изменившиеся и вернувшиеся.
+			const exByUuid = new Map(existing.map((e) => [e.uuid, e]));
+			const { touch, full } = splitSeenUpdates(plan.update, exByUuid);
+			if (touch.length) await tx.checkFinding.updateMany({ where: { uuid: { in: touch } }, data: { lastSeenAt: now, lastRunUuid: checkRun.uuid } });
+			const reopened = [];
+			for (const u of full) {
+				const updated = await tx.checkFinding.update({
+					where: { uuid: u.uuid },
+					data: {
+						severity: u.value.severity, title: u.value.title, factDate: u.value.factDate, amount: u.value.amount, data: u.value.data,
+						lastSeenAt: now, lastRunUuid: checkRun.uuid,
+						...(u.reopened ? { resolvedAt: null, reopenedCount: { increment: 1 }, candidateAt: null } : {}),
+					},
+				});
+				if (u.reopened) reopened.push({ updated, before: exByUuid.get(u.uuid) });
+			}
+			const resolved = plan.resolve.length
+				? (await tx.checkFinding.updateMany({ where: { uuid: { in: plan.resolve } }, data: { resolvedAt: now } })).count
+				: 0;
+			return { synced: true, created, seen: plan.update.length, reopened, resolved };
+		}, { maxWait: 10_000, timeout: 60_000 });
+
+		if (result.duplicate) {
+			// Повторная доставка той же посылки (ai повторяет отправку после сетевого сбоя): ответ
+			// 1С с тем же моментом чтения уже принят — второй прогон и второй раунд находок не нужны.
 			counters.duplicates = (counters.duplicates || 0) + 1;
 			continue;
 		}
-		const checkRun = await prisma.checkRun.create({
-			data: {
-				organizationUuid,
-				baseKey: body.baseKey || null,
-				checkCode: check,
-				checkVersion: Number.isInteger(data?.version) ? data.version : null,
-				scope: run.scope || null,
-				status,
-				truncated: !!data?.truncated,
-				total: Number.isFinite(data?.total) ? data.total : Array.isArray(data?.findings) ? data.findings.length : 0,
-				summary: data?.summary ?? undefined,
-				params: data?.params ?? req.params ?? undefined,
-				periodFrom: asDate(data?.from ?? req.from),
-				periodTo: asDate(data?.to ?? req.to),
-				onDate: asDate(data?.onDate ?? req.onDate),
-				errorCode: run.ok ? null : String(run.error?.code || "ERROR").slice(0, 100),
-				errorMessage: run.ok ? null : String(run.error?.message || "").slice(0, 2000),
-				skipReason: data?.skipReason ? String(data.skipReason).slice(0, 1000) : null,
-				durationMs: Number.isFinite(data?.durationMs) ? Math.round(data.durationMs) : null,
-				readAt,
-			},
-		});
 		counters.runs++;
-		if (!run.ok || status === "skipped") continue;
-
-		// Находки: нормализуем, отбрасывая кривые строки поштучно.
-		const incoming = [];
-		for (const raw of Array.isArray(data.findings) ? data.findings : []) {
-			const n = normalizeFinding(raw);
-			if (n.ok) incoming.push(n.value);
-			else counters.rejected++;
-		}
-		const existing = await prisma.checkFinding.findMany({
-			where: { organizationUuid, checkCode: check },
-			select: { uuid: true, fingerprint: true, resolvedAt: true, firstSeenAt: true },
-		});
-		const plan = planFindingsSync({ existing, incoming, complete: !data.truncated });
-		const now = new Date();
-		const created = [];
-		for (const f of plan.create) {
-			try {
-				created.push(await prisma.checkFinding.create({
-					data: { organizationUuid, checkCode: check, fingerprint: f.fingerprint, severity: f.severity, title: f.title, factDate: f.factDate, amount: f.amount, data: f.data, firstSeenAt: now, lastSeenAt: now, lastRunUuid: checkRun.uuid },
-				}));
-				counters.findingsNew++;
-			} catch (e) {
-				if (e?.code !== "P2002") throw e; // гонка двух приёмов — вторая уже записала
-			}
-		}
-		const exByUuid = new Map(existing.map((e) => [e.uuid, e]));
-		for (const u of plan.update) {
-			const ex = exByUuid.get(u.uuid);
-			const updated = await prisma.checkFinding.update({
-				where: { uuid: u.uuid },
-				data: {
-					severity: u.value.severity, title: u.value.title, factDate: u.value.factDate, amount: u.value.amount, data: u.value.data,
-					lastSeenAt: now, lastRunUuid: checkRun.uuid,
-					...(u.reopened ? { resolvedAt: null, reopenedCount: { increment: 1 }, candidateAt: null } : {}),
-				},
-			});
-			counters.findingsSeen++;
-			if (u.reopened) {
-				counters.findingsReopened++;
-				await onFindingReopened(updated, ex, settings);
-			}
-		}
-		if (plan.resolve.length) {
-			const r = await prisma.checkFinding.updateMany({ where: { uuid: { in: plan.resolve } }, data: { resolvedAt: now } });
-			counters.findingsResolved += r.count;
-		}
+		if (!result.synced) continue;
+		counters.findingsNew += result.created.length;
+		counters.findingsSeen += result.seen;
+		counters.findingsReopened += result.reopened.length;
+		counters.findingsResolved += result.resolved;
+		for (const { updated, before } of result.reopened) await onFindingReopened(updated, before, settings);
 		touched.add(check);
-		if (created.length) await detectSelfCheckViolations(organizationUuid, check, created);
+		if (result.created.length) await detectSelfCheckViolations(organizationUuid, check, result.created);
 	}
 
 	for (const snap of Array.isArray(body?.snapshots) ? body.snapshots : []) {
@@ -262,39 +288,64 @@ export async function runFindingCandidates(now = new Date()) {
 	const firm = await getFirmOrgSetting();
 	if (!firm) return undefined; // учёт качества не включён — см. runSlaJob
 	const settings = await getQualitySettings(firm);
-	const rows = await prisma.checkFinding.findMany({
-		where: { resolvedAt: null, candidateAt: null, severity: "error" },
-		take: 2000,
-		orderBy: { firstSeenAt: "asc" },
-	});
 	const work = await getWorkOptions(settings);
+	/*
+	 * Н6 аудита 26.09. Было: первые 2000 находок по firstSeenAt всех организаций установки, на каждую
+	 * — поиск ответственного, фирмы и запись. У клиента без ответственного отметка candidateAt не
+	 * ставилась, и те же 2000 самых старых находок перебирались вечно, а новые не доходили никогда.
+	 * Стало: только клиенты фирмы; обход всех находок страницами по id; ответственный и фирма — один
+	 * запрос на клиента и сотрудника за тик; сигнал «нет ответственного» — один на клиента.
+	 */
+	const { orgUuids } = await firmScope(firm, await loadGroups(firm), now);
+	const responsibleOf = new Map();
+	const firmOf = new Map();
+	const noResponsible = new Map(); // клиент → задача по находкам (для ссылки в сигнале)
 	let created = 0;
-	for (const f of rows) {
-		if (exceptionActive(f, now)) continue;
-		const days = findingDeadlineDays(f.checkCode, settings);
-		const due = work ? addWorkingDays(f.firstSeenAt, days, work) : new Date(new Date(f.firstSeenAt).getTime() + days * 86_400_000);
-		if (now.getTime() < due.getTime()) continue;
-		const item = standardItemFor(f.checkCode, f);
-		if (!item) continue;
-		const responsible = await responsibleForClient(f.organizationUuid);
-		// Ответственного нет — кандидата некому адресовать (нарушение без нарушителя не бывает). Главбух
-		// группы (или администратор) получает сигнал назначить ответственного; правило вернётся к
-		// находке на следующем круге, когда он появится.
-		if (!responsible) {
-			await notifyNoResponsible(f.organizationUuid, f.todoUuid);
-			continue;
-		}
-		const c = await createCandidate({
-			userUuid: responsible, itemNumber: item, rule: "finding_overdue", ruleKey: `finding:${f.uuid}`,
-			firmOrgUuid: await firmOrgForUser(responsible),
-			clientOrganizationUuid: f.organizationUuid,
-			occurredAt: new Date(new Date(f.firstSeenAt).getTime() + days * 86_400_000),
-			description: `Не отработана за ${days} дн. находка проверки учёта «${checkTitle(f.checkCode)}»: ${f.title}`,
-			evidence: [{ kind: "finding", uuid: f.uuid, label: f.title, checkCode: f.checkCode, todoUuid: f.todoUuid }],
+	let after = 0;
+	for (;;) {
+		const rows = await prisma.checkFinding.findMany({
+			where: { organizationUuid: { in: orgUuids }, resolvedAt: null, candidateAt: null, severity: "error", id: { gt: after } },
+			orderBy: { id: "asc" },
+			take: FINDINGS_PAGE,
 		});
-		await prisma.checkFinding.update({ where: { uuid: f.uuid }, data: { candidateAt: now } });
-		if (c) created++;
+		if (!rows.length) break;
+		after = rows[rows.length - 1].id;
+		const have = await existingRuleKeys(rows.map((f) => `finding:${f.uuid}`));
+		const marked = [];
+		for (const f of rows) {
+			if (exceptionActive(f, now)) continue;
+			const days = findingDeadlineDays(f.checkCode, settings);
+			const due = work ? addWorkingDays(f.firstSeenAt, days, work) : new Date(new Date(f.firstSeenAt).getTime() + days * 86_400_000);
+			if (now.getTime() < due.getTime()) continue;
+			const item = standardItemFor(f.checkCode, f);
+			if (!item) continue;
+			if (!responsibleOf.has(f.organizationUuid)) responsibleOf.set(f.organizationUuid, await responsibleForClient(f.organizationUuid));
+			const responsible = responsibleOf.get(f.organizationUuid);
+			// Ответственного нет — кандидата некому адресовать (нарушение без нарушителя не бывает). Главбух
+			// группы (или администратор) получает сигнал назначить ответственного; правило вернётся к
+			// находке на следующем круге, когда он появится.
+			if (!responsible) {
+				if (!noResponsible.has(f.organizationUuid)) noResponsible.set(f.organizationUuid, f.todoUuid);
+				continue;
+			}
+			if (!have.has(`finding:${f.uuid}`)) {
+				if (!firmOf.has(responsible)) firmOf.set(responsible, await firmOrgForUser(responsible));
+				const c = await createCandidate({
+					userUuid: responsible, itemNumber: item, rule: "finding_overdue", ruleKey: `finding:${f.uuid}`,
+					firmOrgUuid: firmOf.get(responsible),
+					clientOrganizationUuid: f.organizationUuid,
+					occurredAt: new Date(new Date(f.firstSeenAt).getTime() + days * 86_400_000),
+					description: `Не отработана за ${days} дн. находка проверки учёта «${checkTitle(f.checkCode)}»: ${f.title}`,
+					evidence: [{ kind: "finding", uuid: f.uuid, label: f.title, checkCode: f.checkCode, todoUuid: f.todoUuid }],
+				});
+				if (c) created++;
+			}
+			marked.push(f.uuid);
+		}
+		if (marked.length) await prisma.checkFinding.updateMany({ where: { uuid: { in: marked } }, data: { candidateAt: now } });
+		if (rows.length < FINDINGS_PAGE) break;
 	}
+	for (const [org, todoUuid] of noResponsible) await notifyNoResponsible(org, todoUuid);
 	return created ? `кандидатов по находкам: ${created}` : undefined;
 }
 
@@ -310,8 +361,12 @@ async function notifyNoResponsible(organizationUuid, todoUuid = null) {
 		if (firm) to = (await prisma.accessRight.findMany({ where: { organizationUuid: firm, role: "admin" }, select: { userUuid: true } })).map((a) => a.userUuid);
 	}
 	if (!to.length) return;
-	const name = (await orgNames([organizationUuid])).get(organizationUuid) ?? "клиент";
 	const day = new Date().toISOString().slice(0, 10);
+	// Раз в сутки на клиента: уже уведомлённым повторно не пишем (dedupBatch.js), а не ловим P2002.
+	const dedupKey = `no-responsible:${organizationUuid}:${day}`;
+	to = freshRecipients(to, dedupKey, await sentNotificationKeys(manyKeys(to, dedupKey)));
+	if (!to.length) return;
+	const name = (await orgNames([organizationUuid])).get(organizationUuid) ?? "клиент";
 	await notifyMany(to, {
 		kind: "no_responsible",
 		title: `Нет ответственного бухгалтера: ${name}`,
@@ -320,7 +375,7 @@ async function notifyNoResponsible(organizationUuid, todoUuid = null) {
 			: "Клиент не входит ни в одну группу сотрудников: добавьте его в группу и назначьте ответственного.",
 		link: todoUuid ? { endpoint: "todos", uuid: todoUuid } : { pane: "StaffGroupsList" },
 		organizationUuid,
-		dedupKey: `no-responsible:${organizationUuid}:${day}`,
+		dedupKey,
 	});
 }
 

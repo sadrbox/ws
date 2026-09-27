@@ -134,7 +134,8 @@ export class OnecRegistry {
 	}
 
 	/** Где встречается пользователь — ответ на «покажи его во всех базах». */
-	async findUser(name: string): Promise<UserOccurrence[]> {
+	/** `serverIds` — только базы этих серверов (видимость C11, аудит 26.09); null — все. */
+	async findUser(name: string, serverIds?: readonly string[] | null): Promise<UserOccurrence[]> {
 		const r = await this.db.query<{
 			key: string; base_name: string; server_name: string;
 			full_name: string; disabled: boolean; roles: string[]; seen_at: Date;
@@ -144,9 +145,9 @@ export class OnecRegistry {
 			   FROM base_users u
 			   JOIN bases b ON b.id = u.base_id
 			   JOIN servers s ON s.id = b.server_id
-			  WHERE lower(u.name) = lower($1)
+			  WHERE lower(u.name) = lower($1) AND ($2::uuid[] IS NULL OR b.server_id = ANY($2::uuid[]))
 			  ORDER BY s.name, b.key`,
-			[name],
+			[name, serverIds ?? null],
 		);
 		return r.rows.map((x) => ({
 			baseKey: x.key, baseName: x.base_name, serverName: x.server_name,
@@ -162,16 +163,16 @@ export class OnecRegistry {
 	 * УЖЕ видели: ролей в типовой конфигурации сотни, но реально назначают десяток, и для
 	 * выбора при создании пользователя этого достаточно. Работает без обращения к 1С.
 	 */
-	async knownRoles(baseKey?: string): Promise<{ name: string; users: number }[]> {
+	async knownRoles(baseKey?: string, serverIds?: readonly string[] | null): Promise<{ name: string; users: number }[]> {
 		const r = await this.db.query<{ name: string; users: string }>(
 			`SELECT role AS name, count(*)::text AS users
 			   FROM base_users u
 			   JOIN bases b ON b.id = u.base_id
 			   CROSS JOIN LATERAL jsonb_array_elements_text(u.roles) AS role
-			  WHERE ($1::text IS NULL OR b.key = $1)
+			  WHERE ($1::text IS NULL OR b.key = $1) AND ($2::uuid[] IS NULL OR b.server_id = ANY($2::uuid[]))
 			  GROUP BY role
 			  ORDER BY count(*) DESC, role`,
-			[baseKey ?? null],
+			[baseKey ?? null, serverIds ?? null],
 		);
 		return r.rows.map((x) => ({ name: x.name, users: Number(x.users) }));
 	}
@@ -184,14 +185,14 @@ export class OnecRegistry {
 	 * безопасное снятие от разрушительного и вынуждена либо запрещать всё, либо всё
 	 * разрешать. Считается по кэшу прочитанных пользователей, в 1С не ходит.
 	 */
-	async roleHolders(role: string): Promise<{ baseKey: string; users: number }[]> {
+	async roleHolders(role: string, serverIds?: readonly string[] | null): Promise<{ baseKey: string; users: number }[]> {
 		const r = await this.db.query<{ key: string; users: string }>(
 			`SELECT b.key, count(*)::text AS users
 			   FROM base_users u
 			   JOIN bases b ON b.id = u.base_id
-			  WHERE u.roles ? $1 AND NOT u.disabled
+			  WHERE u.roles ? $1 AND NOT u.disabled AND ($2::uuid[] IS NULL OR b.server_id = ANY($2::uuid[]))
 			  GROUP BY b.key`,
-			[role],
+			[role, serverIds ?? null],
 		);
 		return r.rows.map((x) => ({ baseKey: x.key, users: Number(x.users) }));
 	}
@@ -212,7 +213,9 @@ export class OnecRegistry {
 			        COALESCE(
 			          (SELECT array_agg(DISTINCT role ORDER BY role)
 			             FROM base_users u2, jsonb_array_elements_text(u2.roles) role
-			            WHERE lower(u2.name) = lower(min(base_users.name))),
+			            WHERE lower(u2.name) = lower(min(base_users.name))
+			              -- Роли — только из видимых баз (аудит 26.09): иначе сводка выдавала роли чужих серверов.
+			              AND ($1::uuid[] IS NULL OR u2.base_id IN (SELECT id FROM bases WHERE server_id = ANY($1::uuid[])))),
 			          ARRAY[]::text[]) AS roles
 			   FROM base_users
 			  WHERE $1::uuid[] IS NULL OR base_id IN (SELECT id FROM bases WHERE server_id = ANY($1::uuid[]))
@@ -231,7 +234,7 @@ export class OnecRegistry {
 	 * менял. Без неё вопрос «кто снял человеку права» остаётся без ответа, а на сотне
 	 * клиентских баз он рано или поздно задаётся.
 	 */
-	async userHistory(name: string, limit = 50): Promise<{
+	async userHistory(name: string, limit = 50, serverIds?: readonly string[] | null): Promise<{
 		type: string; baseKey: string | null; state: string; createdAt: string; error: string | null;
 	}[]> {
 		const r = await this.db.query<{
@@ -241,9 +244,10 @@ export class OnecRegistry {
 			   FROM commands
 			  WHERE type IN ('IB_CREATE_USER','IB_UPDATE_USER','IB_DELETE_USER')
 			    AND lower(payload->>'name') = lower($1)
+			    AND ($3::uuid[] IS NULL OR agent_id IN (SELECT id FROM agents WHERE server_id = ANY($3::uuid[])))
 			  ORDER BY created_at DESC
 			  LIMIT $2`,
-			[name, limit],
+			[name, limit, serverIds ?? null],
 		);
 		return r.rows.map((x) => ({
 			type: x.type, baseKey: x.base_key, state: x.state,

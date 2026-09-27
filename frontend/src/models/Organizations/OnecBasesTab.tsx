@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchOrganizationBases } from "src/services/onec/api";
-import { QueryError } from "src/models/OneCAdmin/shared";
+import { QueryError } from "src/models/OneCAdmin/sharedUi";
 import admin from "src/models/OneCAdmin/OneCAdmin.module.scss";
 
 const CHAT_LABEL: Record<string, string> = {

@@ -53,6 +53,16 @@ export function progressText(p: ChecklistRun["progress"] | null | undefined): st
 	return p.problems ? `${base} · ${translate("checklistRunProblems")}: ${p.problems}` : base;
 }
 
+/**
+ * Может ли пользователь подписать сданный чек-лист. `canReview` сервер отдаёт по роли (проверяющий,
+ * главбух клиента, администратор), но подпись исполнителя сервер отклоняет всегда — «подписывает
+ * главбух, не исполнитель». Главбух или админ, создавший чек-лист без ответственного, сам стал
+ * исполнителем: кнопка «Подписать» вела его к 403 (И24 аудита 26.09).
+ */
+export function canSignRun(run: Pick<ChecklistRun, "canReview" | "executorUuid"> | null | undefined, myUuid: string): boolean {
+	return !!run?.canReview && (!myUuid || run.executorUuid !== myUuid);
+}
+
 /** Сколько пунктов ещё не отмечено: сдать главбуху можно только при нуле. */
 export const pendingCount = (items: readonly Pick<ChecklistRunItem, "status">[] | null | undefined): number =>
 	(items ?? []).filter((i) => i.status === "pending").length;

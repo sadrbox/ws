@@ -10,7 +10,7 @@
 //   quality-attendance   — опоздания и отсутствие без согласования (пп. 32–34).
 import { prisma } from "../../prisma/prisma-client.js";
 import { getQualitySettings, getFirmOrgSetting } from "./settings.js";
-import { overdueItemFor } from "./taskRules.js";
+import { overdueItemFor, deadlineDueAt } from "./taskRules.js";
 import { loadGroups, chiefsOf, managersOf, firmOrgForUser, userNames } from "./access.js";
 import { createCandidate } from "./violations.js";
 import { notifyUser, notifyMany } from "./notify.js";
@@ -20,14 +20,46 @@ import { localParts, addDaysYmd } from "./time.js";
 import { evaluateDay } from "./attendanceRules.js";
 import { getWorkOptions, getDayKind } from "./calendar.js";
 import { workingDaysBetween } from "./workTime.js";
+import { firmScope, todoScopeWhere } from "./scope.js";
+import { sentNotificationKeys, existingRuleKeys, manyKeys, freshRecipients } from "./dedupBatch.js";
+import { orgTimeZone, localDateOf } from "../periodBounds.js";
 
 export { runFindingCandidates } from "./checks.js";
 
 const DAY = 86_400_000;
+const pad2 = (n) => String(n).padStart(2, "0");
+/** Местная дата момента «ГГГГ-ММ-ДД» — для текста кандидата. */
+const localYmd = (d, tz) => { const c = localDateOf(d, tz); return `${c.y}-${pad2(c.m)}-${pad2(c.d)}`; };
 const label = (t) => t.name || t.description?.slice(0, 80) || `#${t.id}`;
 const link = (t) => ({ endpoint: "todos", uuid: t.uuid });
 
-/** Правила по срокам задач. */
+/** Задач на страницу: правила идут по ВСЕМ подходящим задачам постранично (Н6 аудита 26.09). */
+export const SLA_PAGE = 200;
+
+/**
+ * Все задачи по условию — страницами по возрастанию id (ключевой обход без OFFSET). Раньше было
+ * `take: 1000` без сортировки: задачи сверх тысячи не обрабатывались никогда, а какие именно
+ * попадут в тысячу, решал план запроса.
+ */
+async function* todoPages(where, pageSize = SLA_PAGE) {
+	let after = 0;
+	for (;;) {
+		const rows = await prisma.todo.findMany({ where: { ...where, id: { gt: after } }, orderBy: { id: "asc" }, take: pageSize });
+		if (!rows.length) return;
+		yield rows;
+		if (rows.length < pageSize) return;
+		after = rows[rows.length - 1].id;
+	}
+}
+
+/**
+ * Правила по срокам задач.
+ *
+ * ОХВАТ — задачи фирмы и её клиентов (scope.js), а не всей установки. ДУБЛИ — ключи уже сделанного
+ * (кандидаты, уведомления) проверяются одним запросом на страницу (dedupBatch.js), и записывается
+ * только новое: повторный тик по тем же просрочкам — это три-четыре SELECT на страницу, а не тысячи
+ * упавших INSERT в журнале PostgreSQL.
+ */
 export async function runSlaJob(now = new Date()) {
 	const firm = await getFirmOrgSetting();
 	// Учёт качества включается назначением организации-фирмы («Качество → Настройки»): до этого
@@ -35,94 +67,131 @@ export async function runSlaJob(now = new Date()) {
 	if (!firm) return undefined;
 	const settings = await getQualitySettings(firm);
 	const work = await getWorkOptions(settings);
+	const tz = orgTimeZone(firm);
 	// Дни просрочки и простоя — рабочие: выходные и праздники не «копят» просрочку и простой.
 	const daysSince = (from) => (work ? workingDaysBetween(from, now, work) : Math.floor((now.getTime() - new Date(from).getTime()) / DAY));
 	const statuses = await loadStatuses();
 	const finals = statuses.filter((s) => s.isFinal).map((s) => s.code);
 	const waiting = statuses.filter((s) => s.isWaiting).map((s) => s.code);
-	const groups = await loadGroups(null);
-	const open = { deletedAt: null, status: { notIn: finals.length ? finals : ["done", "cancelled"] } };
+	// Группы — только фирмы: главбухи и руководители чужих организаций установки здесь ни при чём.
+	const groups = await loadGroups(firm);
+	const inScope = todoScopeWhere(await firmScope(firm, groups, now));
+	const open = { deletedAt: null, status: { notIn: finals.length ? finals : ["done", "cancelled"] }, AND: [inScope] };
 	let candidates = 0;
 	let signals = 0;
 
 	// 1. Обращения клиента, не принятые к сроку реакции — п. 3.
-	const unaccepted = await prisma.todo.findMany({
-		where: { ...open, kind: "client_request", acceptedAt: null, reactionDueAt: { lt: now } },
-		take: 500,
-	});
-	for (const t of unaccepted) {
-		if (t.executorUuid) {
-			const c = await createCandidate({
-				userUuid: t.executorUuid, itemNumber: 3, rule: "sla_reaction", ruleKey: `sla_reaction:${t.uuid}`,
-				clientOrganizationUuid: t.organizationUuid, occurredAt: t.reactionDueAt,
-				description: `Обращение клиента не принято в работу к сроку реакции (${t.reactionDueAt.toISOString().slice(0, 16).replace("T", " ")} UTC): «${label(t)}»`,
-				evidence: [{ kind: "todo", uuid: t.uuid, label: label(t) }],
-			});
-			if (c) candidates++;
+	for await (const page of todoPages({ ...open, kind: "client_request", acceptedAt: null, reactionDueAt: { lt: now } })) {
+		const chiefsBy = new Map();
+		for (const t of page) chiefsBy.set(t.uuid, t.executorUuid ? await chiefsOf(t.executorUuid, groups) : chiefsForClient(groups, t.organizationUuid));
+		const [haveRule, sent] = await Promise.all([
+			existingRuleKeys(page.filter((t) => t.executorUuid).map((t) => `sla_reaction:${t.uuid}`)),
+			sentNotificationKeys(page.flatMap((t) => manyKeys(chiefsBy.get(t.uuid), `sla:${t.uuid}`))),
+		]);
+		for (const t of page) {
+			if (t.executorUuid && !haveRule.has(`sla_reaction:${t.uuid}`)) {
+				const c = await createCandidate({
+					userUuid: t.executorUuid, itemNumber: 3, rule: "sla_reaction", ruleKey: `sla_reaction:${t.uuid}`,
+					clientOrganizationUuid: t.organizationUuid, occurredAt: t.reactionDueAt,
+					description: `Обращение клиента не принято в работу к сроку реакции (${t.reactionDueAt.toISOString().slice(0, 16).replace("T", " ")} UTC): «${label(t)}»`,
+					evidence: [{ kind: "todo", uuid: t.uuid, label: label(t) }],
+				});
+				if (c) candidates++;
+			}
+			// Без исполнителя — обращение повисло «ничьим»: сигнал ответственным главбухам.
+			const to = freshRecipients(chiefsBy.get(t.uuid), `sla:${t.uuid}`, sent);
+			if (to.length) signals += (await notifyMany(to, { kind: "sla", title: `Обращение без реакции: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `sla:${t.uuid}` })).length;
 		}
-		// Без исполнителя — обращение повисло «ничьим»: сигнал ответственным главбухам.
-		const chiefs = t.executorUuid ? await chiefsOf(t.executorUuid, groups) : chiefsForClient(groups, t.organizationUuid);
-		signals += (await notifyMany(chiefs, { kind: "sla", title: `Обращение без реакции: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `sla:${t.uuid}` })).length;
 	}
 
 	// 2. Просрочки: п. 20 (срок), п. 35 (поручение руководителя), п. 5 (проверка исправления).
-	const overdue = await prisma.todo.findMany({ where: { ...open, deadline: { lt: now }, executorUuid: { not: null } }, take: 1000 });
-	for (const t of overdue) {
-		const item = overdueItemFor(t.kind);
-		if (item) {
-			const c = await createCandidate({
-				userUuid: t.executorUuid, itemNumber: item, rule: `overdue_${t.kind}`, ruleKey: `overdue:${t.uuid}`,
-				clientOrganizationUuid: t.organizationUuid, occurredAt: t.deadline,
-				description: `${t.kind === "manager_order" ? "Поручение руководителя" : t.kind === "control" ? "Проверка исправления ошибки" : "Задача"} не выполнена в срок (${t.deadline.toISOString().slice(0, 10)}): «${label(t)}»`,
-				evidence: [{ kind: "todo", uuid: t.uuid, label: label(t) }],
-			});
-			if (c) candidates++;
+	// Отбор в базе — по записанному сроку (грубый); истёк ли он — по deadlineDueAt (taskRules.js): срок
+	// голой датой (00:00Z) действует до конца местного дня, а не до 05:00 утра по Алматы.
+	for await (const page of todoPages({ ...open, deadline: { lt: now }, executorUuid: { not: null } })) {
+		const watchers = await prisma.todoWatcher.findMany({ where: { todoUuid: { in: page.map((t) => t.uuid) } }, select: { todoUuid: true, userUuid: true } });
+		const plan = [];
+		for (const t of page) {
+			const due = deadlineDueAt(t.deadline, tz);
+			if (!(due < now)) continue; // срок «сегодня» ещё идёт
+			const chiefs = await chiefsOf(t.executorUuid, groups);
+			const late = daysSince(due) >= settings.escalation.overdueToManagerDays;
+			const managers = late ? await managersOf(t.executorUuid, groups) : [];
+			plan.push({ t, due, item: overdueItemFor(t.kind), chiefs, late, managers, watchers: watchers.filter((w) => w.todoUuid === t.uuid).map((w) => w.userUuid) });
 		}
-		// Эскалация: главбух — сразу, руководитель — через N дней просрочки.
-		const chiefs = await chiefsOf(t.executorUuid, groups);
-		signals += (await notifyMany(chiefs, { kind: "overdue", title: `Просрочена задача: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `overdue-chief:${t.uuid}` })).length;
-		let level = Math.max(t.escalationLevel || 0, chiefs.length ? 1 : 0);
-		if (daysSince(t.deadline) >= settings.escalation.overdueToManagerDays) {
-			const managers = await managersOf(t.executorUuid, groups);
-			signals += (await notifyMany(managers, { kind: "overdue", title: `Просрочка дольше ${settings.escalation.overdueToManagerDays} дн.: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `overdue-manager:${t.uuid}` })).length;
-			if (managers.length) level = Math.max(level, 2);
+		const [haveRule, sent] = await Promise.all([
+			existingRuleKeys(plan.filter((p) => p.item).map((p) => `overdue:${p.t.uuid}`)),
+			sentNotificationKeys(plan.flatMap((p) => [
+				...manyKeys(p.chiefs, `overdue-chief:${p.t.uuid}`),
+				...manyKeys(p.managers, `overdue-manager:${p.t.uuid}`),
+				...manyKeys(p.watchers, `watch-overdue:${p.t.uuid}`),
+			])),
+		]);
+		for (const { t, due, item, chiefs, late, managers, watchers: ws } of plan) {
+			if (item && !haveRule.has(`overdue:${t.uuid}`)) {
+				const c = await createCandidate({
+					userUuid: t.executorUuid, itemNumber: item, rule: `overdue_${t.kind}`, ruleKey: `overdue:${t.uuid}`,
+					clientOrganizationUuid: t.organizationUuid, occurredAt: due,
+					description: `${t.kind === "manager_order" ? "Поручение руководителя" : t.kind === "control" ? "Проверка исправления ошибки" : "Задача"} не выполнена в срок (${localYmd(due, tz)}): «${label(t)}»`,
+					evidence: [{ kind: "todo", uuid: t.uuid, label: label(t) }],
+				});
+				if (c) candidates++;
+			}
+			// Эскалация: главбух — сразу, руководитель — через N дней просрочки.
+			const toChiefs = freshRecipients(chiefs, `overdue-chief:${t.uuid}`, sent);
+			if (toChiefs.length) signals += (await notifyMany(toChiefs, { kind: "overdue", title: `Просрочена задача: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `overdue-chief:${t.uuid}` })).length;
+			let level = Math.max(t.escalationLevel || 0, chiefs.length ? 1 : 0);
+			if (late) {
+				const toManagers = freshRecipients(managers, `overdue-manager:${t.uuid}`, sent);
+				if (toManagers.length) signals += (await notifyMany(toManagers, { kind: "overdue", title: `Просрочка дольше ${settings.escalation.overdueToManagerDays} дн.: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `overdue-manager:${t.uuid}` })).length;
+				if (managers.length) level = Math.max(level, 2);
+			}
+			if (level !== (t.escalationLevel || 0)) {
+				await prisma.todo.update({ where: { uuid: t.uuid }, data: { escalationLevel: level, escalatedAt: now } });
+				await logEvent(t.uuid, { type: "escalation", channel: "system", payload: { level } });
+			}
+			// п. 22: передавший задачу — наблюдатель; просрочка у преемника — сигнал ему.
+			const toWatchers = freshRecipients(ws, `watch-overdue:${t.uuid}`, sent);
+			if (toWatchers.length) signals += (await notifyMany(toWatchers, { kind: "watch", title: `Переданная вами задача просрочена: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `watch-overdue:${t.uuid}` })).length;
 		}
-		if (level !== (t.escalationLevel || 0)) {
-			await prisma.todo.update({ where: { uuid: t.uuid }, data: { escalationLevel: level, escalatedAt: now } });
-			await logEvent(t.uuid, { type: "escalation", channel: "system", payload: { level } });
-		}
-		// п. 22: передавший задачу — наблюдатель; просрочка у преемника — сигнал ему.
-		const watchers = await prisma.todoWatcher.findMany({ where: { todoUuid: t.uuid }, select: { userUuid: true } });
-		signals += (await notifyMany(watchers.map((w) => w.userUuid), { kind: "watch", title: `Переданная вами задача просрочена: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `watch-overdue:${t.uuid}` })).length;
 	}
 
 	// 3. Ожидание с наступившей датой контроля — напоминание исполнителю.
 	if (waiting.length) {
-		const due = await prisma.todo.findMany({ where: { deletedAt: null, status: { in: waiting }, nextControlAt: { lt: now } }, take: 500 });
-		for (const t of due) {
-			const n = await notifyUser(t.executorUuid, { kind: "control_date", title: `Дата контроля наступила: ${label(t)}`, body: "Задача ждёт клиента или контрагента — пора проверить и продвинуть.", link: link(t), organizationUuid: t.organizationUuid, dedupKey: `control-date:${t.uuid}:${t.nextControlAt.toISOString()}` });
-			if (n) {
-				signals++;
-				await logEvent(t.uuid, { type: "control_date", channel: "system" });
+		for await (const page of todoPages({ deletedAt: null, status: { in: waiting }, nextControlAt: { lt: now }, executorUuid: { not: null }, AND: [inScope] })) {
+			const keyOf = (t) => `control-date:${t.uuid}:${t.nextControlAt.toISOString()}`;
+			const sent = await sentNotificationKeys(page.map(keyOf));
+			for (const t of page) {
+				if (sent.has(keyOf(t))) continue;
+				const n = await notifyUser(t.executorUuid, { kind: "control_date", title: `Дата контроля наступила: ${label(t)}`, body: "Задача ждёт клиента или контрагента — пора проверить и продвинуть.", link: link(t), organizationUuid: t.organizationUuid, dedupKey: keyOf(t) });
+				if (n) {
+					signals++;
+					await logEvent(t.uuid, { type: "control_date", channel: "system" });
+				}
 			}
 		}
 	}
 
 	// 4. Без движения: напоминание исполнителю, дольше — сигнал главбуху (пп. 21, 40).
 	const idleSince = new Date(now.getTime() - settings.escalation.idleDays * DAY);
-	const idle = await prisma.todo.findMany({
-		where: { ...open, ...(waiting.length ? { status: { notIn: [...finals, ...waiting] } } : {}), executorUuid: { not: null }, lastActivityAt: { lt: idleSince } },
-		take: 500,
-	});
-	for (const t of idle) {
-		// Отбор выше — календарный (грубый); здесь — рабочие дни: «три дня без движения» после
-		// выходных — это пятница, суббота, воскресенье, а не повод напоминать в понедельник утром.
-		const idleDays = daysSince(t.lastActivityAt);
-		if (idleDays < settings.escalation.idleDays) continue;
-		signals += (await notifyUser(t.executorUuid, { kind: "idle", title: `Задача без движения ${idleDays} дн.: ${label(t)}`, body: "Если не получается — нажмите «Нужна помощь»: это не нарушение, а своевременная эскалация.", link: link(t), organizationUuid: t.organizationUuid, dedupKey: `idle:${t.uuid}:${t.lastActivityAt.toISOString()}` })) ? 1 : 0;
-		if (idleDays >= settings.escalation.idleToChiefDays && !t.helpRequestedAt) {
-			const chiefs = await chiefsOf(t.executorUuid, groups);
-			signals += (await notifyMany(chiefs, { kind: "idle", title: `Задача без движения ${idleDays} дн., помощь не запрошена: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: `idle-chief:${t.uuid}:${t.lastActivityAt.toISOString()}` })).length;
+	const idleWhere = { ...open, ...(waiting.length ? { status: { notIn: [...finals, ...waiting] } } : {}), executorUuid: { not: null }, lastActivityAt: { lt: idleSince } };
+	for await (const page of todoPages(idleWhere)) {
+		const plan = [];
+		for (const t of page) {
+			// Отбор выше — календарный (грубый); здесь — рабочие дни: «три дня без движения» после
+			// выходных — это пятница, суббота, воскресенье, а не повод напоминать в понедельник утром.
+			const idleDays = daysSince(t.lastActivityAt);
+			if (idleDays < settings.escalation.idleDays) continue;
+			const stamp = t.lastActivityAt.toISOString();
+			const chiefs = idleDays >= settings.escalation.idleToChiefDays && !t.helpRequestedAt ? await chiefsOf(t.executorUuid, groups) : [];
+			plan.push({ t, idleDays, own: `idle:${t.uuid}:${stamp}`, chiefBase: `idle-chief:${t.uuid}:${stamp}`, chiefs });
+		}
+		const sent = await sentNotificationKeys(plan.flatMap((p) => [p.own, ...manyKeys(p.chiefs, p.chiefBase)]));
+		for (const { t, idleDays, own, chiefBase, chiefs } of plan) {
+			if (!sent.has(own)) {
+				signals += (await notifyUser(t.executorUuid, { kind: "idle", title: `Задача без движения ${idleDays} дн.: ${label(t)}`, body: "Если не получается — нажмите «Нужна помощь»: это не нарушение, а своевременная эскалация.", link: link(t), organizationUuid: t.organizationUuid, dedupKey: own })) ? 1 : 0;
+			}
+			const toChiefs = freshRecipients(chiefs, chiefBase, sent);
+			if (toChiefs.length) signals += (await notifyMany(toChiefs, { kind: "idle", title: `Задача без движения ${idleDays} дн., помощь не запрошена: ${label(t)}`, link: link(t), organizationUuid: t.organizationUuid, dedupKey: chiefBase })).length;
 		}
 	}
 	return candidates || signals ? `кандидатов: ${candidates}, сигналов: ${signals}` : undefined;
@@ -242,6 +311,10 @@ export default { runSlaJob, runScheduledTasks, runAttendanceJob };
 export const ANNOUNCE_KEY = "quality.announce.tasks-2026-09-25";
 
 export async function runAnnouncement(now = new Date()) {
+	// Как и остальные правила стандарта — только после назначения организации-фирмы (Н6 аудита 26.09):
+	// иначе объявление о правилах уходило бы на установке, где учёт качества не включён, и флаг
+	// «уже объявлено» съедал бы рассылку к моменту, когда стандарт действительно введут.
+	if (!(await getFirmOrgSetting())) return undefined;
 	const done = await prisma.appSetting.findUnique({ where: { key: ANNOUNCE_KEY }, select: { value: true } });
 	if (done?.value) return undefined;
 	const since = new Date(now.getTime() - 90 * DAY);

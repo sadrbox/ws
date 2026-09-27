@@ -31,7 +31,7 @@ export const KnRowsEditor: FC<Props> = ({ rows, onChange, disabled = false, name
 
 	const readFile = useCallback(async (file: File) => {
 		try {
-			const result = mapKnSheet(readWorkbookAoa(await file.arrayBuffer()));
+			const result = mapKnSheet(await readWorkbookAoa(await file.arrayBuffer()));
 			if (result.noHeader) {
 				setNotices([{ type: "error", text: translate("knImportNoHeader") }]);
 				return;

@@ -55,38 +55,42 @@ export class EnrollmentStore {
 	}
 
 	/**
-	 * Новая заявка или повтор нерешённой с того же компьютера и службы — та же заявка и тот же код. Секрет опроса
-	 * выдаётся новый, прежний перестаёт действовать (как у заявки базы: два действующих секрета — два получателя).
+	 * Новая заявка или повтор нерешённой.
+	 *
+	 * ПОВТОР — ТОЛЬКО С ПРЕЖНИМ СЕКРЕТОМ (Б11 аудита 26.09). Раньше повтор с того же компьютера и службы находил
+	 * ожидающую заявку по одним лишь именам (их называет сам заявитель, служба по умолчанию — «BPAPIAgent») и
+	 * перезаписывал в ней секрет опроса и роль при прежнем коде. Оператор одобрял по коду, который продиктовал
+	 * настоящий агент, а токен (при роли admin — с паролями баз) забирал тот, кто повторил заявку последним.
+	 * Теперь заявку меняет только тот, кто предъявил её секрет опроса (`secret`); остальные получают НОВУЮ
+	 * заявку с новым кодом, а прежняя остаётся как была. Какая из двух — решает код, продиктованный человеком.
 	 */
-	async submit(input: EnrollmentInput, ip: string | null): Promise<{ row: EnrollmentRow; secret: string; repeated: boolean }> {
+	async submit(input: EnrollmentInput, ip: string | null, secret?: string | null): Promise<{ row: EnrollmentRow; secret: string; repeated: boolean }> {
 		await this.expire();
-		const secret = newPollSecret();
-		const again = await this.db.query<Raw>(
-			`UPDATE agent_enrollments
-			    SET secret_hash = $3, name = $4, role = $5, server_name = $6, version = $7, ip = $8, repeats = repeats + 1, updated_at = now()
-			  WHERE lower(computer) = lower($1) AND lower(service_name) = lower($2) AND state = 'PENDING'
-			  RETURNING ${COLS}`,
-			[input.computer, input.serviceName, sha256(secret), input.name, input.role, input.serverName ?? null, input.version ?? null, ip],
-		);
-		if (again.rows[0]) return { row: toRow(again.rows[0]), secret, repeated: true };
+		const fresh = newPollSecret();
+		const presented = (secret ?? "").trim();
+		if (presented) {
+			const again = await this.db.query<Raw>(
+				`UPDATE agent_enrollments
+				    SET secret_hash = $3, name = $4, role = $5, server_name = $6, version = $7, ip = $8, repeats = repeats + 1, updated_at = now()
+				  WHERE lower(computer) = lower($1) AND lower(service_name) = lower($2) AND state = 'PENDING' AND secret_hash = $9
+				  RETURNING ${COLS}`,
+				[input.computer, input.serviceName, sha256(fresh), input.name, input.role, input.serverName ?? null, input.version ?? null, ip, sha256(presented)],
+			);
+			if (again.rows[0]) return { row: toRow(again.rows[0]), secret: fresh, repeated: true };
+		}
 		for (let attempt = 0; attempt < 8; attempt++) {
 			try {
 				const r = await this.db.query<Raw>(
 					`INSERT INTO agent_enrollments (id, code, secret_hash, computer, service_name, name, role, server_name, version, ip, expires_at)
 					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now() + make_interval(hours => $11::int))
 					 RETURNING ${COLS}`,
-					[randomUUID(), newRegistrationCode(), sha256(secret), input.computer, input.serviceName, input.name, input.role,
+					[randomUUID(), newRegistrationCode(), sha256(fresh), input.computer, input.serviceName, input.name, input.role,
 						input.serverName ?? null, input.version ?? null, ip, ENROLLMENT_TTL_HOURS],
 				);
-				return { row: toRow(r.rows[0]), secret, repeated: false };
+				return { row: toRow(r.rows[0]), secret: fresh, repeated: false };
 			} catch (e) {
+				// Совпал код с чужой нерешённой заявкой — берём другой.
 				if (!isUniqueViolation(e)) throw e;
-				const raced = await this.db.query<Raw>(
-					`UPDATE agent_enrollments SET secret_hash = $3, repeats = repeats + 1, updated_at = now()
-					  WHERE lower(computer) = lower($1) AND lower(service_name) = lower($2) AND state = 'PENDING' RETURNING ${COLS}`,
-					[input.computer, input.serviceName, sha256(secret)],
-				);
-				if (raced.rows[0]) return { row: toRow(raced.rows[0]), secret, repeated: true };
 			}
 		}
 		throw new Error("не удалось подобрать свободный код заявки");
@@ -131,15 +135,50 @@ export class EnrollmentStore {
 		return r.rows[0]?.agent_id ?? null;
 	}
 
+	/**
+	 * То же для списка заявок — ОДНИМ запросом (аудит 26.09): панель опрашивает список раз в 10 с, и по запросу на
+	 * каждую из трёхсот заявок это было N+1. Ключ — «компьютер + служба» в нижнем регистре.
+	 */
+	async previousAgents(rows: readonly { id: string; computer: string; serviceName: string }[]): Promise<Map<string, string>> {
+		const out = new Map<string, string>();
+		if (!rows.length) return out;
+		const r = await this.db.query<{ id: string; agent_id: string }>(
+			`SELECT x.id, p.agent_id
+			   FROM unnest($1::text[], $2::text[], $3::text[]) AS x(id, computer, service_name)
+			   JOIN LATERAL (
+			        SELECT e.agent_id FROM agent_enrollments e
+			         WHERE lower(e.computer) = lower(x.computer) AND lower(e.service_name) = lower(x.service_name)
+			           AND e.id::text <> x.id AND e.agent_id IS NOT NULL
+			         ORDER BY e.decided_at DESC NULLS LAST LIMIT 1) p ON true`,
+			[rows.map((x) => x.id), rows.map((x) => x.computer), rows.map((x) => x.serviceName)],
+		);
+		for (const x of r.rows) out.set(x.id, x.agent_id);
+		return out;
+	}
+
 	async approve(id: string, d: { organizationUuid: string; agentId: string; decidedBy: string; note?: string | null }): Promise<boolean> {
 		await this.expire();
-		const r = await this.db.query(
+		const r = await this.db.query<{ computer: string; service_name: string; code: string }>(
 			`UPDATE agent_enrollments SET state = 'APPROVED', organization_uuid = $2, agent_id = $3, decided_by = $4, note = $5,
 			        decided_at = now(), updated_at = now()
-			  WHERE id = $1 AND state = 'PENDING'`,
+			  WHERE id = $1 AND state = 'PENDING'
+			  RETURNING computer, service_name, code`,
 			[id, d.organizationUuid, d.agentId, d.decidedBy, d.note ?? null],
 		);
-		return (r.rowCount ?? 0) > 0;
+		const row = r.rows[0];
+		if (!row) return false;
+		/*
+		 * ОСТАЛЬНЫЕ ЗАЯВКИ ТОЙ ЖЕ СЛУЖБЫ — ЗАКРЫВАЕМ (Б11 аудита 26.09). Повтор без секрета заводит новую заявку, и
+		 * их у одной службы бывает две. Одобрена одна — вторую одобрить по ошибке значило бы отдать её подателю
+		 * того же агента с новым токеном (previousAgent), а только что одобренный токен умер бы.
+		 */
+		await this.db.query(
+			`UPDATE agent_enrollments SET state = 'REJECTED', decided_by = $4, decided_at = now(), updated_at = now(),
+			        note = 'Одобрена другая заявка этой службы (код ' || $5 || ')'
+			  WHERE lower(computer) = lower($1) AND lower(service_name) = lower($2) AND state = 'PENDING' AND id <> $3`,
+			[row.computer, row.service_name, id, d.decidedBy, row.code],
+		);
+		return true;
 	}
 
 	async reject(id: string, d: { decidedBy: string; note: string }): Promise<boolean> {

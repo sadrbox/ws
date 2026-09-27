@@ -7,6 +7,7 @@
 // не пишутся.
 
 import { Router, type Request, type RequestHandler } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import { z } from "zod";
 import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
@@ -24,6 +25,11 @@ export const enrollSchema = z.object({
 	serviceName: text(200).min(1),
 	computer: text(200).min(1),
 	version: text(100).nullable().optional(),
+	/**
+	 * Секрет опроса прежней заявки (Б11 аудита 26.09): повтор с ним обновляет ТУ ЖЕ заявку и код, без него —
+	 * новая заявка с новым кодом. Можно прислать и заголовком `X-Enrollment-Secret`, как при опросе.
+	 */
+	pollSecret: text(200).nullable().optional(),
 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,6 +46,8 @@ export function agentEnrollRouter(deps: {
 }) {
 	const { enrollments, agents, erp, audit, log } = deps;
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "подключение агента");
 	const byIp = rateLimit({
 		max: deps.perHour ?? 5, windowMs: 60 * 60_000, key: (req: Request) => `enroll-ip:${req.ip ?? "?"}`,
 		message: "Слишком много заявок на подключение с этого адреса — повторите через час",
@@ -58,7 +66,9 @@ export function agentEnrollRouter(deps: {
 			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: `Некорректная заявка: ${issue ? `${issue.path.join(".") || "тело"} — ${issue.message}` : "тело запроса"}` } });
 			return;
 		}
-		const { row, secret, repeated } = await enrollments.submit(p.data, req.ip ?? null);
+		const presented = String(req.headers["x-enrollment-secret"] ?? "").trim() || p.data.pollSecret || null;
+		const { pollSecret: _presented, ...input } = p.data;
+		const { row, secret, repeated } = await enrollments.submit(input, req.ip ?? null, presented);
 		await audit.write({
 			event: repeated ? "agent.enrollment.repeated" : "agent.enrollment.created",
 			details: { enrollmentId: row.id, code: row.code, name: row.name, role: row.role, computer: row.computer, serviceName: row.serviceName, ip: req.ip ?? null },

@@ -205,9 +205,31 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Interceptor: offline — при ошибке сети мутирующие запросы получают _offline заглушку
-// Фактическое сохранение в IndexedDB делает useFormStore / offlineDataService
+// Interceptor: offline — заглушка вместо сетевой ошибки ТОЛЬКО по явному запросу
 // ═══════════════════════════════════════════════════════════════════════════
+/**
+ * КОНТРАКТ ОФЛАЙН-ЗАГЛУШКИ (аудит 26.09, И2).
+ *
+ * Раньше при обрыве связи ЛЮБОЙ POST/PUT/DELETE получал «успех» 202 `{ _offline: true }`.
+ * Вызывающие его не проверяли: терминал писал «Реализация проведена» и очищал корзину,
+ * форма в транзакционном режиме (persistencePipe) принимала заглушку за сохранённую запись и
+ * помечалась «чистой» — а на сервере ничего не было. В очередь сам клиент НИЧЕГО не кладёт.
+ *
+ * Теперь:
+ *   • по умолчанию сетевой сбой мутирующего запроса — ОШИБКА (Promise.reject; её узнаёт
+ *     `isNetworkError` из services/networkUtils): экран показывает её как сбой;
+ *   • заглушку получает только тот, кто сам умеет отложить запрос и попросил её флагом
+ *     `offlineStub: true` в конфиге запроса (`{ offlineStub: true } as OfflineStubConfig`);
+ *   • заглушка несёт `_offline: true` и `queued: false`: «сервер не ответил, запрос НЕ выполнен
+ *     и никуда не поставлен» — отличить её от успеха можно функцией `isOfflineStubResponse`.
+ */
+export type OfflineStubConfig = AxiosRequestConfig & { offlineStub?: boolean };
+
+/** Данные ответа — офлайн-заглушка (сервер не ответил, запрос не выполнен). */
+export function isOfflineStubResponse(data: unknown): data is { _offline: true; queued: false; message: string } {
+	return !!data && typeof data === "object" && (data as { _offline?: unknown })._offline === true;
+}
+
 apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 	// Определяем ошибку сети
 	if (!isNetworkLikeError(error)) {
@@ -216,6 +238,11 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 
 	const config = error.config;
 	if (!config) return Promise.reject(error);
+
+	// Заглушка — только по явному запросу (см. контракт выше).
+	if (!(config as OfflineStubConfig).offlineStub) {
+		return Promise.reject(error);
+	}
 
 	// Если это retry-запрос из sync engine — не оборачиваем
 	if ((config as { _fromSyncEngine?: boolean })._fromSyncEngine) {
@@ -244,13 +271,12 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 		return Promise.reject(error);
 	}
 
-	// Возвращаем "успешный" ответ с offline-меткой,
-	// чтобы вызывающий код (useFormStore) обработал offline-сохранение
+	// Заглушка с offline-меткой: вызывающий код САМ решает, что делать (отложить запрос).
 	return {
 		data: {
 			_offline: true,
-			message:
-				"Данные сохранены локально. Синхронизация произойдёт при восстановлении связи.",
+			queued: false,
+			message: "Нет связи с сервером: запрос не выполнен.",
 		},
 		status: 202,
 		statusText: "Accepted (Offline)",

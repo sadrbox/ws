@@ -13,6 +13,7 @@
 // ХРАНИЛИЩЕ — БЕЗ МИГРАЦИИ: ключи в app_settings, как у тогглов модулей (T11.1). Установка
 // одна на базу, значений единицы — отдельная таблица тут ничего не добавила бы.
 import { getSettings, setSetting } from "./appSettings.js";
+import { onCacheInvalidate } from "./cacheBus.js";
 import { INSTALL_MODES, DEFAULT_MODE, normalizeMode, selfRegistrationAllowed } from "./installationModes.js";
 import crypto from "node:crypto";
 
@@ -33,9 +34,17 @@ let cache = null;
 let cachedAt = 0;
 const TTL_MS = 30_000;
 
+// Сброс уходит во все воркеры кластера (Н7 аудита 26.09): режим поменяли — остальные три воркера
+// не должны ещё 30 с пускать самостоятельную регистрацию по старому правилу.
+const broadcast = onCacheInvalidate("installation", () => {
+	cache = null;
+	cachedAt = 0;
+});
+
 export function invalidateInstallationCache() {
 	cache = null;
 	cachedAt = 0;
+	broadcast();
 }
 
 /**

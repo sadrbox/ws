@@ -192,6 +192,13 @@ export interface TableApi {
   focusContainer: () => void;
   /** Получить скролл-контейнер (для поиска DOM-элементов строк). */
   getScrollContainer: () => HTMLDivElement | null;
+  /**
+   * Отмеченные строки среди ВИДИМЫХ — по модели выбора (в т. ч. «выбраны все»), а не
+   * по DOM: виртуализация рисует не все строки (аудит 26.09, И12).
+   */
+  getSelectedIds: () => Set<number>;
+  /** Удалить отмеченное тем же путём, что кнопка «Удалить» (с переносом активной строки). */
+  deleteSelected: () => Promise<void>;
 }
 
 // ────────────────────────────────────────────────
@@ -620,7 +627,20 @@ const Table: FC<TableProps> = memo((props) => {
       return;
     }
     const el = c.querySelector<HTMLElement>('[data-active="true"]');
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (el) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return;
+    }
+    // Строки нет в DOM — она за виртуальным окном (End/Home/PgDn уводят далеко).
+    // Прокручиваем по ИНДЕКСУ (index × ROW_HEIGHT, как centerActiveRow): после
+    // прокрутки окно отрисует строку. Без этого активная строка уходила за экран.
+    const idx = rowsForCenterRef.current.findIndex((r) => r.id === activeRow);
+    if (idx < 0) return;
+    const headerH = c.querySelector('thead')?.getBoundingClientRect().height ?? 0;
+    const top = idx * ROW_HEIGHT;
+    const bottom = top + ROW_HEIGHT + headerH;
+    if (top < c.scrollTop) c.scrollTop = top;
+    else if (bottom > c.scrollTop + c.clientHeight) c.scrollTop = Math.max(0, bottom - c.clientHeight);
   }, [activeRow, centerActiveRow]);
 
   // Подсветка строки документа по uuid («Показать в списке» / после «Сохранить
@@ -654,6 +674,7 @@ const Table: FC<TableProps> = memo((props) => {
   }, [activeRow, activeCell]);
 
   // Императивный API для внешних оберток (SubTable и т.п.)
+  const handleDeleteClickRef = useRef<() => Promise<void>>(async () => { });
   useImperativeHandle(
     apiRef,
     () => ({
@@ -663,40 +684,49 @@ const Table: FC<TableProps> = memo((props) => {
       setActiveCell: (identifier) => setActiveCell(identifier),
       focusContainer: () => scrollRef.current?.focus(),
       getScrollContainer: () => scrollRef.current,
+      getSelectedIds: () => new Set(
+        rowsRef.current.map((r) => r.id).filter((id) => isRowSelected(selectionRef.current, id)),
+      ),
+      deleteSelected: () => handleDeleteClickRef.current(),
     }),
     [],
   );
 
-  // Клавиатурная навигация: ↑ / ↓ / Enter — только когда открыт список для выбора
-  useEffect(() => {
-    if (!onSelectItem) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const currentRows = rowsRef.current;
-      if (currentRows.length === 0) return;
+  // Клавиатурная навигация: ↑ / ↓ / Enter — только когда открыт список для выбора.
+  //
+  // Слушаем ОБЁРТКУ ЭТОЙ таблицы (onKeyDown ниже), а не window: все панели
+  // смонтированы разом, и слушатель на window перехватывал Enter и стрелки во всём
+  // приложении — в textarea других форм не вводился перевод строки, Enter в поле
+  // дочерней формы подставлял в лукап строку скрытого списка (аудит 26.09, И7).
+  // Обёртка включает строку быстрого поиска: набрал текст → ↓/Enter выбирают, как раньше.
+  const handleSelectKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!onSelectItemRef.current) return;
+    if (e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const target = e.target as HTMLElement | null;
+    // Кнопки тулбара, многострочный ввод и поля с собственным списком — не наши.
+    if (target instanceof HTMLButtonElement || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement || target?.isContentEditable
+      || target?.getAttribute('aria-expanded') === 'true') return;
+    const currentRows = rowsRef.current;
+    if (currentRows.length === 0) return;
 
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const currentActive = activeRowRef.current;
-        const row = currentRows.find(r => r.id === currentActive);
-        if (row) onSelectItemRef.current?.(row);
-        return;
-      }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const currentActive = activeRowRef.current;
+      const row = currentRows.find(r => r.id === currentActive);
+      if (row) onSelectItemRef.current?.(row);
+      return;
+    }
 
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveRow((prev: number | null): number | null => {
-          const idx = prev !== null ? currentRows.findIndex(r => r.id === prev) : -1;
-          if (e.key === 'ArrowDown') {
-            return currentRows[Math.min(Math.max(idx + 1, 0), currentRows.length - 1)].id;
-          } else {
-            return currentRows[Math.max(idx <= 0 ? 0 : idx - 1, 0)].id;
-          }
-        });
+    e.preventDefault();
+    setActiveRow((prev: number | null): number | null => {
+      const idx = prev !== null ? currentRows.findIndex(r => r.id === prev) : -1;
+      if (e.key === 'ArrowDown') {
+        return currentRows[Math.min(Math.max(idx + 1, 0), currentRows.length - 1)].id;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onSelectItem]);
+      return currentRows[Math.max(idx <= 0 ? 0 : idx - 1, 0)].id;
+    });
+  }, [setActiveRow]);
 
   // Текущие значения dateRange из фильтров
   const dateRangeFilter = filtering.filters?.dateRange as { startDate?: string; endDate?: string } | undefined;
@@ -818,6 +848,11 @@ const Table: FC<TableProps> = memo((props) => {
       pagination, sorting, filtering, search, extendedActions,
       hasNextPage, isFetchingNextPage,
       onInlineAdd, onDelete,
+      // canSelect зависит от onSelectionChange, inlineEditing — значение контекста: без них
+      // контекст держал первые значения (аудит 26.09, О8). renderCell в зависимости НЕ
+      // добавляем: строки читают его через renderCellRef (иначе инлайн-функция владельца
+      // перерисовывала бы все строки на каждый его рендер).
+      onSelectionChange, inlineEditing,
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
       expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
@@ -859,7 +894,10 @@ const Table: FC<TableProps> = memo((props) => {
   const rowIdentityRef = useRef<Map<number, string>>(new Map());
   useEffect(() => {
     const was = rowIdentityRef.current;
-    rowIdentityRef.current = rowIdentities(rows);
+    // Пустой набор (поиск без результатов, загрузка) карту НЕ затирает: иначе на пути
+    // [4 строки] → [] → [3 строки] ключи терялись, и отметка в списках с порядковыми id
+    // («Базы», «Сеансы») переезжала на чужую строку.
+    if (rows.length > 0) rowIdentityRef.current = rowIdentities(rows);
     const narrowedNow = narrowedRef.current;
     const nextSelected = remapSelection(selectedRows, was, rows, narrowedNow);
     if (nextSelected) setSelectedRows(nextSelected);
@@ -895,7 +933,8 @@ const Table: FC<TableProps> = memo((props) => {
     }
 
     if (effectiveIds.size === 0) return;
-    if (!onDelete) { alert('Удалить выбранные'); return; }
+    // Удаление не предусмотрено (кнопка скрыта) — ничего не делаем; alert() здесь был заглушкой.
+    if (!onDelete) return;
 
     // Узнаём, какие строки РЕАЛЬНО удалены. Если onDelete вернул deletedIds —
     // используем их (неудалённые, напр. документ-основание → 409, останутся
@@ -929,13 +968,15 @@ const Table: FC<TableProps> = memo((props) => {
     setExcludedRows(new Set());
     setActiveRow(nextActiveRow);
   }, [onDelete, selectedRows, rows, isAllSelectedMode, excludedRows, activeRow, setSelectedRows, setIsAllSelectedMode, setExcludedRows, setActiveRow]);
+  // Для императивного API (apiRef.deleteSelected): он объявлен раньше и стабилен.
+  handleDeleteClickRef.current = handleDeleteClick;
 
   // ── Клавиатурная навигация по таблице (Insert / Delete / Home / End /
   // PgUp / PgDn / ArrowUp / ArrowDown) ───────────────────────────────────
   // Обрабатывает события на контейнере скролла (tabIndex={0}). Срабатывает
   // только когда фокус на самом контейнере или на не-input элементе внутри
   // (чтобы не мешать вводу). Для select-режима (onSelectItem) стрелки/Enter
-  // продолжают работать через отдельный window-listener выше.
+  // продолжают работать через обработчик обёртки (handleSelectKeyDown) выше.
   const handleScrollKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement | null;
     // Не вмешиваемся, если фокус внутри редактируемого поля
@@ -947,8 +988,9 @@ const Table: FC<TableProps> = memo((props) => {
     // в списке, где создание и удаление скрыты как неприменимые (базы 1С заводит
     // кластер, а не панель), нажатие Delete на строке всё равно удаляло запись —
     // разрушающее действие без единой кнопки, которая бы о нём говорила.
-    const canCreate = variant !== 'select' && !isReadonly && !hideAddDelete && !hideAdd;
-    const canRemove = variant !== 'select' && !isReadonly && !hideAddDelete && !!onDelete;
+    // Погашенная кнопка (disableAdd, идёт загрузка) — тоже запрет (аудит 26.09, И8).
+    const canCreate = variant !== 'select' && !isReadonly && !hideAddDelete && !hideAdd && !disableAdd && !isLoading;
+    const canRemove = variant !== 'select' && !isReadonly && !hideAddDelete && !!onDelete && !isLoading;
     // Insert: создание новой строки/записи. Работает даже из input,
     // т.к. Insert обычно не используется внутри полей ввода.
     if (e.key === 'Insert') {
@@ -968,7 +1010,9 @@ const Table: FC<TableProps> = memo((props) => {
       return;
     }
     // ── Пробел: переключить выделение активной строки ───────────────────────
-    if (e.key === ' ' && variant !== 'select' && !selectionLocked && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
+    // Только если колонка отметок есть и чекбокс не погашен (как у самого чекбокса в TableBody).
+    const canToggle = variant !== 'select' && selectable && !selectionLocked && !isLoading && (!!onDelete || !!onSelectionChange);
+    if (e.key === ' ' && canToggle && activeCell === CHECKBOX_COL_ID && activeRow !== null) {
       e.preventDefault();
       e.stopPropagation();
       const { selected, allMode, excluded } = selectionRef.current;
@@ -979,7 +1023,7 @@ const Table: FC<TableProps> = memo((props) => {
     // Работает только в обычных списках (*List, variant === 'default').
     //  - SubTable (variant === 'embedded') обрабатывает Enter сам в capture-фазе
     //    (вход в редактирование ячейки/строки).
-    //  - select-режим (onSelectItem) обрабатывает Enter через свой window-listener.
+    //  - select-режим (onSelectItem) обрабатывает Enter обработчиком обёртки таблицы.
     if (
       e.key === 'Enter' &&
       variant === 'default' &&
@@ -1044,7 +1088,12 @@ const Table: FC<TableProps> = memo((props) => {
     e.preventDefault();
     e.stopPropagation();
     setActiveRow(nextId);
-  }, [handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch, selectionLocked, toggleRowSelect]);
+  }, [
+    handleCreate, handleDeleteClick, rows, activeRow, activeCell, columns, variant, onSelectItem, openModelForm, refetch,
+    selectionLocked, toggleRowSelect, selectable, isLoading,
+    // Запреты — полные: без них обработчик замыкал первые значения (аудит 26.09, И8/О8).
+    isReadonly, hideAddDelete, hideAdd, disableAdd, onDelete, onSelectionChange, setActiveRow,
+  ]);
 
   const handleConfigOpen = useCallback(() => {
     setConfigModalAction('open');
@@ -1105,7 +1154,10 @@ const Table: FC<TableProps> = memo((props) => {
         />
       )}
 
-      <div className={fitHeight ? `${styles.TableWrapper} ${styles.TableWrapperFit}` : styles.TableWrapper}>
+      <div
+        className={fitHeight ? `${styles.TableWrapper} ${styles.TableWrapperFit}` : styles.TableWrapper}
+        onKeyDown={onSelectItem ? handleSelectKeyDown : undefined}
+      >
         {!hideToolbar && <TableControlPanel
           variant={variant}
           componentName={componentName}

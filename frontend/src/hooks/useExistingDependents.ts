@@ -61,7 +61,8 @@ export function formatDependentOption(
 ): string {
 	if (dep) {
 		const dateStr = dep.date ? ` - ${getFormatDateOnly(dep.date) ?? ""}` : "";
-		const ref = dep.number ? `№ ${dep.number}` : `ID ${dep.id}`;
+		// Документ без номера — «б/н», а не служебный ID (памятка «подписи документов без ID», И22).
+		const ref = dep.number ? `№ ${dep.number}` : "б/н";
 		return `${docLabel}: ${ref}${dateStr}`;
 	}
 	return `Создать ${docLabel}`;

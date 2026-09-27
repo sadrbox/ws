@@ -9,14 +9,26 @@ import {
 	upsertLink, confirmLink, setLinkState, assignStaff, unassignStaff,
 	clientsOf, providersOf, LINK_STATES,
 } from "../../services/serviceLinks.js";
-import { hasUnconditionalAccess, orgIsAccessible } from "../../utils/auth.js";
+import { isAdminOfOrg } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
 
 const router = express.Router();
 
-/** Распоряжаться связью может тот, кто распоряжается организацией-участником. */
+/**
+ * Распоряжаться связью может тот, кто распоряжается организацией-участником: её
+ * администратор ПО ЧЛЕНСТВУ (Б2 аудита 26.09). Раньше хватало быть админом любой организации —
+ * фирма заводила связь к чужому клиенту и сама же её «подтверждала».
+ */
 function manages(req, organizationUuid) {
-	return hasUnconditionalAccess(req) && orgIsAccessible(req, organizationUuid);
+	return isAdminOfOrg(req, organizationUuid);
+}
+
+/**
+ * Согласие клиента — только администратор КЛИЕНТА по членству. Суперадмин тоже не подтверждает
+ * за клиента: смысл записи в том, что доступ открыл владелец данных, а не оператор установки.
+ */
+function clientConsents(req, clientOrgUuid) {
+	return !!clientOrgUuid && (req.user?.adminOrgUuids ?? []).includes(clientOrgUuid);
 }
 
 function audit(req, actionType, link, props = null) {
@@ -87,9 +99,10 @@ router.post("/service-links/:uuid/confirm", async (req, res) => {
 	try {
 		const link = await prisma.serviceLink.findUnique({ where: { uuid: req.params.uuid } });
 		if (!link) return res.status(404).json({ success: false, message: "Связь не найдена" });
-		if (!manages(req, link.clientOrgUuid)) {
+		if (!clientConsents(req, link.clientOrgUuid)) {
 			return res.status(403).json({ success: false, message: "Подтвердить может только администратор организации-клиента" });
 		}
+		if (link.state === "active") return res.json({ success: true, data: link });
 		const updated = await confirmLink({ uuid: link.uuid, confirmedByUuid: req.user?.uuid ?? null });
 		audit(req, "service_link_confirmed", updated, { serviceOrgUuid: link.serviceOrgUuid });
 		return res.json({ success: true, data: updated });
@@ -115,6 +128,11 @@ router.patch("/service-links/:uuid/state", async (req, res) => {
 		if (!link) return res.status(404).json({ success: false, message: "Связь не найдена" });
 		if (!manages(req, link.clientOrgUuid) && !manages(req, link.serviceOrgUuid)) {
 			return res.status(403).json({ success: false, message: "Недостаточно прав" });
+		}
+		// Включить доступ (в т.ч. снять приостановку) — это согласие, его даёт только клиент:
+		// иначе фирма возобновляла бы доступ, приостановленный клиентом.
+		if (state === "active" && !clientConsents(req, link.clientOrgUuid)) {
+			return res.status(403).json({ success: false, message: "Открыть доступ может только администратор организации-клиента" });
 		}
 		// Возобновление после отзыва — это новое согласие клиента, а не смена состояния.
 		if (state === "active" && link.state === "revoked") {
@@ -143,6 +161,15 @@ router.post("/service-links/:uuid/staff", async (req, res) => {
 		// Назначает ФИРМА: это её сотрудники и её распределение работы.
 		if (!manages(req, link.serviceOrgUuid)) {
 			return res.status(403).json({ success: false, message: "Недостаточно прав" });
+		}
+		// Назначить можно только СОТРУДНИКА фирмы: иначе админ фирмы открывал бы учёт клиента
+		// кому угодно из установки.
+		const staffMember = await prisma.accessRight.findUnique({
+			where: { userUuid_organizationUuid: { userUuid, organizationUuid: link.serviceOrgUuid } },
+			select: { userUuid: true },
+		});
+		if (!staffMember) {
+			return res.status(400).json({ success: false, message: "Пользователь не состоит в обслуживающей организации" });
 		}
 		const a = await assignStaff({ linkUuid: link.uuid, userUuid, role });
 		audit(req, "service_staff_assigned", link, { userUuid, role: a.role });

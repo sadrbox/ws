@@ -77,8 +77,11 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     return String(value).replace(/[\s\u00A0\u202F]/g, '').replace(',', '.');
   }, [value]);
 
-  // Значение поля в момент получения фокуса — для сравнения в handleBlur
-  const valueAtFocusRef = useRef('');
+  // Текущее ВНЕШНЕЕ значение: blur сравнивает с ним, а не со значением на момент фокуса.
+  // «12,5» → стёрли до «12,» → Tab: «12,» не эмитится (незавершённое), и сравнение с
+  // «12» на входе оставляло в состоянии 12.5 (аудит 26.09, И15).
+  const rawValueRef = useRef(rawValue);
+  rawValueRef.current = rawValue;
 
   // Синхронизируем editText когда внешнее значение меняется извне (не через ввод пользователя)
   const prevRawRef = useRef(rawValue);
@@ -102,8 +105,6 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
-    // Сохраняем исходное значение для сравнения в handleBlur (определение изменения)
-    valueAtFocusRef.current = prevRawRef.current;
     // При входе в поле показываем значение с запятой (пользовательский формат)
     setEditText(prevRawRef.current.replace('.', ','));
   }, []);
@@ -116,8 +117,11 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     if (n === null) {
       // Если пустое — ничего не делаем
       if (e.target.value.trim() === '') return;
-      // Некорректный ввод — сбрасываем в пустое, но только если исходное не было пустым
-      if (valueAtFocusRef.current === '') return;
+      // Некорректный ввод (одиночный «−») — сбрасываем в пустое, но только если внешнее
+      // значение не пустое: сам «−» наружу не уходит (см. handleChange).
+      prevRawRef.current = '';
+      setEditText('');
+      if (rawValueRef.current === '') return;
       const fakeEvent = { target: { value: '', name }, currentTarget: e.currentTarget } as React.ChangeEvent<HTMLInputElement>;
       onChange(fakeEvent);
       return;
@@ -132,8 +136,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     // «менялось само» после сохранения: что видно в поле, то и сохранится.
     if (decimals !== undefined && decimals >= 0) clamped = Number(clamped.toFixed(decimals));
     prevRawRef.current = String(clamped);
-    // Вызываем onChange только если значение реально изменилось
-    if (String(clamped) === valueAtFocusRef.current) return;
+    // Вызываем onChange только если значение реально отличается от ТЕКУЩЕГО внешнего.
+    const current = parseNumericInput(rawValueRef.current);
+    if (current !== null && current === clamped) return;
     const fakeEvent = {
       target: { value: String(clamped), name },
       currentTarget: e.currentTarget,
@@ -156,7 +161,14 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     // Разрешаем только: цифры, точку, запятую (десятичный разделитель), минус в начале
     const raw = e.target.value;
     // Убираем все недопустимые символы: всё кроме 0-9, . , -
-    const filtered = raw.replace(/[^0-9.,-]/g, '');
+    let filtered = raw.replace(/[^0-9.,-]/g, '');
+    // Вставка «1,234.56» / «1.234,56»: есть ОБА разделителя — последний десятичный, прочие
+    // разделяют разряды. Раньше первая точка становилась запятой, и выходило 1.23456 (И15).
+    const lastComma = filtered.lastIndexOf(','), lastDot = filtered.lastIndexOf('.');
+    if (lastComma >= 0 && lastDot >= 0) {
+      const dec = Math.max(lastComma, lastDot);
+      filtered = filtered.slice(0, dec).replace(/[.,]/g, '') + ',' + filtered.slice(dec + 1).replace(/[.,]/g, '');
+    }
     // Разрешаем минус только в начале и только один раз
     const withMinus = filtered.replace(/(?!^)-/g, '');
     // Нормализуем: и точку и запятую принимаем как десятичный разделитель,
@@ -185,8 +197,9 @@ export const FieldNumber: FC<TypeFieldNumberProps> = ({
     // Обновляем буфер редактирования (с запятой — для отображения)
     setEditText(displayNorm);
     prevRawRef.current = dotNorm;
-    // Пробрасываем дальше только если значение завершённое (не заканчивается запятой/точкой)
-    if (onChange && dotNorm !== '' && !dotNorm.endsWith('.')) {
+    // Пробрасываем дальше только если значение завершённое (не заканчивается запятой/точкой
+    // и не одиночный минус — иначе в состоянии оставалась строка «-», NaN в пересчётах).
+    if (onChange && dotNorm !== '' && !dotNorm.endsWith('.') && dotNorm !== '-') {
       const fakeEvent = { ...e, target: { ...e.target, value: dotNorm, name } } as React.ChangeEvent<HTMLInputElement>;
       onChange(fakeEvent);
     } else if (onChange && dotNorm === '') {

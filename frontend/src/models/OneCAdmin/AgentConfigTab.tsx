@@ -19,7 +19,7 @@ import { reportError } from "src/services/errors/route";
 import { asText } from "src/utils/asText";
 import { fetchAgentConfig, setAgentConfig, type AgentConfig, type AgentConfigPatch } from "src/services/onec/api";
 import { withOp } from "./progress";
-import { QueryError } from "./shared";
+import { QueryError } from "./sharedUi";
 import { canEditField, configPatch, hasChanges, numberField } from "./agentConfigView";
 import styles from "./OneCAdmin.module.scss";
 

@@ -7,6 +7,7 @@
 import { prisma } from "../../prisma/prisma-client.js";
 import { computeRkCalendar, makeDayKind, workOptions } from "./workTime.js";
 import { localParts } from "./time.js";
+import { onCacheInvalidate } from "../cacheBus.js";
 
 const TTL_MS = 5 * 60_000;
 let cache = { at: 0, entries: null };
@@ -21,6 +22,7 @@ export async function ensureCalendarYear(year) {
 	const rows = computeRkCalendar(year).map((d) => ({ ...d, source: "seed" }));
 	const r = await prisma.workCalendarDay.createMany({ data: rows, skipDuplicates: true });
 	cache = { at: 0, entries: null };
+	if (r.count) broadcastCalendar();
 	return r.count;
 }
 
@@ -37,8 +39,13 @@ export async function loadCalendar() {
 	return entries;
 }
 
+// Правка календаря с экрана сбрасывает кэш во всех воркерах кластера (Н7 аудита 26.09): иначе сроки
+// SLA в соседних воркерах ещё 5 минут считались бы по старому календарю. См. services/cacheBus.js.
+const broadcastCalendar = onCacheInvalidate("qualityCalendar", () => { cache = { at: 0, entries: null }; });
+
 export function invalidateCalendar() {
 	cache = { at: 0, entries: null };
+	broadcastCalendar();
 }
 
 /**

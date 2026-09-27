@@ -4,7 +4,8 @@ import type { TPane } from "src/app/types";
 import type { TDataItem, DocRow } from "src/components/Table/types";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
-import { getFormatDateOnly } from "src/utils/datetime";
+import { getFormatDateOnly, isoToLocalInput } from "src/utils/datetime";
+import { reportError } from "src/services/errors/route";
 import { unwrapItem, unwrapList } from "src/utils/apiUnwrap";
 import type { UserDefaultsMap } from "src/hooks/useUserDefaults";
 import { isEquivalent } from "src/utils/normalize";
@@ -63,6 +64,14 @@ export interface BasisFromTarget {
 	 * рассинхрон между тем, что показывает меню, и тем, что открывается по клику.
 	 */
 	knownExisting?: { uuid: string; id: number; number?: string | null; date?: string } | null;
+	/**
+	 * ПЛАТЁЖ ПО ОСНОВАНИЮ (ПКО/РКО/выписка) — частичных оплат может быть несколько (аудит
+	 * 26.09, И21). Раньше платёж стоял под existingCheckEndpoint, и при уже созданном ПКО на
+	 * часть суммы меню открывало его — вторую оплату «на основании» было не создать.
+	 * С этим полем меню ВСЕГДА создаёт новый платёж, а его сумма — остаток: итог основания
+	 * минус суммы платежей этого вида (эндпоинт), уже созданных по нему.
+	 */
+	paidByEndpoint?: string;
 }
 
 interface BasisSourceConfig {
@@ -137,6 +146,9 @@ export function mapItemsForBasis(sourceItems: DocRow[]): DocRow[] {
 		// строки, а обновляет/удаляет существующие по этому ключу.
 		sourceRowId: r.uuid ?? null,
 		productUuid: r.productUuid ?? null,
+		// Партия строки основания (T6.1): возврат поставщику партионного товара без неё
+		// получал 422 «не указана партия», партии приходилось выбирать заново (И21).
+		batchUuid: r.batchUuid ?? null,
 		product: r.product ?? null,
 		unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
 		unitOfMeasure: r.unitOfMeasure ?? null,
@@ -202,6 +214,7 @@ function basisRowValues(b: DocRow): Record<string, unknown> {
 		vatRate: b.vatRate,
 		exciseRate: b.exciseRate,
 		discountPercent: b.discountPercent,
+		batchUuid: b.batchUuid ?? null,
 	};
 }
 
@@ -385,7 +398,25 @@ export interface RefillFormHandle {
 	setFields: (patch: Record<string, unknown>) => void;
 }
 
-export async function runBasisRefill(opts: {
+/**
+ * ОШИБКА «ПЕРЕЗАПОЛНИТЬ» — ЧЕЛОВЕКУ, А НЕ В КОНСОЛЬ (аудит 26.09, И22). Раньше все обёртки
+ * глотали её в console.error: кнопка крутилась и переставала, таблица не менялась, и почему —
+ * не видно. Отказ по существу и системный сбой разводит маршрутизатор ошибок.
+ */
+export function reportBasisRefillError(e: unknown): void {
+	reportError(e, { source: translate("basisDocument"), fallback: translate("refillFromBasisFailed") });
+}
+
+/** Перезаполнение по основанию; ошибка показывается здесь же (reportBasisRefillError). */
+export async function runBasisRefill(opts: RunBasisRefillOptions): Promise<void> {
+	try {
+		await runBasisRefillUnsafe(opts);
+	} catch (e) {
+		reportBasisRefillError(e);
+	}
+}
+
+interface RunBasisRefillOptions {
 	form: RefillFormHandle;
 	skipFields: boolean;
 	currentUserUuid: string;
@@ -396,7 +427,9 @@ export async function runBasisRefill(opts: {
 	allItemsRef: { current: TDataItem[] };
 	setBasisItems: (rows: TDataItem[]) => void;
 	bumpItemsTableKey: () => void;
-}): Promise<void> {
+}
+
+async function runBasisRefillUnsafe(opts: RunBasisRefillOptions): Promise<void> {
 	const snap = opts.form.store.getSnapshot().fields;
 	const basisType = snap.basisDocumentType;
 	const basisUuid = snap.basisDocumentUuid;
@@ -529,6 +562,35 @@ export async function refillFromBasisSource(
 }
 
 /**
+ * «ОБНОВИТЬ» В ТАБЛИЦЕ ПОЗИЦИЙ ДОКУМЕНТА С ОСНОВАНИЕМ — НЕ МОЛЧА (аудит 26.09, И20).
+ *
+ * У документа с основанием кнопка «Обновить» таблицы перезаполняет строки по основанию: ручные
+ * правки (частичная отгрузка, лишние строки) пропадали без вопроса, хотя у той же кнопки в
+ * поле «Основание» подтверждение есть. Спрашиваем, только если строки действительно
+ * изменятся; совпадают с основанием — обновляем без вопроса. Не удалось сравнить — не
+ * мешаем: само перезаполнение покажет ошибку.
+ *
+ * @returns true — можно перезаполнять.
+ */
+export async function confirmBasisItemsRefresh(opts: {
+	basisType?: string | null;
+	basisUuid?: string | null;
+	displayed: DocRow[];
+	confirm: (message: string) => Promise<boolean>;
+}): Promise<boolean> {
+	if (!opts.basisType || !opts.basisUuid) return true;
+	let wouldChange = true;
+	try {
+		const res = await refillFromBasisSource(opts.basisType, opts.basisUuid, mapCommonTradeFields);
+		wouldChange = !!res && buildRefillBasisItems(opts.displayed, res.items).length > 0;
+	} catch {
+		return true;
+	}
+	if (!wouldChange) return true;
+	return opts.confirm(translate("basisRefreshItemsConfirm"));
+}
+
+/**
  * Загружает текущие позиции документа с сервера.
  * Используется для сравнения «текущие строки vs строки основания» при
  * «Перезаполнить по основанию», когда вкладка с таблицей ещё не открыта
@@ -612,7 +674,22 @@ export async function openDocumentFromBasis(
 			});
 			sourceItems = unwrapList(resp);
 		} catch (e) {
-			console.error("[createFromBasis] не удалось загрузить позиции", e);
+			// Без позиций документ открылся бы пустым молча — будто у основания их нет.
+			reportError(e, { source: sourceTypeLabel, fallback: translate("basisItemsLoadFailed") });
+		}
+	}
+
+	// Платёж на основании: сумма — остаток к оплате (частичных оплат может быть несколько).
+	let paidRemainder: string | null = null;
+	if (target.paidByEndpoint && sourceFields.uuid) {
+		try {
+			const resp = await api.get<{ items?: DocRow[] }>(`/${target.paidByEndpoint}`, {
+				params: { filter: { basisDocumentUuid: { equals: sourceFields.uuid } }, limit: 500 },
+			});
+			paidRemainder = paymentRemainder(sourceFields.amount, unwrapList<DocRow>(resp).map((d) => d.amount));
+		} catch (e) {
+			// Не узнали, что уже оплачено, — сумма основания целиком, а человеку об этом скажем.
+			reportError(e, { source: sourceTypeLabel, fallback: translate("basisPaymentsLoadFailed") });
 		}
 	}
 
@@ -626,7 +703,11 @@ export async function openDocumentFromBasis(
 
 	const initialFields = {
 		...target.mapFields(sourceFields),
-		date: new Date().toISOString().slice(0, 10),
+		...(paidRemainder != null ? { amount: paidRemainder } : {}),
+		// Местные дата и время, как у нового документа (У5). Раньше — UTC-дата без времени:
+		// с 00:00 до 05:00 по Алматы это вчерашнее число (1-го — прошлый месяц и 423 закрытого
+		// периода), а днём возврат вставал раньше своего основания.
+		date: isoToLocalInput(new Date()),
 		basisDocumentType: target.basisType,
 		basisDocumentUuid: sourceFields.uuid ?? "",
 		basisDocumentLabel: basisLabel,
@@ -641,6 +722,17 @@ export async function openDocumentFromBasis(
 			fromBasisItems: (target.mapItems ?? mapItemsForBasis)(sourceItems),
 		},
 	});
+}
+
+/**
+ * Остаток к оплате по основанию: итог минус уже созданные платежи. null — платежей ещё нет
+ * (сумма остаётся итогом основания); "" — оплачено полностью или сверх (сумму вводит человек).
+ */
+export function paymentRemainder(total: unknown, paidAmounts: unknown[]): string | null {
+	const paid = paidAmounts.reduce<number>((s, a) => s + (Number(a) || 0), 0);
+	if (paid <= 0) return null;
+	const rest = Math.round(((Number(total) || 0) - paid) * 100) / 100;
+	return rest > 0 ? rest.toFixed(2) : "";
 }
 
 /** Сырое значение userDefaults с сервера. */

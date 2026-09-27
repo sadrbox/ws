@@ -12,6 +12,7 @@ import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import ReportPane from "src/components/ReportPane";
+import { useReportLoadError } from "./_shared/reportLoadError";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money, DirectionTag } from "./_shared/reportLayout";
 import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
@@ -32,6 +33,8 @@ interface MovementRow {
   id: number; date: string; movementType: "in" | "out";
   quantity: number | string; amount: number | string;
   documentType: string; documentUuid: string | null; documentId: number | null;
+  /** Номер документа — когда сервер его отдаёт. */
+  documentNumber?: string | null;
   product?: { name?: string } | null; warehouse?: { name?: string } | null; unitOfMeasure?: { name?: string } | null;
 }
 interface BalanceRow { productUuid: string | null; productName: string; warehouseName: string; unitName: string; quantity: number; amount: number }
@@ -67,7 +70,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
     return p;
   }, [applied]);
 
-  const { data: movements = [], isLoading: loadingMov } = useQuery<MovementRow[]>({
+  const { data: movements = [], isLoading: loadingMov, error: movError } = useQuery<MovementRow[]>({
     queryKey: ["product-register", "movements", applied],
     queryFn: async () => {
       const resp = await api.get<{ items?: MovementRow[] }>("product-register", { params: buildAppliedParams() });
@@ -76,7 +79,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
     enabled: view === "movements" && !!applied,
   });
 
-  const { data: balances = [], isLoading: loadingBal } = useQuery<BalanceRow[]>({
+  const { data: balances = [], isLoading: loadingBal, error: balError } = useQuery<BalanceRow[]>({
     queryKey: ["product-register", "balances", applied],
     queryFn: async () => {
       const resp = await api.get<{ items?: BalanceRow[] }>("product-register/balances", { params: buildAppliedParams() });
@@ -84,6 +87,7 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
     },
     enabled: view === "balances" && !!applied,
   });
+  const loadErrorText = useReportLoadError(view === "movements" ? movError : balError, translate("registerMovements"));
 
   const isLoading = view === "movements" ? loadingMov : loadingBal;
   const isEmpty = view === "movements"
@@ -148,7 +152,8 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
       <tbody>
         {movements.map((r, idx) => {
           const isIn = r.movementType === "in";
-          const docLabel = `${DOC_TYPE_LABELS[r.documentType] ?? r.documentType}${r.documentId ? ` № ${r.documentId}` : ""}`;
+          // Внутренний id в подписи не показываем (И22): «№» — только номер документа.
+          const docLabel = `${DOC_TYPE_LABELS[r.documentType] ?? r.documentType}${r.documentNumber ? ` № ${r.documentNumber}` : ""}`;
           return (
             <tr key={r.id}>
               <Td col="n">{idx + 1}</Td>
@@ -240,8 +245,8 @@ const ProductRegisterReport: FC<ProductRegisterReportProps> = ({ uniqId }) => {
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={isEmpty}
-      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      isEmpty={!!loadErrorText || isEmpty}
+      emptyMessage={loadErrorText ?? (!applied ? translate("reportPressGenerate") : undefined)}
       onGenerate={handleGenerate}
       fileBaseName={translate("ProductRegisterList")}
       title={translate("ProductRegisterList")}

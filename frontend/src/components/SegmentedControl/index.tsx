@@ -91,7 +91,9 @@ export function SegmentedControl<T extends string>({ name, label, value, options
 						type="button"
 						role="radio"
 						aria-checked={checked}
-						tabIndex={checked ? 0 : -1}
+						// Значения нет среди вариантов — в обход по Tab попадает первый (как у radiogroup
+						// без выбора), иначе группа была недостижима с клавиатуры (аудит 26.09, И17).
+						tabIndex={i === current ? 0 : -1}
 						className={cx(styles.Segment, o.tone && TONE_CLASS[o.tone])}
 						disabled={disabled}
 						title={o.title}

@@ -3,12 +3,16 @@
 //   quality.firmOrganizationUuid      — какая организация установки — фирма, ведущая учёт качества.
 import { prisma } from "../../prisma/prisma-client.js";
 import { mergeSettings } from "./settingsRules.js";
+import { onCacheInvalidate } from "../cacheBus.js";
 
 export const FIRM_KEY = "quality.firmOrganizationUuid";
 const keyOf = (org) => `quality.settings.${org || "global"}`;
 
 const TTL_MS = 30_000;
 const cache = new Map();
+// Сохранение настроек сбрасывает кэш во всех воркерах кластера (Н7 аудита 26.09), а не только в
+// том, куда пришёл запрос. См. services/cacheBus.js.
+const broadcastSettings = onCacheInvalidate("qualitySettings", (key) => (key ? cache.delete(key) : cache.clear()));
 
 /** Настройки фирмы, слитые с умолчаниями. Кэш 30 с: правила зовут их на каждой задаче. */
 export async function getQualitySettings(firmOrgUuid) {
@@ -34,6 +38,7 @@ export async function saveQualitySettings(firmOrgUuid, patch) {
 	const key = keyOf(firmOrgUuid);
 	await prisma.appSetting.upsert({ where: { key }, create: { key, value: JSON.stringify(next) }, update: { value: JSON.stringify(next) } });
 	cache.delete(key);
+	broadcastSettings(key);
 	return next;
 }
 

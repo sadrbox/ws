@@ -2,15 +2,45 @@ import express from "express";
 import { applyPipeReference } from "../../services/pipeReference.js";
 import { idSearchCondition } from "../../utils/searchId.js";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { pruneAuditLog, retentionDays } from "../../services/auditLog.js";
 import { parse1cDate } from "../../utils/parse1cDate.js";
 import { resolveActors } from "../../services/pipeActor.js";
 import { logger } from "../../services/logger.js";
+import { clampLimit, sendError, buildFilterWhere } from "../../utils/listQuery.js";
 
 const log = logger("pipe");
 // import { success } from "zod";
 const router = express.Router();
+
+/*
+ * КТО ЧТО МОЖЕТ С ЖУРНАЛОМ (аудит 26.09, п. 10 и 12 отчёта инспекции маршрутов).
+ *
+ * Роутер смонтирован дважды: /api/v1/activityhistories (журнал действий для панели) и /pipe (приём
+ * событий 1С). Раньше:
+ *   - событие 1С мог прислать любой с правом ActivityHistory:full — и через сопоставление
+ *     справочников перенести чужих контрагентов и товары в «свою» организацию;
+ *   - по ключу интеграции (служебный пользователь — суперадмин) через /pipe читался и чистился
+ *     журнал действий ВСЕХ организаций;
+ *   - запись журнала по :uuid читалась, а по :id удалялась без проверки организации.
+ * Теперь:
+ *   - приём события — только канал 1С по X-Api-Key или суперадмин (ручная проверка приёма);
+ *   - вход ключом интеграции — ТОЛЬКО приём событий, ничего больше;
+ *   - запись журнала видна по правилам списка (своя организация; записи без организации —
+ *     суперадмину), удаляет — только суперадмин (журнал, который правят руками, — не журнал;
+ *     массовая чистка по сроку — POST /prune).
+ */
+router.use((req, res, next) => {
+	if (req.pipeKeyAuth && !(req.method === "POST" && req.path === "/")) {
+		return res.status(403).json({ success: false, message: "Ключ интеграции 1С разрешает только приём событий" });
+	}
+	return next();
+});
+
+/** Прислать событие 1С можно ключом интеграции или суперадмину. */
+export function mayIngestPipeEvent(req) {
+	return !!req.pipeKeyAuth || !!req.user?.isSuperAdmin;
+}
 
 // Ручная чистка журнала по сроку хранения (AUDIT_RETENTION_DAYS, по умолчанию 365).
 // Обычно чистка идёт сама, не чаще раза в сутки, попутно с записью в журнал —
@@ -48,6 +78,12 @@ router.post("/prune", async (req, res) => {
 // ============================================
 router.post("/", async (req, res) => {
 	try {
+		if (!mayIngestPipeEvent(req)) {
+			return res.status(403).json({
+				success: false,
+				message: "События 1С принимаются только от интеграции (X-Api-Key на /pipe)",
+			});
+		}
 		const body = req.body || {};
 		// В журнал — ПРИЗНАКИ события, а не всё тело. Полный дамп писался на КАЖДОЕ событие
 		// 1С: в логах оседали реквизиты документов и имена пользователей, а искать в этом
@@ -339,7 +375,9 @@ router.get("/:uuid", async (req, res) => {
 			include: { organization: true },
 		});
 
-		if (!item) {
+		// Как в списке: своя организация; запись без организации (вход, справочники установки) —
+		// суперадмину. Раньше по uuid читалась запись любой организации.
+		if (!item || !checkOwnership(item, req, "organizationUuid", { allowShared: false })) {
 			return res.status(404).json({
 				success: false,
 				message: "Запись не найдена",
@@ -368,9 +406,8 @@ router.get("/", async (req, res) => {
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-		// Парсим limit: если не приходит — используем 500, максимум 10000
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0)) {
@@ -438,6 +475,10 @@ router.get("/", async (req, res) => {
 		}
 
 		// ── Поиск (search=строка) ─────────────────────────────────────────────
+		// Проверить потом: ILIKE по девяти колонкам — полный проход журнала на каждый поиск. trgm-индекс
+		// помогает, только если индексирована КАЖДАЯ колонка в OR, а девять GIN-индексов на самой пишущей
+		// таблице замедлили бы каждую запись (раздел 5 аудита 26.09). Сначала решить с владельцем, по
+		// каким колонкам искать (objectName, userName + точные objectId/bin), затем — индексы под них.
 		const TEXT_FIELDS = [
 			"actionType",
 			"bin",
@@ -487,32 +528,9 @@ router.get("/", async (req, res) => {
 				: {};
 
 		// ── Произвольные фильтры filter[field][operator]=value ────────────────
-		const ALLOWED_OPERATORS = ["contains", "equals", "gte", "lte", "gt", "lt"];
-		const SKIP_KEYS = ["searchBy", "dateRange"];
-		const filterWhereClause = {};
-
-		for (const [field, conditions] of Object.entries(filter)) {
-			if (SKIP_KEYS.includes(field)) continue;
-			if (!conditions || typeof conditions !== "object") continue;
-
-			for (const [operator, value] of Object.entries(conditions)) {
-				if (!ALLOWED_OPERATORS.includes(operator)) continue;
-
-				if (!filterWhereClause[field]) {
-					filterWhereClause[field] = {};
-				}
-
-				if (operator === "contains") {
-					// contains требует mode, поэтому заменяем объект целиком
-					filterWhereClause[field] = {
-						contains: String(value),
-						mode: "insensitive",
-					};
-				} else {
-					filterWhereClause[field][operator] = value;
-				}
-			}
-		}
+		// Фильтры — по схеме модели: неизвестное поле, кривая дата или число → 400, а не 500 из Prisma
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		const filterWhereClause = buildFilterWhere("activityHistory", filter);
 
 		// ── Итоговый where ────────────────────────────────────────────────────
 		const baseWhere = {
@@ -557,11 +575,9 @@ router.get("/", async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error("GET /pipe error:", error);
-		return res.status(500).json({
-			success: false,
-			message: "Ошибка сервера при получении истории активностей",
-		});
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера при получении истории активностей", label: "GET /activityhistories" });
 	}
 });
 
@@ -571,6 +587,11 @@ router.get("/", async (req, res) => {
 // DELETE /:id
 router.delete("/:id", async (req, res) => {
 	try {
+		// Журнал действий поштучно не удаляют: иначе держатель права записи стирал бы следы своих
+		// действий (и чужой организации). Суперадмину — для обслуживания; чистка по сроку — /prune.
+		if (!req.user?.isSuperAdmin) {
+			return res.status(403).json({ success: false, message: "Записи журнала действий удаляет только суперадминистратор" });
+		}
 		const param = req.params.id;
 		const numId = Number(param);
 		const isNumeric = !isNaN(numId) && Number.isInteger(numId) && numId > 0;

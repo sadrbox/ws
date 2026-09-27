@@ -20,14 +20,15 @@ import BasisDocumentField from "src/components/Field/BasisDocumentField";
 import { useRefillAction } from "src/hooks/useRefillAction";
 import ConfirmModal from "src/components/ConfirmModal";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource } from "src/utils/createFromBasis";
+import { mapCommonTradeFields, resolveOrgChangeFields, refillFromBasisSource, reportBasisRefillError } from "src/utils/createFromBasis";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
+import { useFormLateResponseGuard } from "src/models/_shared/lateResponseGuard";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { asText } from "src/utils/asText";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
@@ -107,7 +108,9 @@ interface BankStatementsServerRecord {
 const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const { canWrite } = useAccessPermission("BankStatement");
-  const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
+  // Стабильные части контекста (О3): useAppContext() перерисовывал форму при любом переключении вкладки.
+  const { windows: { addPane } } = useAppActions();
+  const { user: currentUser } = useAppAuth();
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data as {
@@ -206,16 +209,17 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
     // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
     // LookupField зовёт onSelect("", "", {}).
+    // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+    // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
+    const guardFields = useFormLateResponseGuard<TFields>(form);
     const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
       form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
-      const cur = form.store.getSnapshot().fields;
-      const patch = await syncContract({
+      await guardFields((cur) => syncContract({
         counterpartyUuid: uuid,
         organizationUuid: cur.organizationUuid,
         currentContractUuid: cur.contractUuid,
-      });
-      if (patch) form.setFields(patch as Partial<TFields>);
-    }, [form.setFields, form.store, syncContract]);
+      }), ["counterpartyUuid", "organizationUuid"]);
+    }, [form.setFields, guardFields, syncContract]);
 
   // Смена организации: зависимые поля (договор, банк-счёт) → дефолт пользователя
   // для новой орг, иначе очистка.
@@ -223,12 +227,11 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
     form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
-    const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+    await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
       { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
       { valueType: "bankAccount", uuidKey: "bankAccountUuid", nameKey: "bankAccountName" },
-    ]);
-    form.setFields(patch as Partial<TFields>);
-  }, [form.setFields, form.store, currentUser?.uuid]);
+    ]), ["organizationUuid"]);
+  }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
 
   const basisMismatch = useBasisMismatch({
     basisType: form.fields.basisDocumentType,
@@ -270,7 +273,8 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
         form.setFields(patch);
       }
     } catch (e) {
-      console.error("[refill] failed", e);
+      // Ошибку «Перезаполнить» — человеку, а не в консоль (И22).
+      reportBasisRefillError(e);
     } finally {
       setIsRefilling(false);
     }
@@ -376,10 +380,13 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
 
   const handlePrint = useCallback(() => {
     if (!form.fields.uuid) return;
+    // Подпись — номер документа или «б/н», не внутренний id (reference_doc_label_no_id, И22).
+    const number = form.fields.number?.trim() ?? "";
+    const ref = number ? `№ ${number}` : translate("docNoNumber");
     addPane({
       component: PrintDocumentPane,
       isSelector: true,
-      label: `Банковская выписка № ${form.fields.id ?? "—"}`,
+      label: `Банковская выписка ${ref}`,
       data: {
         id: Number(form.fields.id ?? 0),
         uuid: String(form.fields.uuid ?? ""),
@@ -398,8 +405,8 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
             basisLabel: form.fields.basisDocumentLabel,
           }} />
         ),
-        fileBaseName: `БанкВыписка_${form.fields.id ?? "новый"}`,
-        title: `Банковская выписка № ${form.fields.id ?? "—"}`,
+        fileBaseName: `БанкВыписка_${number || "бн"}`,
+        title: `Банковская выписка ${ref}`,
       },
     });
   }, [form.fields, addPane]);

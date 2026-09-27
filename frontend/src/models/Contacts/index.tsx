@@ -9,7 +9,7 @@ import { Field, FieldSelect } from "src/components/Field";
 import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import OwnerLookupField, { OwnerType } from "src/components/Field/OwnerLookupField";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import SubTable, { type SubTableContext } from "src/components/SubTable";
 import { openSubFormPane } from "src/components/SubTable/subFormOpener";
@@ -255,7 +255,7 @@ const ContactsTable: FC<ContactsTableProps> = ({
   deferRemoteChanges = false, onItemsChange, initialPendingRows,
   showPrimaryButton = false,
 }) => {
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
   const queryClient = useQueryClient();
 
   const renderCell = useCallback((row: TDataItem, col: TColumn, ctx: SubTableContext) => {

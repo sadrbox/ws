@@ -100,10 +100,15 @@ export function useOrgAccountingSettings(
 				{ params },
 			);
 		},
-		staleTime: 0,
+		// Настройки меняются редко, а читаются каждой открытой формой документа (и каждой её
+		// табличной частью) — на пару «организация, дата». Раньше срок был нулевым, а запрос
+		// повторялся на каждое монтирование и каждый возврат в окно: Alt-Tab = столько
+		// запросов, сколько открыто документов (аудит 26.09, О4). Теперь минута: форма,
+		// открытая позже, прочтёт свежие настройки, а сохранение настроек в этой вкладке
+		// сбрасывает кэш сразу (models/OrganizationAccountingSettings — invalidateQueries).
+		staleTime: 60_000,
 		gcTime: 5 * 60_000,
-		refetchOnMount: "always",
-		refetchOnWindowFocus: true,
+		refetchOnWindowFocus: false,
 	});
 
 	return useMemo(() => {

@@ -77,13 +77,24 @@ export async function tenantMiddleware(req, res, next) {
 				uuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
+				deletedAt: true,
 				accessRights: {
 					select: { organizationUuid: true, role: true },
 				},
 			},
 		});
 
-		if (dbUser) {
+		/*
+		 * ТОКЕН БЕЗ ПОЛЬЗОВАТЕЛЯ — НЕ ГОСТЬ, А ОТКАЗ (Н2 аудита 26.09).
+		 *
+		 * JWT живёт сутки. Удалённый (или отключённый) пользователь с живым токеном раньше шёл
+		 * дальше без организаций и без признаков роли — и попадал в ветки «глобальных» записей.
+		 */
+		if (!dbUser || dbUser.deletedAt) {
+			return res.status(401).json({ success: false, message: "Учётная запись недоступна — войдите заново" });
+		}
+
+		{
 			req.user.isSuperAdmin = dbUser.isSuperAdmin || false;
 			/*
 			 * ОПЕРАТОР УСТАНОВКИ ≠ ДОСТУП К УЧЁТУ (О5).
@@ -133,10 +144,16 @@ export async function tenantMiddleware(req, res, next) {
 			);
 			req.user.isOrgAdmin = activeOrgEntry?.role === "admin" || false;
 
-			// Является ли администратором хотя бы одной организации
-			req.user.isAnyOrgAdmin = dbUser.accessRights.some(
-				(uo) => uo.role === "admin",
-			);
+			/*
+			 * Организации, где пользователь — администратор ПО ЧЛЕНСТВУ (обслуживание сюда не
+			 * попадает). Нужны точечным проверкам «распоряжается ли он именно этой организацией».
+			 * `isAnyOrgAdmin` остаётся сведением для интерфейса и ПРАВ НЕ ДАЁТ (Б2 аудита 26.09):
+			 * админ своей организации не должен становиться админом чужих.
+			 */
+			req.user.adminOrgUuids = dbUser.accessRights
+				.filter((uo) => uo.role === "admin")
+				.map((uo) => uo.organizationUuid);
+			req.user.isAnyOrgAdmin = req.user.adminOrgUuids.length > 0;
 
 			// Безопасность: если активная орг не входит в список разрешённых — сбрасываем
 			if (
@@ -149,7 +166,13 @@ export async function tenantMiddleware(req, res, next) {
 			}
 		}
 	} catch (err) {
+		/*
+		 * ОТКАЗ, А НЕ ПРОПУСК (Н2 аудита 26.09). Раньше сбой БД здесь вёл дальше с пустым
+		 * контекстом — без организаций и ролей, и изоляция держалась на случайностях
+		 * (`checkOwnership` пускал к «глобальным» записям всех). Сбой прав — это 503.
+		 */
 		console.error("tenantMiddleware error:", err);
+		return res.status(503).json({ success: false, code: "ACCESS_CHECK_UNAVAILABLE", message: "Проверка доступа временно недоступна — повторите позже" });
 	}
 	next();
 }
@@ -322,14 +345,19 @@ export function orgQueryFilter(req, field = "organizationUuid") {
  * @param {object|null} item   — запись из БД (может быть null)
  * @param {object}      req    — Express request с req.user
  * @param {string}      field  — поле организации в записи (по умолчанию "organizationUuid")
+ * @param {object}      [opts]
+ * @param {boolean}     [opts.allowShared=true] — считать запись без организации общей. Для
+ *   ДОКУМЕНТОВ и других записей, которые обязаны принадлежать юрлицу, передавать false: «нет
+ *   организации» там значит «битая запись», а не «общая для всех» (Б5/Б6 аудита 26.09) — и
+ *   видит её только суперадмин.
  */
-export function checkOwnership(item, req, field = "organizationUuid") {
+export function checkOwnership(item, req, field = "organizationUuid", { allowShared = true } = {}) {
 	if (!item) return false;
 	if (!req.user) return false;
 	if (req.user.isSuperAdmin) return true;
 
 	const itemOrgUuid = item[field] ?? null;
-	if (itemOrgUuid === null) return true; // глобальная запись — доступна всем
+	if (itemOrgUuid === null) return allowShared; // глобальная запись — доступна всем (если допустимо)
 
 	const activeOrg = req.user.organizationUuid ?? null;
 	const allowedOrgs = req.user.allowedOrgUuids ?? [];
@@ -338,6 +366,46 @@ export function checkOwnership(item, req, field = "organizationUuid") {
 	if (allowedOrgs.includes(itemOrgUuid)) return true;
 
 	return false;
+}
+
+/**
+ * Middleware «запись по :id/:uuid принадлежит пользователю» ДО общего обработчика удаления
+ * (`handleDelete` из utils/checkReferences.js считает запись без организации общей). Для
+ * документов запись без организации — не общая, а битая: трогать её может только суперадмин.
+ */
+export function requireOwnedRecord(modelName, { field = "organizationUuid", allowShared = false, notFoundMessage = "Не найдено" } = {}) {
+	return async (req, res, next) => {
+		try {
+			const param = req.params.id ?? req.params.uuid;
+			const n = Number(param);
+			const where = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(param) };
+			const item = await prisma[modelName].findUnique({ where, select: { [field]: true } });
+			if (!item || !checkOwnership(item, req, field, { allowShared })) {
+				return res.status(404).json({ success: false, message: notFoundMessage });
+			}
+			return next();
+		} catch (err) {
+			console.error(`requireOwnedRecord(${modelName}) error:`, err);
+			return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		}
+	};
+}
+
+/** То же для пакетного удаления `{ uuids: [...] }`: есть чужая или «ничья» запись — пакет не выполняем. */
+export function requireOwnedBatch(modelName, { field = "organizationUuid", allowShared = false } = {}) {
+	return async (req, res, next) => {
+		try {
+			const uuids = Array.isArray(req.body?.uuids) ? req.body.uuids.filter((u) => typeof u === "string") : null;
+			if (!uuids || req.user?.isSuperAdmin) return next();
+			const rows = await prisma[modelName].findMany({ where: { uuid: { in: uuids } }, select: { uuid: true, [field]: true } });
+			const foreign = rows.filter((r) => !checkOwnership(r, req, field, { allowShared }));
+			if (foreign.length) return res.status(404).json({ success: false, message: "Часть записей не найдена — удаление не выполнено" });
+			return next();
+		} catch (err) {
+			console.error(`requireOwnedBatch(${modelName}) error:`, err);
+			return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		}
+	};
 }
 
 /**
@@ -391,11 +459,47 @@ export { ROUTE_TO_MODEL } from "./routeModels.js";
  * Есть ли у пользователя безусловный полный доступ (минуя таблицу прав):
  * суперадмин, админ организации, а в dev-режиме — пользователь admin.
  * Вынесено, чтобы точечные проверки в роутерах вели себя ТАК ЖЕ, как middleware.
+ *
+ * АДМИН — ТОЛЬКО В ПРЕДЕЛАХ СВОЕЙ ОРГАНИЗАЦИИ (Б2 аудита 26.09). Раньше хватало быть админом
+ * ЛЮБОЙ организации (`isAnyOrgAdmin`): самозарегистрированный владелец своей фирмы проходил
+ * мимо прав в организации, где он рядовой участник. Теперь безусловный доступ даёт только
+ * роль admin в АКТИВНОЙ организации; если данные идут по нескольким организациям сразу
+ * (сводный вид или активная не выбрана) — только когда он админ КАЖДОЙ из них.
  */
 export function hasUnconditionalAccess(req) {
 	if (req.user?.isSuperAdmin) return true;
-	if (req.user?.isOrgAdmin || req.user?.isAnyOrgAdmin) return true;
-	return devUnrestrictedAdmin(req.user?.username);
+	if (devUnrestrictedAdmin(req.user?.username)) return true;
+	return adminOfCurrentScope(req);
+}
+
+/*
+ * Проверить потом: безусловный доступ админа АКТИВНОЙ организации действует и на запись другой
+ * его организации, открытую по id (checkOwnership пускает во все allowedOrgUuids), — там, где он
+ * рядовой участник, модельные права не проверяются. Закрыть можно, только зная организацию
+ * записи в middleware (или передав её в checkOwnership вместе с режимом доступа).
+ */
+function adminOfCurrentScope(req) {
+	const u = req.user;
+	if (!u) return false;
+	// Роль в активной организации (tenantMiddleware ставит isOrgAdmin только при выбранной).
+	if (u.isOrgAdmin && !groupScopeRequested(req)) return true;
+	if (u.organizationUuid && !groupScopeRequested(req)) return false;
+	const allowed = u.allowedOrgUuids ?? [];
+	const admin = new Set(u.adminOrgUuids ?? []);
+	return allowed.length > 0 && allowed.every((o) => admin.has(o));
+}
+
+/**
+ * Администратор ли пользователь ИМЕННО этой организации — по членству, не по обслуживанию.
+ * Для действий «распоряжаться организацией»: членства, профили прав, связи обслуживания.
+ */
+export function isAdminOfOrg(req, organizationUuid) {
+	if (!organizationUuid) return false;
+	if (req.user?.isSuperAdmin) return true;
+	if (devUnrestrictedAdmin(req.user?.username)) return true;
+	if ((req.user?.adminOrgUuids ?? []).includes(organizationUuid)) return true;
+	// Запрос, собранный без tenantMiddleware (тесты, служебные вызовы), знает только активную.
+	return !!req.user?.isOrgAdmin && req.user?.organizationUuid === organizationUuid;
 }
 
 /**
@@ -455,13 +559,59 @@ export async function canAccessModel(req, modelName, { write = false } = {}) {
 /**
  * Доступна ли пользователю КОНКРЕТНАЯ организация (переданная в теле/квери).
  * Нужна там, где организация приходит из запроса, а не выводится из записи, —
- * страховка от смены настроек ЧУЖОЙ организации. Суперадмин/админ орг — всегда.
+ * страховка от смены настроек ЧУЖОЙ организации.
+ *
+ * Доступна = суперадмин (если ему сейчас открыты данные, О5) или организация в списке
+ * доступных пользователю (членство + обслуживание). Роль admin сюда НЕ ВХОДИТ (Б2 аудита
+ * 26.09): раньше админ любой организации получал «да» для любого uuid — и через это
+ * подтверждал связи обслуживания за чужого клиента и раздавал себе права в чужих фирмах.
  */
 export function orgIsAccessible(req, organizationUuid) {
-	if (hasUnconditionalAccess(req)) return true;
+	if (req.user?.isSuperAdmin && req.user?.operatorDataAccess !== false) return true;
+	if (devUnrestrictedAdmin(req.user?.username)) return true;
 	if (!organizationUuid) return false;
 	const allowed = [req.user?.organizationUuid, ...(req.user?.allowedOrgUuids || [])];
 	return allowed.includes(organizationUuid);
+}
+
+/**
+ * ОРГАНИЗАЦИЯ СОЗДАВАЕМОЙ ИЛИ ПЕРЕНОСИМОЙ ЗАПИСИ (Б8 аудита 26.09).
+ *
+ * Организация документа приходит из тела запроса, и раньше её никто не сверял: пользователь
+ * организации A создавал и проводил документ в организации B — в том числе закрытие месяца,
+ * то есть закрывал чужой период. Правило одно на все роутеры:
+ *   - организация указана → она должна быть доступна пользователю (`orgIsAccessible`);
+ *   - не указана → берём активную; нет и её → отказ (документ принадлежит юрлицу).
+ *     Суперадмину пустая организация по-прежнему разрешена — как было.
+ *
+ * @returns {string|null} итоговая организация
+ * @throws {OrgAccessError}
+ */
+export function resolveWritableOrg(req, requested) {
+	const org = typeof requested === "string" && requested.trim() ? requested.trim() : null;
+	if (org) {
+		if (!orgIsAccessible(req, org)) throw new OrgAccessError(403, "Организация недоступна");
+		return org;
+	}
+	if (req.user?.isSuperAdmin) return null;
+	const active = req.user?.organizationUuid ?? null;
+	if (active) return active;
+	throw new OrgAccessError(400, "Не выбрана организация документа");
+}
+
+export class OrgAccessError extends Error {
+	constructor(status, message) {
+		super(message);
+		this.name = "OrgAccessError";
+		this.status = status;
+	}
+}
+
+/** Ответить на OrgAccessError; true — ответ отправлен. По образцу respondPeriodLockError. */
+export function respondOrgAccessError(error, res) {
+	if (!(error instanceof OrgAccessError)) return false;
+	res.status(error.status).json({ success: false, code: "ORG_NOT_ACCESSIBLE", message: error.message });
+	return true;
 }
 
 /**
@@ -492,7 +642,8 @@ function noteUnknownRoute(req, res, next, segment) {
 		});
 	}
 	// Один раз на сегмент за процесс: иначе журнал зальёт одной и той же строкой.
-	if (!seenUnknownRoutes.has(segment)) {
+	// Предел — чтобы случайные сегменты (сканеры, опечатки) не раздували множество бесконечно.
+	if (!seenUnknownRoutes.has(segment) && seenUnknownRoutes.size < 500) {
 		seenUnknownRoutes.add(segment);
 		console.warn(`[access] маршрут /${segment} не описан ни в ROUTE_TO_MODEL, ни в ROUTE_SUBJECTS — пропущен без проверки прав`);
 	}
@@ -581,7 +732,9 @@ export async function accessPermissionMiddleware(req, res, next) {
 			message: `Нет доступа к ${modelName}`,
 		});
 	} catch (err) {
+		// Сбой проверки прав — отказ, а не пропуск (Н2 аудита 26.09): fail-open здесь означал
+		// «при падении БД права не проверяются вовсе».
 		console.error("accessPermissionMiddleware error:", err);
-		return next();
+		return res.status(503).json({ success: false, code: "ACCESS_CHECK_UNAVAILABLE", message: "Проверка доступа временно недоступна — повторите позже" });
 	}
 }

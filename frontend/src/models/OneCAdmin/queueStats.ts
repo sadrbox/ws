@@ -13,15 +13,22 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import { fetchQueueStats, type OnecQueueStats } from "src/services/onec/api";
 
-/** Состояние очереди опрашивается редко: это справка, а не наблюдение за командой. */
-export const useQueueStats = () => useQuery({
-	queryKey: ["onec", "queue-stats"],
-	queryFn: fetchQueueStats,
-	staleTime: 30_000,
-	refetchInterval: 60_000,
-});
+/**
+ * Состояние очереди опрашивается редко: это справка, а не наблюдение за командой. И только пока
+ * панель на экране (О4 аудита 26.09).
+ */
+export function useQueueStats() {
+	const pollInterval = usePanePollInterval(60_000);
+	return useQuery({
+		queryKey: ["onec", "queue-stats"],
+		queryFn: fetchQueueStats,
+		staleTime: 30_000,
+		refetchInterval: pollInterval,
+	});
+}
 
 /**
  * Сколько займёт операция: число баз × средняя длительность ÷ параллельность.

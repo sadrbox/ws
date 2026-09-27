@@ -58,11 +58,20 @@ router.post("/classifiers/import", async (req, res) => {
 	}
 });
 
-// POST /classifiers/import-file (multipart, поле file) — импорт из XML гос-системы
-// (КАТО ValueTable / ГС ВС gsvsUpdates). Стриминг + bulk upsert. Только суперадмин.
-router.post("/classifiers/import-file", importUpload.single("file"), async (req, res) => {
+/**
+ * Суперадмин — ДО приёма файла (Б14 аудита 26.09). Раньше multer сначала писал на диск до 200 МБ,
+ * а проверка шла потом, и на отказе 401/403 файл оставался в uploads/classifiers: любой вошедший
+ * мог забить диск сервера.
+ */
+export function requireSuperAdminBeforeUpload(req, res, next) {
 	if (!req.user?.uuid) return res.status(401).json({ success: false, message: "Требуется авторизация" });
 	if (!req.user?.isSuperAdmin) return res.status(403).json({ success: false, message: "Только для суперадмина" });
+	return next();
+}
+
+// POST /classifiers/import-file (multipart, поле file) — импорт из XML гос-системы
+// (КАТО ValueTable / ГС ВС gsvsUpdates). Стриминг + bulk upsert. Только суперадмин.
+router.post("/classifiers/import-file", requireSuperAdminBeforeUpload, importUpload.single("file"), async (req, res) => {
 	if (!req.file) return res.status(400).json({ success: false, message: "Файл не передан (поле file)" });
 	try {
 		const result = await importClassifierXml(req.file.path);

@@ -35,6 +35,7 @@ import { prepareCreate, prepareUpdate, afterCreate, afterUpdate, remindTodo, rat
 import { ingestCheckResults } from "../../services/quality/checks.js";
 import { isStaffUser } from "../../services/quality/access.js";
 import { getFirmOrgSetting } from "../../services/quality/settings.js";
+import { idempotent } from "../../services/idempotency.js";
 
 /** Автор из 1С — сотрудник фирмы? null — учёт качества не включён (фирма не назначена). */
 async function isStaffAuthor(userUuid) {
@@ -185,7 +186,12 @@ router.get("/tasks", async (req, res) => {
 	}
 });
 
-router.post("/tasks", async (req, res) => {
+/*
+ * ПОВТОР ЗАПРОСА — НЕ ВТОРАЯ ЗАДАЧА (добор аудита 26.09, п. 4). Ход из 1С после таймаута сервис ИИ
+ * повторяет с тем же `Idempotency-Key: 1c:<baseId>:<ключ>`; ERP запоминает ключ и отвечает прежним
+ * результатом — services/idempotency.js. Без заголовка запрос обычный.
+ */
+router.post("/tasks", idempotent("POST /bpai/tasks"), async (req, res) => {
 	try {
 		const { organizationUuid, author } = await resolveContext(req.body);
 		const name = text(req.body?.name);
@@ -325,7 +331,9 @@ router.post("/tasks/:uuid/rate", async (req, res) => {
 // Тело: { bin, baseKey, agentId, startedAt, finishedAt, catalog, runs:[…], snapshots:[…] }.
 // Организацию называет БИН, как во всём канале; незнакомый БИН — 404 (сервис ai шлёт только
 // тех, кого нашёл в ERP).
-router.post("/checks/results", async (req, res) => {
+// Ключ посылки (`Idempotency-Key` и поле `idempotencyKey`, `checks:<sha>`): повтор после обрыва
+// соединения получает прежние счётчики, а не второй приём (добор аудита 26.09, п. 4).
+router.post("/checks/results", idempotent("POST /bpai/checks/results"), async (req, res) => {
 	try {
 		// НЕ organizationByBin: тот заводит организацию по незнакомому БИН (так работает чат),
 		// а итоги проверок по чужому или опечатанному БИН должны отвергаться, не создавая клиентов.

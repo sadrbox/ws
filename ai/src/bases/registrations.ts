@@ -7,6 +7,7 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
 import { sha256 } from "../auth/index.ts";
+import type { OrgDetails } from "./orgDetails.ts";
 
 export type RegistrationState = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 
@@ -17,7 +18,8 @@ export type RegistrationBody = {
 		configuration?: { name?: string; synonym?: string; version?: string } | null;
 		platform?: string | null; extensionVersion?: string | null; computer?: string | null;
 	};
-	organizations: { id?: string | null; name?: string | null; bin?: string | null }[];
+	/** `details` — реквизиты организации из базы (26.09), уже разобранные `normalizeOrgDetails`; у старых расширений нет. */
+	organizations: { id?: string | null; name?: string | null; bin?: string | null; details?: OrgDetails | null }[];
 	user?: { id?: string | null; name?: string | null } | null;
 	contact?: string | null;
 	comment?: string | null;
@@ -78,40 +80,42 @@ export class RegistrationStore {
 	}
 
 	/**
-	 * Новая заявка или повтор нерешённой. Повтор той же базы (`base.id`) — ТА ЖЕ заявка и тот же код; секрет
-	 * опроса выдаётся новый, прежний перестаёт действовать: 1С хранит последний, а два действующих секрета — два
-	 * получателя одного токена. Число повторов и последний адрес видны в панели.
+	 * Новая заявка или повтор нерешённой.
+	 *
+	 * ПОВТОР — ТОЛЬКО С ПРЕЖНИМ СЕКРЕТОМ (Б11 аудита 26.09). Раньше повтор той же базы (`base.id`) находил
+	 * ожидающую заявку по одному идентификатору ИБ и перезаписывал в ней секрет опроса и список БИНов при прежнем
+	 * коде: оператор одобрял по продиктованному коду, а токен базы и одобренные БИНы доставались тому, кто повторил
+	 * заявку последним. Теперь заявку меняет только тот, кто предъявил её секрет опроса (`secret`), — тогда это ТА
+	 * ЖЕ заявка и тот же код; без секрета заводится новая заявка с новым кодом, прежняя остаётся как была.
+	 * Число повторов и последний адрес видны в панели.
 	 */
-	async submit(body: RegistrationBody, ip: string | null): Promise<{ row: RegistrationRow; secret: string; repeated: boolean }> {
+	async submit(body: RegistrationBody, ip: string | null, secret?: string | null): Promise<{ row: RegistrationRow; secret: string; repeated: boolean }> {
 		await this.expire();
-		const secret = newPollSecret();
-		const again = await this.db.query<Raw>(
-			`UPDATE base_registrations
-			    SET secret_hash = $2, body = $3, base_name = $4, ip = $5, repeats = repeats + 1, updated_at = now()
-			  WHERE onec_base_id = $1 AND state = 'PENDING'
-			  RETURNING ${COLS}`,
-			[body.base.id, sha256(secret), JSON.stringify(body), body.base.name, ip],
-		);
-		if (again.rows[0]) return { row: toRow(again.rows[0]), secret, repeated: true };
+		const fresh = newPollSecret();
+		const presented = (secret ?? "").trim();
+		if (presented) {
+			const again = await this.db.query<Raw>(
+				`UPDATE base_registrations
+				    SET secret_hash = $2, body = $3, base_name = $4, ip = $5, repeats = repeats + 1, updated_at = now()
+				  WHERE onec_base_id = $1 AND state = 'PENDING' AND secret_hash = $6
+				  RETURNING ${COLS}`,
+				[body.base.id, sha256(fresh), JSON.stringify(body), body.base.name, ip, sha256(presented)],
+			);
+			if (again.rows[0]) return { row: toRow(again.rows[0]), secret: fresh, repeated: true };
+		}
 
-		// Код может совпасть с чужим нерешённым — тогда новый; база могла прислать повтор параллельно — тогда он.
+		// Код может совпасть с чужим нерешённым — тогда берём другой.
 		for (let attempt = 0; attempt < 8; attempt++) {
 			try {
 				const r = await this.db.query<Raw>(
 					`INSERT INTO base_registrations (id, code, secret_hash, onec_base_id, base_name, body, ip, expires_at)
 					 VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(days => $8))
 					 RETURNING ${COLS}`,
-					[randomUUID(), newRegistrationCode(), sha256(secret), body.base.id, body.base.name, JSON.stringify(body), ip, REGISTRATION_TTL_DAYS],
+					[randomUUID(), newRegistrationCode(), sha256(fresh), body.base.id, body.base.name, JSON.stringify(body), ip, REGISTRATION_TTL_DAYS],
 				);
-				return { row: toRow(r.rows[0]), secret, repeated: false };
+				return { row: toRow(r.rows[0]), secret: fresh, repeated: false };
 			} catch (e) {
 				if (!isUniqueViolation(e)) throw e;
-				const raced = await this.db.query<Raw>(
-					`UPDATE base_registrations SET secret_hash = $2, repeats = repeats + 1, updated_at = now()
-					  WHERE onec_base_id = $1 AND state = 'PENDING' RETURNING ${COLS}`,
-					[body.base.id, sha256(secret)],
-				);
-				if (raced.rows[0]) return { row: toRow(raced.rows[0]), secret, repeated: true };
 			}
 		}
 		throw new Error("не удалось подобрать свободный код заявки");
@@ -153,10 +157,21 @@ export class RegistrationStore {
 			`UPDATE base_registrations
 			    SET state = 'APPROVED', organization_uuid = $2, base_id = $3, base_key = $4, decided_by = $5, note = $6,
 			        decided_at = now(), updated_at = now()
-			  WHERE id = $1 AND state = 'PENDING'`,
+			  WHERE id = $1 AND state = 'PENDING'
+			  RETURNING onec_base_id, code`,
 			[id, d.organizationUuid, d.baseId, d.baseKey, d.decidedBy, d.note ?? null],
 		);
-		return (r.rowCount ?? 0) > 0;
+		const row = (r.rows as { onec_base_id: string; code: string }[])[0];
+		if (!row) return false;
+		// Остальные нерешённые заявки той же базы закрываем (Б11 аудита 26.09): повтор без секрета заводит новую,
+		// и одобрить вторую по ошибке значило бы выдать второй токен и второй список БИНов.
+		await this.db.query(
+			`UPDATE base_registrations SET state = 'REJECTED', decided_by = $3, decided_at = now(), updated_at = now(),
+			        note = 'Одобрена другая заявка этой базы (код ' || $4 || ')'
+			  WHERE onec_base_id = $1 AND state = 'PENDING' AND id <> $2`,
+			[row.onec_base_id, id, d.decidedBy, row.code],
+		);
+		return true;
 	}
 
 	async reject(id: string, d: { decidedBy: string; note: string }): Promise<boolean> {

@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
 	rejectViolation: vi.fn(() => Promise.resolve({ success: true })),
 	disputeViolation: vi.fn(() => Promise.resolve({ success: true })),
 	resolveDispute: vi.fn(() => Promise.resolve({ success: true })),
+	fetchQualityMe: vi.fn(() => Promise.resolve({ isAdmin: false })),
 }));
 vi.mock("src/services/quality/api", () => api);
 
@@ -35,7 +36,7 @@ const ctx = (confirm = true): TypeAppContextProps => ({
 	auth: { user: { uuid: "me", username: "me" }, logout: () => { } },
 });
 
-function setup(p: { status: ViolationStatus; canDecide?: boolean; isMine?: boolean; selfDetected?: boolean }) {
+function setup(p: { status: ViolationStatus; canDecide?: boolean; isMine?: boolean; selfDetected?: boolean; decidedByUuid?: string; canResolveDispute?: boolean }) {
 	const onDone = vi.fn();
 	const onNotices = vi.fn();
 	const wrap = (node: ReactNode) => (
@@ -45,7 +46,7 @@ function setup(p: { status: ViolationStatus; canDecide?: boolean; isMine?: boole
 	);
 	render(wrap(
 		<DecisionBlock uuid="v-1" status={p.status} selfDetected={!!p.selfDetected} canDecide={!!p.canDecide} isMine={!!p.isMine}
-			source="test" onDone={onDone} onNotices={onNotices} />,
+			decidedByUuid={p.decidedByUuid} canResolveDispute={p.canResolveDispute} source="test" onDone={onDone} onNotices={onNotices} />,
 	));
 	return { onDone, onNotices };
 }
@@ -55,6 +56,7 @@ const button = (key: string) => screen.getByRole("button", { name: translate(key
 describe("блок решения по нарушению", () => {
 	beforeEach(() => {
 		Object.values(api).forEach((f) => f.mockClear());
+		api.fetchQualityMe.mockImplementation(() => Promise.resolve({ isAdmin: false }));
 	});
 
 	it("решающему по кандидату — «Подтвердить» и «Отклонить», оспорить нечего", () => {
@@ -113,5 +115,37 @@ describe("блок решения по нарушению", () => {
 		fireEvent.click(button("violationReject"));
 		await waitFor(() => expect(onDone).toHaveBeenCalled());
 		expect(api.rejectViolation).toHaveBeenCalledWith("v-1", "Клиент не наш");
+	});
+
+	// И24: по возражению решает не тот, кто подтверждал, — иначе «Решить» вела к 403.
+	it("возражение: подтверждавшему — не «Решить», а пояснение про уровень выше", async () => {
+		setup({ status: "disputed", canDecide: true, decidedByUuid: "me" });
+		await waitFor(() => expect(api.fetchQualityMe).toHaveBeenCalled());
+		expect(screen.queryByRole("button", { name: translate("violationResolve") })).toBeNull();
+		expect(screen.getByText(translate("violationResolveHint"))).toBeTruthy();
+	});
+
+	it("возражение: решающему уровнем выше — «Решить»", () => {
+		setup({ status: "disputed", canDecide: true, decidedByUuid: "chief" });
+		expect(button("violationResolve")).toBeTruthy();
+	});
+
+	it("возражение: администратор решает и по своему подтверждению", async () => {
+		api.fetchQualityMe.mockImplementation(() => Promise.resolve({ isAdmin: true }));
+		setup({ status: "disputed", canDecide: true, decidedByUuid: "me" });
+		expect(await screen.findByRole("button", { name: translate("violationResolve") })).toBeTruthy();
+	});
+
+	// Слово сервера (canResolveDispute) главнее догадки панели: коллега того же уровня, что подтверждавший, тоже не решает.
+	it("возражение: сервер запретил (коллега того же уровня) — «Решить» нет, хотя подтверждал не я", async () => {
+		setup({ status: "disputed", canDecide: true, decidedByUuid: "chief", canResolveDispute: false });
+		await waitFor(() => expect(api.fetchQualityMe).toHaveBeenCalled());
+		expect(screen.queryByRole("button", { name: translate("violationResolve") })).toBeNull();
+		expect(screen.getByText(translate("violationResolveHint"))).toBeTruthy();
+	});
+
+	it("возражение: сервер разрешил — «Решить» есть, даже если по decidedByUuid подтверждал я", () => {
+		setup({ status: "disputed", canDecide: true, decidedByUuid: "me", canResolveDispute: true });
+		expect(button("violationResolve")).toBeTruthy();
 	});
 });

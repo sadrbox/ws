@@ -19,6 +19,7 @@ import styles from "src/styles/main.module.scss";
 import { HelpBox } from "src/components/HelpBox";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
+import { useFormLateResponseGuard } from "./lateResponseGuard";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
@@ -43,8 +44,9 @@ import DocumentChainButton from "src/components/DocumentChain/DocumentChainButto
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { useEsfInvoice } from "src/hooks/useEsfInvoice";
 import type { NoticeItem } from "src/components/Notice";
-import { useAppContext } from "src/app/context";
-import { type BasisFromTarget, type OrgDependentField, type BasisSource, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill } from "src/utils/createFromBasis";
+import { useAppActions, useAppAuth } from "src/app/context";
+import { type BasisFromTarget, type OrgDependentField, type BasisSource, openDocumentFromBasis, mapCommonTradeFields, resolveOrgChangeFields, runBasisRefill, reportBasisRefillError, confirmBasisItemsRefresh } from "src/utils/createFromBasis";
+import { reportError } from "src/services/errors/route";
 import { useExistingDependents, formatDependentOption } from "src/hooks/useExistingDependents";
 import DocumentTotals from "src/components/DocumentTotals";
 import { useRefillAction } from "src/hooks/useRefillAction";
@@ -246,7 +248,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     const defaultOrg = useDefaultOrganization();
     const queryClient = useQueryClient();
     const { canWrite } = useAccessPermission(cfg.accessPermissionModel);
-    const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
+    // Стабильные части контекста (О3): useAppContext() перерисовывал форму при любом переключении вкладки.
+    const { windows: { addPane }, actions: { confirm } } = useAppActions();
+    const { user: currentUser } = useAppAuth();
 
     const initialFields: TFields | undefined = (() => {
       const data = paneProps.data as InvoicePaneData | undefined;
@@ -490,11 +494,22 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           allItemsRef, setBasisItems, bumpItemsTableKey: () => setItemsTableKey(k => k + 1),
         });
       } catch (e) {
-        console.error("[refill] failed", e);
+        // Ошибку «Перезаполнить» — человеку, а не в консоль (И22).
+        reportBasisRefillError(e);
       } finally {
         setIsRefilling(false);
       }
     }, [form, currentUser?.uuid]);
+
+    // «Обновить» таблицы у документа с основанием перезаполняет строки — ручные правки
+    // спрашиваем, а не теряем молча (И20).
+    const refreshItemsFromBasis = useCallback(async () => {
+      const ok = await confirmBasisItemsRefresh({
+        basisType: form.fields.basisDocumentType, basisUuid: form.fields.basisDocumentUuid,
+        displayed: allItemsRef.current, confirm,
+      });
+      if (ok) await handleRefillFromBasis(true);
+    }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, confirm, handleRefillFromBasis]);
 
     // Кнопка «Перезаполнить» стоит в ряду действий поля «Основание», вплотную к
     // «Очистить», а перезаполнение перетирает строки — спрашиваем подтверждение.
@@ -543,7 +558,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           },
         });
       } catch (e) {
-        console.error("[print] failed", e);
+        // Сбой подготовки печати раньше уходил только в консоль — кнопка молча ничего не делала.
+        reportError(e, { source: cfg.formLabel, fallback: translate("printPrepareFailed") });
       }
     }, [form.fields, addPane]);
 
@@ -621,6 +637,9 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     }, [form.setFields]);
 
     // Выбор контрагента: ЭСФ — грузополучатель = контрагент; категория получателя из карточки.
+    // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+    // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
+    const guardFields = useFormLateResponseGuard<TFields>(form);
     const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string, item?: LookupRow) => {
       const updates: Partial<TFields> = { counterpartyUuid: uuid, counterpartyName: displayValue };
       if (cfg.hasEsf) {
@@ -629,14 +648,12 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       }
       form.setFields(updates);
       // Договор: основной у нового контрагента → подставить, чужой → очистить.
-      const cur = form.store.getSnapshot().fields;
-      const patch = await syncContract({
+      await guardFields((cur) => syncContract({
         counterpartyUuid: uuid,
         organizationUuid: cur.organizationUuid,
         currentContractUuid: cur.contractUuid,
-      });
-      if (patch) form.setFields(patch as Partial<TFields>);
-    }, [form.setFields, form.store, syncContract]);
+      }), ["counterpartyUuid", "organizationUuid"]);
+    }, [form.setFields, guardFields, syncContract]);
 
     // Смена организации: зависимые поля (договор, склад если есть) →
     // дефолт пользователя для новой орг, иначе очистка.
@@ -654,9 +671,8 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
         { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
       ];
       if (cfg.hasWarehouse) orgFields.push({ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" });
-      const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", orgFields);
-      form.setFields(patch as Partial<TFields>);
-    }, [form.setFields, form.store, currentUser?.uuid]);
+      await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", orgFields), ["organizationUuid"]);
+    }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
 
     const contractScope = useMemo<Record<string, string> | null>(() => {
       if (!form.fields.organizationUuid) return null;
@@ -820,7 +836,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
             disableDeleteRows={basisLock}
             fieldsReadOnly={basisLock}
             deferRemoteChanges
-            onRefresh={hasBasis ? () => handleRefillFromBasis(true) : undefined}
+            onRefresh={hasBasis ? () => void refreshItemsFromBasis() : undefined}
             key={itemsTableKey}
             initialPendingRows={itemsTableKey > 0 ? basisItems : (items.pending.length > 0 ? items.pending : basisItems)}
             onTotalChange={handleTotalChange}
@@ -884,7 +900,7 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
           </div>
         )
       }] : []),
-    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleCounterpartySelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, esfDict]);
+    ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleContractSelect, handleOrganizationSelect, handleCounterpartySelect, handleTotalChange, canWrite, items, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, esfDict, refreshItemsFromBasis]);
 
     return (
       <FormRequiredScope docType={cfg.docType} active>

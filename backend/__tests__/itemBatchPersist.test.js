@@ -37,12 +37,14 @@ test("batch-эндпоинты СТРОК применяют batchUuid (инач
 	// Страж-проверка исходников: batch-ветка должна знать про доп. поля строки.
 	const fs = await import("node:fs/promises");
 
+	// Строки реализации идут через общую фабрику (аудит 26.09) — партия должна быть
+	// среди её доп. полей.
 	const sale = await fs.readFile("api/router/saleitems.js", "utf-8");
-	const batchBlock = sale.slice(sale.indexOf("/batch`"));
+	assert.ok(sale.includes("createDocumentItemsRouter("), "saleitems: строки реализации — через фабрику строк");
 	for (const f of BATCH_WRITABLE) {
 		assert.ok(
-			batchBlock.includes(f),
-			`saleitems: batch-эндпоинт должен применять ${f} — иначе выбор партии молча теряется`,
+			new RegExp(`extraStringFields:\\s*\\[[^\\]]*"${f}"`).test(sale),
+			`saleitems: ${f} должен быть в extraStringFields — иначе выбор партии молча теряется`,
 		);
 	}
 
@@ -54,10 +56,10 @@ test("batch-эндпоинты СТРОК применяют batchUuid (инач
 		facBatch.includes("extraFields(data)"),
 		"фабрика: batch-create должен применять extraFields (там batchUuid)",
 	);
-	assert.ok(
-		facBatch.includes("for (const f of extraStringFields)"),
-		"фабрика: batch-update должен применять extraStringFields (там batchUuid)",
-	);
+	// update — через общий buildUpdateData (тот же, что у PUT), а он применяет extraStringFields.
+	const upd = factory.slice(factory.indexOf("async function buildUpdateData"), factory.indexOf("// ── PUT"));
+	assert.ok(upd.includes("for (const f of extraStringFields)"), "фабрика: buildUpdateData применяет extraStringFields (там batchUuid)");
+	assert.ok(facBatch.includes("buildUpdateData("), "фабрика: batch-update идёт через buildUpdateData");
 });
 
 test("смена партии в строке продажи сохраняется (не откатывается на прежнюю)", async (t) => {

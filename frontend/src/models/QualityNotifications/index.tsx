@@ -10,7 +10,7 @@
 import { type FC, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { Button } from "src/components/Button";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
@@ -31,7 +31,7 @@ const listKey = (onlyUnread: boolean) => ["quality", "notifications", "list", on
 
 export const QualityNotificationsList: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const queryClient = useQueryClient();
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const [onlyUnread, setOnlyUnread] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [notices, setNotices] = useState<NoticeItem[]>([]);

@@ -1,5 +1,5 @@
 import { FC, useMemo, useCallback, useRef, useState } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import type { TTableVariant } from "src/components/Table";
@@ -255,7 +255,7 @@ const AccessPermissionsTable: FC<AccessPermissionsTableProps> = ({
   disableAdd: disableAddProp,
   onAllItemsChange: onAllItemsChangeProp,
 }) => {
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
   const queryClient = useQueryClient();
 
   const { getFirstUnused, getAvailableOptions, handleRowsChange } =

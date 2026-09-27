@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { allocateNumber, peekNextNumber, invalidateNumberSettingsCache, renumberDraftDocuments, reformatNumber, normalizeDocNumber, docNumberDigitLength } from "../services/documentNumbering.js";
 import { resolveDocumentNumber } from "../services/documentNumberAssign.js";
+import { unjournaledDocTypes } from "../services/documentNumbering.js";
 
 // Мок prisma:
 //  • documentNumberSetting.findMany → настройки нумерации (префикс/enabled);
@@ -177,4 +178,11 @@ test("renumberDraftDocuments: нормализует черновики под �
 	assert.equal(r.updated, 2);
 	assert.equal(r.skipped, 0);
 	assert.deepEqual(updates, [{ number: "РЕАЛ-1", uuid: "u1" }, { number: "РЕАЛ-2", uuid: "u2" }]);
+});
+
+// ─── Аудит 26.09 ─────────────────────────────────────────────────────────────
+
+
+test("у каждого вида документа с нумерацией есть журнал (иначе автономер всегда «1» и 409 на втором)", () => {
+	assert.deepEqual(unjournaledDocTypes(), []);
 });

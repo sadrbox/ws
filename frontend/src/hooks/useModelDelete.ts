@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import apiClient, { type RequestError } from "src/services/api/client";
 import type { TDataItem } from "src/components/Table/types";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { getComponentName } from "src/app/getComponentName";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
@@ -35,8 +35,8 @@ export function useModelDelete(
 ) {
 	const {
 		actions: { confirm },
-		windows: { panes, requestClose },
-	} = useAppContext();
+		windows: { getPanes, requestClose },
+	} = useAppActions();
 
 	const handleDelete = useCallback(
 		async (selectedRowIds: Set<number>, tableRows: TDataItem[]) => {
@@ -44,17 +44,16 @@ export function useModelDelete(
 			if (items.length === 0) return { deletedIds: new Set<number>() };
 
 			// Понятный текст подтверждения: имя сущности + № документа-дата (или ID-имя),
-			// списком при множественном выборе. confirm рендерит как HTML → экранируем.
-			const esc = (s: string) =>
-				s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+			// списком при множественном выборе. ConfirmModal выводит сообщение ТЕКСТОМ
+			// (аудит 26.09, Б7) — экранировать не нужно, иначе на экране будет «&amp;».
 			const MAX_LIST = 12;
 			const message =
 				items.length === 1
-					? `Удалить ${esc(describeRow(model, items[0]))}?`
+					? `Удалить ${describeRow(model, items[0])}?`
 					: `Удалить выбранные (${items.length}):\n` +
 						items
 							.slice(0, MAX_LIST)
-							.map((r) => `• ${esc(describeRow(model, r))}`)
+							.map((r) => `• ${describeRow(model, r)}`)
 							.join("\n") +
 						(items.length > MAX_LIST
 							? `\n… и ещё ${items.length - MAX_LIST}`
@@ -152,7 +151,9 @@ export function useModelDelete(
 			//    uniqId формируется как "<FormName>-<uuid|id>" (см. app/index.tsx),
 			//    но надёжнее искать по data.uuid/data.id текущих panes.
 			if (deletedUuids.size > 0 || deletedIds.size > 0) {
-				const toClose = panes.filter((p) => {
+				// Панели — на момент удаления: подписка на список перерисовывала бы хук на каждое
+				// переключение вкладки (useAppActions стабилен).
+				const toClose = getPanes().filter((p) => {
 					const name = getComponentName(p.component);
 					if (name.endsWith("List")) return false; // *List — не одна запись
 					const d = (p as { data?: TDataItem }).data;
@@ -202,7 +203,7 @@ export function useModelDelete(
 			void refetch();
 			return { deletedIds };
 		},
-		[model, refetch, confirm, panes, requestClose],
+		[model, refetch, confirm, getPanes, requestClose],
 	);
 
 	return handleDelete;

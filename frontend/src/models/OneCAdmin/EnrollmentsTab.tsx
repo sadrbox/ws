@@ -11,12 +11,14 @@
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import { FieldTextarea } from "src/components/Field/FieldTextarea";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Modal from "src/components/Modal";
+import Notice from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
@@ -29,8 +31,10 @@ import {
 	approveEnrollment, fetchEnrollments, fetchErpOrganizations, rejectEnrollment,
 	type AgentEnrollment, type EnrollmentState,
 } from "src/services/onec/api";
-import { QueryError, SharedListForbidden, isSharedListForbidden, useAgents } from "./shared";
+import { isSharedListForbidden, useAgents } from "./shared";
+import { QueryError, SharedListForbidden } from "./sharedUi";
 import { registrationStateLabel, stateTone } from "./requestsView";
+import { siblingsCount, siblingsWarning } from "./enrollmentsView";
 import styles from "./OneCAdmin.module.scss";
 
 const TONE_CLASS = { wait: styles.ReqWait, ok: styles.ReqOk, bad: styles.ReqBad, off: styles.ReqOff };
@@ -47,17 +51,21 @@ const columns = (): TColumn[] => ([
 	{ identifier: "reqExpires", type: "datetime", width: "160px", minWidth: "110px", alignment: "left", visible: false, inlist: true },
 	{ identifier: "reqResult", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "onecEnrollReplaces", type: "string", width: "220px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	// Ещё ожидающие заявки той же службы (Б11): одобрение одной отклонит остальные — одобрять строго по коду.
+	{ identifier: "onecEnrollSiblings", type: "string", width: "240px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
 	{ identifier: "reqRepeats", type: "string", width: "160px", minWidth: "100px", alignment: "left", visible: false, inlist: true },
 ] as unknown as TColumn[]);
 
 export const EnrollmentsTab: FC = () => {
 	const qc = useQueryClient();
 	const [state, setState] = useState<EnrollmentState | "">("PENDING");
+	// Опрос — только пока панель на экране (О4 аудита 26.09).
+	const pollInterval = usePanePollInterval(10_000);
 	const list = useQuery({
 		queryKey: ["onec", "enrollments", state, ""],
 		queryFn: () => fetchEnrollments({ state }),
 		// Человек у компьютера с агентом ждёт одобрения — список обновляется сам.
-		refetchInterval: 10_000,
+		refetchInterval: pollInterval,
 	});
 	const agents = useAgents();
 	const names = useMemo(() => new Map((agents.data?.items ?? []).map((a) => [a.id, a.name])), [agents.data]);
@@ -90,6 +98,8 @@ export const EnrollmentsTab: FC = () => {
 			? `${(e.agentId && names.get(e.agentId)) || e.agentId?.slice(0, 8) || "—"} · ${e.tokenDeliveredAt ? translate("onecReqTokenDelivered") : translate("onecEnrollWaiting")}${e.note ? ` · ${e.note}` : ""}`
 			: e.note || "—",
 		onecEnrollReplaces: e.previousAgentId ? names.get(e.previousAgentId) || e.previousAgentId.slice(0, 8) : "—",
+		onecEnrollSiblings: siblingsCount(e) ? `${siblingsCount(e)} — ${translate("onecEnrollSiblingsShort")}` : "—",
+		__siblings: siblingsCount(e) > 0,
 		reqRepeats: e.repeats ? `${e.repeats}${e.ip ? ` · ${e.ip}` : ""}` : "—",
 	})), (r) => r.uuid), [items, names]);
 	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
@@ -123,7 +133,8 @@ export const EnrollmentsTab: FC = () => {
 				renderCell: (r, col) => (col.identifier === "reqState"
 					? <span className={TONE_CLASS[asText(r.__tone) as keyof typeof TONE_CLASS]}>{asText(r.reqState)}</span>
 					: col.identifier === "reqCode" ? <span className={styles.ReqCode}>{asText(r.reqCode)}</span>
-						: undefined),
+						: col.identifier === "onecEnrollSiblings" && r.__siblings ? <span className={styles.ReqWait}>{asText(r.onecEnrollSiblings)}</span>
+							: undefined),
 				onActiveRowChange: (r) => setActiveId(r ? asText(r.uuid) : null),
 				onRowClick: (r) => {
 					const e = items.find((x) => x.id === asText(r.uuid));
@@ -179,6 +190,8 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 			onApply={() => { if ((!needsOrg || organizationUuid) && !approve.isPending) approve.mutate(); }}>
 			<div className={styles.ModalForm}>
 				<div>{enr.computer} · {enr.serviceName} · {enr.role === "admin" ? translate("onecRoleAdmin") : translate("onecRoleBusiness")}</div>
+				{/* Две ожидающие заявки одной службы (Б11): одобрение этой отклонит остальные — сверить код, а не имя. */}
+				{siblingsWarning(enr) && <Notice inline items={[{ type: "warning", text: siblingsWarning(enr)! }]} />}
 				{needsOrg
 					? (
 						<FieldSelect name="enr_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}

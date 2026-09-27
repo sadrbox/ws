@@ -28,6 +28,7 @@ import columnsJson from "./documentItemsColumns.json";
 import SubTable, { ReadOnlyCell, type SubTableContext, type SubTableApi, type TCellValidator } from "src/components/SubTable";
 import { SerialNumbersCell } from "./SerialNumbersCell";
 import { BatchNumbersCell } from "./BatchNumbersCell";
+import type { RowProductTracking } from "./productTracking";
 import { useSubTableContext } from "src/components/SubTable/context";
 import { withSaleItemRecalc, withSaleItemRecalcFromDiscountAmount, recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import { parseNumericInput } from "src/components/Table/services";
@@ -528,6 +529,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           toWarehouseUuid={toWarehouseUuid ?? undefined}
           originIssueDocUuid={originIssueDocUuid ?? undefined}
           documentDate={documentDate ?? null}
+          product={row.product as RowProductTracking | undefined}
           disabled={ctx.disabled}
         />
       );
@@ -545,6 +547,7 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
           organizationUuid={organizationUuid ?? undefined}
           warehouseUuid={warehouseUuid ?? undefined}
           documentDate={documentDate ?? null}
+          product={row.product as RowProductTracking | undefined}
           disabled={ctx.disabled}
         />
       );
@@ -771,7 +774,10 @@ const TradeDocumentItemsTable: FC<TradeDocumentItemsTableProps> = ({
     // Серийные номера/партии: без этих зависимостей renderCell замораживает
     // parentUuid="" (документ ещё не сохранён на первом рендере), и ячейка «Серии»
     // навсегда показывает «сначала сохраните» даже после записи документа.
-    serialMode, serialDocType, batchMode, warehouseUuid, toWarehouseUuid, parentUuid, organizationUuid]);
+    serialMode, serialDocType, batchMode, warehouseUuid, toWarehouseUuid, parentUuid, organizationUuid,
+    // Дата и основание — туда же (аудит 26.09, О8): без них серии и партии сверялись с
+    // прежней датой документа и прежним основанием возврата после их смены в шапке.
+    documentDate, originIssueDocUuid, autofillRowPrice, autofillEsfDeclaration]);
 
   const defaultNewRow = useMemo(() => ({
     productUuid: null,
@@ -869,8 +875,10 @@ const RecalcAllButton: FC<RecalcAllButtonProps> = ({ endpoint, disabled = false,
         }
         if (Object.keys(realPatch).length === 0) continue;
         patches.push({ row, payload: realPatch });
-        subCtx?.updateLocalRow(row, realPatch);
       }
+      // Одним пакетом: updateLocalRow в цикле проходил весь кэш строк на каждую строку
+      // (O(n²)) и n раз оповещал форму (аудит 26.09, О6).
+      subCtx?.updateLocalRows(patches.map(({ row, payload }) => ({ row, patch: payload })));
       if (!subCtx?.deferRemoteChanges) {
         await Promise.all(patches.map(({ row, payload }) =>
           row.uuid ? apiClient.put(`/${endpoint}/${row.uuid}`, payload).catch(() => undefined) : Promise.resolve(),

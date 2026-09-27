@@ -1,16 +1,16 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
-import { tenantFilter, checkOwnership, checkFkOwnership } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership, checkFkOwnership, orgIsAccessible, resolveWritableOrg, respondOrgAccessError, OrgAccessError } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
-import { syncItemsFromParent } from "./_documentItemsFactory.js";
-import { reconcileDocumentRegister, removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
-import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
+import { removeDocumentRegister, assertStockForPosting, respondStockError } from "../../services/productRegister.js";
+import { removeDocumentEntries, assertPostable, respondPostingError } from "../../services/accountingPosting.js";
 import { assertDocumentSerials, respondSerialError, releaseIssuedSerials } from "../../services/serialNumbers.js";
 import { assertDocumentBatches, respondBatchError } from "../../services/batches.js";
-import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
+import { commitDocumentHeader, recomputeAfterDelete } from "../../services/documentCommit.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
@@ -29,8 +29,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawCursor = req.query.cursor;
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res
@@ -121,8 +120,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 
@@ -177,7 +176,6 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			vatAmount,
 			discountAmount,
 			posted,
-			organizationUuid,
 			counterpartyUuid,
 			contractUuid,
 			warehouseUuid,
@@ -189,6 +187,9 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			awpRelatedUuid,
 			sntRelatedUuid,
 		} = req.body;
+		// Организация реализации — доступная пользователю (Б8 аудита 26.09): раньше документ
+		// создавался и проводился в чужой организации.
+		const organizationUuid = resolveWritableOrg(req, req.body.organizationUuid);
 		const fkError = await checkFkOwnership(req, prisma, [
 			{ model: "warehouse", uuid: warehouseUuid },
 		]);
@@ -197,9 +198,10 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		await assertOrgFieldMembership({ organizationUuid, warehouseUuid, contractUuid }, prisma);
 		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
 		await assertPeriodOpen(organizationUuid, date);
+		// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать, быть
+		// той же организации и — если реализация сразу проводится — проведённым (У9).
+		if (basisDocumentUuid) await assertBasisExists(basisDocumentType, basisDocumentUuid, prisma, { organizationUuid, posting: posted === true });
 		// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
-		// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать.
-		if (basisDocumentUuid) await assertBasisExists(basisDocumentType, basisDocumentUuid);
 		const docNumber = await ensureDocumentNumber({ docType: "sale", modelName: MODEL, manual: req.body.number, organizationUuid, date });
 		const item = await prisma[MODEL].create({
 			data: {
@@ -238,6 +240,7 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		});
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondSerialError(error, res)) return;
@@ -297,14 +300,28 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const fkError = await checkFkOwnership(req, prisma, [{ model: "warehouse", uuid: data.warehouseUuid }]);
 			if (fkError) return res.status(403).json({ success: false, message: fkError });
 		}
-		// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания.
-		if (data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType, data.basisDocumentUuid);
 		const existing = await prisma[MODEL].findUnique({
 			where: w,
-			select: { uuid: true, organizationUuid: true, posted: true, number: true, warehouseUuid: true, contractUuid: true, date: true },
+			select: { uuid: true, organizationUuid: true, posted: true, number: true, warehouseUuid: true, contractUuid: true, date: true, basisDocumentType: true, basisDocumentUuid: true },
 		});
 		if (!existing || !checkOwnership(existing, req))
 			return res.status(404).json({ success: false, message: "Не найдено" });
+		// Перенос в другую организацию — только в доступную (Б8 аудита 26.09).
+		if ("organizationUuid" in data && data.organizationUuid !== existing.organizationUuid) {
+			if (!data.organizationUuid && !req.user?.isSuperAdmin) throw new OrgAccessError(400, "Не выбрана организация документа");
+			if (data.organizationUuid && !orgIsAccessible(req, data.organizationUuid)) throw new OrgAccessError(403, "Организация недоступна");
+		}
+		// Основание: существует, той же организации и — при проведении — проведено (У9).
+		// Проверяем новое основание и прежнее, если документ проводится.
+		{
+			const finalOrg = data.organizationUuid !== undefined ? data.organizationUuid : existing.organizationUuid;
+			const posting = (data.posted !== undefined ? data.posted : existing.posted) === true;
+			const basisType = data.basisDocumentType !== undefined ? data.basisDocumentType : existing.basisDocumentType;
+			const basisUuid = data.basisDocumentUuid !== undefined ? data.basisDocumentUuid : existing.basisDocumentUuid;
+			if (basisUuid && (data.basisDocumentUuid || posting)) {
+				await assertBasisExists(basisType, basisUuid, prisma, { organizationUuid: finalOrg, posting });
+			}
+		}
 		// Блокировка закрытого периода: нельзя трогать закрытый документ и нельзя
 		// переносить документ в закрытый период.
 		await assertPeriodOpen(existing.organizationUuid, existing.date);
@@ -328,13 +345,16 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			await assertDocumentBatches({ docType: "sale", docUuid: existing.uuid, itemModel: "saleItem", parentField: "saleUuid" });
 			const warehouseUuid =
 				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
-			await assertStockForPosting("sale", existing.uuid, { warehouseUuid });
+			// Предпроверка остатка до записи (окончательная — в транзакции commitDocumentHeader).
+			await assertStockForPosting("sale", existing.uuid, { warehouseUuid, date: data.date ?? undefined });
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
 			await assertPostable("sale", existing.uuid, { ...data, posted: true });
 		}
-		const item = await prisma[MODEL].update({
-			where: w,
-			data,
+		// Шапка, строки, контроль остатка, регистр и проводки — одной транзакцией под
+		// блокировкой документа (У2/У4 аудита 26.09); связи дочитываются после фиксации.
+		const item = await commitDocumentHeader({
+			documentType: "sale", model: MODEL, uuid: existing.uuid, data, existing,
+			itemModel: "saleItem", parentField: "saleUuid",
 			include: {
 				organization: true,
 				counterparty: true,
@@ -345,17 +365,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 				author: { select: { uuid: true, username: true, email: true } },
 			},
 		});
-		await syncItemsFromParent("saleItem", "saleUuid", item.uuid, item);
-		// Проведение/распроведение или смена даты/склада/организации — пересобираем
-		// движения регистра товаров (записываются только для проведённых документов).
-		await reconcileDocumentRegister("sale", item.uuid);
-		// Пересобираем бухгалтерские проводки документа.
-		await reconcileDocumentEntries("sale", item.uuid);
-		// Ввод задним числом делает COGS последующих документов устаревшим —
-		// пересчитываем хвост истории (не трогая закрытый период).
-		await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: item.date });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
 		if (respondBasisError(error, res)) return;
 		if (respondOrgFieldError(error, res)) return;
 		if (respondStockError(error, res)) return;
@@ -375,6 +387,9 @@ const onSaleDeleted = async (doc) => {
 	await removeDocumentRegister("sale", doc.uuid);
 	await removeDocumentEntries("sale", doc.uuid);
 	await releaseIssuedSerials("sale", doc.uuid);
+	// Удаление проведённой реализации задним числом меняет себестоимость последующих
+	// документов — пересчёт хвоста (в фоне).
+	await recomputeAfterDelete(doc);
 };
 
 router.delete(`/${ROUTE}/:id`, (req, res) =>

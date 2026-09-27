@@ -3,7 +3,7 @@
 import { FC, PropsWithChildren } from "react";
 import styles from "../../styles/main.module.scss";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { useChatUnread } from "src/hooks/useChatUnread";
 
 import { getAccessLevel } from 'src/hooks/useAccessPermission';
@@ -185,9 +185,8 @@ NavItem.displayName = "NavItem";
 // ─────────────────────────────────────────────────────────────────────────────
 export const NavList = ({ label }: TypeNavListProps) => {
 
-  const context = useAppContext();
-  const addPane = context.windows.addPane;
-  const user = context.auth.user;
+  const { addPane } = useAppActions().windows;
+  const { user } = useAppAuth();
   const rights = user?.accessPermissions ?? user?.employee?.accessPermissions ?? [];
   const isSuperAdmin = user?.isSuperAdmin;
 
@@ -205,6 +204,13 @@ export const NavList = ({ label }: TypeNavListProps) => {
   // E17: роль в учёте качества задают группы сотрудников, а не права на модели (см. useQualityMe).
   const { me: qualityMe, isController: qualityController, canManage: qualityCanManage } = useQualityMe();
 
+  /*
+   * ГРУППЫ — ФУНКЦИИ РАЗМЕТКИ, А НЕ КОМПОНЕНТЫ (аудит 26.09, О6). Объявленные внутри рендера
+   * и смонтированные тегом компонента, они были НОВЫМ типом компонента на каждую
+   * перерисовку меню (пришло непрочитанное в чат, обновились права) — React снимал и заново
+   * монтировал всё меню, и фокус клавиатуры с пункта терялся. Вызов TradeGroups() встраивает
+   * ту же разметку в дерево NavList, и узлы переживают перерисовку.
+   */
   const TradeGroups = () => (
     <>
       {moduleOn("sales") && <div className={styles.NavGroup}>
@@ -534,13 +540,13 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("allSections")}</h1>
         <div className={styles.NavSection}>
-          <TradeGroups />
-          <AccountingGroups />
-          {moduleOn("hr") && <HRGroups />}
-          <CRMGroups />
-          <QualityGroups />
-          <AdministrationGroups />
-          <SettingsGroups />
+          {TradeGroups()}
+          {AccountingGroups()}
+          {moduleOn("hr") && HRGroups()}
+          {CRMGroups()}
+          {QualityGroups()}
+          {AdministrationGroups()}
+          {SettingsGroups()}
         </div>
       </div>
     );
@@ -551,7 +557,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("trade")}</h1>
         <div className={styles.NavSection}>
-          <TradeGroups />
+          {TradeGroups()}
         </div>
       </div>
     );
@@ -562,7 +568,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("accounting2")}</h1>
         <div className={styles.NavSection}>
-          <AccountingGroups />
+          {AccountingGroups()}
         </div>
       </div>
     );
@@ -573,7 +579,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("hr")}</h1>
         <div className={styles.NavSection}>
-          {moduleOn("hr") && <HRGroups />}
+          {moduleOn("hr") && HRGroups()}
         </div>
       </div>
     );
@@ -584,8 +590,8 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("crm")}</h1>
         <div className={styles.NavSection}>
-          <CRMGroups />
-          <QualityGroups />
+          {CRMGroups()}
+          {QualityGroups()}
         </div>
       </div>
     );
@@ -596,7 +602,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("onecManagement")}</h1>
         <div className={styles.NavSection}>
-          <AdministrationGroups />
+          {AdministrationGroups()}
         </div>
       </div>
     );
@@ -607,7 +613,7 @@ export const NavList = ({ label }: TypeNavListProps) => {
       <div className={styles.NavListWrapper}>
         <h1>{translate("settings")}</h1>
         <div className={styles.NavSection}>
-          <SettingsGroups />
+          {SettingsGroups()}
         </div>
       </div>
     );

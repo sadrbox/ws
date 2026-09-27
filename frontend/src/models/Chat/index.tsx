@@ -15,7 +15,7 @@ import { apiClient } from "src/services/api/client";
 import { getCurrentUser } from "src/services/auth";
 import { onLiveEvent } from "src/services/liveEvents";
 import { useChatUnread, markChatRead } from "src/hooks/useChatUnread";
-import { useAppContext } from "src/app/context";
+import { useAppAuth } from "src/app/context";
 import { translate } from "src/i18";
 import { getFormatDate } from "src/utils/datetime";
 import RefText from "src/components/ObjectLink/RefText";
@@ -41,7 +41,7 @@ const timeOf = (iso: string): string => {
 
 export const ChatList: FC = () => {
   const me = getCurrentUser();
-  const { auth } = useAppContext();
+  const auth = useAppAuth();
   const queryClient = useQueryClient();
 
   // Доступные пользователю организации (для выбора канала).

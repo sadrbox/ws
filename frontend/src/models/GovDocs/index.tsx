@@ -6,7 +6,7 @@ import { asText } from "src/utils/asText";
 import { useQuery } from "@tanstack/react-query";
 import { onLiveEvent } from "src/services/liveEvents";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import { getModelColumns } from "src/components/Table/services";
@@ -45,7 +45,7 @@ const AWP_COLUMNS: TColumn[] = [
 ] as unknown as TColumn[];
 
 export const AwpOutboxList: FC = () => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(AWP_COLUMNS, "AwpOutboxList"));
 	const { data, isLoading, refetch } = useQuery({ queryKey: ["awp", "outbox"], queryFn: async () => (await fetchAwpOutbox()).items });
 	// E4: live-обновление при смене статуса ЭАВР (push из govdocs.js через SSE-шину).
@@ -78,7 +78,7 @@ const SNT_COLUMNS: TColumn[] = [
 ] as unknown as TColumn[];
 
 export const SntOutboxList: FC = () => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(SNT_COLUMNS, "SntOutboxList"));
 	const { data, isLoading, refetch } = useQuery({ queryKey: ["snt", "outbox"], queryFn: async () => (await fetchSntOutbox()).items });
 	// E4: live-обновление при смене статуса СНТ.

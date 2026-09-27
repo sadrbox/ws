@@ -13,6 +13,7 @@ import { GroupCol, GroupRow } from "src/components/UI";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { docTypeLabel } from "src/utils/accountingDocTypes";
 import ReportPane from "src/components/ReportPane";
+import { useReportLoadError } from "./_shared/reportLoadError";
 import { ReportSheet, ReportTable, Th, Td, SubtotalRow, TotalRow, Money } from "./_shared/reportLayout";
 import { useReportDrill, DrillLink } from "./_shared/reportDrill";
 import { useReportFilters } from "./_shared/useReportFilters";
@@ -25,6 +26,8 @@ const CASH_ACCOUNT = "1010";
 interface CardRow {
   uuid: string; date: string;
   documentType: string; documentId: number | null; documentUuid: string;
+  /** Номер документа (account-card отдаёт его с аудита 26.09). */
+  documentNumber?: string | null;
   corrAccountCode: string; corrAccountName: string;
   debit: number; credit: number; balance: number;
   description: string; analytics: string;
@@ -45,7 +48,7 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ orgName: fields.orgName });
 
-  const { data, isLoading } = useQuery<AccountCardResponse>({
+  const { data, isLoading, error: loadError } = useQuery<AccountCardResponse>({
     queryKey: ["report-cash-1010", applied],
     queryFn: async () => {
       const params: Record<string, string> = { accountCode: CASH_ACCOUNT };
@@ -56,6 +59,7 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
     },
     enabled: !!applied,
   });
+  const loadErrorText = useReportLoadError(loadError, translate("CashReportList"));
 
   const rows: CardRow[] = data?.items ?? [];
   const opening = data?.opening ?? 0;
@@ -115,7 +119,8 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
               <Td col="date">{fmtDate(row.date)}</Td>
               <Td col="name">
                 <DrillLink onOpen={() => drill.toDocument(row.documentType, row.documentUuid)}>
-                  {docTypeLabel(row.documentType)}{row.documentId ? ` №${row.documentId}` : ""}
+                  {/* Внутренний id документа в подписи не показываем (reference_doc_label_no_id, И22): «№» — только номер. */}
+                  {docTypeLabel(row.documentType)}{row.documentNumber ? ` № ${row.documentNumber}` : ""}
                 </DrillLink>
               </Td>
               <Td col="uom">{row.corrAccountCode}</Td>
@@ -145,8 +150,8 @@ const CashReport: FC<CashReportProps> = ({ uniqId }) => {
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!applied || rows.length === 0)}
-      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      isEmpty={!!loadErrorText || (!isLoading && (!applied || rows.length === 0))}
+      emptyMessage={loadErrorText ?? (!applied ? translate("reportPressGenerate") : undefined)}
       onGenerate={handleGenerate}
       fileBaseName={translate("CashReportList")}
       title={translate("CashReportList")}

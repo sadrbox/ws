@@ -49,13 +49,19 @@ const searchWhere = async (search) => {
 				.then((rows) => rows.map((r) => r.productUuid)),
 		),
 	);
+	// Бренд и единица — тоже отдельными запросами (раздел 5 аудита 26.09): связь внутри OR
+	// выключала trgm-индексы products так же, как вложенные штрих-коды.
+	const refHits = (model) => Promise.all(words.map((w) => prisma[model]
+		.findMany({ where: { name: { contains: w, mode: "insensitive" } }, select: { uuid: true }, take: 1000 })
+		.then((rows) => rows.map((r) => r.uuid))));
+	const [brands, units] = await Promise.all([refHits("brand"), refHits("unitOfMeasure")]);
 	return {
 		AND: words.map((w, i) => {
 			const like = { contains: w, mode: "insensitive" };
 			const OR = TEXT_FIELDS.map((f) => ({ [f]: like }));
 			if (hits[i].length) OR.push({ uuid: { in: hits[i] } });
-			OR.push({ brand: { name: like } });
-			OR.push({ unitOfMeasure: { name: like } });
+			if (brands[i].length) OR.push({ brandUuid: { in: brands[i] } });
+			if (units[i].length) OR.push({ unitOfMeasureUuid: { in: units[i] } });
 			const idNum = idSearchCondition(w);
 			if (idNum) OR.push(idNum);
 			return { OR };

@@ -4,7 +4,10 @@
  * Отдельно от компонентов — ради тестов и Fast Refresh.
  */
 import { translate } from "src/i18";
-import type { ActivationState, BaseRegistration, ErpOrganization, RegistrationState } from "src/services/onec/api";
+import { getFormatDateOnly } from "src/utils/datetime";
+import type {
+	ActivationState, BaseRegistration, ErpOrganization, OnecOrgDetails, RegistrationOrganization, RegistrationState,
+} from "src/services/onec/api";
 
 export const registrationStateLabel = (s: RegistrationState): string => ({
 	PENDING: translate("onecReqPending"),
@@ -52,4 +55,39 @@ export function organizationOptions(orgs: ErpOrganization[], r: BaseRegistration
 	const first = orgs.filter((o) => matched.has(o.uuid));
 	const rest = orgs.filter((o) => !matched.has(o.uuid));
 	return [{ value: "", label: "—" }, ...first.map((o) => ({ value: o.uuid, label: label(o) })), ...rest.map((o) => ({ value: o.uuid, label: label(o) }))];
+}
+
+/** БИН из заявки — по цифрам: 1С может прислать его с пробелами. Не 12 цифр — не БИН. */
+export const registrationBin = (v?: string | null): string | null => {
+	const d = String(v ?? "").replace(/\D/g, "");
+	return /^\d{12}$/.test(d) ? d : null;
+};
+
+/**
+ * Организации заявки, которых нет в ERP (26.09): одобрить заявку без организации ERP нельзя, и панель предлагает
+ * создать её из реквизитов, пришедших из 1С. `bin: null` — БИН не пришёл, и создать такую нельзя: организация ERP
+ * без БИН не бывает, а выдумывать его нельзя.
+ */
+export function missingOrganizations(r: BaseRegistration): { org: RegistrationOrganization; bin: string | null }[] {
+	return r.organizations.filter((o) => !o.erp).map((o) => ({ org: o, bin: registrationBin(o.bin) }));
+}
+
+/** Реквизиты из 1С строками «подпись — значение»: человек видит, что именно запишется в ERP, до нажатия. */
+export function orgDetailsLines(d: OnecOrgDetails | null | undefined): { label: string; value: string }[] {
+	if (!d) return [];
+	const person = (p: { fullName: string; position: string | null } | null) => (p ? `${p.fullName}${p.position ? `, ${p.position}` : ""}` : null);
+	const vat = [d.vatSeries, d.vatNumber].filter(Boolean).join(" № ");
+	const lines: [string, string | null][] = [
+		[translate("legalName"), d.legalName],
+		[translate("onecReqOrgVat"), vat ? `${vat}${d.vatDate ? ` (${getFormatDateOnly(d.vatDate) || d.vatDate})` : ""}` : null],
+		[translate("onecReqOrgLegalAddress"), d.legalAddress],
+		[translate("onecReqOrgActualAddress"), d.actualAddress && d.actualAddress !== d.legalAddress ? d.actualAddress : null],
+		[translate("phone"), d.phones.join(", ") || null],
+		[translate("email"), d.emails.join(", ") || null],
+		[translate("onecReqOrgDirector"), person(d.director)],
+		[translate("onecReqOrgChiefAccountant"), person(d.chiefAccountant)],
+		[translate("BankAccountsList"), d.bankAccounts.map((a) => [a.iban, a.bankName, a.currency].filter(Boolean).join(" · ")).join("; ") || null],
+		[translate("kbe"), d.bankAccounts.length ? d.kbe : null],
+	];
+	return lines.filter((x): x is [string, string] => !!x[1]).map(([label, value]) => ({ label, value }));
 }

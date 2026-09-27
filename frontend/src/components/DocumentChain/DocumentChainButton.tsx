@@ -14,7 +14,7 @@ import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import Modal from "src/components/Modal";
 import toolbarStyles from "src/components/Toolbar/Toolbar.module.scss";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { openDocumentByType } from "src/utils/accountingDocTypes";
 import { getFormatDateOnly } from "src/utils/datetime";
 import styles from "./DocumentChain.module.scss";
@@ -103,7 +103,7 @@ const NodeRow: FC<{
 
 const DocumentChainButton: FC<Props> = ({ documentType, documentUuid, disabled }) => {
   const [open, setOpen] = useState(false);
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
 
   const { data, isLoading, isFetching, refetch } = useQuery<ChainResponse | null>({
     queryKey: ["document-chain", documentType, documentUuid],

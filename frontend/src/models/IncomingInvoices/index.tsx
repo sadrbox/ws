@@ -82,7 +82,9 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "incomingInvoiceUuid",
       mapFields: mapPaymentFromBasis,
       mapItems: () => [],
-      existingCheckEndpoint: "bankstatements",
+      // Платёж: новый на каждую частичную оплату, сумма — остаток (И21). Прежний
+      // existingCheckEndpoint "bankstatements" к тому же не существовал — маршрут «bank-statements».
+      paidByEndpoint: "bank-statements",
     },
     {
       docLabel: translate("CashExpenseOrdersList"),
@@ -92,7 +94,7 @@ const IncomingInvoicesForm: FC<Partial<TPane>> = createInvoiceLikeForm({
       sourceItemsParentField: "incomingInvoiceUuid",
       mapFields: mapPaymentFromBasis,
       mapItems: () => [],
-      existingCheckEndpoint: "cash-expense-orders",
+      paidByEndpoint: "cash-expense-orders",
     },
   ],
 });

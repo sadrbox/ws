@@ -4,9 +4,10 @@
 // же механизм применять к контрагентам/остаткам/номенклатуре без копипасты.
 //
 // Чистые функции (mapRowsByHeader/recordsToAoa) тестируются headless; тонкие
-// XLSX-обёртки (readWorkbookAoa/downloadAoa) — браузерный ввод/скачивание.
+// XLSX-обёртки (readWorkbookAoa/downloadAoa) — браузерный ввод/скачивание. Они
+// асинхронные: xlsx грузится только в момент чтения или выгрузки (utils/loadXlsx).
 // ─────────────────────────────────────────────────────────────────────────────
-import * as XLSX from "xlsx";
+import { loadXlsx } from "src/utils/loadXlsx";
 import { asText } from "src/utils/asText";
 
 /** Массив-строк листа (header:1) в записи по СИНОНИМАМ заголовков.
@@ -47,7 +48,8 @@ export function recordsToAoa(
 }
 
 /** Прочитать книгу (xlsx/xls/csv) в массив-строк первого листа (header:1). */
-export function readWorkbookAoa(data: ArrayBuffer): unknown[][] {
+export async function readWorkbookAoa(data: ArrayBuffer): Promise<unknown[][]> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(data, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   if (!sheet) return [];
@@ -55,7 +57,8 @@ export function readWorkbookAoa(data: ArrayBuffer): unknown[][] {
 }
 
 /** Скачать массив-строк как xlsx-файл (браузер). */
-export function downloadAoa(aoa: unknown[][], opts: { sheetName?: string; fileName: string }): void {
+export async function downloadAoa(aoa: unknown[][], opts: { sheetName?: string; fileName: string }): Promise<void> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), opts.sheetName || "sheet");
   XLSX.writeFile(wb, opts.fileName);

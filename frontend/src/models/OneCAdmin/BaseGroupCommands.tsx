@@ -29,7 +29,7 @@ import {
 	changesNothing, reportBatchStart, splitTargets, useOnecWrite, useOnecPermissions,
 } from "./shared";
 import { runGroupCommand } from "./runGroupCommand";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { SECTION_OF_TYPE, sectionAllows } from "./onecPermissions";
 
 export type CommandGroup = "operations" | "users" | "extensions";
@@ -105,7 +105,7 @@ export const BaseGroupCommands: FC<{
 	 */
 	const nothingToChange = (o: GroupOp) => changesNothing(selected, GROUP_OPS[o].target);
 	const qc = useQueryClient();
-	const { confirm } = useAppContext().actions;
+	const { confirm } = useAppActions().actions;
 	const openWizard = useOpenGroupCommand();
 	const keys = selected.map((r) => asText(r.baseKey)).filter(Boolean);
 

@@ -7,6 +7,7 @@
 // с большим таймаутом сервера; SSE-стриминг — отдельным шагом при интеграции во фронт.
 
 import { Router } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import { z } from "zod";
 import type { ChatWorkflow } from "../chat/workflow.ts";
 import { WorkflowError } from "../chat/workflow.ts";
@@ -34,6 +35,8 @@ export function chatRouter(deps: { workflow: ChatWorkflow; log: Logger; maxAttac
 	const { workflow, log } = deps;
 	const maxAttachmentBytes = deps.maxAttachmentBytes ?? 20 * 1048576;
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "маршрут чата");
 
 	// Лимиты на пользователя: ходы чата и отдельно ходы с вложениями (каждое — вызов модели с PDF).
 	const chatLimiter = rateLimit({ max: deps.chatPerMin ?? 30, windowMs: 60_000, message: "Слишком много сообщений подряд — подождите минуту" });

@@ -118,6 +118,8 @@ export interface Violation {
 	status: ViolationStatus;
 	selfDetected: boolean;
 	decidedByName: string | null;
+	/** Кто подтверждал/отклонял: по возражению он не решает (кроме администратора). */
+	decidedByUuid?: string | null;
 	decidedAt: string | null;
 	decisionNote: string | null;
 	disputeText: string | null;
@@ -127,6 +129,11 @@ export interface Violation {
 	createdByName: string | null;
 	canDecide?: boolean;
 	isMine?: boolean;
+	/**
+	 * Можно ли решить по возражению (только у `disputed`): решает уровень выше подтвердившего, администратор
+	 * фирмы и суперадмин — всегда (И24 аудита 26.09). Нет поля — старый сервер, панель решает по decidedByUuid.
+	 */
+	canResolveDispute?: boolean;
 }
 export const confirmViolation = (uuid: string, body: { note?: string; selfDetected?: boolean; selfDetectedInfo?: { foundBySelfCheck: boolean; fixedInTime: boolean; reported: boolean; noConsequences: boolean } }) =>
 	api.post<{ success: boolean; item: Violation }>(`/standard-violations/${uuid}/confirm`, body);

@@ -13,6 +13,7 @@
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import Table from "src/components/Table";
 import { Button } from "src/components/Button";
 import { FieldSelect } from "src/components/Field";
@@ -30,7 +31,8 @@ import {
 	approveActivation, fetchActivationRequests, fixAllActiveBins, rejectActivation,
 	type ActivationRequest, type ActivationState,
 } from "src/services/onec/api";
-import { QueryError, SharedListForbidden, isSharedListForbidden } from "./shared";
+import { isSharedListForbidden } from "./shared";
+import { QueryError, SharedListForbidden } from "./sharedUi";
 import { activationStateLabel, stateTone } from "./requestsView";
 import styles from "./OneCAdmin.module.scss";
 
@@ -51,10 +53,12 @@ const columns = (withAgent: boolean): TColumn[] => ([
 export const ActivationRequestsTab: FC<{ agentId?: string }> = ({ agentId }) => {
 	const qc = useQueryClient();
 	const [state, setState] = useState<ActivationState | "">("PENDING");
+	// Опрос — только пока панель на экране (О4 аудита 26.09).
+	const pollInterval = usePanePollInterval(15_000);
 	const list = useQuery({
 		queryKey: ["onec", "activation-requests", state, agentId ?? ""],
 		queryFn: () => fetchActivationRequests({ state, agentId }),
-		refetchInterval: 15_000,
+		refetchInterval: pollInterval,
 	});
 	const items = useMemo(() => list.data?.items ?? [], [list.data]);
 	const canDecide = !!list.data?.canDecide;

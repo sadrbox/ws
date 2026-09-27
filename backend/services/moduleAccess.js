@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { moduleOfRoute, guardMode } from "./moduleRoutes.js";
+import { onCacheInvalidate } from "./cacheBus.js";
 
 /** Канонический список модулей (тот же на фронте — src/config/modules.ts). */
 export const MODULE_KEYS = ["sales", "purchase", "warehouse", "cash", "hr", "govdocs", "edo"];
@@ -22,9 +23,18 @@ const keyFor = (orgUuid) => `modules.disabled.${orgUuid}`;
 const cache = new Map(); // orgUuid -> { at:number, set:Set<string> }
 const TTL_MS = 30_000;
 
-export function invalidateModuleCache(orgUuid) {
+function invalidateLocal(orgUuid) {
 	if (orgUuid) cache.delete(orgUuid);
 	else cache.clear();
+}
+
+// Сброс — во всех воркерах кластера (Н7 аудита 26.09): иначе модуль, отключённый в одном воркере,
+// ещё 30 с оставался открытым в трёх других. См. services/cacheBus.js.
+const broadcast = onCacheInvalidate("moduleAccess", invalidateLocal);
+
+export function invalidateModuleCache(orgUuid) {
+	invalidateLocal(orgUuid);
+	broadcast(orgUuid ?? null);
 }
 
 /** Набор ОТКЛЮЧЁННЫХ модулей организации (валидированный по MODULE_KEYS). */

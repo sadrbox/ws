@@ -21,6 +21,7 @@ import { useRunningCommand } from "src/components/TechMessages/operations";
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import Table from "src/components/Table";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
@@ -36,9 +37,8 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchAgentProcesses, killAgentProcess } from "src/services/onec/api";
 import { AiServiceError } from "src/services/ai/endpoint";
-import {
-	CapabilityGuard, QueryError, useAgents, useOnecPermissions,
-} from "./shared";
+import { useAgents, useOnecPermissions } from "./shared";
+import { CapabilityGuard, QueryError } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 
@@ -70,11 +70,13 @@ export const ProcessesTab: FC = () => {
 	const [active, setActive] = useState<{ pid: number; agentId?: string } | null>(null);
 	const [confirm, setConfirm] = useState<null | { pid: number; agentId?: string; force: boolean; note?: string }>(null);
 
-	// Снимок из heartbeat: дешёвое чтение своей базы, поэтому обновляем сами раз в 30 с.
+	// Снимок из heartbeat: дешёвое чтение своей базы, поэтому обновляем сами раз в 30 с —
+	// пока панель на экране (О4 аудита 26.09).
+	const pollInterval = usePanePollInterval(30_000);
 	const procs = useQuery({
 		queryKey: ["onec", "agent-processes"],
 		queryFn: () => fetchAgentProcesses(false),
-		refetchInterval: 30_000,
+		refetchInterval: pollInterval,
 		staleTime: 0,
 	});
 	// Живой опрос — у выбранного агента, если строка выбрана: иначе сервис спросит всех, кто умеет (СП1).

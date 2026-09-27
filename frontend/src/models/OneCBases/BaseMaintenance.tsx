@@ -17,6 +17,7 @@
 import { FC, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
@@ -27,11 +28,10 @@ import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
-import {
-	CapabilityGuard, ReadonlyNotice, useOnecErrorActions, useOnecWrite, useOnecPermissions,
-} from "src/models/OneCAdmin/shared";
+import { reportBatchStart, useOnecErrorActions, useOnecWrite, useOnecPermissions } from "src/models/OneCAdmin/shared";
+import { CapabilityGuard, ReadonlyNotice } from "src/models/OneCAdmin/sharedUi";
 import { agentsAllow } from "src/models/OneCAdmin/onecPermissions";
-import { attachBatch, finishOp, getOps, startOp } from "src/models/OneCAdmin/progress";
+import { finishOp, getOps, startBatchOp, startOp } from "src/models/OneCAdmin/progress";
 import { updateOp, useRunningWork } from "src/components/TechMessages/operations";
 import { getFormatDate } from "src/utils/datetime";
 import {
@@ -112,11 +112,13 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	 * чтобы «выполняется с 12:03» можно было сверить с сервером и, если он завис, найти его в «Процессах агента».
 	 */
 	const running = live?.pending.state === "dispatched";
+	// Опрос — только пока карточка на экране (О4 аудита 26.09).
+	const procsInterval = usePanePollInterval(running ? 15_000 : false);
 	const procs = useQuery({
 		queryKey: ["onec", "agent-processes"],
 		queryFn: () => fetchAgentProcesses(false),
 		enabled: running,
-		refetchInterval: running ? 15_000 : false,
+		refetchInterval: procsInterval,
 	});
 	const liveProc = live ? (procs.data?.items ?? []).find((x) => x.commandId === live.commandId) : undefined;
 
@@ -252,10 +254,14 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 			}
 			if (job === "backup") {
 				// Выгрузка идёт заданием, как и раньше: она же доступна группой по списку баз.
-				const op = startOp({ kind: "update", title: translate("onecBackup"), target: baseKey, total: 1, scope: { bases: [baseKey] } });
-				const r = await runBatch("IB_BACKUP", [baseKey], backupDir.trim() ? { dir: backupDir.trim() } : {});
-				attachBatch(op, r.batchId, r.total);
-				return translate("onecBatchQueued");
+				// Отказ постановки закрывает запись — не вечное «Выполняется» (И26).
+				const r = await startBatchOp(
+					{ kind: "update", title: translate("onecBackup"), target: baseKey, total: 1, scope: { bases: [baseKey] } },
+					() => runBatch("IB_BACKUP", [baseKey], backupDir.trim() ? { dir: backupDir.trim() } : {}),
+				);
+				// «Не поставлено» (агент не на связи, queued: 0) — не зелёный успех: итог говорит reportBatchStart.
+				reportBatchStart(r, translate("onecBackup"));
+				return "";
 			}
 			if (job === "restore") {
 				const path = restorePath.trim();

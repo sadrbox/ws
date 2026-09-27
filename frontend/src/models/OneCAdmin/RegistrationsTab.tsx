@@ -17,6 +17,7 @@
 import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import Table from "src/components/Table";
 import { SegmentedControl, type SegmentOption } from "src/components/SegmentedControl";
 import { Button } from "src/components/Button";
@@ -36,7 +37,8 @@ import {
 	approveRegistration, fetchErpOrganizations, fetchRegistrations, rejectRegistration,
 	type BaseRegistration, type RegistrationState,
 } from "src/services/onec/api";
-import { QueryError } from "./shared";
+import { QueryError } from "./sharedUi";
+import { MissingOrganizations } from "./MissingOrganizations";
 import {
 	approveDefaults, configurationText, organizationOptions, registrationStateLabel, stateTone, whereText,
 } from "./requestsView";
@@ -80,11 +82,13 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 	// По умолчанию — все заявки (26.09): нерешённые видны и так — сервис отдаёт их первыми, а число у «Ждут решения»
 	// говорит, сколько их.
 	const [state, setState] = useState<StateFilter>("");
+	// Опрос — только пока панель на экране (О4 аудита 26.09).
+	const pollInterval = usePanePollInterval(15_000);
 	const list = useQuery({
 		queryKey: ["onec", "registrations", state, ""],
 		queryFn: () => fetchRegistrations({ state }),
 		// Заявка приходит без предупреждения, а человек у телефона ждёт — список обновляется сам.
-		refetchInterval: 15_000,
+		refetchInterval: pollInterval,
 	});
 	/*
 	 * Сколько ждут решения — числом у варианта, при любом отборе. При «Все» — по уже загруженному списку: сервис
@@ -94,7 +98,7 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 	const pendingList = useQuery({
 		queryKey: ["onec", "registrations", "PENDING", ""],
 		queryFn: () => fetchRegistrations({ state: "PENDING" }),
-		refetchInterval: 15_000,
+		refetchInterval: pollInterval,
 		enabled: state !== "",
 	});
 	const items = useMemo(() => list.data?.items ?? [], [list.data]);
@@ -121,7 +125,9 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 		reqBaseName: r.base.name,
 		reqConfiguration: `${configurationText(r)}${r.base.extensionVersion ? ` · buhprof_api ${r.base.extensionVersion}` : ""}`,
 		reqWhere: whereText(r),
-		reqOrganizations: r.organizations.map((o) => `${o.name || "—"}${o.bin ? ` (${o.bin})` : ""}${o.erp ? ` — ${translate("onecReqBinMatch")}` : ""}`).join("; ") || "—",
+		// «Нет в ERP» — только у нерешённых: такую заявку не одобрить, пока организацию не создадут (26.09).
+		reqOrganizations: r.organizations.map((o) => `${o.name || "—"}${o.bin ? ` (${o.bin})` : ""}${o.erp ? ` — ${translate("onecReqBinMatch")}`
+			: r.state === "PENDING" ? ` — ${translate("onecReqOrgMissing")}` : ""}`).join("; ") || "—",
 		reqSentBy: [r.user?.name, r.contact].filter(Boolean).join(" · ") || "—",
 		reqComment: r.comment || "—",
 		reqReceived: r.createdAt,
@@ -199,6 +205,8 @@ const ApproveModal: FC<{ reg: BaseRegistration; onClose: () => void; onDone: () 
 				<div>{reg.base.name} · {configurationText(reg)} · {whereText(reg)}</div>
 				<FieldSelect name="reg_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}
 					onChange={(e) => setOrganizationUuid(e.target.value)} options={organizationOptions(orgs.data?.items ?? [], reg)} />
+				{/* Организации базы нет в ERP — создать её из реквизитов 1С и сразу подставить (26.09). */}
+				<MissingOrganizations reg={reg} disabled={approve.isPending} onCreated={setOrganizationUuid} />
 				<Field name="reg_base_key" label={translate("onecReqBaseKey")} width={FIELD_WIDTH.lg} value={baseKey} required error={!baseKey.trim()}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setBaseKey(e.target.value); setBaseId(""); }}
 					hint={translate("onecReqBaseKeyHint")} />

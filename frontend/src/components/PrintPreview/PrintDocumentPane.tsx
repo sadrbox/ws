@@ -7,8 +7,9 @@
  */
 import { FC, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import * as XLSX from "xlsx";
 import type { WorkBook } from "xlsx";
+import { loadXlsx, type XlsxModule } from "src/utils/loadXlsx";
+import { reportError } from "src/services/errors/route";
 import { Toolbar } from "src/components/Toolbar";
 import SaveDropdownButton, { type SaveDropdownOption } from "src/components/Toolbar/SaveDropdownButton";
 import IconButton from "src/components/IconButton/IconButton";
@@ -51,8 +52,9 @@ export interface PrintDocumentPaneData {
   fileBaseName: string;
   /** Заголовок для диалога печати. */
   title?: string;
-  /** Готовый workbook для xlsx/xls; если не передан — строится из DOM. */
-  workbook?: WorkBook;
+  /** Готовый workbook для xlsx/xls; если не передан — строится из DOM. Может быть
+   *  обещанием: построитель сам грузит xlsx (utils/loadXlsx) и не держит форму на нём. */
+  workbook?: WorkBook | Promise<WorkBook>;
   /** Начальная ориентация листа (по умолчанию portrait). */
   orientation?: PageOrientation;
 }
@@ -75,7 +77,7 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function extractWorkbookFromDom(el: HTMLElement): WorkBook | null {
+function extractWorkbookFromDom(XLSX: XlsxModule, el: HTMLElement): WorkBook | null {
   const tables = el.querySelectorAll<HTMLTableElement>("table");
   if (!tables.length) return null;
   const wb = XLSX.utils.book_new();
@@ -212,19 +214,34 @@ const PrintDocumentPane: FC<PaneProps> = ({ data, uniqId }) => {
     });
   }, [data, printNode, title, orientation, activeLayout]);
 
+  // Обещание книги (печать реализации) отмечаем обработанным: отказ загрузки xlsx покажет
+  // выгрузка, а не консоль «Uncaught (in promise)», если до выгрузки дело не дошло.
+  const workbookSrc = data?.workbook;
+  useEffect(() => {
+    if (workbookSrc instanceof Promise) workbookSrc.catch(() => { });
+  }, [workbookSrc]);
+
+  // xlsx грузится только здесь, в момент выгрузки (utils/loadXlsx, аудит 26.09, О2).
   const handleExport = useCallback((format: "xlsx" | "xls") => {
-    const wb = data?.workbook ?? (layoutRef.current ? extractWorkbookFromDom(layoutRef.current) : null);
-    if (!wb) {
-      alert(translate("printDocumentExportError"));
-      return;
-    }
-    const bookType = format === "xls" ? "biff8" : "xlsx";
-    const mime = format === "xls"
-      ? "application/vnd.ms-excel"
-      : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    const ab = XLSX.write(wb, { type: "array", bookType }) as ArrayBuffer;
-    download(new Blob([ab], { type: mime }), `${baseName}.${format}`);
-  }, [data, baseName]);
+    void (async () => {
+      try {
+        const XLSX = await loadXlsx();
+        const wb = (await workbookSrc) ?? (layoutRef.current ? extractWorkbookFromDom(XLSX, layoutRef.current) : null);
+        if (!wb) {
+          alert(translate("printDocumentExportError"));
+          return;
+        }
+        const bookType = format === "xls" ? "biff8" : "xlsx";
+        const mime = format === "xls"
+          ? "application/vnd.ms-excel"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const ab = XLSX.write(wb, { type: "array", bookType }) as ArrayBuffer;
+        download(new Blob([ab], { type: mime }), `${baseName}.${format}`);
+      } catch (e) {
+        reportError(e, { source: title, fallback: translate("printDocumentExportError") });
+      }
+    })();
+  }, [workbookSrc, baseName, title]);
 
   const exportDoc = useCallback(() => {
     if (!data) return;

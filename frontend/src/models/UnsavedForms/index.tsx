@@ -1,6 +1,6 @@
 import { FC, useMemo, useCallback, useState, useRef, useEffect } from "react";
 import type { TPane } from "src/app/types";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { getModelColumns } from "src/components/Table/services";
 import { translate } from "src/i18";
 import type { TColumn, TDataItem, DocRow } from "src/components/Table/types";
@@ -133,7 +133,7 @@ const UnsavedFormsList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TDat
   variant = "default",
   onSelectItem,
 }) => {
-  const appCtx = useAppContext();
+  const appCtx = useAppActions();
   const { addPane } = appCtx.windows;
   const { confirm } = appCtx.actions;
   const t = (key: string) => translate(key) || key;

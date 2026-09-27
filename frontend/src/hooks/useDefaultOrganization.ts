@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppAuth } from "src/app/context";
 
 /**
  * Возвращает организацию текущего пользователя (из user.organizationUuid).
@@ -9,7 +9,7 @@ export function useDefaultOrganization(): {
 	organizationUuid: string;
 	organizationName: string;
 } {
-	const { auth } = useAppContext();
+	const auth = useAppAuth();
 	return useMemo(() => {
 		const user = auth.user;
 		// Берём organizationUuid непосредственно из пользователя

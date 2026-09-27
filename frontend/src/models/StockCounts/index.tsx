@@ -9,6 +9,7 @@
 //   • deviation          — факт − учёт (вычисляется в таблице)
 // ─────────────────────────────────────────────────────────────────────────────
 import { FC, useMemo, useCallback, useState, useRef } from "react";
+import { deviationSummary, type DeviationSummary } from "./deviationSummary";
 import { asText } from "src/utils/asText";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateSubTableFor } from "src/utils/invalidateSubTableFor";
@@ -42,7 +43,7 @@ import { api } from "src/services/api/client";
 import { routeError } from "src/services/errors/route";
 import { notify } from "src/components/TechMessages/store";
 import { openDocumentFromBasis, type BasisFromTarget, type BasisSource } from "src/utils/createFromBasis";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { WriteOffsForm } from "src/models/WriteOffs";
 import { GoodsReceiptsForm } from "src/models/GoodsReceipts";
@@ -244,15 +245,15 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
   const assignNumber = useAssignNumber();
   const notices = useDocumentNotices({ docType: "stock_count", fields: form.fields as unknown as Record<string, unknown>, formError: form.errorKind === "form" ? form.error : null });
 
-  // Сводка расхождений по текущим строкам (излишек / недостача, в штуках).
-  const { surplus, shortage } = useMemo(() => {
-    let s = 0, d = 0;
-    for (const r of allItemsRef.current) {
-      if (r._pendingAction === "delete") continue;
-      const dev = (Number(r.quantity) || 0) - (Number(r.accountingQuantity) || 0);
-      if (dev > 0) s += dev; else d += -dev;
-    }
-    return { surplus: Math.round(s * 10000) / 10000, shortage: Math.round(d * 10000) / 10000 };
+  // Сводка расхождений по текущим строкам (излишек / недостача, в штуках). Состоянием, а не
+  // useMemo по ref: memo с пустыми зависимостями читал строки один раз при монтировании, и
+  // сводка всегда была 0 / 0 (И21). Обновляется из onAllItemsChange таблицы; одинаковые числа
+  // состояние не меняют — лишней перерисовки нет.
+  const [{ surplus, shortage }, setDeviation] = useState<DeviationSummary>({ surplus: 0, shortage: 0 });
+  const handleAllItemsChange = useCallback((rows: TDataItem[]) => {
+    allItemsRef.current = rows;
+    const next = deviationSummary(rows);
+    setDeviation((prev) => (prev.surplus === next.surplus && prev.shortage === next.shortage ? prev : next));
   }, []);
   const fmtQty = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 });
 
@@ -323,17 +324,18 @@ const StockCountsForm: FC<Partial<TPane>> = (paneProps) => {
             key={itemsTableKey}
             initialPendingRows={items.pending}
             onItemsChange={items.onItemsChange}
-            onAllItemsChange={(rows) => { allItemsRef.current = rows; }}
+            onAllItemsChange={handleAllItemsChange}
             showRequiredHighlight
           />
         </>
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.isDirty, form.setField, form.setFields, handleOrganizationSelect, handleFillAccounting, isFilling, isSaved, canWrite, items, notices, assignNumber, itemsTableKey, surplus, shortage]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.isDirty, form.setField, form.setFields, handleOrganizationSelect, handleFillAccounting, isFilling, isSaved, canWrite, items, notices, assignNumber, itemsTableKey, surplus, shortage, handleAllItemsChange]);
 
   // «На основании»: недостача → Списание, излишек → Оприходование.
   // Строки фильтруются по знаку отклонения, количество = |отклонение|.
-  const { windows: { addPane } } = useAppContext();
+  // Стабильные действия (О3): useAppContext() перерисовывал форму при любом переключении вкладки.
+  const { windows: { addPane } } = useAppActions();
   const basisTargets: Record<string, BasisFromTarget> = useMemo(() => ({
     writeOff: {
       docLabel: translate("WriteOffsList"),

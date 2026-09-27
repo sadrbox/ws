@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { auditIsolation, orgScopedModels, EXEMPT, GUARDS } from "../utils/isolationAudit.js";
+import { auditIsolation, orgScopedModels, EXEMPT, GUARDS, KNOWN_GAPS, readsWithoutGuard, staleKnownGaps } from "../utils/isolationAudit.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const routerDir = path.join(root, "api", "router");
@@ -47,5 +47,30 @@ test("список механизмов изоляции не пустеет н�
 	for (const g of GUARDS) {
 		assert.ok(auth.includes(`export function ${g}`) || auth.includes(`export async function ${g}`),
 			`${g} больше не экспортируется из utils/auth.js — аудит проверяет несуществующее`);
+	}
+});
+
+// ── Б12 аудита 26.09: аудит видит `prisma[MODEL]` и не верит импорту из фабрики ──────────────
+test("аудит видит обращение через константу prisma[MODEL]", () => {
+	const models = orgScopedModels(readFileSync(schemaPath, "utf8"));
+	const txt = 'const MODEL = "sale";\nrouter.get("/x", async () => prisma[MODEL].findMany({}));';
+	assert.deepEqual(readsWithoutGuard(txt, models), ["Sale"]);
+	// Имя модели из запроса — неизвестная модель, тоже находка.
+	assert.deepEqual(readsWithoutGuard("prisma[modelName].findMany({})", models), ["?modelName"]);
+});
+
+test("импорт вспомогательной функции из фабрики не делает роутер изолированным", () => {
+	const models = orgScopedModels(readFileSync(schemaPath, "utf8"));
+	const txt = 'import { syncItemsFromParent } from "./_documentItemsFactory.js";\nprisma.sale.findMany({});';
+	assert.deepEqual(readsWithoutGuard(txt, models), ["Sale"]);
+	const factory = 'const r = createDocumentHeaderRouter({ MODEL: "monthClose" });\nprisma.monthClose.findMany({});';
+	assert.deepEqual(readsWithoutGuard(factory, models), []);
+});
+
+test("известные дыры ещё действительно дыры (закрыли — уберите из KNOWN_GAPS)", () => {
+	const stale = staleKnownGaps({ routerDir, schemaPath });
+	assert.deepEqual(stale, [], `уже изолированы, уберите из KNOWN_GAPS: ${stale.join(", ")}`);
+	for (const [file, why] of Object.entries(KNOWN_GAPS)) {
+		assert.ok(why.startsWith("Проверить потом:"), `${file}: причина должна начинаться с «Проверить потом:»`);
 	}
 });

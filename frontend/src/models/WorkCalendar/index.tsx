@@ -19,7 +19,7 @@ import { Button } from "src/components/Button";
 import { FieldSelect } from "src/components/Field";
 import { getModelColumns } from "src/components/Table/services";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { useQualityMe } from "src/hooks/useQualityMe";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
@@ -55,7 +55,7 @@ const KIND_CLASS: Record<string, string> = {
 };
 
 export const WorkCalendarView: FC<{ uniqId?: string }> = ({ uniqId }) => {
-	const { confirm } = useAppContext().actions;
+	const { confirm } = useAppActions().actions;
 	const { me } = useQualityMe();
 	const isAdmin = !!me?.isAdmin;
 	const today = localYmd(getAppUtcOffset() * 60);

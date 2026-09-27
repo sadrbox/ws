@@ -47,6 +47,8 @@ export type LLMRequest = {
 	 */
 	systemExtra?: string;
 	maxTokens?: number;
+	/** Прервать вызов (например, по сроку вызывающего): провайдер перестаёт ждать и не платит за остаток ответа. */
+	signal?: AbortSignal;
 };
 
 export type LLMResponse = {

@@ -1,10 +1,10 @@
-import React, { CSSProperties, FC, PropsWithChildren, useEffect, useLayoutEffect, useMemo, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo } from 'react';
+import React, { CSSProperties, FC, PropsWithChildren, useEffect, useLayoutEffect, useMemo, useState, useCallback, forwardRef, useRef, useImperativeHandle, ReactNode, Component, ErrorInfo, memo } from 'react';
 import styles from "../../styles/main.module.scss"
 import modalManager from 'src/components/Modal/modalManager';
 import { createPortal } from 'react-dom';
 // Divider is imported in components that use it; not used here
 import { translate } from 'src/i18';
-import { useAppContext } from 'src/app/context';
+import { useAppActions, useAppAuth, useAppPanes } from 'src/app/context';
 import { ReloadButton, CloseButton, IconButton } from 'src/components/Toolbar';
 import { ToolbarSlot } from 'src/components/Toolbar';
 import { copyPaneLink } from "src/utils/paneLink";
@@ -112,18 +112,19 @@ export const HorizontalLine = () => {
 const DOCK_MIN_PX = 240;
 
 export const Container: FC = () => {
-  const context = useAppContext();
+  const { user } = useAppAuth();
+  const { panes } = useAppPanes();
   /*
    * ПОЛЬЗОВАТЕЛЬ — ХОЗЯИН ТЕХНИЧЕСКИХ СООБЩЕНИЙ И ПРОГРЕССА. Сменился (вход другим пользователем в той же вкладке) —
    * история и операции прежнего уходят с экрана. И при каждом входе и загрузке страницы поднимаем с сервиса работу,
    * которая ещё идёт: после обновления страницы «Прогресс» не должен пустеть.
    */
-  const userUuid = (context.auth.user as { uuid?: string } | null)?.uuid ?? null;
+  const userUuid = (user as { uuid?: string } | null)?.uuid ?? null;
   useEffect(() => {
     if (setTechMessagesOwner(userUuid)) resetOps();
     if (userUuid) void restoreRunningWork();
   }, [userUuid]);
-  const isPaneShow = context.windows.panes.length > 0;
+  const isPaneShow = panes.length > 0;
   const techOpen = useTechMessagesOpen();
   const techPlace = useTechMessagesPlacement();
   const techBottom = techPlace === "bottom";
@@ -223,19 +224,26 @@ export const Container: FC = () => {
 
 export { PanesTabs } from "./PanesTabs";
 export const Panes: FC = () => {
-  const context = useAppContext();
-  const { panes, activePane, requestClose } = context.windows;
+  const { panes, activePane } = useAppPanes();
+  const { requestClose } = useAppActions().windows;
 
   return (
     <div className={styles.Panes}>
-      {panes.map(p => <PaneItem key={`Panes-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={() => requestClose(p.uniqId)} />
+      {panes.map(p => <PaneItem key={`Panes-${p.uniqId}`} pane={p} isActive={p.uniqId === activePane} onClose={requestClose} />
       )}
     </div>
   )
 }
 
-/** Отдельный компонент панели — позволяет вызывать хуки */
-const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({ pane: p, isActive, onClose }) => {
+/**
+ * Отдельный компонент панели — позволяет вызывать хуки.
+ *
+ * МЕМОИЗИРОВАН (аудит 26.09, О3): переключение вкладки меняет isActive у двух панелей, смена
+ * подписи — объект одной; остальные открытые панели не перерисовываются вовсе. Поэтому
+ * onClose — стабильный requestClose(uniqId), а не новая стрелка на каждый рендер списка, и
+ * сам PaneItem берёт из контекста только стабильные действия.
+ */
+const PaneItem = memo(function PaneItem({ pane: p, isActive, onClose }: { pane: TPane; isActive: boolean; onClose: (uniqId: string) => void }) {
   const { refCallback: slot } = usePaneToolbarSlot(p.uniqId);
   const { refCallback: headerSlot } = usePaneHeaderActionsSlot(p.uniqId);
   const hasToolbar = useHasToolbar(p.uniqId);
@@ -386,7 +394,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
               />
             )}
             {hasToolbar && <ReloadButton onClick={onReload} disabled={!isEditMode || isBusy} loading={isBusy} />}
-            <CloseButton onClick={onClose} />
+            <CloseButton onClick={() => void onClose(p.uniqId)} />
           </div>
         </div>
         {hasToolbar && <div className={styles.PaneItemToolbar}>
@@ -398,7 +406,7 @@ const PaneItem: FC<{ pane: TPane; isActive: boolean; onClose: () => void }> = ({
       </div>
     </NoticeScope.Provider>
   );
-}
+});
 
 type TypeOverFormProps = PropsWithChildren;
 export const OverForm: FC<TypeOverFormProps> = ({ children }) => {
@@ -548,8 +556,7 @@ export const LoadingSpinner: React.FC<{ variant?: 'default' | 'overlay' }> = ({ 
  * @param uniqId - Уникальный идентификатор сущности в панели.
  */
 function usePaneReload(uniqId?: string): () => void {
-  const ctx = useAppContext();
-  const reloadPane = (ctx?.windows as { reloadPane?: (uniqId: string) => void })?.reloadPane;
+  const reloadPane = (useAppActions().windows as { reloadPane?: (uniqId: string) => void }).reloadPane;
 
   const handleReload = useCallback(() => {
     if (!uniqId) return;

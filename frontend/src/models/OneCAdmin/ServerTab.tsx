@@ -19,7 +19,7 @@ import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { fetchLicenses, fetchProcesses, type ClusterRow } from "src/services/onec/api";
-import { QueryError } from "./shared";
+import { QueryError } from "./sharedUi";
 import { SplitView } from "src/components/SplitPane";
 
 /** Колонки задаёт rac; берём то, что есть в ответе, остальное скрыто настройкой таблицы. */

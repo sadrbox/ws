@@ -32,9 +32,10 @@ test("суперадмин проходит любой метод", async () => 
 	}
 });
 
-test("администратор организации проходит", async () => {
-	assert.ok((await run({ user: { uuid: "x", isOrgAdmin: true }, method: "POST" })).passed);
-	assert.ok((await run({ user: { uuid: "x", isAnyOrgAdmin: true }, method: "DELETE" })).passed);
+test("администратор АКТИВНОЙ организации проходит", async () => {
+	assert.ok((await run({ user: { uuid: "x", isOrgAdmin: true, organizationUuid: "org-A" }, method: "POST" })).passed);
+	// Б2 аудита 26.09: админ ЛЮБОЙ организации (isAnyOrgAdmin) безусловного доступа больше не
+	// получает — это проверяет headless-тест securityAccess (без БД).
 });
 
 test("OPTIONS пропускается всегда (CORS preflight)", async () => {
@@ -160,5 +161,6 @@ test("orgIsAccessible: своя/разрешённая орг — да, чужа
 	assert.equal(orgIsAccessible({ user: base }, "org-X"), false, "чужая — отказ");
 	assert.equal(orgIsAccessible({ user: base }, null), false, "без орг — отказ");
 	assert.equal(orgIsAccessible({ user: { isSuperAdmin: true } }, "org-X"), true, "суперадмин — любая");
-	assert.equal(orgIsAccessible({ user: { isOrgAdmin: true } }, "org-X"), true, "админ орг — любая");
+	// Б2 аудита 26.09: роль admin не открывает ЧУЖИЕ организации.
+	assert.equal(orgIsAccessible({ user: { isOrgAdmin: true, organizationUuid: "org-A", allowedOrgUuids: ["org-A"] } }, "org-X"), false, "админ орг — не любая");
 });

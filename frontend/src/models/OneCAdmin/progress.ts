@@ -19,8 +19,10 @@ import { stagesText } from "./queueStats";
 import { useEffect, useSyncExternalStore } from "react";
 import { queryClient } from "src/app/queryClient";
 import {
-	cancelBatch, fetchBatches, hasCapability, type BatchProgress, type OnecAgent, fetchMyWork, followCommand, type MyWork
+	cancelBatch, fetchBatch, fetchBatches, hasCapability, type BatchProgress, type BatchStart, type OnecAgent, fetchMyWork,
+	followCommand, type MyWork
 } from "src/services/onec/api";
+import { AiServiceError } from "src/services/ai/endpoint";
 import { translate } from "src/i18";
 import { notify } from "src/components/TechMessages/store";
 import { getFormatDate } from "src/utils/datetime";
@@ -188,6 +190,27 @@ export function withOp<T>(
 	return withCoreOp({ ...init, ref: onecOpRef(init), onFinish: refreshAfterWork }, run);
 }
 
+/**
+ * Поставить задание сервиса под записью реестра: запись заводится ДО отправки и закрывается и при
+ * отказе (И26 аудита 26.09). Раньше «Запустить сейчас», публикация и выгрузка звали startOp, а при
+ * отказе постановки (403, сеть, 400) finishOp не звали: операция навсегда оставалась «Выполняется»,
+ * а базы из её области — запертыми на 30 минут. Отказ пробрасывается дальше: сообщает о нём
+ * вызывающий, реестр второй раз его не запишет (finishOp с error).
+ */
+export async function startBatchOp(
+	init: OpInit, launch: () => Promise<BatchStart>, note: (r: BatchStart) => string = () => "",
+): Promise<BatchStart> {
+	const id = startOp(init);
+	try {
+		const r = await launch();
+		attachBatch(id, r.batchId, r.total, note(r));
+		return r;
+	} catch (e) {
+		finishOp(id, { failed: Math.max(1, init.total), note: e instanceof Error ? e.message : String(e), error: e });
+		throw e;
+	}
+}
+
 /** Связать запись с заданием сервиса: дальше её двигает опрос заданий. */
 export function attachBatch(id: string, batchId: string, total: number, note = ""): void {
 	updateOp(id, (o) => ({ ...o, batchId, total, note: note || o.note }));
@@ -308,30 +331,91 @@ let polling = false;
 const watchListeners = new Set<() => void>();
 const emitWatch = () => { for (const l of watchListeners) l(); };
 
+/** Ключ списка заданий — общий с вкладкой «Задания»: один опрос кормит обоих (О4 аудита 26.09). */
+export const BATCHES_KEY = ["onec", "batches"] as const;
+
+/** Сколько заданий вне общего списка дочитывать по одному за тик: предел на случай «зависших» десятков. */
+const DIRECT_PER_TICK = 10;
+
+/**
+ * Задания, за которыми следим, но которых нет в общем списке `/batches` (И26 аудита 26.09).
+ *
+ * Список отдаёт только 20 последних заданий АКТИВНОЙ организации ERP. Сменили организацию в шапке,
+ * задание поднято restoreRunningWork из другой или за время долгой выгрузки появилось больше 20 новых —
+ * задание выпадало из списка, операция навсегда оставалась «Выполняется», а карточки баз были заперты
+ * на 30 минут. Такие задания дочитываются по одному (`/batches/:id` видит все свои организации).
+ */
+function unseenBatchIds(seen: ReadonlySet<string>): string[] {
+	const ids = new Set<string>();
+	for (const o of getOps()) if (o.state === "running" && o.batchId && !seen.has(o.batchId)) ids.add(o.batchId);
+	for (const id of lateWatch.keys()) if (!seen.has(id)) ids.add(id);
+	return [...ids];
+}
+
+/** Задания больше нет (удалено, недоступно): ждать нечего — закрываем операцию с честной пометкой. */
+function dropLostBatch(batchId: string): void {
+	lateWatch.delete(batchId);
+	for (const o of getOps()) {
+		if (o.batchId !== batchId || o.state !== "running") continue;
+		finishOp(o.id, { failed: Math.max(1, o.total - o.done), note: translate("onecBatchLost") });
+	}
+}
+
 async function pollBatches(): Promise<void> {
 	if (polling) return;
 	polling = true;
 	emitWatch();
+	let list: { items: BatchProgress[] } | null = null;
 	try {
-		const r = await fetchBatches();
-		for (const b of r.items) mergeBatch(b);
+		list = await fetchBatches();
+		for (const b of list.items) mergeBatch(b);
+		const seen = new Set(list.items.map((b) => b.id));
+		for (const id of unseenBatchIds(seen).slice(0, DIRECT_PER_TICK)) {
+			try {
+				mergeBatch(await fetchBatch(id));
+			} catch (e) {
+				// 404 — задания нет или оно не наше: итог уже не придёт. Прочее — сеть, повторим на следующем тике.
+				if (e instanceof AiServiceError && e.status === 404) dropLostBatch(id);
+			}
+		}
 	} catch {
 		// Сеть отвалилась — следующий тик попробует снова. Ошибку наблюдения показывать
 		// человеку незачем: он её не просил и сделать с ней ничего не может.
 	} finally {
 		polling = false;
-		emitWatch();
 		if (poll !== null && !hasRunningBatches(getOps()) && !hasLateWatch()) {
 			window.clearInterval(poll);
 			poll = null;
 		}
+		// Список — в кэш вкладки «Задания» ПОСЛЕ решения об остановке: вкладка по нему решает,
+		// опрашивать ли самой (см. isBatchWatchActive).
+		if (list) queryClient.setQueryData(BATCHES_KEY, list);
+		emitWatch();
 	}
+}
+
+/**
+ * Идёт ли опрос заданий модулем. Пока идёт, вкладка «Задания» своего опроса не держит: раньше оба
+ * опрашивали `/batches` каждые 3 с — два запроса там, где хватает одного (О4 аудита 26.09).
+ */
+export const isBatchWatchActive = (): boolean => poll !== null;
+
+/** Скрытая вкладка браузера опрос не гоняет: вернулись — сразу тик, не дожидаясь трёх секунд. */
+const pageHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
+let visibilityHooked = false;
+function hookVisibility(): void {
+	if (visibilityHooked || typeof document === "undefined") return;
+	visibilityHooked = true;
+	document.addEventListener("visibilitychange", () => {
+		if (!pageHidden() && poll !== null) void pollBatches();
+	});
 }
 
 /** Начать наблюдение, если есть за чем. Идемпотентно: второй вызов ничего не удваивает. */
 export function ensureBatchWatch(): void {
 	if (poll !== null || (!hasRunningBatches(getOps()) && !hasLateWatch())) return;
-	poll = window.setInterval(() => void pollBatches(), 3000);
+	hookVisibility();
+	poll = window.setInterval(() => { if (!pageHidden()) void pollBatches(); }, 3000);
 	void pollBatches();
 }
 

@@ -70,3 +70,14 @@ test("без orgUuid → пусто", async () => {
 	const out = await computeDepreciationEntries(client, null, "2026-02-01", "2026-02-28");
 	assert.equal(out.length, 0);
 });
+
+// ─── Аудит 26.09 (У5): месяц ввода — местный ─────────────────────────────────
+
+test("ОС введено 01.06 00:00 по Алматы — это июнь: за июнь не начисляется, за июль — начисляется", async () => {
+	const client = mockClient({ acceptances: [asset({ depreciationStartDate: "2026-06-01T00:00:00+05:00" })] });
+	const june = await computeDepreciationEntries(client, "org-1", "2026-06-01T00:00:00.000Z", "2026-06-30T00:00:00.000Z");
+	assert.equal(june.length, 0, "в месяц ввода амортизации нет (раньше по UTC это был «май» и июнь начислялся)");
+	const july = await computeDepreciationEntries(client, "org-1", "2026-07-01T00:00:00.000Z", "2026-07-31T00:00:00.000Z");
+	assert.equal(july.length, 1);
+	assert.equal(july[0].amount, 100);
+});

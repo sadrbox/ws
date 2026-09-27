@@ -71,6 +71,7 @@ const ALL_MODEL_NAMES = [
 	"ChartOfAccount",
 	"SubkontoType",
 	"AccountingEntry",
+	"MonthClose",
 	"User",
 ];
 
@@ -345,9 +346,9 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 		const accessPermissions = await loadAccessPermissions(user.uuid, user.organizationUuid);
 
 		// Определяем Разрешения пользователей
-		const isDev = process.env.NODE_ENV !== "production";
-		const isSuperOrDevAdmin =
-			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
+		// Всевластие по имени admin — только при явном DEV_UNRESTRICTED_ADMIN=1 и не в production,
+		// как у сервера (utils/auth.js): иначе меню показывало бы разделы, в которых API откажет.
+		const isSuperOrDevAdmin = user.isSuperAdmin || devUnrestrictedAdmin(user.username);
 		const rights = isSuperOrDevAdmin
 			? generateFullAccessPermissions()
 			: accessPermissions;
@@ -399,8 +400,11 @@ router.post("/auth/change-password", authMiddleware, async (req, res) => {
 			});
 		}
 
+		// Пароль — явным select: клиент Prisma скрывает его по умолчанию (prisma/prisma-client.js),
+		// и без select старый пароль оказался бы «не задан» — смена прошла бы без проверки.
 		const user = await prisma.user.findUnique({
 			where: { uuid: req.user.uuid },
+			select: { uuid: true, password: true },
 		});
 		if (!user) {
 			return res
@@ -879,9 +883,9 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 		// Подгружаем права для новой орг (только для активной орг + глобальные)
 		const accessPermissions = await loadAccessPermissions(user.uuid, organizationUuid ?? null);
 
-		const isDev = process.env.NODE_ENV !== "production";
-		const isSuperOrDevAdmin =
-			user.isSuperAdmin || (isDev && user.username?.toLowerCase() === "admin");
+		// Всевластие по имени admin — только при явном DEV_UNRESTRICTED_ADMIN=1 и не в production,
+		// как у сервера (utils/auth.js): иначе меню показывало бы разделы, в которых API откажет.
+		const isSuperOrDevAdmin = user.isSuperAdmin || devUnrestrictedAdmin(user.username);
 		const rights = isSuperOrDevAdmin
 			? generateFullAccessPermissions()
 			: accessPermissions;
@@ -925,6 +929,7 @@ router.post("/auth/regenerate-invite", authMiddleware, async (req, res) => {
 
 		const user = await prisma.user.findUnique({
 			where: { uuid: req.user.uuid },
+			select: { organizationUuid: true, isSuperAdmin: true },
 		});
 		if (!user || !user.organizationUuid) {
 			return res
@@ -933,6 +938,17 @@ router.post("/auth/regenerate-invite", authMiddleware, async (req, res) => {
 					success: false,
 					message: "Пользователь не привязан к организации",
 				});
+		}
+		// Код приглашения — пропуск в организацию: перевыпускает (и видит) только её
+		// администратор (Б2 аудита 26.09). Раньше новый код получал любой участник.
+		if (!user.isSuperAdmin) {
+			const membership = await prisma.accessRight.findUnique({
+				where: { userUuid_organizationUuid: { userUuid: req.user.uuid, organizationUuid: user.organizationUuid } },
+				select: { role: true },
+			});
+			if (membership?.role !== "admin") {
+				return res.status(403).json({ success: false, message: "Код приглашения перевыпускает администратор организации" });
+			}
 		}
 
 		const newCode = crypto.randomBytes(4).toString("hex").toUpperCase();

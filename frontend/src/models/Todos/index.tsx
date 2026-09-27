@@ -8,9 +8,11 @@ import type { TTableVariant } from "src/components/Table";
 import columnsJson from "./columns.json";
 import { ONEC_CHAT_SOURCE, isFromOnec, isOnecObject, onecOriginLabel, originOf, sourceChipLabel, sourceCellText } from "./source";
 import {
-  KIND_LABEL_KEYS, isFinalStatus, isKindLocked, isWaitingStatus, kindLabel, kindOptions, needsResult, priorityLabel,
-  priorityOptions, reactionOverdue, reportedByOptions, statusOptions as buildStatusOptions, todoFormError,
+  KIND_LABEL_KEYS, deadlineForServer, deadlineToField, isFinalStatus, isKindLocked, isWaitingStatus, kindLabel, kindOptions,
+  needsResult, priorityLabel, priorityOptions, reactionOverdue, reportedByOptions, statusOptions as buildStatusOptions,
+  todoFormError,
 } from "./todoRules";
+import { addDaysYmd, localYmd, localYmdOf } from "src/models/_quality/month";
 import { fetchRecordName } from "./recordName";
 import TodoActions from "./TodoActions";
 import TodoHistory from "./TodoHistory";
@@ -22,7 +24,7 @@ import { ValueList, ValueRow } from "src/components/ValueList";
 import ObjectLink from "src/components/ObjectLink";
 import ObjectMarks from "src/components/ObjectMarks";
 import { refFromRestore } from "src/utils/objectRef";
-import { getFormatDate } from "src/utils/datetime";
+import { getAppUtcOffset, getFormatDate } from "src/utils/datetime";
 import styles from "src/styles/main.module.scss";
 import todoStyles from "./Todos.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
@@ -36,6 +38,9 @@ import Notice, { type NoticeItem } from "src/components/Notice";
 import { useFormNotices } from "src/hooks/useFormNotices";
 
 const MODEL_ENDPOINT = "todos";
+
+/** Смещение местного времени приложения, минут: даты формы — местные. */
+const offsetMinutes = () => getAppUtcOffset() * 60;
 
 /**
  * Поля формы задачи.
@@ -70,6 +75,8 @@ interface TFields {
   // ── Только с сервера ──
   /** Статус и исполнитель, с которыми задача загружена: по ним видно смену статуса и передачу. */
   loadedStatus: string; loadedExecutorUuid: string;
+  /** Срок, как его хранит сервер (точный момент): неизменённый срок не отправляем заново (У5). */
+  loadedDeadline: string;
   parentTodoUuid: string; checkCode: string;
   acceptedAt: string; reactionDueAt: string; startedAt: string; completedAt: string;
   lastReminderAt: string; helpRequestedAt: string;
@@ -87,7 +94,7 @@ const DEFAULT_FIELDS: TFields = {
   createdAt: "", deadline: "", deadlineDays: "",
   sourceType: "", sourceUuid: "", sourceLabel: "",
   origin: "", originLabel: "",
-  loadedStatus: "", loadedExecutorUuid: "", parentTodoUuid: "", checkCode: "",
+  loadedStatus: "", loadedExecutorUuid: "", loadedDeadline: "", parentTodoUuid: "", checkCode: "",
   acceptedAt: "", reactionDueAt: "", startedAt: "", completedAt: "",
   lastReminderAt: "", helpRequestedAt: "",
   reminderCount: 0, returnedCount: 0, escalationLevel: 0,
@@ -96,7 +103,7 @@ const DEFAULT_FIELDS: TFields = {
 
 /** Поля, которые ставит сервер: форма их показывает, но не меняет и не считает несохранёнными. */
 const SERVER_FIELDS: readonly (keyof TFields)[] = [
-  "name", "loadedStatus", "loadedExecutorUuid", "parentTodoUuid", "checkCode",
+  "name", "loadedStatus", "loadedExecutorUuid", "loadedDeadline", "parentTodoUuid", "checkCode",
   "acceptedAt", "reactionDueAt", "startedAt", "completedAt", "lastReminderAt", "helpRequestedAt",
   "reminderCount", "returnedCount", "escalationLevel", "clientRating", "clientRatingNote",
 ];
@@ -184,8 +191,10 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
         curatorUuid: d.curatorUuid ?? "", curatorName: d.curator?.employee?.fullName || d.curator?.username || "",
         executorUuid: d.executorUuid ?? "", executorName: d.executor?.employee?.fullName || d.executor?.username || "",
         transferReason: "",
-        createdAt: d.createdAt?.slice(0, 10) ?? "",
-        deadline: d.deadline?.slice(0, 10) ?? "", deadlineDays: d.deadlineDays?.toString() ?? "",
+        // Даты — местные, а не UTC-срез ISO (У5): с 00:00 до 05:00 срез давал вчерашнее число.
+        createdAt: localYmdOf(d.createdAt, offsetMinutes()),
+        deadline: deadlineToField(d.deadline, offsetMinutes()), deadlineDays: d.deadlineDays?.toString() ?? "",
+        loadedDeadline: d.deadline ?? "",
         sourceType: d.sourceType ?? "", sourceUuid: d.sourceUuid ?? "", sourceLabel: d.sourceLabel ?? "",
         // Происхождение только показываем: ставит его тот, кто создал запись (панель или канал 1С).
         origin: d.origin ?? "", originLabel: d.originLabel ?? "",
@@ -208,13 +217,15 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
       if (err) return err;
       const kind = fd.kind || "task";
       const transferred = isEdit && !!fd.loadedExecutorUuid && fd.executorUuid !== fd.loadedExecutorUuid;
+      // Срок — концом местного дня; не изменённый — не отправляем, его точное время остаётся (У5).
+      const deadline = deadlineForServer(fd.deadline, fd.loadedDeadline, offsetMinutes());
       return {
         description: fd.description?.trim() || null, status,
         // counterpartyUuid НЕ отправляем: поля контрагента в форме нет, а null затирал бы
         // контрагента, которого задаче поставил сервер (проверка исправления ошибки, канал 1С).
         organizationUuid: fd.organizationUuid || null,
         curatorUuid: fd.curatorUuid || null, executorUuid: fd.executorUuid || null,
-        deadline: fd.deadline || null, deadlineDays: fd.deadlineDays || null,
+        ...(deadline !== undefined ? { deadline } : {}), deadlineDays: fd.deadlineDays || null,
         sourceType: fd.sourceType || null, sourceUuid: fd.sourceUuid || null,
         sourceLabel: fd.sourceLabel || null,
         kind, priority: fd.priority || "normal",
@@ -254,10 +265,9 @@ const TodosForm: FC<Partial<TPane>> = (paneProps) => {
   const handleDeadlineDaysChange = useCallback((value: string) => {
     const days = parseInt(value);
     const snap = store.getSnapshot().fields;
-    const base = snap.createdAt ? new Date(snap.createdAt) : new Date();
-    const deadline = !isNaN(days) && days > 0
-      ? new Date(base.getTime() + days * 86400000).toISOString().substring(0, 10)
-      : snap.deadline;
+    // Дни — от местной даты создания (или сегодняшней), а не от UTC-полночи (У5).
+    const base = snap.createdAt || localYmd(offsetMinutes());
+    const deadline = !isNaN(days) && days > 0 ? addDaysYmd(base, days) || snap.deadline : snap.deadline;
     setFields({ deadlineDays: value, deadline } as Partial<TFields>);
   }, [store, setFields]);
 

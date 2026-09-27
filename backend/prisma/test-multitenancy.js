@@ -23,6 +23,13 @@ import { operatorSeesData } from "../services/supportMode.js";
 import saleitemsRouter from "../api/router/saleitems.js";
 import purchaseitemsRouter from "../api/router/purchaseitems.js";
 import contractsRouter from "../api/router/contracts.js";
+import salesRouter from "../api/router/sales.js";
+import monthClosesRouter from "../api/router/monthcloses.js";
+import organizationsRouter from "../api/router/organizations.js";
+import usersRouter from "../api/router/users.js";
+import accessRightsRouter from "../api/router/accessrights.js";
+import syncRouter from "../api/router/sync.js";
+import pipeActivitiesRouter from "../api/router/pipeactivities.js";
 
 const ORG_BIN_PREFIX = "9995";
 const CP_BIN_PREFIX = "9996";
@@ -49,6 +56,7 @@ async function cleanup() {
 	if (orgUuids.length) {
 		await prisma.sale.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
 		await prisma.purchase.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
+		await prisma.monthClose.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
 	}
 	await prisma.user.deleteMany({ where: { username: { startsWith: USER_PREFIX } } });
 	if (orgUuids.length) await prisma.contract.deleteMany({ where: { organizationUuid: { in: orgUuids } } });
@@ -153,6 +161,12 @@ async function createData() {
 	const docs = {
 		sale1: await mkSale(0), sale2: await mkSale(1),
 		purchase1: await mkPurchase(0), purchase2: await mkPurchase(1),
+		// Закрытие месяца орг2 — для проверки Б5 (PUT по числовому id открывал чужой период).
+		// Непроведённое: период тестовой организации не блокируется.
+		monthClose2: await prisma.monthClose.create({ data: {
+			organizationUuid: orgs[1].uuid, authorUuid: adminOf(1).uuid, posted: false,
+			periodStart: new Date("2026-08-01T00:00:00Z"), periodEnd: new Date("2026-08-31T00:00:00Z"),
+		} }),
 	};
 
 	return { orgs, baseUsers, special, docs };
@@ -398,6 +412,13 @@ async function runHttpTests(docs) {
 	app.use(saleitemsRouter);
 	app.use(purchaseitemsRouter);
 	app.use(contractsRouter);
+	app.use(salesRouter);
+	app.use(monthClosesRouter);
+	app.use(organizationsRouter);
+	app.use(usersRouter);
+	app.use(accessRightsRouter);
+	app.use(syncRouter);
+	app.use(pipeActivitiesRouter);
 	const server = app.listen(0);
 	await new Promise((r) => server.once("listening", r));
 	const base = `http://127.0.0.1:${server.address().port}`;
@@ -450,6 +471,53 @@ async function runHttpTests(docs) {
 		const rows = (contracts.json?.items ?? []).filter((c) => String(c.name || "").startsWith("MT Договор"));
 		const foreignContracts = rows.filter((c) => c.organizationUuid !== docs.sale1.sale.organizationUuid);
 		check("HTTP GET /contracts (Fix 1): только своя орг, без чужих", contracts.status === 200 && rows.length === 2 && foreignContracts.length === 0, `всего MT=${rows.length}, чужих=${foreignContracts.length}`);
+
+		// ── Аудит 26.09: чужой документ ПО ЧИСЛОВОМУ ID (Б5) и организация из тела (Б8) ──
+		// Атакующий — АДМИН своей организации: до Б2 это давало ему «доступ» к любой организации.
+		const orgA = own.sale.organizationUuid, orgB = foreign.sale.organizationUuid;
+		check("Б5 HTTP GET /sales/:id чужой → 404", (await call("GET", `/sales/${foreign.sale.id}`)).status === 404);
+		check("Б5 HTTP PUT /sales/:id чужой → 404", (await call("PUT", `/sales/${foreign.sale.id}`, { comment: "взлом" })).status === 404);
+		check("Б5 HTTP GET /month-closes/:id чужое → 404", (await call("GET", `/month-closes/${docs.monthClose2.id}`)).status === 404);
+		check("Б5 HTTP PUT /month-closes/:id чужое → 404", (await call("PUT", `/month-closes/${docs.monthClose2.id}`, { posted: true })).status === 404);
+		const mc = await prisma.monthClose.findUnique({ where: { uuid: docs.monthClose2.uuid }, select: { posted: true } });
+		check("Б5: чужое закрытие месяца не изменилось", mc?.posted === false, `posted=${mc?.posted}`);
+		check("Б8 HTTP POST /sales в чужую организацию → 403", (await call("POST", `/sales`, { organizationUuid: orgB })).status === 403);
+		check("Б8 HTTP POST /month-closes в чужую организацию → 403", (await call("POST", `/month-closes`, { organizationUuid: orgB, periodStart: "2026-07-01", periodEnd: "2026-07-31" })).status === 403);
+
+		// ── Б6: организация по id и код приглашения ──
+		check("Б6 HTTP GET /organizations/:uuid чужая → 404", (await call("GET", `/organizations/${orgB}`)).status === 404);
+		const ownOrg = await call("GET", `/organizations/${orgA}`);
+		check("Б6 HTTP GET /organizations/:uuid своя → 200", ownOrg.status === 200);
+
+		// ── Б3: пользователи чужой организации и секреты ──
+		const foreignUser = await prisma.user.findFirst({ where: { username: `${USER_PREFIX}o2_u2` } });
+		check("Б3 HTTP GET /users/:id чужой → 404", (await call("GET", `/users/${foreignUser.id}`)).status === 404);
+		check("Б3 HTTP PUT /users/:id чужой → 404", (await call("PUT", `/users/${foreignUser.uuid}`, { password: "hacked-123" })).status === 404);
+		const usersList = await call("GET", `/users?limit=500`);
+		const leakedSecret = (usersList.json?.items ?? []).some((u) => "password" in u || "twoFactorSecret" in u);
+		const foreignInList = (usersList.json?.items ?? []).some((u) => String(u.username).startsWith(`${USER_PREFIX}o2_`));
+		check("Б3 HTTP GET /users: без секретов и без пользователей чужой организации", usersList.status === 200 && !leakedSecret && !foreignInList);
+
+		// ── Б4: пакет членств — назначить себя админом чужой организации нельзя ──
+		const escal = await call("POST", `/access-rights/batch`, { operations: [{ action: "create", data: { userUuid: u1.uuid, organizationUuid: orgB, role: "admin" } }] });
+		check("Б4 HTTP POST /access-rights/batch себе admin в чужой → 403", escal.status === 403);
+		const sneaked = await prisma.accessRight.findUnique({ where: { userUuid_organizationUuid: { userUuid: u1.uuid, organizationUuid: orgB } } });
+		check("Б4: членство в чужой организации не появилось", !sneaked);
+
+		// ── Б1: офлайн-обмен ──
+		const push = await call("POST", `/sync/push`, { changes: [{ table: "users", action: "update", uuid: u1.uuid, data: { isSuperAdmin: true } }] });
+		const me = await prisma.user.findUnique({ where: { uuid: u1.uuid }, select: { isSuperAdmin: true } });
+		check("Б1 HTTP /sync/push users.isSuperAdmin → отказ", push.status === 200 && push.json?.applied === 0 && me?.isSuperAdmin === false);
+		const pull = await call("POST", `/sync/pull`, { tables: ["users", "sales"] });
+		const pulledUsers = pull.json?.data?.users ?? [];
+		const pulledSales = pull.json?.data?.sales ?? [];
+		check("Б1 HTTP /sync/pull: без секретов и без чужих организаций",
+			pull.status === 200 && !pulledUsers.some((u) => "password" in u || "twoFactorSecret" in u)
+				&& !pulledSales.some((x) => x.organizationUuid !== orgA),
+			`users=${pulledUsers.length}, sales=${pulledSales.length}`);
+
+		// ── Б6: «События 1С» не удаляются ──
+		check("Б6 HTTP DELETE /pipeactivities/:uuid → 405", (await call("DELETE", `/pipeactivities/00000000-0000-0000-0000-000000000000`)).status === 405);
 	} finally {
 		await new Promise((r) => server.close(r));
 	}

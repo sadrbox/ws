@@ -4,13 +4,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SerialNumbersCell } from "src/components/DocumentItemsTable/SerialNumbersCell";
 import { BatchNumbersCell } from "src/components/DocumentItemsTable/BatchNumbersCell";
 
-const getMock = vi.fn();
-const postMock = vi.fn();
+const getMock = vi.fn<(url: string, ...rest: unknown[]) => unknown>();
+const postMock = vi.fn<(...args: unknown[]) => unknown>();
 
 vi.mock("src/services/api/client", () => ({
   __esModule: true,
   default: {
-    get: (...args: unknown[]) => getMock(...args),
+    get: (url: string, ...rest: unknown[]) => getMock(url, ...rest),
     post: (...args: unknown[]) => postMock(...args),
   },
 }));
@@ -21,6 +21,7 @@ vi.mock("src/i18", () => ({
 
 vi.mock("src/app/context", () => ({
   useAppContext: () => ({ windows: { addPane: vi.fn() } }),
+  useAppActions: () => ({ windows: { addPane: vi.fn() } }),
 }));
 
 function renderWithClient(ui: React.ReactElement) {

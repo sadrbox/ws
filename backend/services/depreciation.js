@@ -12,10 +12,12 @@
 // (практика РК). Накопленная амортизация не превышает амортизируемую базу.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+import { r2 } from "./money.js";
+import { localMonthIndex, startOfLocalDay, endOfLocalDay, orgTimeZone } from "./periodBounds.js";
 
-/** Индекс месяца (год*12 + месяц, 0-базовый) по UTC — для счёта месяцев. */
-const monthIndex = (d) => d.getUTCFullYear() * 12 + d.getUTCMonth();
+// Месяцы — МЕСТНЫЕ, в поясе организации (У5 аудита 26.09). Раньше месяц брался по UTC:
+// ОС, введённое 01.06 в 00:00 по Алматы (31.05 19:00 UTC), считалось введённым в мае и
+// амортизировалось с июня, а не с июля.
 
 /**
  * Накопленная амортизация ОС на счёте accumulatedAccount ДО beforeDate
@@ -46,9 +48,10 @@ async function accumulatedBefore(client, orgUuid, accumulatedAccount, assetUuid,
  */
 export async function computeDepreciationEntries(client, orgUuid, periodStart, periodEnd) {
 	if (!orgUuid) return [];
-	const start = new Date(periodStart);
-	const end = new Date(periodEnd);
-	if (isNaN(start) || isNaN(end)) return [];
+	const tz = orgTimeZone(orgUuid);
+	const start = startOfLocalDay(periodStart, tz);
+	const end = endOfLocalDay(periodEnd, tz);
+	if (!start || !end) return [];
 
 	const acceptances = await client.fixedAssetAcceptance.findMany({
 		where: {
@@ -60,8 +63,8 @@ export async function computeDepreciationEntries(client, orgUuid, periodStart, p
 		},
 	});
 
-	const periodStartM = monthIndex(start);
-	const periodEndM = monthIndex(end);
+	const periodStartM = localMonthIndex(start, tz);
+	const periodEndM = localMonthIndex(end, tz);
 	const out = [];
 
 	for (const a of acceptances) {
@@ -72,7 +75,7 @@ export async function computeDepreciationEntries(client, orgUuid, periodStart, p
 		const monthly = base / life;
 
 		// Первый амортизируемый месяц — следующий за месяцем ввода в эксплуатацию.
-		const firstDepM = monthIndex(new Date(a.depreciationStartDate)) + 1;
+		const firstDepM = localMonthIndex(new Date(a.depreciationStartDate), tz) + 1;
 		const fromM = Math.max(periodStartM, firstDepM);
 		const monthsInPeriod = Math.max(0, periodEndM - fromM + 1);
 		if (monthsInPeriod === 0) continue;

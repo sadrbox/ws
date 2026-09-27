@@ -14,6 +14,7 @@
 import { translate } from "src/i18";
 import { asText } from "src/utils/asText";
 import type { Priority, TodoEventRow, TodoKind, TodoWatcherRow } from "src/services/quality/api";
+import { endOfLocalDayIso, localYmdOf } from "src/models/_quality/month";
 
 // ── Подписи кодов ─────────────────────────────────────────────────────────────
 
@@ -340,4 +341,45 @@ export interface WatcherView { uuid: string; name: string; reason: string; since
 /** Наблюдатели: кто и почему (передавший задачу остаётся на связи до закрытия, п. 22). */
 export function watcherViews(watchers: readonly TodoWatcherRow[]): WatcherView[] {
 	return watchers.map((w) => ({ uuid: w.uuid, name: w.userName || w.userUuid, reason: watcherReasonLabel(w.reason), since: w.createdAt }));
+}
+
+// ── Срок задачи (У5 аудита 26.09) ──────────────────────────────────────────────
+
+/*
+ * СРОК — КОНЕЦ МЕСТНОГО ДНЯ, А НЕ ПОЛНОЧЬ UTC. Форма держала срок как `deadline.slice(0, 10)` и
+ * отправляла голую дату: сервер хранил 30.09 00:00Z = 05:00 по Алматы, и SLA-задание в 05:05 того же
+ * дня считало задачу просроченной (кандидат в нарушение, эскалация главбуху). Хуже — любое
+ * «Сохранить» отправляло срок заново: срок 18:00, поставленный по SLA или задачей контроля,
+ * переезжал на 05:00 того же дня.
+ */
+
+/** Срок с сервера → значение поля даты: местная дата момента. */
+export const deadlineToField = (iso: string | null | undefined, offsetMinutes: number): string => localYmdOf(iso, offsetMinutes);
+
+/**
+ * Поле срока → что отправить серверу.
+ *   `undefined` — не отправлять: дата в поле та же, что у загруженного срока (его точное время, например
+ *                 18:00 по SLA, остаётся как есть);
+ *   `null`      — срок убрали;
+ *   ISO         — новый срок: конец выбранного местного дня.
+ */
+export function deadlineForServer(field: string, loadedIso: string | null | undefined, offsetMinutes: number): string | null | undefined {
+	const value = field.trim();
+	if (!value) return loadedIso ? null : undefined;
+	if (loadedIso && deadlineToField(loadedIso, offsetMinutes) === value) return undefined;
+	return endOfLocalDayIso(value, offsetMinutes) ?? undefined;
+}
+
+/**
+ * Момент, после которого задача просрочена. Срок, записанный до исправления голой датой, лежит ровно в
+ * 00:00:00.000Z — это «весь этот день», и считать его истёкшим с 05:00 утра неверно: такой срок
+ * истекает в конце местного дня. Остальные сроки — точные моменты (SLA, контроль) — как есть.
+ */
+export function deadlineDueMs(iso: string | null | undefined, offsetMinutes: number): number | null {
+	if (!iso) return null;
+	const t = Date.parse(iso);
+	if (Number.isNaN(t)) return null;
+	if (t % 86_400_000 !== 0) return t;
+	const end = endOfLocalDayIso(new Date(t).toISOString().slice(0, 10), offsetMinutes);
+	return end ? Date.parse(end) : t;
 }

@@ -26,7 +26,7 @@
  * поиску, «Только ошибкам» и срезу «Текущая форма».
  */
 import { FC, useEffect, useState, useSyncExternalStore } from "react";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { canOpenByRef, openFormByRef } from "src/utils/openFormByRef";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
@@ -137,7 +137,7 @@ const Progress: FC<{ percent: number | null; state?: Op["state"]; value?: string
 
 /** Одна операция реестра — в той же сетке, что и сообщение: время, шкала, тело. */
 const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const at = new Date(op.startedAt).toISOString();
 	const percent = opPercent(op);
 	const running = op.state === "running";

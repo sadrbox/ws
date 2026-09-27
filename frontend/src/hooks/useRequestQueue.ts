@@ -15,6 +15,24 @@ interface QueuedRequest {
 	timeout?: ReturnType<typeof setTimeout>;
 	/** Callback для отмены (когда компонент размонтирован) */
 	cancelled?: boolean;
+	/** Сообщить владельцу, что запрос снят из очереди и выполнен НЕ будет. */
+	onCancel?: (reason: Error) => void;
+}
+
+/**
+ * Запрос снят из очереди, не начавшись (размонтирование, «Обновить», отмена react-query).
+ * Имя — AbortError: так отмену узнают по `err.name`, как у fetch/axios.
+ */
+export class RequestCancelledError extends Error {
+	constructor(message = "Запрос снят из очереди") {
+		super(message);
+		this.name = "AbortError";
+	}
+}
+
+/** Ошибка — это снятие запроса из очереди (а не сбой сервера). */
+export function isRequestCancelled(err: unknown): boolean {
+	return err instanceof RequestCancelledError;
 }
 
 /** Максимум параллельных запросов */
@@ -60,17 +78,42 @@ function processQueue() {
 	}
 }
 
-function addRequestGlobal(id: string, execute: () => Promise<unknown>) {
-	const req: QueuedRequest = { id, execute, timestamp: Date.now() };
+/**
+ * Снять ещё не начатый запрос: убрать из очереди и СООБЩИТЬ владельцу (onCancel).
+ * Раньше снятый запрос просто не выполнялся — его промис не завершался никогда, и
+ * react-query держал список в «загрузке»: повторно открытый список крутился без
+ * запроса (аудит 26.09, И9). Уже начатый запрос не трогаем.
+ */
+function cancelRequest(req: QueuedRequest) {
+	if (req.cancelled) return;
+	const idx = queue.indexOf(req);
+	if (idx === -1) return;
+	queue.splice(idx, 1);
+	req.cancelled = true;
+	req.onCancel?.(new RequestCancelledError());
+}
+
+function addRequestGlobal(
+	id: string,
+	execute: () => Promise<unknown>,
+	onCancel?: (reason: Error) => void,
+	signal?: AbortSignal,
+) {
+	const req: QueuedRequest = { id, execute, timestamp: Date.now(), onCancel };
+	if (signal?.aborted) {
+		onCancel?.(new RequestCancelledError());
+		return;
+	}
+	signal?.addEventListener("abort", () => cancelRequest(req), { once: true });
 	queue.push(req);
 	processQueue();
 }
 
 function cancelGroupGlobal(groupId: string) {
-	// Помечаем ожидающие запросы этой группы как отменённые
-	for (const req of queue) {
+	// Снимаем ожидающие запросы этой группы (владельцу — отказ, см. cancelRequest)
+	for (const req of [...queue]) {
 		if (req.id.startsWith(groupId + ":")) {
-			req.cancelled = true;
+			cancelRequest(req);
 		}
 	}
 }
@@ -89,10 +132,15 @@ let instanceCounter = 0;
 export const useRequestQueue = () => {
 	const groupIdRef = useRef(`rq-${++instanceCounter}`);
 
+	/**
+	 * Поставить запрос в очередь.
+	 * @param onCancel — вызывается, если запрос снят, не начавшись (владелец отклоняет свой промис);
+	 * @param signal — отмена извне (react-query при размонтировании / новом запросе).
+	 */
 	const addRequest = useCallback(
-		(id: string, execute: () => Promise<unknown>) => {
+		(id: string, execute: () => Promise<unknown>, onCancel?: (reason: Error) => void, signal?: AbortSignal) => {
 			const fullId = `${groupIdRef.current}:${id}`;
-			addRequestGlobal(fullId, execute);
+			addRequestGlobal(fullId, execute, onCancel, signal);
 		},
 		[],
 	);

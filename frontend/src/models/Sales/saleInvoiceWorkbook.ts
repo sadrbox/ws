@@ -6,8 +6,13 @@
  * Структура соответствует SaleInvoicePrint.tsx — те же колонки/итоги/подписи.
  * Используется при нажатии «Печать» в SalesForm: книга рендерится в
  * GeneratedXlsxPreview, откуда её можно сохранить как .xlsx или .pdf.
+ *
+ * Построитель асинхронный: xlsx грузится только при печати, а не при открытии формы
+ * реализации (utils/loadXlsx, аудит 26.09, О2). Печатная панель принимает и готовую
+ * книгу, и обещание книги (PrintDocumentPaneData.workbook).
  */
-import * as XLSX from "xlsx";
+import type { WorkBook } from "xlsx";
+import { loadXlsx } from "src/utils/loadXlsx";
 import type {
 	SaleInvoicePrintData,
 	SaleItemPrintRow,
@@ -24,9 +29,10 @@ const fmtDate = (d?: string): string => {
 	return getFormatDateOnly(d) || d;
 };
 
-export function buildSaleInvoiceWorkbook(
+export async function buildSaleInvoiceWorkbook(
 	data: SaleInvoicePrintData,
-): XLSX.WorkBook {
+): Promise<WorkBook> {
+	const XLSX = await loadXlsx();
 	const cols = data.columns ?? {};
 	const has = (g: (r: SaleItemPrintRow) => number | undefined | null) =>
 		data.items.some((r) => Number(g(r) ?? 0) > 0);

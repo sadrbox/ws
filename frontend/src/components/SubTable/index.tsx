@@ -18,7 +18,7 @@ import Table, { TOpenModelFormProps, type TableApi } from "src/components/Table"
 import type { TTableVariant } from "src/components/Table";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useModelDelete } from "src/hooks/useModelDelete";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
 import { getRowId, extractServerError, ReadOnlyCell, type ReadOnlyCellProps } from "./SubTableCells";
@@ -31,6 +31,7 @@ import { useSubTableRows } from "./useSubTableRows";
 import { useSubTableColumns } from "./useSubTableColumns";
 import { useSubTableToolbar } from "./useSubTableToolbar";
 import { useSubTableKeyboardNav } from "./useSubTableKeyboardNav";
+import { showToast } from "src/components/UIToast";
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -220,6 +221,12 @@ export interface SubTableContext {
    * Если deferRemoteChanges=false — вызывающая сторона должна использовать API напрямую.
    */
   updateLocalRow: (row: TDataItem, patch: Record<string, unknown>) => void;
+  /**
+   * Пакетный updateLocalRow: один проход по кэшу и ОДНО оповещение родителя на весь
+   * набор (O(n + m)). Для «Пересчитать всё»: updateLocalRow в цикле — O(n²) и n
+   * уведомлений стора формы (аудит 26.09, О6).
+   */
+  updateLocalRows: (patches: ReadonlyArray<{ row: TDataItem; patch: Record<string, unknown> }>) => void;
   /** true если SubTable работает в режиме отложенных изменений */
   deferRemoteChanges: boolean;
   /** Текущие ошибки валидации ячеек: rowId → { field → errorMessage } */
@@ -328,7 +335,7 @@ const SubTable: FC<SubTableProps> = ({
   const queryClient = useQueryClient();
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
   // удаления при нажатии клавиши Delete.
-  const { actions: { confirm } } = useAppContext();
+  const { actions: { confirm } } = useAppActions();
 
   // ── Ошибки валидации ячеек ─────────────────────────────────────────────
   const [cellErrors, setCellErrors] = useState<TCellErrors>({});
@@ -592,6 +599,27 @@ const SubTable: FC<SubTableProps> = ({
     notifyParent(cachedRowsRef.current);
   }, [validateCell, setCellError, cachedRowsRef, setCacheVersion, notifyParent]);
 
+  const updateLocalRows = useCallback((patches: ReadonlyArray<{ row: TDataItem; patch: Record<string, unknown> }>) => {
+    if (patches.length === 0) return;
+    // Ключ — как в isSameRow: uuid, а без него — id.
+    const byUuid = new Map<string, Record<string, unknown>>();
+    const byId = new Map<number, Record<string, unknown>>();
+    for (const { row, patch } of patches) {
+      const rowId = getRowId(row);
+      for (const [field, value] of Object.entries(patch)) {
+        setCellError(rowId, field, validateCell(row, field, value));
+      }
+      if (row.uuid) byUuid.set(String(row.uuid), { ...(byUuid.get(String(row.uuid)) ?? {}), ...patch });
+      else byId.set(row.id, { ...(byId.get(row.id) ?? {}), ...patch });
+    }
+    cachedRowsRef.current = cachedRowsRef.current.map(r => {
+      const patch = (r.uuid && byUuid.get(String(r.uuid))) || (!r.uuid ? byId.get(r.id) : undefined);
+      return patch ? applyEditMarker(r, patch) : r;
+    });
+    setCacheVersion(v => v + 1);
+    notifyParent(cachedRowsRef.current);
+  }, [validateCell, setCellError, cachedRowsRef, setCacheVersion, notifyParent]);
+
   // ── Refs для фокуса после добавления строки ──────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
   /** Императивный API нижележащей Table — позволяет двигать activeRow без фокуса. */
@@ -683,14 +711,14 @@ const SubTable: FC<SubTableProps> = ({
     // в сырых rows были бы другие объекты (без computeRow-полей).
     get rows() { return displayRowsRef.current; },
     refetch, inlineEditing, disabled, handleInlineChange,
-    updateLocalRow, deferRemoteChanges,
+    updateLocalRow, updateLocalRows, deferRemoteChanges,
     get cellErrors() { return cellErrorsRef.current; },
     setCellError,
     handleLookupChange,
     expandedRowIds,
     toggleExpandRow,
     removeRow,
-  }), [refetch, inlineEditing, disabled, handleInlineChange, updateLocalRow, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow, removeRow]);
+  }), [refetch, inlineEditing, disabled, handleInlineChange, updateLocalRow, updateLocalRows, deferRemoteChanges, setCellError, handleLookupChange, expandedRowIds, toggleExpandRow, removeRow]);
 
   // ── Фронтенд-фильтрация (всегда на фронте) ─────────────────────────────
   // Конвейер отображаемых строк вынесен в чистую computeDisplayRows (см. выше),
@@ -861,7 +889,8 @@ const SubTable: FC<SubTableProps> = ({
         await apiClient.post(`/${model}`, { ...resolvedDefaultNewRow, [parentKey]: parentUuid, ...(extraQueryParams ?? {}) });
         newRowFocusRef.current = 'last';
       } catch (err: unknown) {
-        alert(extractServerError(err) || "Ошибка создания записи");
+        // Системная ошибка сервера — тостом (правило Notice/Toast), а не alert().
+        showToast(extractServerError(err) || "Ошибка создания записи", "error");
       } finally {
         void refetch();
         setOpCount(c => c - 1);
@@ -932,9 +961,12 @@ const SubTable: FC<SubTableProps> = ({
   // только activeRow. Это намеренно унифицирует поведение с *List и убирает
   // прежнюю «cell-level» навигацию фокусом. Реализация — в useSubTableKeyboardNav.
   const handleContainerKeyDown = useSubTableKeyboardNav({
-    readonly, inlineEditing, columns,
+    readonly, disabled, disableAdd, disableDelete, hideAddDelete,
+    // В немедленном режиме удаление спрашивает useModelDelete — здесь второй вопрос не нужен.
+    confirmDelete: deferRemoteChanges,
+    inlineEditing, columns,
     onInlineAdd: onInlineAddProp, defaultNewRow,
-    handleInlineAdd, handleDelete, confirm, openModelForm,
+    handleInlineAdd, confirm, openModelForm,
     displayRowsRef, containerRef, tableApiRef,
   });
 
@@ -971,7 +1003,8 @@ const SubTable: FC<SubTableProps> = ({
     renderCell,
     onInlineAdd: !readonly && inlineEditing && (onInlineAddProp || defaultNewRow) ? handleInlineAdd : undefined,
     readonly,
-    disableAdd,
+    // «Отключить все действия» гасит и «Добавить» (а с ней — клавишу Insert в Table).
+    disableAdd: disableAdd || disabled,
     hideAddDelete,
     hideReload,
     expandedRowIds: renderExpandedRowProp ? expandedRowIds : undefined,

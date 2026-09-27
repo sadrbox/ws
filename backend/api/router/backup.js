@@ -1,6 +1,7 @@
 // Админ-роуты резервного копирования БД (E1.3). Только суперадмин.
 import express from "express";
 import { runBackup, listBackups } from "../../services/backup.js";
+import { withClusterLock } from "../../services/clusterLock.js";
 import { getSupportMode, enableSupportMode, disableSupportMode, operatorAccessMode } from "../../services/supportMode.js";
 import { recordAudit } from "../../services/auditLog.js";
 
@@ -26,10 +27,26 @@ router.get("/admin/backups", async (req, res) => {
 });
 
 // POST /admin/backup → сделать новый дамп (pg_dump + gzip + ротация)
+//
+// ПОД ТОЙ ЖЕ БЛОКИРОВКОЙ, ЧТО И ПЛАНОВЫЙ (Н8 аудита 26.09). Ручной запуск шёл без неё: второе нажатие,
+// соседний воркер или плановый бэкап в ту же минуту запускали второй pg_dump параллельно, а ротация
+// одного могла удалить файл, который дописывал другой. Блокировка кластерная (advisory-lock Postgres,
+// services/clusterLock.js): занята — отвечаем 409, а не ждём.
 router.post("/admin/backup", async (req, res) => {
 	if (!requireSuperAdmin(req, res)) return;
 	try {
-		const info = await runBackup();
+		let ran = false;
+		let lockError = null;
+		const info = await withClusterLock("backup", async () => {
+			ran = true;
+			return runBackup();
+		}, (m, e) => { lockError = m; console.warn(m, e); });
+		if (!ran && lockError) {
+			return res.status(503).json({ success: false, message: "База недоступна для блокировки резервного копирования — повторите позже" });
+		}
+		if (!ran) {
+			return res.status(409).json({ success: false, message: "Резервная копия уже создаётся — дождитесь окончания" });
+		}
 		return res.json({ success: true, backup: info });
 	} catch (err) {
 		console.error("POST /admin/backup error:", err);
@@ -45,8 +62,13 @@ router.post("/admin/backup", async (req, res) => {
  */
 router.get("/admin/support-mode", async (req, res) => {
 	if (!req.user?.isSuperAdmin) return res.status(403).json({ success: false, message: "Недостаточно прав" });
-	const state = await getSupportMode();
-	return res.json({ success: true, data: { mode: operatorAccessMode(), active: !!state, ...(state ?? {}) } });
+	try {
+		const state = await getSupportMode();
+		return res.json({ success: true, data: { mode: operatorAccessMode(), active: !!state, ...(state ?? {}) } });
+	} catch (err) {
+		console.error("GET /admin/support-mode error:", err);
+		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+	}
 });
 
 router.post("/admin/support-mode", async (req, res) => {

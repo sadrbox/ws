@@ -17,8 +17,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 import { buildNestedItemsConditions } from "../../utils/nestedSearch.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership, orgIsAccessible, resolveWritableOrg, respondOrgAccessError, OrgAccessError, requireOwnedRecord, requireOwnedBatch } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { assertOrgFieldMembership, respondOrgFieldError } from "../../utils/orgFieldValidation.js";
 import {
@@ -70,7 +71,7 @@ export function createDocumentHeaderRouter({
 			const rawLimit = req.query.limit;
 			const rawCursor = req.query.cursor;
 			const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-			const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+			const limitNumber = clampLimit(rawLimit);
 			const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 			if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 				return res.status(400).json({ success: false, message: "Некорректный cursor" });
@@ -139,8 +140,8 @@ export function createDocumentHeaderRouter({
 			if (cursorNumber === null) total = await prisma[MODEL].count({ where: baseWhere });
 			return res.status(200).json({ success: true, items, nextCursor, hasMore, ...(total !== undefined ? { total } : {}) });
 		} catch (error) {
-			console.error(`GET /${ROUTE} error:`, error);
-			return res.status(500).json({ success: false, message: "Ошибка сервера" });
+			// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+			return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 		}
 	});
 
@@ -151,7 +152,9 @@ export function createDocumentHeaderRouter({
 			const n = Number(p);
 			const w = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: p };
 			const item = await prisma[MODEL].findUnique({ where: w, include });
-			if (!item) return res.status(404).json({ success: false, message: "Не найдено" });
+			// Чужой документ — «не найден» (Б5 аудита 26.09: документ искался по числовому id без
+			// проверки владельца, и чужие выписки, заказы, закрытия месяца читались перебором).
+			if (!item || !checkOwnership(item, req, "organizationUuid", { allowShared: false })) return res.status(404).json({ success: false, message: "Не найдено" });
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
 			console.error(`GET /${ROUTE}/:id error:`, error);
@@ -174,6 +177,9 @@ export function createDocumentHeaderRouter({
 			for (const f of numberFields) data[f] = b[f] != null ? parseFloat(b[f]) : null;
 			for (const f of dateFields) data[f] = b[f] ? new Date(b[f]) : null;
 			if (hasBasis) for (const f of BASIS_FIELDS) data[f] = b[f] || null;
+			// Организация документа — доступная пользователю (Б8 аудита 26.09): иначе документ,
+			// в том числе закрытие месяца, создавался и проводился в чужой организации.
+			if (stringFields.includes("organizationUuid")) data.organizationUuid = resolveWritableOrg(req, data.organizationUuid);
 			// Запрещаем ссылку «в никуда»: основание (если указано) должно существовать.
 			if (hasBasis && data.basisDocumentUuid) await assertBasisExists(data.basisDocumentType, data.basisDocumentUuid);
 
@@ -191,6 +197,7 @@ export function createDocumentHeaderRouter({
 			if (afterSave) await afterSave(item.uuid);
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (respondOrgAccessError(error, res)) return;
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
@@ -221,7 +228,14 @@ export function createDocumentHeaderRouter({
 			// организации (мерж data поверх текущих значений ловит и смену орг,
 			// и смену поля), и для проверки проведения.
 			const existing = await prisma[MODEL].findUnique({ where: w });
-			if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+			// Б5 аудита 26.09: `PUT /month-closes/5 {posted:false}` от пользователя организации A
+			// открывал закрытый период организации B. Чужой документ — 404, перенос — только
+			// в доступную организацию.
+			if (!existing || !checkOwnership(existing, req, "organizationUuid", { allowShared: false })) return res.status(404).json({ success: false, message: "Не найдено" });
+			if ("organizationUuid" in data && data.organizationUuid !== existing.organizationUuid) {
+				if (!data.organizationUuid && !req.user?.isSuperAdmin) throw new OrgAccessError(400, "Не выбрана организация документа");
+				if (data.organizationUuid && !orgIsAccessible(req, data.organizationUuid)) throw new OrgAccessError(403, "Организация недоступна");
+			}
 
 			// Запрещаем ссылку «в никуда»: проверяем только при ЗАДАНИИ нового основания
 			// (очистку и нетронутое основание пропускаем — чтобы можно было чинить старое).
@@ -255,6 +269,7 @@ export function createDocumentHeaderRouter({
 			if (afterSave) await afterSave(item.uuid);
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (respondOrgAccessError(error, res)) return;
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
 			if (respondPeriodLockError(error, res)) return;
@@ -273,8 +288,9 @@ export function createDocumentHeaderRouter({
 			if (afterDelete) await afterDelete(doc);
 		}
 		: undefined;
-	router.delete(`/${ROUTE}/:id`, (req, res) => handleDelete({ req, res, prisma, modelName: MODEL, onDeleted, numberDocType: numberDocType || posting?.docType || null }));
-	router.post(`/${ROUTE}/batch-delete`, (req, res) => handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted, numberDocType: numberDocType || posting?.docType || null }));
+	// Владелец проверяется строго (документ без организации — не «общий»), затем общий обработчик.
+	router.delete(`/${ROUTE}/:id`, requireOwnedRecord(MODEL), (req, res) => handleDelete({ req, res, prisma, modelName: MODEL, onDeleted, numberDocType: numberDocType || posting?.docType || null }));
+	router.post(`/${ROUTE}/batch-delete`, requireOwnedBatch(MODEL), (req, res) => handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted, numberDocType: numberDocType || posting?.docType || null }));
 
 	return router;
 }

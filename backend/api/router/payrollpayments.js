@@ -1,9 +1,11 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
+import { tenantFilter, checkOwnership, orgIsAccessible, resolveWritableOrg, respondOrgAccessError, OrgAccessError, requireOwnedRecord, requireOwnedBatch, checkFkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, validatePosting, respondPostingError } from "../../services/accountingPosting.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
+import { assertCashForPosting, respondCashError } from "../../services/cashBalance.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { idSearchCondition } from "../../utils/searchId.js";
 const DOC_TYPE = "payroll_payment";
@@ -24,10 +26,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawCursor = req.query.cursor;
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(
-			Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1),
-			999999,
-		);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res
@@ -108,8 +107,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 
@@ -123,7 +122,8 @@ router.get(`/${ROUTE}/:id`, async (req, res) => {
 			where: w,
 			include: INCLUDE,
 		});
-		if (!item)
+		// Чужой документ — «не найден» (Б5 аудита 26.09): зарплата другой организации читалась по id.
+		if (!item || !checkOwnership(item, req, "organizationUuid", { allowShared: false }))
 			return res.status(404).json({ success: false, message: "Не найдено" });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
@@ -145,11 +145,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			comment,
 			period,
 			employeeUuid,
-			organizationUuid,
 			paymentMethod,
 			amount,
 			posted,
 		} = req.body;
+		// Организация — доступная пользователю, сотрудник — её (Б8 аудита 26.09).
+		const organizationUuid = resolveWritableOrg(req, req.body.organizationUuid);
+		const fkError = await checkFkOwnership(req, prisma, [{ model: "employee", uuid: employeeUuid }]);
+		if (fkError) throw new OrgAccessError(403, "Сотрудник из недоступной организации");
 		// Блокировка закрытого периода: нельзя создавать документ в закрытом месяце.
 		await assertPeriodOpen(organizationUuid, date);
 		const docNumber = await ensureDocumentNumber({ docType: DOC_TYPE, modelName: MODEL, manual: req.body.number, organizationUuid, date });
@@ -167,10 +170,15 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			authorUuid: req.user.uuid,
 		};
 		if (willPost) await validatePosting(DOC_TYPE, docData, []);
+		// Выплата наличными (paymentMethod=cash) — из кассы, и касса не может уйти в минус
+		// (аудит 26.09, У8); через банк касса не затрагивается — сервис пропустит.
+		if (willPost) await assertCashForPosting(DOC_TYPE, null, docData);
 		const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
 		if (item.posted) await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
+		if (respondCashError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		console.error(`POST /${ROUTE} error:`, error);
@@ -201,8 +209,16 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		if (req.body.amount !== undefined)
 			data.amount = req.body.amount != null ? parseFloat(req.body.amount) : 0;
 		if (req.body.posted !== undefined) data.posted = !!req.body.posted;
-		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true, organizationUuid: true, date: true, number: true } });
-		if (!existing) return res.status(404).json({ success: false, message: "Не найдено" });
+		const existing = await prisma[MODEL].findUnique({ where: w, select: { uuid: true, posted: true, organizationUuid: true, date: true, number: true, amount: true, paymentMethod: true } });
+		// Б5 аудита 26.09: чужой документ по id правился и проводился.
+		if (!existing || !checkOwnership(existing, req, "organizationUuid", { allowShared: false })) return res.status(404).json({ success: false, message: "Не найдено" });
+		if ("organizationUuid" in data && data.organizationUuid !== existing.organizationUuid) {
+			if (!data.organizationUuid && !req.user?.isSuperAdmin) throw new OrgAccessError(400, "Не выбрана организация документа");
+			if (data.organizationUuid && !orgIsAccessible(req, data.organizationUuid)) throw new OrgAccessError(403, "Организация недоступна");
+		}
+		if (data.employeeUuid && await checkFkOwnership(req, prisma, [{ model: "employee", uuid: data.employeeUuid }])) {
+			throw new OrgAccessError(403, "Сотрудник из недоступной организации");
+		}
 		// Блокировка закрытого периода: нельзя трогать закрытый документ и переносить в закрытый период.
 		await assertPeriodOpen(existing.organizationUuid, existing.date);
 		await assertPeriodOpen(data.organizationUuid ?? existing.organizationUuid, data.date ?? existing.date);
@@ -210,6 +226,15 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		data.number = await ensureDocumentNumber({ docType: DOC_TYPE, modelName: MODEL, manual: req.body.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
+		// Выплата наличными — из кассы: на любое изменение касса не должна уйти в минус
+		// (аудит 26.09, У8); собственные проводки документа сервис исключает сам.
+		await assertCashForPosting(DOC_TYPE, existing.uuid, {
+			organizationUuid: data.organizationUuid ?? existing.organizationUuid,
+			date: data.date ?? existing.date,
+			amount: data.amount ?? existing.amount,
+			paymentMethod: data.paymentMethod ?? existing.paymentMethod,
+			posted: willBePosted,
+		});
 		const item = await prisma[MODEL].update({
 			where: w,
 			data,
@@ -218,6 +243,8 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
+		if (respondOrgAccessError(error, res)) return;
+		if (respondCashError(error, res)) return;
 		if (respondPostingError(error, res)) return;
 		if (respondPeriodLockError(error, res)) return;
 		if (error.code === "P2025")
@@ -227,11 +254,11 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 	}
 });
 
-router.delete(`/${ROUTE}/:id`, (req, res) =>
+router.delete(`/${ROUTE}/:id`, requireOwnedRecord(MODEL), (req, res) =>
 	handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(DOC_TYPE, doc.uuid) }),
 );
 
-router.post(`/${ROUTE}/batch-delete`, (req, res) =>
+router.post(`/${ROUTE}/batch-delete`, requireOwnedBatch(MODEL), (req, res) =>
 	handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(DOC_TYPE, doc.uuid) }),
 );
 

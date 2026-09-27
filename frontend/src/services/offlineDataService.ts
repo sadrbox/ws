@@ -40,6 +40,30 @@ export function isSyncableEndpoint(endpoint: string): boolean {
 	return (SYNCABLE_TABLES as readonly string[]).includes(endpoint);
 }
 
+/**
+ * Таблицы, которые можно ЗАПИСАТЬ без связи: их принимает /sync/push (backend PUSH_TABLES,
+ * справочники). Документы, пользователи, права, организации, задачи сервер через обмен не
+ * принимает (SYNC_PUSH_REFUSED): проведение, нумерация и закрытый период проверяются только
+ * при связи. Раньше такая запись офлайн «сохранялась локально» и терялась при обмене.
+ */
+export const OFFLINE_WRITE_TABLES: ReadonlySet<string> = new Set([
+	"counterparties", "contracts", "contacts", "contactpersons", "bankaccounts",
+	"warehouses", "brands", "products", "employees", "positions",
+]);
+
+/**
+ * Запись без связи невозможна. Для вызывающего это СЕТЕВОЙ сбой (code ERR_NETWORK —
+ * isNetworkError его узнаёт): форма пишет «Нет связи с сервером, повторите», а не
+ * «Сохранено локально», и данные остаются в форме.
+ */
+export class OfflineWriteRefusedError extends Error {
+	code = "ERR_NETWORK";
+	constructor(endpoint: string) {
+		super(`Нет связи с сервером: «${endpoint}» без связи не записывается — повторите при восстановлении соединения.`);
+		this.name = "OfflineWriteRefusedError";
+	}
+}
+
 /** Нормализует endpoint: убирает начальный слеш */
 function normalizeEndpoint(endpoint: string): string {
 	return endpoint.replace(/^\/+/, "");
@@ -78,6 +102,11 @@ export async function fetchList<T = SyncRecord>(
 ): Promise<OfflineListResult<T>> {
 	const ep = normalizeEndpoint(endpoint);
 	const syncable = isSyncableEndpoint(ep);
+	// Чтение из кэша — с теми же поиском и фильтрами, что ушли бы на сервер. Раньше
+	// вызов без params (поле выбора) офлайн отдавал последние 200 записей без поиска и
+	// без фильтра — в т. ч. договоры чужой организации, и Enter выбирал случайную
+	// (аудит 26.09, И10).
+	const dexieParams = params ?? offlineParamsFromApi(apiParams);
 
 	// ── Online: пробуем сервер ──
 	if (getIsOnline()) {
@@ -103,7 +132,7 @@ export async function fetchList<T = SyncRecord>(
 			// Если сеть упала во время запроса — fallback на Dexie
 			if (isNetworkLike(err) && syncable) {
 				console.warn(`[OfflineData] Fallback на кэш для ${ep}`);
-				return fetchFromDexie<T>(ep, params);
+				return fetchFromDexie<T>(ep, dexieParams);
 			}
 			throw err;
 		}
@@ -111,7 +140,7 @@ export async function fetchList<T = SyncRecord>(
 
 	// ── Offline: читаем из Dexie ──
 	if (syncable) {
-		return fetchFromDexie<T>(ep, params);
+		return fetchFromDexie<T>(ep, dexieParams);
 	}
 
 	// Несинхронизируемая таблица и нет сети — пустой результат
@@ -122,6 +151,38 @@ export async function fetchList<T = SyncRecord>(
 		total: 0,
 		fromCache: true,
 	};
+}
+
+/**
+ * Параметры запроса к API → параметры чтения из Dexie: `search`, `limit` и фильтр по
+ * остальным скалярным параметрам (organizationUuid, ownerUuid…).
+ */
+function offlineParamsFromApi(apiParams?: Record<string, unknown>): OfflineListParams | undefined {
+	if (!apiParams) return undefined;
+	const { search, limit, cursor: _cursor, sort: _sort, ...rest } = apiParams;
+	const filter: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(rest)) {
+		if (v === undefined || v === null || v === "") continue;
+		if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") filter[k] = v;
+	}
+	return {
+		limit: typeof limit === "number" ? limit : undefined,
+		search: typeof search === "string" && search.trim() ? search : undefined,
+		filter: Object.keys(filter).length ? filter : undefined,
+	};
+}
+
+/**
+ * Совпадает ли запись с фильтром. Поле, которого у записи нет, не отсекает её: это
+ * параметр запроса, а не поле модели (например, ownerType у справочника без владельца).
+ */
+function matchesFilter(r: SyncRecord, filter: Record<string, unknown>): boolean {
+	for (const [k, v] of Object.entries(filter)) {
+		if (!(k in r)) continue;
+		const rv = r[k];
+		if (rv == null || typeof rv === "object" || String(rv as string | number | boolean) !== String(v)) return false;
+	}
+	return true;
 }
 
 /** Чтение из Dexie с пагинацией и поиском */
@@ -144,10 +205,12 @@ async function fetchFromDexie<T>(
 
 	let items: SyncRecord[];
 	let total: number;
+	const filter = params?.filter && Object.keys(params.filter).length ? params.filter : null;
 
 	if (params?.search) {
 		// Поиск
 		items = await searchRecords(endpoint, params.search, params.searchColumns);
+		if (filter) items = items.filter((r) => matchesFilter(r, filter));
 		total = items.length;
 		// Сортировка
 		items.sort((a, b) => {
@@ -170,6 +233,11 @@ async function fetchFromDexie<T>(
 		});
 		// Пагинация
 		items = items.slice(offset, offset + limit);
+	} else if (filter) {
+		// Фильтр — по всем записям, затем страница.
+		const all = (await getActiveRecords(endpoint, { sortField, sortDir })).filter((r) => matchesFilter(r, filter));
+		total = all.length;
+		items = all.slice(offset, offset + limit);
 	} else {
 		total = await countActiveRecords(endpoint);
 		items = await getActiveRecords(endpoint, {
@@ -302,6 +370,7 @@ async function handleOfflineCreate<T>(
 	data: Record<string, unknown>,
 	now: string,
 ): Promise<{ item: T; offline: boolean }> {
+	if (!OFFLINE_WRITE_TABLES.has(endpoint)) throw new OfflineWriteRefusedError(endpoint);
 	const record = {
 		...data,
 		uuid,
@@ -375,6 +444,7 @@ async function handleOfflineUpdate<T>(
 	data: Record<string, unknown>,
 	now: string,
 ): Promise<{ item: T; offline: boolean }> {
+	if (!OFFLINE_WRITE_TABLES.has(endpoint)) throw new OfflineWriteRefusedError(endpoint);
 	if (syncable) {
 		// Мержим с существующей записью
 		const existing = await getRecordByUuid(endpoint, uuid);
@@ -470,6 +540,7 @@ async function handleOfflineDelete(
 	uuid: string,
 	now: string,
 ): Promise<{ offline: boolean }> {
+	if (!OFFLINE_WRITE_TABLES.has(endpoint)) throw new OfflineWriteRefusedError(endpoint);
 	if (syncable) {
 		const existing = await getRecordByUuid(endpoint, uuid);
 		if (existing) {

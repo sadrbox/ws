@@ -39,6 +39,8 @@ export interface ViolationViewData {
 	selfDetected: boolean;
 	createdByName: string;
 	decidedByName: string;
+	/** Кто подтверждал: по возражению решает уровень выше (И24). */
+	decidedByUuid: string;
 	decidedAt: string;
 	decisionNote: string;
 	disputeText: string;
@@ -48,6 +50,8 @@ export interface ViolationViewData {
 	disputeDecidedAt: string;
 	canDecide: boolean;
 	isMine: boolean;
+	/** Слово сервера по возражению (И24); `null` — старый сервер. */
+	canResolveDispute: boolean | null;
 }
 
 interface Props {
@@ -122,6 +126,7 @@ export const ViolationView: FC<Props> = ({ v, formUid, disabled, source, onReloa
 
 			<FormArea title={translate("violationDecision")}>
 				<DecisionBlock uuid={v.uuid} status={v.status} selfDetected={v.selfDetected} canDecide={v.canDecide} isMine={v.isMine}
+					decidedByUuid={v.decidedByUuid} canResolveDispute={v.canResolveDispute}
 					disabled={disabled} source={source} onDone={onReload} onNotices={onNotices} />
 			</FormArea>
 

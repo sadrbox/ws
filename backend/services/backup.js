@@ -98,18 +98,43 @@ export function tightenPermissions(dir) {
 	}
 }
 
+/*
+ * НЕЗАКОНЧЕННАЯ КОПИЯ НЕ ВЫГЛЯДИТ ГОТОВОЙ (Н8 аудита 26.09).
+ *
+ * Файл писался сразу под итоговым именем. `pm2 restart` посреди pg_dump (умолчание pm2 — убить
+ * через 1,6 с) оставлял усечённый `backup_*.sql.gz`, который список и расписание считали свежей
+ * копией: следующий автобэкап пропускался на сутки, а ротация вытесняла целые копии обрезками.
+ * Теперь пишем в `<имя>.partial` и переименовываем только после успешного завершения процесса и
+ * сброса файла на диск. Переименование в одном каталоге атомарно: копия либо целая, либо её нет.
+ * Обрезки `.partial` от убитого процесса не подходят ни под один вид и убираются при следующем
+ * запуске (removePartials).
+ */
+export const PARTIAL_SUFFIX = ".partial";
+
+/** Удалить незаконченные файлы (`*.partial`) — остатки прерванных запусков. */
+export function removePartials(dir) {
+	if (!fs.existsSync(dir)) return 0;
+	let n = 0;
+	for (const f of fs.readdirSync(dir)) {
+		if (!f.endsWith(PARTIAL_SUFFIX)) continue;
+		try { fs.unlinkSync(path.join(dir, f)); n++; } catch { /* ignore */ }
+	}
+	return n;
+}
+
 /** Процесс → поток в файл 600. `gzip` — сжать вывод (pg_dump пишет несжатый SQL). */
-function streamToFile(cmd, args, filePath, { env, gzip }) {
+export function streamToFile(cmd, args, filePath, { env, gzip }) {
 	return new Promise((resolve, reject) => {
 		const proc = spawn(cmd, args, { env });
-		const out = fs.createWriteStream(filePath, { mode: 0o600 });
+		const partial = filePath + PARTIAL_SUFFIX;
+		const out = fs.createWriteStream(partial, { mode: 0o600 });
 		let errText = "";
 		let failed = false;
 		const fail = (e) => {
 			if (failed) return;
 			failed = true;
 			out.destroy();
-			try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+			try { fs.unlinkSync(partial); } catch { /* ignore */ }
 			reject(e);
 		};
 		proc.stderr.on("data", (d) => { errText += d.toString(); });
@@ -117,8 +142,17 @@ function streamToFile(cmd, args, filePath, { env, gzip }) {
 		out.on("error", fail);
 		let exited = null;
 		let flushed = false;
-		const done = () => { if (!failed && exited === 0 && flushed) resolve(); };
-		out.on("finish", () => { flushed = true; done(); });
+		const done = () => {
+			if (failed || exited !== 0 || !flushed) return;
+			try {
+				fs.renameSync(partial, filePath);
+			} catch (e) {
+				return fail(e);
+			}
+			resolve();
+		};
+		// `close`, а не `finish`: к нему дескриптор закрыт и данные отданы системе.
+		out.on("close", () => { flushed = true; done(); });
 		proc.on("close", (code) => {
 			exited = code;
 			if (code !== 0) fail(new Error(`${cmd} завершился с кодом ${code}: ${errText.trim()}`));
@@ -145,10 +179,13 @@ function archiveDir(dir, filePath) {
 /** Скопировать набор в каталог вне сервера и ротировать там. */
 function copyOut(files, targetDir) {
 	fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+	removePartials(targetDir);
 	for (const f of files) {
+		// Через временное имя — как и локальная копия: оборванное копирование не выдаёт себя за целую.
 		const to = path.join(targetDir, f);
-		fs.copyFileSync(path.join(BACKUP_DIR, f), to);
-		fs.chmodSync(to, 0o600);
+		fs.copyFileSync(path.join(BACKUP_DIR, f), to + PARTIAL_SUFFIX);
+		fs.chmodSync(to + PARTIAL_SUFFIX, 0o600);
+		fs.renameSync(to + PARTIAL_SUFFIX, to);
 	}
 	rotate(targetDir);
 	tightenPermissions(targetDir);
@@ -164,6 +201,9 @@ export async function runBackup() {
 	if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL не задан");
 	fs.mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
 	tightenPermissions(BACKUP_DIR);
+	// Обрезки прерванных запусков. Два запуска разом не идут: плановый и ручной берут одну
+	// блокировку «backup» (server.js, api/router/backup.js).
+	removePartials(BACKUP_DIR);
 	const ts = new Date().toISOString().replace(/[:.]/g, "-");
 	const name = (kind) => `${KINDS[kind].prefix}${ts}${KINDS[kind].ext}`;
 	const warnings = [];

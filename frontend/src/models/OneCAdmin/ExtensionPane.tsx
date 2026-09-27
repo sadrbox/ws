@@ -14,10 +14,14 @@
  * ЧЕГО ЗДЕСЬ НЕТ. Заявки на подключение АГЕНТОВ и активация БИНов остались в разделе «Агенты 1С»: первые — про
  * службу на компьютере, вторые приходят из окна агента и упираются в его тариф. Соседство «всё, что называется
  * заявкой, лежит вместе» удобно только тому, кто уже знает, чем они отличаются.
+ *
+ * «ОРГАНИЗАЦИИ БАЗ» (Б11 аудита 26.09) — здесь: БИН называет сама база через расширение, и действует он только
+ * после одобрения администратора BuhProf, как заявка на подключение базы.
  */
 import { FC, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { PaneActiveProvider, usePanePollInterval } from "src/hooks/usePaneActive";
 import Tabs from "src/components/Tabs";
 import Table from "src/components/Table";
 import { getModelColumns } from "src/components/Table/services";
@@ -27,17 +31,21 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { withStableIds } from "src/utils/stableRowId";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
-import { fetchExtensionBases, fetchBases, fetchRegistrations } from "src/services/onec/api";
+import { fetchExtensionBases, fetchBases, fetchPendingBaseOrganizations, fetchRegistrations } from "src/services/onec/api";
+import { useAppAuth } from "src/app/context";
 import RegistrationsTab from "./RegistrationsTab";
+import BaseOrganizationsTab from "./BaseOrganizationsTab";
+import { BASE_ORGS_PENDING_KEY } from "./baseOrganizationsView";
 import BaseChatCalls from "src/models/OneCBases/BaseChatCalls";
 import BaseChatTokens from "src/models/OneCBases/BaseChatTokens";
-import { ReadonlyNotice, QueryError, useOnecPermissions } from "./shared";
+import { useOnecPermissions } from "./shared";
+import { ReadonlyNotice, QueryError } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
 import { extensionRows, extensionSummary } from "./extensionView";
 import main from "src/styles/main.module.scss";
 import styles from "./OneCAdmin.module.scss";
 
-type ExtensionTab = "access" | "bases" | "calls";
+type ExtensionTab = "access" | "orgs" | "bases" | "calls";
 
 const columns = (): TColumn[] => ([
 	{ identifier: "baseKey", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
@@ -176,7 +184,7 @@ const BasesTab: FC = () => {
 	);
 };
 
-export const OneCExtensionList: FC = () => {
+const ExtensionPaneBody: FC = () => {
 	const perms = useOnecPermissions();
 	const [tab, setTab] = useState<ExtensionTab>("access");
 	// Журналу вызовов нужны подписи баз: он хранит идентификатор, а имя знает только реестр.
@@ -186,12 +194,22 @@ export const OneCExtensionList: FC = () => {
 		[bases.data],
 	);
 	/** Заявок, ждущих решения, — числом у вкладки: их ждут у телефона, открывать наугад не придётся. */
+	const pendingInterval = usePanePollInterval(60_000);
 	const pending = useQuery({
 		queryKey: ["onec", "registrations", "PENDING", ""],
 		queryFn: () => fetchRegistrations({ state: "PENDING" }),
-		refetchInterval: 60_000, retry: false,
+		// Только пока панель на экране (О4 аудита 26.09).
+		refetchInterval: pendingInterval, retry: false,
 	});
 	const waiting = pending.data?.items.length ?? 0;
+	// Организации баз, ждущие одобрения (Б11), — числом у вкладки. Список отдаётся только администратору BuhProf:
+	// у остальных его и не спрашиваем, чтобы не получать отказ раз в минуту.
+	const isSuperAdmin = !!useAppAuth().user?.isSuperAdmin;
+	const pendingOrgs = useQuery({
+		queryKey: BASE_ORGS_PENDING_KEY, queryFn: fetchPendingBaseOrganizations,
+		refetchInterval: pendingInterval, retry: false, enabled: isSuperAdmin,
+	});
+	const waitingOrgs = pendingOrgs.data?.items.length ?? 0;
 
 	// Право то же, что у соседних разделов 1С; без просмотра агентов не показываем ничего, кроме объяснения.
 	if (!agentsAllow(perms, "view")) {
@@ -231,6 +249,12 @@ export const OneCExtensionList: FC = () => {
 						label: waiting ? `${translate("onecExtAccess")} (${waiting})` : translate("onecExtAccess"),
 						component: tab === "access" ? <AccessTab /> : null,
 					},
+					{
+						// БИНы, названные самими базами: действуют только после одобрения (Б11).
+						id: "orgs",
+						label: waitingOrgs ? `${translate("onecExtBaseOrgs")} (${waitingOrgs})` : translate("onecExtBaseOrgs"),
+						component: tab === "orgs" ? <BaseOrganizationsTab /> : null,
+					},
 					{ id: "bases", label: translate("onecExtBases"), component: tab === "bases" ? <BasesTab /> : null },
 					{
 						// Журнал вызовов по ВСЕМ базам: та же таблица, что в карточке базы, но без отбора по одной.
@@ -242,5 +266,12 @@ export const OneCExtensionList: FC = () => {
 		</div>
 	);
 };
+
+/** Корень панели: опросы внутри идут, только пока панель на экране (О4 аудита 26.09). */
+export const OneCExtensionList: FC<{ uniqId?: string }> = ({ uniqId }) => (
+	<PaneActiveProvider uniqId={uniqId}>
+		<ExtensionPaneBody />
+	</PaneActiveProvider>
+);
 
 export default OneCExtensionList;

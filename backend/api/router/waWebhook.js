@@ -34,7 +34,17 @@ router.get("/wa/webhook", (req, res) => {
 router.post("/wa/webhook", express.raw({ type: "application/json", limit: "2mb" }), (req, res) => {
 	try {
 		const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
-		if (!checkSignature(raw, req.headers["x-hub-signature-256"], process.env.WA_APP_SECRET || "")) {
+		/*
+		 * БЕЗ СЕКРЕТА — НЕ ПРИНИМАЕМ (Б14 аудита 26.09). Проверка подписи при пустом
+		 * WA_APP_SECRET пропускала всё: любой, кто знает адрес, подкладывал «входящие» в диалоги и
+		 * менял статусы доставки. Канал без секрета не настроен — отвечаем 403, как на плохую подпись.
+		 */
+		const appSecret = process.env.WA_APP_SECRET || "";
+		if (!appSecret) {
+			log.warn("событие отклонено: WA_APP_SECRET не задан — вебхук не настроен");
+			return res.sendStatus(403);
+		}
+		if (!checkSignature(raw, req.headers["x-hub-signature-256"], appSecret)) {
 			console.warn("[wa] событие с неверной подписью отклонено");
 			return res.sendStatus(403);
 		}
@@ -78,8 +88,9 @@ async function ingest(events) {
 		}
 		for (const st of ev.statuses) {
 			// Статус доставки исходящего: обновляем по wamid, если сообщение наше.
+			// Только исходящие ЭТОГО канала (организации): статус по чужому wamid не трогаем.
 			await prisma.waMessage.updateMany({
-				where: { providerMessageId: st.id },
+				where: { providerMessageId: st.id, organizationUuid: channel.organizationUuid, direction: "out" },
 				data: { status: normalizeStatus(st.status) },
 			});
 		}

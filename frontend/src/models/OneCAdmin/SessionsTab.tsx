@@ -35,7 +35,7 @@ import {
 } from "src/services/onec/api";
 import { errorNotice, useNoticeReport, useNoticeScope } from "src/components/TechMessages/store";
 import { finishOp, startOp } from "./progress";
-import { sessionsLockView } from "./sessionsLock";
+import { lockOutcome, sessionsLockView } from "./sessionsLock";
 import { StateChip } from "src/components/StateChip";
 import { echoList } from "./clusterEcho";
 import { useOnecWrite } from "./shared";
@@ -174,25 +174,19 @@ export const SessionsTab: FC = () => {
 				target: p.baseKey, total: 1, scope: { bases: [p.baseKey] },
 			});
 			return setSessionsLock(p.baseKey, p.enabled, p.message)
-				.then((r) => { finishOp(op); return r; })
+				.then((r) => {
+					// Не закрылось — итог операции предупреждением, а не «Выполнено» (И26).
+					const out = lockOutcome(r, p.enabled);
+					finishOp(op, out.tone === "warning" ? { warning: out.text } : undefined);
+					return r;
+				})
 				.catch((e: unknown) => { finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e }); throw e; });
 		},
 		onSuccess: (r, p) => {
 			// Кластер прочитал состояние после команды (агент E1) и оно не то, что просили, —
-			// говорим это, а не «вход закрыт»: иначе человек уйдёт с открытой базой.
-			const echo = r?.state?.lock;
-			// Кластер не отдал состояние после записи (агент 23:45) — это «не проверено», а не «применено» (П30).
-			if (r?.unverified?.includes("enabled")) showToast(r.caveat || translate("onecLockUnverified"), "warning");
-			else if (echo && echo.enabled !== p.enabled) showToast(translate("onecLockNotApplied"), "warning");
-			// Включили, но вход не закрыт (агент 23:16): осталось окно прошлой блокировки. Текст агента
-			// называет это окно; нет текста — наш. И сброшено ли прежнее (П10, агент 23:52): не `all` —
-			// прежние окно, сообщение или код разрешения остались, и человек должен об этом знать.
-			else if (p.enabled && (r?.warning || echo?.active === false || (r?.reset && r.reset !== "all"))) {
-				showToast([
-					r?.warning || (echo?.active === false ? translate("onecLockNotActive") : translate("onecLockEnabled")),
-					r?.reset && r.reset !== "all" ? (r.note || translate("onecLockResetPartial")) : "",
-				].filter(Boolean).join(". "), "warning");
-			} else showToast(p.enabled ? translate("onecLockEnabled") : translate("onecLockDisabled"), "success");
+			// говорим это, а не «вход закрыт»: иначе человек уйдёт с открытой базой. Разбор — lockOutcome.
+			const out = lockOutcome(r, p.enabled);
+			showToast(out.text, out.tone);
 			// Реестр сервис уже обновил — перечитываем, и метка покажет новое состояние.
 			void bases.refetch();
 		},

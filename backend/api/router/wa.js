@@ -4,16 +4,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { normalizePhone } from "../../services/wa/phone.js";
 import { queueOutgoing, markRead, isWindowOpen, saveIncoming } from "../../services/wa/conversations.js";
 
 const router = express.Router();
 
-/** Организации, доступные пользователю (для изоляции выборок). */
-function orgWhere(req) {
-	const f = tenantFilter(req);
-	return f?.organizationUuid ? { organizationUuid: f.organizationUuid } : {};
+/**
+ * Организации, доступные пользователю (для изоляции выборок).
+ *
+ * Фильтр отдаём КАК ЕСТЬ (Б14 аудита 26.09): раньше пустой фильтр `{organizationUuid: null}`
+ * (отозванный пользователь с живым токеном, суперадмин вне режима поддержки) превращался в `{}` —
+ * и открывал ВСЕ диалоги установки на чтение и отправку. У диалога организация обязательна, так
+ * что `null` просто ничего не находит.
+ */
+export function orgWhere(req) {
+	return tenantFilter(req);
 }
 
 // ── Диалоги ──────────────────────────────────────────────────────────────────
@@ -127,9 +133,16 @@ router.post("/wa/conversations/:uuid/link", async (req, res) => {
 
 		let displayName = conv.displayName;
 		let cpUuid = counterpartyUuid;
+		// Привязывать можно только записи организации диалога (раньше — любые чужие: после
+		// привязки сводка отдавала чужого контрагента, его контакты и продажи).
+		const sameOrg = (row) => !!row && (row.organizationUuid == null || row.organizationUuid === conv.organizationUuid) && checkOwnership(row, req);
+		if (cpUuid) {
+			const cp = await prisma.counterparty.findFirst({ where: { uuid: cpUuid, deletedAt: null }, select: { organizationUuid: true } });
+			if (!sameOrg(cp)) return res.status(400).json({ success: false, message: "Контрагент не найден" });
+		}
 		if (contactPersonUuid) {
 			const p = await prisma.contactPerson.findFirst({ where: { uuid: contactPersonUuid, deletedAt: null } });
-			if (!p) return res.status(400).json({ success: false, message: "Контактное лицо не найдено" });
+			if (!sameOrg(p)) return res.status(400).json({ success: false, message: "Контактное лицо не найдено" });
 			displayName = p.fullName || [p.lastName, p.firstName].filter(Boolean).join(" ") || displayName;
 			// Контрагент — владелец лица, если явно не передан.
 			if (!cpUuid && p.ownerType === "Counterparty") cpUuid = p.ownerUuid;

@@ -21,8 +21,10 @@ import { getSnapshotFor } from "./costSnapshot.js";
 import { getSettingsAt } from "./accountingSettings.js";
 import { getCached } from "./refCache.js";
 import { computeDepreciationEntries } from "./depreciation.js";
-
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+import { r2 } from "./money.js";
+import { periodBounds, orgTimeZone } from "./periodBounds.js";
+import { inDocumentTransaction } from "./documentLock.js";
+import { compareMovements } from "./costingReplay.js";
 
 // Коды типовых счетов РК (см. seed-accounting.js).
 export const ACC = {
@@ -56,12 +58,9 @@ const CLOSE_ACCOUNTS = [
 	{ account: ACC.ADMIN_EXP, normal: "debit" }, // 7210 админрасходы
 ];
 
-// Формат даты для описания закрывающих проводок (детерминированно, по UTC).
-const fmtDateUTC = (d) => {
-	const dd = String(d.getUTCDate()).padStart(2, "0");
-	const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-	return `${dd}.${mm}.${d.getUTCFullYear()}`;
-};
+// Формат даты для описания закрывающих проводок — местная дата организации.
+const fmtDateLocal = (d, tz) =>
+	new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 
 // Корр-счёт проводки кассового ордера по типу операции (см. cashOperationTypes на фронте).
 // ПКО: Дт 1010 Кт account; РКО: Дт account Кт 1010. analyticsType задаёт субконто на
@@ -93,6 +92,27 @@ const buildCashAnalytics = (analyticsType, doc) => {
 	return [];
 };
 
+// Счета обязательств по зарплате (У7 аудита 26.09) — ОДНО место для кодов. По типовому
+// плану счетов РК: 3120 ИПН, 3150 социальный налог, 3210 социальное страхование (СО),
+// 3220 пенсионные отчисления (ОПВ), 3212/3213 — отчисления и взносы на ОСМС.
+// Проверить потом: коды 3212/3213 (ОСМС) сверить с бухгалтером и планом счетов клиентов.
+export const PAYROLL_ACCOUNTS = Object.freeze({
+	ipn: "3120",
+	socialTax: "3150",
+	socialContrib: "3210",
+	opv: "3220",
+	oosms: "3212", // отчисления работодателя на ОСМС
+	vosms: "3213", // взносы работника на ОСМС
+});
+
+/** Разносить ли начисление зарплаты: в плане счетов есть ВСЕ счета PAYROLL_ACCOUNTS. */
+async function payrollSplitAvailable(ctx) {
+	for (const code of Object.values(PAYROLL_ACCOUNTS)) {
+		if (!(await ctx.resolveAccount(code))) return false;
+	}
+	return true;
+}
+
 // Субконто, обязательные при проверке проведения. «Основные» измерения —
 // обязательны; договор/статья затрат/подразделение/ОС — необязательны (не
 // блокируют проведение, но фиксируются, если заполнены в документе).
@@ -123,6 +143,62 @@ const DOC_CONFIG = {
 };
 
 export const POSTING_DOC_TYPES = Object.keys(DOC_CONFIG);
+
+// Таблицы документов-регистраторов проводок — для SQL-отчётов (ОСВ, карточка счёта,
+// взаиморасчёты): «проводка учитывается, только если её документ СЕЙЧАС проведён» —
+// тем же правилом, что filterPostedEntries, но в самом запросе (EXISTS), без выгрузки
+// всей истории проводок в память. Имена — константы кода, не ввод.
+export const POSTING_DOC_TABLES = Object.freeze({
+	purchase: "purchases",
+	sale: "sales",
+	sale_return: "sale_returns",
+	purchase_return: "purchase_returns",
+	import_declaration: "import_declarations",
+	write_off: "write_offs",
+	goods_receipt: "goods_receipts",
+	inventory_transfer: "inventory_transfers",
+	cash_receipt_order: "cash_orders",
+	cash_expense_order: "cash_orders",
+	bank_statement: "bank_statements",
+	payroll_calculation: "payroll_calculations",
+	payroll_payment: "payroll_payments",
+	month_close: "month_closes",
+});
+
+/**
+ * Номера документов для строк отчётов (журнал, карточка счёта, движения регистра):
+ * пары { documentType, documentUuid } → Map(`${type}:${uuid}` → number). Один запрос на
+ * тип документа. Нужен, чтобы отчёты показывали «№ номер», а не внутренний id.
+ */
+export async function documentNumbers(rows, client = prisma) {
+	const byType = new Map();
+	for (const r of rows ?? []) {
+		if (!r?.documentType || !r.documentUuid || !DOC_CONFIG[r.documentType]) continue;
+		if (!byType.has(r.documentType)) byType.set(r.documentType, new Set());
+		byType.get(r.documentType).add(r.documentUuid);
+	}
+	const out = new Map();
+	for (const [type, uuids] of byType) {
+		try {
+			const docs = await client[DOC_CONFIG[type].parentModel].findMany({
+				where: { uuid: { in: [...uuids] } },
+				select: { uuid: true, number: true },
+			});
+			for (const d of docs) out.set(`${type}:${d.uuid}`, d.number ?? null);
+		} catch (err) {
+			console.error(`documentNumbers(${type}) error:`, err?.message ?? err);
+		}
+	}
+	return out;
+}
+
+/** SQL-условие «документ проводки проведён и не удалён» для псевдонима таблицы проводок. */
+export function postedEntrySql(alias = "e") {
+	const parts = Object.entries(POSTING_DOC_TABLES).map(([type, table]) =>
+		`(${alias}."documentType" = '${type}' AND EXISTS (SELECT 1 FROM "${table}" d WHERE d."uuid" = ${alias}."documentUuid" AND d."posted" = true AND d."deletedAt" IS NULL))`,
+	);
+	return `(${parts.join(" OR ")})`;
+}
 
 /** Маппинг prisma-модели документа → documentType (для фабрики позиций). */
 export function documentTypeForParentModel(parentModel) {
@@ -250,13 +326,13 @@ export async function resolveUnitCost(orgUuid, productUuid, warehouseUuid, dateU
  * @param {Date|string|null} date — дата документа (по ней же выбирается метод)
  * @param {{docUuid?:string|null, docId?:number|null}} [opts]
  */
-export async function createCostingContext(orgUuid, date, { docUuid = null, docId = null, boundary = null } = {}, client = prisma) {
+export async function createCostingContext(orgUuid, date, { docUuid = null, docId = null, docType = null, boundary = null } = {}, client = prisma) {
 	// boundary — граница закрытого периода. Передавать ТОЛЬКО когда все оценки этого
 	// контекста идут на дату СТРОГО позже границы (оценка документа хвоста): тогда
 	// costing стартует от снапшота на границе, а не от начала истории. Для оценки на
 	// прошлую дату (возврат от покупателя) boundary НЕ передавать.
 	const ctx = makeContext(client, orgUuid ?? null, new Map(), boundary);
-	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, date ?? null, client), docUuid, docId);
+	ctx.beginDocument(await resolveCostingMethod(orgUuid ?? null, date ?? null, client), docUuid, docId, docType);
 	return ctx;
 }
 
@@ -536,6 +612,9 @@ export const POSTING_RULES = {
 
 	// Банковская выписка. Поступление (in): Дт 1030 Кт 1210 (Контрагент, Договор).
 	// Списание (out): Дт 3310 (Контрагент, Договор) Кт 1030.
+	// Проверить потом (аудит 26.09, У9): валюта банковского счёта не учитывается — выписка по
+	// счёту в USD проводится как тенге, курсовых разниц нет. Нужны курс на дату (справочник
+	// курсов), счёт 1030 в валюте (субконто «Валюта») и проводки курсовой разницы.
 	bank_statement: (doc) => {
 		const amount = r2(doc.amount);
 		if (amount <= 0) return [];
@@ -591,18 +670,51 @@ export const POSTING_RULES = {
 		}];
 	},
 
-	// Начисление зарплаты: Дт 7210 (Подразделение, Статья затрат) Кт 3350 (Сотрудник).
-	payroll_calculation: (doc) => {
-		const amount = r2(doc.totalExpense ?? doc.baseSalary);
-		if (amount <= 0) return [];
-		return [{
-			debit: ACC.ADMIN_EXP,
-			credit: ACC.PAYROLL,
-			amount,
-			description: doc.comment || `Начисление зарплаты${doc.period ? ` за ${doc.period}` : ""}`,
-			debitAnalytics: [], // Подразделение/Статья затрат — необязательные субконто
-			creditAnalytics: compact([an("Employee", doc.employeeUuid)]),
-		}];
+	// Начисление зарплаты (У7 аудита 26.09).
+	//
+	// РАЗНЕСЕНИЕ — когда в плане счетов есть ВСЕ счета обязательств (PAYROLL_ACCOUNTS):
+	//   Дт 7210 Кт 3350 [Сотрудник] — начислено (оклад);
+	//   Дт 3350 [Сотрудник] Кт ОПВ / ИПН / ВОСМС — удержания из начисленного;
+	//   Дт 7210 Кт СО / СН / ООСМС — взносы и налог работодателя.
+	// Тогда 3350 после выплаты «к выдаче» закрывается в ноль, а обязательства перед
+	// бюджетом и фондами видны на своих счетах.
+	//
+	// БЕЗ РАЗНЕСЕНИЯ (в плане счетов нет хотя бы одного из счетов — так сейчас на всех
+	// установках: сид их не заводит) — прежняя одна проводка Дт 7210 Кт 3350 на весь
+	// расход. На 3350 тогда копится сумма налогов и взносов, которую выплата не гасит.
+	// Проверить потом: завести счета из PAYROLL_ACCOUNTS в плане счетов (prisma/seed-accounting.js —
+	// зона «backend-платформа») и сверить с бухгалтером их коды, а заодно ставки и МРП 2026:
+	// суммы удержаний и взносов считает форма начисления (frontend PayrollCalculations), здесь
+	// они только проводятся.
+	payroll_calculation: async (doc, _items, ctx) => {
+		const description = doc.comment || `Начисление зарплаты${doc.period ? ` за ${doc.period}` : ""}`;
+		const employee = compact([an("Employee", doc.employeeUuid)]);
+		const split = await payrollSplitAvailable(ctx);
+		if (!split) {
+			const amount = r2(doc.totalExpense ?? doc.baseSalary);
+			if (amount <= 0) return [];
+			return [{
+				debit: ACC.ADMIN_EXP,
+				credit: ACC.PAYROLL,
+				amount,
+				description,
+				debitAnalytics: [], // Подразделение/Статья затрат — необязательные субконто
+				creditAnalytics: employee,
+			}];
+		}
+		const out = [];
+		const push = (debit, credit, amount, text, debitAnalytics, creditAnalytics) => {
+			const a = r2(amount);
+			if (a > 0) out.push({ debit, credit, amount: a, description: text, debitAnalytics, creditAnalytics });
+		};
+		push(ACC.ADMIN_EXP, ACC.PAYROLL, doc.baseSalary, description, [], employee);
+		push(ACC.PAYROLL, PAYROLL_ACCOUNTS.opv, doc.opv, "Удержаны обязательные пенсионные взносы (ОПВ)", employee, []);
+		push(ACC.PAYROLL, PAYROLL_ACCOUNTS.ipn, doc.ipn, "Удержан индивидуальный подоходный налог (ИПН)", employee, []);
+		push(ACC.PAYROLL, PAYROLL_ACCOUNTS.vosms, doc.vosms, "Удержаны взносы на ОСМС (ВОСМС)", employee, []);
+		push(ACC.ADMIN_EXP, PAYROLL_ACCOUNTS.socialContrib, doc.socialContrib, "Начислены социальные отчисления (СО)", [], []);
+		push(ACC.ADMIN_EXP, PAYROLL_ACCOUNTS.socialTax, doc.socialTax, "Начислен социальный налог (СН)", [], []);
+		push(ACC.ADMIN_EXP, PAYROLL_ACCOUNTS.oosms, doc.oosms, "Начислены отчисления на ОСМС (ООСМС)", [], []);
+		return out;
 	},
 
 	// Выплата зарплаты: Дт 3350 (Сотрудник) Кт 1010|1030 (по способу выплаты).
@@ -629,10 +741,13 @@ export const POSTING_RULES = {
 	// (Кт = прибыль, Дт = убыток).
 	month_close: async (doc, _items, ctx) => {
 		if (!doc.organizationUuid || !doc.periodStart || !doc.periodEnd) return [];
-		const start = new Date(doc.periodStart);
-		const endRaw = new Date(doc.periodEnd);
-		const end = new Date(endRaw);
-		end.setHours(23, 59, 59, 999); // включительно по последний день периода
+		// Границы периода — местные сутки организации (У5 аудита 26.09): начало — полночь
+		// первого дня, конец — 23:59:59.999 последнего. Раньше начало бралось полуночью UTC
+		// (05:00 по Алматы), и документы первой ночи месяца не попадали ни в одно закрытие.
+		// Та же функция считает границу запрета (periodLock) — они совпадают.
+		const tz = orgTimeZone(doc.organizationUuid);
+		const { start, end } = periodBounds(doc.periodStart, doc.periodEnd, tz);
+		if (!start || !end) return [];
 		const codes = CLOSE_ACCOUNTS.map((c) => c.account);
 
 		// Обороты периода по закрываемым счетам (без собственных проводок закрытия).
@@ -647,7 +762,7 @@ export const POSTING_RULES = {
 		});
 		// Самолечение: учитываем только проводки реально проведённых документов.
 		const posted = await filterPostedEntries(raw, ctx.client);
-		const periodLabel = `${fmtDateUTC(start)}–${fmtDateUTC(endRaw)}`;
+		const periodLabel = `${fmtDateLocal(start, tz)}–${fmtDateLocal(end, tz)}`;
 
 		const out = [];
 
@@ -656,7 +771,7 @@ export const POSTING_RULES = {
 		// принадлежат month_close (reconcile пересобирает их идемпотентно). Начисленная
 		// здесь сумма в `posted` не входит (это оборот того же документа), поэтому её
 		// добавляем в дебет закрываемого счёта вручную (depDebitByAccount).
-		const depEntries = await computeDepreciationEntries(ctx.client, doc.organizationUuid, start, endRaw);
+		const depEntries = await computeDepreciationEntries(ctx.client, doc.organizationUuid, start, end);
 		const depDebitByAccount = {};
 		for (const de of depEntries) {
 			out.push({
@@ -713,6 +828,7 @@ function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 	let costingMethod = "AVERAGE";
 	let docUuid = null;
 	let docId = null;
+	let docType = null;
 	const fifoOffset = new Map(); // `product|warehouse` → потреблено строками документа
 
 	// ── Кэш чтений регистра для себестоимости ────────────────────────────────
@@ -758,19 +874,23 @@ function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 		if (afterDate) base.date = { gt: afterDate };
 		const raw = await client.productRegister.findMany({
 			where: base,
-			select: { quantity: true, amount: true, movementType: true, date: true, documentId: true, documentUuid: true },
+			select: { id: true, quantity: true, amount: true, movementType: true, date: true, documentType: true, documentId: true, documentUuid: true },
 			orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
 		});
 		// Нормализуем: число + метка времени (мс) один раз, чтобы не парсить дату
-		// повторно на каждой строке каждого документа.
+		// повторно на каждой строке каждого документа. Порядок — ЕДИНЫЙ порядок регистра
+		// (compareMovements: при равной дате приход раньше расхода, затем тип и id
+		// документа): documentId из разных таблиц сам по себе ничего не упорядочивает (У8).
 		const rows = raw.map((r) => ({
 			q: Number(r.quantity) || 0,
 			amount: Number(r.amount) || 0,
 			movementType: r.movementType,
 			t: r.date instanceof Date ? r.date.getTime() : new Date(r.date).getTime(),
+			documentType: r.documentType ?? null,
 			documentId: r.documentId,
 			documentUuid: r.documentUuid,
-		}));
+			id: r.id,
+		})).sort(compareMovements);
 		cached = { seed, rows };
 		costCache.set(key, cached);
 		return cached;
@@ -779,13 +899,25 @@ function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 	const upToMs = (dateUpTo) =>
 		dateUpTo ? (dateUpTo instanceof Date ? dateUpTo.getTime() : new Date(dateUpTo).getTime()) : null;
 
-	// Инициализация контекста под конкретный документ: метод себестоимости, uuid+id
+	// Инициализация контекста под конкретный документ: метод себестоимости, uuid+id+тип
 	// (для исключения собственных outs и упорядочивания ФИФО) и сброс offset строк.
-	function beginDocument(method, uuid, id) {
+	function beginDocument(method, uuid, id, type = null) {
 		costingMethod = method === "FIFO" ? "FIFO" : "AVERAGE";
 		docUuid = uuid ?? null;
 		docId = id ?? null;
+		docType = type ?? null;
 		fifoOffset.clear();
+	}
+
+	// Расход другого документа В ТОТ ЖЕ МОМЕНТ — раньше ли он текущего документа? Ключ
+	// тот же, что в compareMovements: тип документа, затем id. Сравнивать один id нельзя:
+	// это id из РАЗНЫХ таблиц (поступление 500 «позже» продажи 20). Приход в тот же момент
+	// в этот вопрос не попадает — он всегда раньше расхода (см. avgCost/fifoCost).
+	function outBeforeCurrent(r) {
+		const ta = r.documentType ?? "";
+		const tb = docType ?? "";
+		if (ta !== tb) return ta < tb;
+		return r.documentId != null && r.documentId < docId;
 	}
 
 	async function resolveAccount(code) {
@@ -852,9 +984,10 @@ function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 		for (const r of rows) {
 			// Исключаем собственные движения документа (как SQL `documentUuid not`).
 			if (docUuid && r.documentUuid === docUuid) continue;
-			// Строго ДО текущего документа: по дате, при равной дате — по documentId.
+			// Строго ДО текущего документа: по дате; в тот же момент приход — всегда раньше
+			// (товар, поступивший в ту же минуту, уже на складе), расход — по единому ключу.
 			const before = upTo == null || r.t < upTo
-				|| (r.t === upTo && (docId == null || r.documentId == null || r.documentId < docId));
+				|| (r.t === upTo && (docId == null || r.movementType !== "out" || r.documentId == null || outBeforeCurrent(r)));
 			if (!before) continue;
 			if (r.movementType === "out") {
 				const avg = qty > 0 ? value / qty : 0;
@@ -906,7 +1039,7 @@ function makeContext(client, orgUuid, costCache = new Map(), boundary = null) {
 				const before =
 					upTo == null || r.t < upTo
 						? true
-						: r.t === upTo && docId != null && r.documentId != null && r.documentId < docId;
+						: r.t === upTo && docId != null && r.documentId != null && outBeforeCurrent(r);
 				if (before) priorOut += r.q;
 			}
 		}
@@ -969,7 +1102,7 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 	// проведённых документов прошлых периодов.
 	ctx.useVat = await resolveUseVat(doc.organizationUuid ?? null, doc.date ?? null, client);
 	// Метод себестоимости организации (AVERAGE|FIFO) + инициализация ФИФО-состояния.
-	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, doc.date ?? null, client), doc.uuid, doc.id);
+	ctx.beginDocument(await resolveCostingMethod(doc.organizationUuid ?? null, doc.date ?? null, client), doc.uuid, doc.id, documentType);
 	// Себестоимость движения — из УЖЕ построенного регистра (amount по строке
 	// документа): единый источник, проводка проецирует регистр, а не считает
 	// себестоимость повторно. Расход (sale) — out.amount = COGS; приход возврата
@@ -995,18 +1128,21 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 	for (const e of raw) {
 		const amount = r2(e.amount);
 		if (amount <= 0) continue;
-		const [debitAcc, creditAcc] = await Promise.all([
-			ctx.resolveAccount(e.debit),
-			ctx.resolveAccount(e.credit),
-		]);
-		const resolveSide = async (list) =>
-			Promise.all(
-				(list ?? []).map(async (a) => ({
+		// Последовательно, не Promise.all: сборка идёт и внутри транзакции перепроведения, а
+		// у транзакции одно соединение — параллельные запросы в нём pg не поддерживает.
+		const debitAcc = await ctx.resolveAccount(e.debit);
+		const creditAcc = await ctx.resolveAccount(e.credit);
+		const resolveSide = async (list) => {
+			const out = [];
+			for (const a of list ?? []) {
+				out.push({
 					subkontoType: a.type,
 					objectUuid: a.objectUuid ?? null,
 					objectName: await ctx.resolveName(a.type, a.objectUuid),
-				})),
-			);
+				});
+			}
+			return out;
+		};
 		resolved.push({
 			debitAccountUuid: debitAcc?.uuid ?? null,
 			debitAccountCode: e.debit,
@@ -1042,11 +1178,63 @@ export async function buildDocumentEntries(documentType, doc, items, client = pr
 
 // ─── Проверки проведения ─────────────────────────────────────────────────────
 export class PostingValidationError extends Error {
-	constructor(errors) {
+	constructor(errors, status = 422) {
 		super(Array.isArray(errors) ? errors.join("\n") : String(errors));
 		this.name = "PostingValidationError";
 		this.errors = Array.isArray(errors) ? errors : [errors];
+		this.status = status;
 	}
+}
+
+/**
+ * Второе проведённое закрытие того же периода (У6 аудита 26.09) — 409: правило закрытия
+ * исключает из оборотов ВСЕ проводки закрытий, поэтому два проведённых закрытия одного
+ * месяца дважды переносили бы обороты на 5610.
+ */
+export class MonthCloseOverlapError extends PostingValidationError {
+	constructor(message) {
+		super([message], 409);
+		this.name = "MonthCloseOverlapError";
+	}
+}
+
+// Денежные документы: без положительной суммы проводок нет, а «проведённый» документ без
+// проводок молча расходился бы с учётом (ПКО/РКО на 0 ₸ проводились пустыми).
+const MONEY_DOC_AMOUNT = {
+	cash_receipt_order: (d) => d.amount,
+	cash_expense_order: (d) => d.amount,
+	bank_statement: (d) => d.amount,
+	payroll_payment: (d) => d.amount,
+	payroll_calculation: (d) => d.totalExpense ?? d.baseSalary,
+};
+
+/**
+ * Проведённое закрытие месяца этой организации, пересекающееся с периодом doc (кроме
+ * самого doc). Пересечение — по местным суткам организации, как и сами границы.
+ */
+export async function findOverlappingMonthClose(doc, client = prisma) {
+	if (!doc?.organizationUuid || !doc.periodStart || !doc.periodEnd) return null;
+	const tz = orgTimeZone(doc.organizationUuid);
+	const mine = periodBounds(doc.periodStart, doc.periodEnd, tz);
+	if (!mine.start || !mine.end) return null;
+	const DAY = 86_400_000;
+	// Грубый отбор в БД (±сутки на разный способ хранения дат), точный — по границам.
+	const candidates = await client.monthClose.findMany({
+		where: {
+			organizationUuid: doc.organizationUuid,
+			posted: true,
+			deletedAt: null,
+			...(doc.uuid ? { uuid: { not: doc.uuid } } : {}),
+			periodStart: { lte: new Date(mine.end.getTime() + DAY) },
+			periodEnd: { gte: new Date(mine.start.getTime() - DAY) },
+		},
+		select: { uuid: true, number: true, periodStart: true, periodEnd: true },
+	});
+	for (const c of candidates) {
+		const b = periodBounds(c.periodStart, c.periodEnd, tz);
+		if (b.start && b.end && b.start <= mine.end && b.end >= mine.start) return c;
+	}
+	return null;
 }
 
 /**
@@ -1064,6 +1252,34 @@ export async function validatePosting(documentType, doc, items, client = prisma)
 	}
 	if (!doc.organizationUuid) errors.push("Не заполнена организация");
 	if (!doc.date) errors.push("Не заполнена дата документа");
+
+	// Отрицательное количество (У9): расход с «−5» увеличивал бы остаток в обход контроля.
+	if ((items ?? []).some((it) => Number(it.quantity) < 0)) {
+		errors.push("Количество в строках документа не может быть отрицательным");
+	}
+
+	const moneyAmount = MONEY_DOC_AMOUNT[documentType];
+	if (moneyAmount && !(r2(moneyAmount(doc)) > 0)) {
+		errors.push("Сумма документа должна быть больше нуля — документ без суммы не даёт проводок");
+	}
+
+	if (documentType === "month_close") {
+		const tz = orgTimeZone(doc.organizationUuid);
+		const b = periodBounds(doc.periodStart, doc.periodEnd, tz);
+		if (!b.start || !b.end) errors.push("Не заполнен период закрытия");
+		else if (b.start > b.end) errors.push("Начало периода закрытия позже его конца");
+		else {
+			const other = await findOverlappingMonthClose(doc, client);
+			if (other) {
+				const fmt = (d) => new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
+				throw new MonthCloseOverlapError(
+					`Период уже закрыт документом «Закрытие месяца» ${other.number ? `№ ${other.number}` : "б/н"} ` +
+					`(${fmt(other.periodStart)}–${fmt(other.periodEnd)}). Второе закрытие удвоило бы обороты — ` +
+					`распроведите прежнее закрытие или измените период.`,
+				);
+			}
+		}
+	}
 
 	const entries = await buildDocumentEntries(documentType, doc, items, client);
 
@@ -1100,10 +1316,32 @@ export async function validatePosting(documentType, doc, items, client = prisma)
 		const total = r2(entries.reduce((s, e) => s + e.amount, 0));
 		if (total <= 0) errors.push("Сумма проводок должна быть больше нуля");
 
-		// Дебет = Кредит (для одиночных проводок Дт/Кт выполняется по построению).
-		const totalDebit = r2(entries.reduce((s, e) => s + e.amount, 0));
-		const totalCredit = totalDebit;
-		if (Math.abs(totalDebit - totalCredit) > 0.005) errors.push("Дебет не равен кредиту");
+		// Дебет = Кредит — считаем по сторонам НЕЗАВИСИМО (У9): раньше кредит приравнивался
+		// дебету, и проверка была истинна всегда. Проводка без счёта одной из сторон или с
+		// нечисловой суммой теперь даёт расхождение и отказ, а не молчаливую запись.
+		let totalDebit = 0;
+		let totalCredit = 0;
+		for (const e of entries) {
+			const amt = Number(e.amount);
+			if (!Number.isFinite(amt) || amt <= 0) {
+				errors.push(`Некорректная сумма проводки Дт ${e.debitAccountCode ?? "?"} Кт ${e.creditAccountCode ?? "?"}`);
+				continue;
+			}
+			if (e.debitAccountCode) totalDebit += amt;
+			else errors.push(`Проводка без счёта дебета (Кт ${e.creditAccountCode ?? "?"}, ${r2(amt)})`);
+			if (e.creditAccountCode) totalCredit += amt;
+			else errors.push(`Проводка без счёта кредита (Дт ${e.debitAccountCode ?? "?"}, ${r2(amt)})`);
+		}
+		if (Math.abs(r2(totalDebit) - r2(totalCredit)) > 0.005) errors.push("Дебет не равен кредиту");
+
+		// Зарплата с разнесением: к выдаче = начислено − удержания, иначе 3350 после выплаты
+		// не закроется в ноль (сумма к выдаче и удержания пришли из формы начисления).
+		if (documentType === "payroll_calculation" && entries.some((e) => e.creditAccountCode === PAYROLL_ACCOUNTS.opv || e.creditAccountCode === PAYROLL_ACCOUNTS.ipn)) {
+			const expectedNet = r2(Number(doc.baseSalary || 0) - Number(doc.opv || 0) - Number(doc.ipn || 0) - Number(doc.vosms || 0));
+			if (Math.abs(expectedNet - r2(doc.netSalary)) > 0.01) {
+				errors.push(`Сумма к выдаче (${r2(doc.netSalary)}) не равна начисленному за вычетом удержаний (${expectedNet})`);
+			}
+		}
 	}
 
 	if (errors.length) throw new PostingValidationError(errors);
@@ -1133,35 +1371,56 @@ async function loadDocument(documentType, documentUuid, client) {
 
 // ─── Пересбор проводок документа ─────────────────────────────────────────────
 /**
+ * Дата проводок документа. Закрытие месяца — КОНЕЦ закрываемого периода (местные сутки
+ * организации), а не дата документа (У6 аудита 26.09): закрытие июня, сделанное 03.07,
+ * датировалось 03.07 — ОСВ июня оставалась без закрытия (финрезультат 0), а амортизация
+ * июня выпадала из «накопленной до июля» и перенакапливалась сверх срока.
+ */
+export function entryDateOf(documentType, doc) {
+	if (documentType === "month_close" && doc?.periodEnd) {
+		const { end } = periodBounds(doc.periodStart ?? doc.periodEnd, doc.periodEnd, orgTimeZone(doc.organizationUuid));
+		if (end) return end;
+	}
+	return doc?.date ?? new Date();
+}
+
+/**
  * Полный пересбор проводок одного документа. Удаляет прежние проводки документа
  * и, если документ проведён (posted=true) и не удалён, создаёт новые из текущего
  * состояния. Идемпотентно. Безопасно вызывать при каждом сохранении.
+ *
+ * Атомарно (У2 аудита 26.09): удаление и вставка — в одной транзакции под блокировкой
+ * документа (documentLock.inDocumentTransaction). Передан tx — работаем в нём (вызывающий
+ * включает в ту же транзакцию шапку/строки). Ошибка НЕ глушится: транзакция откатывается
+ * (прежние проводки остаются), а исключение уходит вызывающему — роутер вернёт ошибку,
+ * а не «успех» при документе без проводок.
  */
 export async function reconcileDocumentEntries(documentType, documentUuid, client = prisma, costCache = new Map()) {
 	const cfg = DOC_CONFIG[documentType];
 	if (!cfg || !documentUuid) return;
-	try {
+	await inDocumentTransaction(client, documentType, documentUuid, async (tx) => {
 		// 1. Удаляем прежние проводки документа (аналитика удалится каскадом).
-		await client.accountingEntry.deleteMany({ where: { documentType, documentUuid } });
+		await tx.accountingEntry.deleteMany({ where: { documentType, documentUuid } });
 
 		// 2. Загружаем документ; проводки только для проведённого и не удалённого.
-		const { doc, items } = await loadDocument(documentType, documentUuid, client);
+		const { doc, items } = await loadDocument(documentType, documentUuid, tx);
 		if (!doc || doc.posted !== true || doc.deletedAt) return;
 
 		// 3. Формируем проводки. costCache разделяется на всю фазу пересчёта проводок
 		//    (регистр в это время НЕизменен) — история товара читается один раз.
-		const entries = await buildDocumentEntries(documentType, doc, items, client, costCache);
+		const entries = await buildDocumentEntries(documentType, doc, items, tx, costCache);
 		if (!entries.length) return;
 
 		// 4. Создаём проводки + аналитику.
+		const date = entryDateOf(documentType, doc);
 		for (const e of entries) {
-			await client.accountingEntry.create({
+			await tx.accountingEntry.create({
 				data: {
 					organizationUuid: doc.organizationUuid ?? null,
 					documentType,
 					documentUuid,
 					documentId: doc.id ?? null,
-					date: doc.date ?? new Date(),
+					date,
 					debitAccountUuid: e.debitAccountUuid,
 					debitAccountCode: e.debitAccountCode,
 					creditAccountUuid: e.creditAccountUuid,
@@ -1187,9 +1446,7 @@ export async function reconcileDocumentEntries(documentType, documentUuid, clien
 				},
 			});
 		}
-	} catch (err) {
-		console.error(`reconcileDocumentEntries(${documentType}, ${documentUuid}) error:`, err);
-	}
+	});
 }
 
 /** Пересбор по prisma-модели документа (для фабрики позиций). */
@@ -1199,14 +1456,15 @@ export async function reconcileByParentModel(parentModel, documentUuid, client =
 	await reconcileDocumentEntries(type, documentUuid, client);
 }
 
-/** Удалить все проводки документа (при удалении документа-регистратора). */
+/**
+ * Удалить все проводки документа (при удалении документа-регистратора). Ошибка
+ * пробрасывается (У2): «успешное» удаление с оставшимися проводками — хуже отказа.
+ */
 export async function removeDocumentEntries(documentType, documentUuid, client = prisma) {
 	if (!DOC_CONFIG[documentType] || !documentUuid) return;
-	try {
-		await client.accountingEntry.deleteMany({ where: { documentType, documentUuid } });
-	} catch (err) {
-		console.error(`removeDocumentEntries(${documentType}, ${documentUuid}) error:`, err);
-	}
+	await inDocumentTransaction(client, documentType, documentUuid, (tx) =>
+		tx.accountingEntry.deleteMany({ where: { documentType, documentUuid } }),
+	);
 }
 
 /**
@@ -1238,15 +1496,24 @@ export async function getDocumentEntries(documentType, documentUuid, client = pr
  *
  * Инвариант «проводки есть ⇔ документ проведён» поддерживается reconcile при
  * сохранении, но read-time проверка гарантирует его даже при «осиротевших»
- * проводках (legacy-данные, сид, не покрытый код-путь). Дополнительно
- * САМОИСЦЕЛЯЕТСЯ: найденные осиротевшие проводки физически удаляются.
+ * проводках (legacy-данные, сид, не покрытый код-путь).
+ *
+ * ТОЛЬКО ЧТЕНИЕ (аудит 26.09): раньше фильтр здесь же УДАЛЯЛ осиротевшие проводки —
+ * запись на пути GET, в гонке с проведением (документ, проведённый между выборкой и
+ * удалением, терял свежие проводки). Самоисцеление вынесено в purgeOrphanEntries —
+ * для фоновой задачи или ручного запуска.
  *
  * Принимает массив проводок (нужны поля documentType, documentUuid) и клиент.
  */
 export async function filterPostedEntries(entries, client = prisma) {
 	const list = entries ?? [];
 	if (!list.length) return list;
+	const { postedKey } = await classifyEntryDocuments(list, client);
+	return list.filter((e) => postedKey.has(`${e.documentType}:${e.documentUuid}`));
+}
 
+/** Разбить документы проводок на проведённые и «осиротевшие» (не проведены/удалены). */
+async function classifyEntryDocuments(list, client) {
 	// Группируем uuid документов по типу.
 	const byType = new Map();
 	for (const e of list) {
@@ -1279,25 +1546,43 @@ export async function filterPostedEntries(entries, client = prisma) {
 			}
 		}
 	}
+	return { postedKey, orphans };
+}
 
-	// Самоисцеление: удаляем проводки документов, которые не проведены/удалены.
+/**
+ * Самоисцеление: удалить проводки документов, которые не проведены или удалены.
+ * Каждый документ — под своей блокировкой и с повторной проверкой внутри транзакции,
+ * чтобы не снести проводки документа, проведённого только что.
+ * Фоновая задача «accounting-purge-orphans» (server.js) зовёт её раз в сутки по каждой организации.
+ *
+ * @returns {Promise<number>} сколько документов очищено
+ */
+export async function purgeOrphanEntries({ organizationUuid = null } = {}, client = prisma) {
+	const rows = await client.accountingEntry.findMany({
+		where: organizationUuid ? { organizationUuid } : {},
+		select: { documentType: true, documentUuid: true },
+		distinct: ["documentType", "documentUuid"],
+	});
+	const { orphans } = await classifyEntryDocuments(rows, client);
+	let purged = 0;
 	for (const [type, uuids] of orphans) {
-		try {
-			await client.accountingEntry.deleteMany({
-				where: { documentType: type, documentUuid: { in: Array.from(uuids) } },
+		const cfg = DOC_CONFIG[type];
+		for (const uuid of uuids) {
+			await inDocumentTransaction(client, type, uuid, async (tx) => {
+				const doc = await tx[cfg.parentModel].findUnique({ where: { uuid }, select: { posted: true, deletedAt: true } });
+				if (doc && doc.posted === true && !doc.deletedAt) return; // успели провести
+				await tx.accountingEntry.deleteMany({ where: { documentType: type, documentUuid: uuid } });
+				purged++;
 			});
-		} catch (err) {
-			console.error(`filterPostedEntries purge(${type}) error:`, err);
 		}
 	}
-
-	return list.filter((e) => postedKey.has(`${e.documentType}:${e.documentUuid}`));
+	return purged;
 }
 
 /** Маппинг PostingValidationError → HTTP 422. Возвращает true, если ответ отправлен. */
 export function respondPostingError(err, res) {
 	if (err instanceof PostingValidationError) {
-		res.status(422).json({ success: false, message: err.message, errors: err.errors });
+		res.status(err.status ?? 422).json({ success: false, message: err.message, errors: err.errors });
 		return true;
 	}
 	return false;
@@ -1316,6 +1601,9 @@ export default {
 	assertPostable,
 	getDocumentEntries,
 	filterPostedEntries,
+	purgeOrphanEntries,
+	entryDateOf,
 	PostingValidationError,
+	MonthCloseOverlapError,
 	respondPostingError,
 };

@@ -36,6 +36,37 @@ export function localYmd(offsetMinutes: number, now: number = Date.now()): strin
 	return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
 }
 
+/**
+ * Местная дата «ГГГГ-ММ-ДД» момента (ISO): для поля даты. `iso.slice(0, 10)` давал дату по UTC — с 00:00
+ * до 05:00 по Алматы вчерашнюю (У5 аудита 26.09). Пусто или мусор — пустая строка.
+ */
+export function localYmdOf(iso: string | null | undefined, offsetMinutes: number): string {
+	if (!iso) return "";
+	const t = Date.parse(iso);
+	return Number.isNaN(t) ? "" : localYmd(offsetMinutes, t);
+}
+
+/**
+ * Конец местного дня «ГГГГ-ММ-ДД» — момент ISO для сервера (последняя миллисекунда дня).
+ *
+ * Голая дата на сервере становится 00:00Z — это 05:00 по Алматы того же дня: срок «30.09» истекал
+ * утром 30-го, а мера «02.09» оказывалась раньше нарушения, выявленного 02.09 днём (У5, И24).
+ */
+export function endOfLocalDayIso(ymd: string, offsetMinutes: number): string | null {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+	if (!m) return null;
+	const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1) - offsetMinutes * 60_000 - 1;
+	return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+
+/** Дата «ГГГГ-ММ-ДД» плюс n дней (календарных). Мусор — пустая строка. */
+export function addDaysYmd(ymd: string, n: number): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+	if (!m) return "";
+	const t = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + n));
+	return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
+}
+
 /** Последние n месяцев, начиная с `from` и назад: для отбора списка по месяцу бонуса. */
 export function recentMonths(n: number, from: string): string[] {
 	const out: string[] = [];

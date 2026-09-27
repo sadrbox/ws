@@ -4,14 +4,65 @@
 // целостность держится через сервис serialNumbers.js.
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
+import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import {
 	setReceiptSerials, issueSerials, transferSerials, reinstateSerials, SERIAL_STATUS,
 } from "../../services/serialNumbers.js";
+import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 
 const router = express.Router();
 const ROUTE = "serialnumbers";
+
+/*
+ * ОПЕРАЦИИ С СЕРИЯМИ — ТОЛЬКО ПО СВОЕМУ ДОКУМЕНТУ ОТКРЫТОГО ПЕРИОДА (У9 аудита 26.09).
+ *
+ * Приёмка, выбытие, перенос и возврат серий шли по `docUuid` из тела без проверки: можно было
+ * переразметить серии чужого документа или документа закрытого месяца, а выбытием — пометить
+ * проданными серии чужой организации. Теперь документ ищется по своему типу, должен быть
+ * доступен пользователю (запись без организации — не «общая»), его период — открыт; серии из
+ * выбора — той же доступной организации. Организация приёмки берётся из документа, а не из тела.
+ */
+const SERIAL_DOC_MODELS = {
+	purchase: "purchase", goods_receipt: "goodsReceipt", import_declaration: "importDeclaration",
+	sale_return: "saleReturn", inventory_transfer: "inventoryTransfer", sale: "sale",
+	write_off: "writeOff", purchase_return: "purchaseReturn",
+};
+
+class SerialAccessError extends Error {
+	constructor(status, message) { super(message); this.status = status; }
+}
+
+/** Документ операции: доступен и в открытом периоде. Возвращает { organizationUuid }. */
+export async function assertSerialDoc(req, docType, docUuid, db = prisma) {
+	const model = SERIAL_DOC_MODELS[docType];
+	if (!model) throw new SerialAccessError(400, `Неизвестный вид документа: ${docType}`);
+	const doc = await db[model].findUnique({ where: { uuid: String(docUuid) }, select: { organizationUuid: true, date: true } });
+	if (!doc || !checkOwnership(doc, req, "organizationUuid", { allowShared: false })) {
+		throw new SerialAccessError(404, "Документ не найден");
+	}
+	await assertPeriodOpen(doc.organizationUuid, doc.date);
+	return doc;
+}
+
+/** Серии из выбора — доступной организации (чужие uuid не принимаем). */
+export async function assertSerialsOwned(req, serialUuids, db = prisma) {
+	const ids = Array.isArray(serialUuids) ? serialUuids.filter((u) => typeof u === "string") : [];
+	if (!ids.length) return;
+	const rows = await db.serialNumber.findMany({ where: { uuid: { in: ids } }, select: { uuid: true, organizationUuid: true } });
+	if (rows.length !== new Set(ids).size || rows.some((r) => !checkOwnership(r, req, "organizationUuid", { allowShared: false }))) {
+		throw new SerialAccessError(404, "Часть серий не найдена");
+	}
+}
+
+function respondSerialAccess(error, res) {
+	if (error instanceof SerialAccessError) {
+		res.status(error.status).json({ success: false, message: error.message });
+		return true;
+	}
+	return respondPeriodLockError(error, res);
+}
 const TEXT_FIELDS = ["serialNumber"];
 
 const INCLUDE = { product: { select: { uuid: true, name: true, sku: true } } };
@@ -72,7 +123,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const rawLimit = req.query.limit;
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+		const limitNumber = clampLimit(rawLimit);
 		const filter = req.query.filter && typeof req.query.filter === "object" ? req.query.filter : {};
 
 		const where = { deletedAt: null, ...tenantFilter(req) };
@@ -93,8 +144,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const total = await prisma.serialNumber.count({ where });
 		return res.status(200).json({ success: true, items, total, hasMore: items.length === limitNumber, nextCursor: null });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 
@@ -104,7 +155,7 @@ router.get(`/${ROUTE}/receipt`, async (req, res) => {
 		const { docType, docUuid, productUuid } = req.query;
 		if (!docUuid || !productUuid) return res.status(400).json({ success: false, message: "docUuid и productUuid обязательны" });
 		const items = await prisma.serialNumber.findMany({
-			where: { receiptDocType: docType || undefined, receiptDocUuid: String(docUuid), productUuid: String(productUuid), deletedAt: null },
+			where: { receiptDocType: docType || undefined, receiptDocUuid: String(docUuid), productUuid: String(productUuid), deletedAt: null, ...tenantFilter(req) },
 			orderBy: [{ id: "asc" }],
 		});
 		return res.status(200).json({ success: true, items });
@@ -146,11 +197,13 @@ router.get(`/${ROUTE}/available`, async (req, res) => {
 // Установить серии, принятые документом приёмки по товару (идемпотентно).
 router.post(`/${ROUTE}/receipt`, async (req, res) => {
 	try {
-		const { docType, docUuid, productUuid, warehouseUuid, organizationUuid, serials } = req.body;
+		const { docType, docUuid, productUuid, warehouseUuid, serials } = req.body;
 		if (!docType || !docUuid || !productUuid) return res.status(400).json({ success: false, message: "docType, docUuid, productUuid обязательны" });
-		const result = await setReceiptSerials({ docType, docUuid, productUuid, warehouseUuid: warehouseUuid || null, organizationUuid: organizationUuid || null, serials });
+		const doc = await assertSerialDoc(req, docType, docUuid);
+		const result = await setReceiptSerials({ docType, docUuid, productUuid, warehouseUuid: warehouseUuid || null, organizationUuid: doc.organizationUuid ?? null, serials });
 		return res.status(200).json({ success: true, ...result });
 	} catch (error) {
+		if (respondSerialAccess(error, res)) return;
 		console.error(`POST /${ROUTE}/receipt error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -162,9 +215,12 @@ router.post(`/${ROUTE}/transfer`, async (req, res) => {
 	try {
 		const { docUuid, serialUuids, fromWarehouseUuid, toWarehouseUuid } = req.body;
 		if (!docUuid) return res.status(400).json({ success: false, message: "docUuid обязателен" });
+		await assertSerialDoc(req, "inventory_transfer", docUuid);
+		await assertSerialsOwned(req, serialUuids);
 		const count = await transferSerials({ docUuid, serialUuids, fromWarehouseUuid: fromWarehouseUuid || null, toWarehouseUuid: toWarehouseUuid || null });
 		return res.status(200).json({ success: true, count });
 	} catch (error) {
+		if (respondSerialAccess(error, res)) return;
 		console.error(`POST /${ROUTE}/transfer error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -203,6 +259,8 @@ router.post(`/${ROUTE}/return`, async (req, res) => {
 	try {
 		const { docUuid, serialUuids, warehouseUuid, originIssueDocUuid } = req.body;
 		if (!docUuid) return res.status(400).json({ success: false, message: "docUuid обязателен" });
+		await assertSerialDoc(req, "sale_return", docUuid);
+		await assertSerialsOwned(req, serialUuids);
 		const count = await reinstateSerials({
 			docUuid,
 			serialUuids,
@@ -211,6 +269,7 @@ router.post(`/${ROUTE}/return`, async (req, res) => {
 		});
 		return res.status(200).json({ success: true, count });
 	} catch (error) {
+		if (respondSerialAccess(error, res)) return;
 		console.error(`POST /${ROUTE}/return error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -221,6 +280,8 @@ router.post(`/${ROUTE}/issue`, async (req, res) => {
 	try {
 		const { docType, docUuid, serialUuids } = req.body;
 		if (!docType || !docUuid) return res.status(400).json({ success: false, message: "docType, docUuid обязательны" });
+		await assertSerialDoc(req, docType, docUuid);
+		await assertSerialsOwned(req, serialUuids);
 		// Полная переустановка: сначала возвращаем прежние в in_stock, затем помечаем выбранные.
 		await prisma.serialNumber.updateMany({
 			where: { issueDocType: docType, issueDocUuid: docUuid, deletedAt: null },
@@ -230,6 +291,7 @@ router.post(`/${ROUTE}/issue`, async (req, res) => {
 		const count = await issueSerials({ docType, docUuid, serialUuids, status });
 		return res.status(200).json({ success: true, count });
 	} catch (error) {
+		if (respondSerialAccess(error, res)) return;
 		console.error(`POST /${ROUTE}/issue error:`, error);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}

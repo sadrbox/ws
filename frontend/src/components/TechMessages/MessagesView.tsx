@@ -36,7 +36,7 @@ import { Button } from "src/components/Button";
 import IconButton from "src/components/IconButton/IconButton";
 import { Icon } from "src/components/IconButton/icons";
 import { getFormatDateOnly, getFormatTimeOnly } from "src/utils/datetime";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { openFormByRef, canOpenByRef } from "src/utils/openFormByRef";
 import { dismissMessage, type TechMessage } from "./store";
 import { useOps } from "./operations";
@@ -80,7 +80,7 @@ const readMode = (): GroupMode => {
 };
 
 const Message: FC<{ message: TechMessage; mode: GroupMode }> = ({ message: m, mode }) => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const canOpen = !!m.ref && canOpenByRef(m.ref.endpoint);
 	const at = new Date(m.firstAt).toISOString();
 	// Под заголовком дня дата известна и в строке не нужна; в остальных режимах — нужна.

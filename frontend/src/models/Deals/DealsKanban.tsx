@@ -6,7 +6,7 @@ import { FC, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import type { TDataItem } from "src/components/Table/types";
 import { DEAL_STAGES } from "./stages";
 import { DealsForm } from "./index";
@@ -23,7 +23,7 @@ const money = (v: number | string, ccy: string) => {
 };
 
 const DealsKanban: FC<Partial<{ uniqId: string }>> = () => {
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
   const qc = useQueryClient();
 
   const { data, isLoading, isError } = useQuery<DealRow[]>({

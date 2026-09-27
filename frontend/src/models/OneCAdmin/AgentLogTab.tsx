@@ -19,7 +19,7 @@ import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { fetchAgentLog } from "src/services/onec/api";
 import { withOp } from "./progress";
-import { QueryError } from "./shared";
+import { QueryError } from "./sharedUi";
 import styles from "./OneCAdmin.module.scss";
 import diag from "./AgentDiag.module.scss";
 

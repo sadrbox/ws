@@ -6,6 +6,7 @@ import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { clampLimit, sendError, buildFilterWhere } from "../../utils/listQuery.js";
 
 const router = express.Router();
 
@@ -36,8 +37,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawLimit = req.query.limit;
 		const rawCursor = req.query.cursor;
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit, { def: 500, max: 1000 });
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res.status(400).json({ success: false, message: "Некорректный параметр cursor" });
@@ -69,19 +70,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				}),
 			};
 
-		const ALLOWED = ["contains", "equals", "gte", "lte", "gt", "lt"];
-		const filterWhere = {};
-		for (const [field, conds] of Object.entries(filter)) {
-			if (["searchBy", "dateRange"].includes(field) || !conds || typeof conds !== "object") continue;
-			for (const [op, val] of Object.entries(conds)) {
-				if (!ALLOWED.includes(op)) continue;
-				if (op === "contains") filterWhere[field] = { contains: String(val), mode: "insensitive" };
-				else {
-					if (!filterWhere[field]) filterWhere[field] = {};
-					filterWhere[field][op] = val;
-				}
-			}
-		}
+		// Фильтры — по схеме модели: неизвестное поле, кривая дата или число → 400, а не 500 из Prisma
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		const filterWhere = buildFilterWhere("deal", filter);
 
 		const baseWhere = { ...searchWhere, ...filterWhere, ...tenantFilter(req) };
 		const opts = { take: limitNumber, where: baseWhere, orderBy, include: REL_INCLUDE };
@@ -98,8 +89,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 
 		return res.status(200).json({ success: true, items: items.map(flatten), nextCursor, hasMore, ...(total !== undefined ? { total } : {}) });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

@@ -26,8 +26,14 @@ describe("NavList structure", () => {
 	it("«Все разделы» переиспользует группы ВСЕХ разделов — меню не разойдётся", () => {
 		const all = SRC.slice(SRC.indexOf('"All".toLocaleLowerCase()'));
 		for (const s of ["Trade", "Accounting", "HR", "CRM", "Administration", "Settings"]) {
-			expect(all, `в «Все разделы» нет группы ${s}`).toContain(`<${s}Groups />`);
+			expect(all, `в «Все разделы» нет группы ${s}`).toContain(`${s}Groups()`);
 		}
+	});
+
+	it("группы вызываются функциями, а не монтируются компонентами (аудит 26.09, О6)", () => {
+		// Группа, объявленная в рендере и смонтированная тегом, — новый тип компонента на каждую
+		// перерисовку: React пересоздавал всё меню, и фокус клавиатуры с пункта терялся.
+		expect(SRC).not.toMatch(/<\w+Groups\s*\/>/);
 	});
 
 	it("Торговля: документы разбиты по бизнес-цепочке, а не свалены в один список", () => {
@@ -111,9 +117,9 @@ it("раздел «Управление 1С» — модуль поставки 
 it("«Качество» (E17): блок в CRM и во «Все разделы», контроль — только контролёрам", () => {
 	// Стандарт качества — рядом с управлением задачами: те же поручения и сроки, но про людей.
 	const all = SRC.slice(SRC.indexOf('"All".toLocaleLowerCase()'));
-	expect(all).toContain("<QualityGroups />");
+	expect(all).toContain("QualityGroups()");
 	const crm = SRC.slice(SRC.indexOf('"CRM".toLocaleLowerCase()'), SRC.indexOf('"Administration".toLocaleLowerCase()'));
-	expect(crm).toContain("<QualityGroups />");
+	expect(crm).toContain("QualityGroups()");
 	const quality = groupsOf("Quality");
 	// Личное видно всем: уведомления, мой день, мои нарушения.
 	for (const v of ["QualityNotificationsList", "AttendanceMyDay", "StandardViolationsList"]) expect(quality).toContain(v);

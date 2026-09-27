@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { useRef, useMemo, useCallback, useEffect } from "react";
 import apiClient from "src/services/api/client";
-import { useRequestQueue } from "./useRequestQueue";
+import { useRequestQueue, isRequestCancelled } from "./useRequestQueue";
 import { fetchList, isSyncableEndpoint } from "src/services/offlineDataService";
 import { getIsOnline } from "src/services/networkStatus";
 import { isNetworkError as isNetworkLikeError } from "src/services/networkUtils";
@@ -107,8 +107,10 @@ export function useInfiniteModelList<TData = unknown>({
 
 	const { addRequest, cancelAll } = useRequestQueue();
 
+	// signal react-query: обращение к нему включает отмену запроса при размонтировании
+	// (состояние откатывается, «загрузка» не зависает) и отмену HTTP в axios (аудит 26.09, И9).
 	const wrappedQueryFn = useCallback(
-		async ({ pageParam }: { pageParam: number | null }) => {
+		async ({ pageParam, signal }: { pageParam: number | null; signal?: AbortSignal }) => {
 			const query: Record<string, unknown> = {};
 
 			if (pageParam !== null && pageParam !== undefined) {
@@ -176,12 +178,14 @@ export function useInfiniteModelList<TData = unknown>({
 						try {
 							const response = await apiClient.get<InfiniteModelPage<TData>>(
 								model,
-								{ params: query },
+								{ params: query, signal },
 							);
 							resolve(response.data);
 						} catch (err) {
 							if (err instanceof Error && err.name === "CanceledError") {
+								// Отменён по signal (react-query сам знает об отмене) — не ошибка.
 								reject(new Error("Request was cancelled"));
+								return;
 							}
 							onError?.(err as Error);
 							reject(err instanceof Error ? err : new Error(String(err)));
@@ -224,7 +228,7 @@ export function useInfiniteModelList<TData = unknown>({
 					try {
 						const response = await apiClient.get<InfiniteModelPage<TData>>(
 							model,
-							{ params: query },
+							{ params: query, signal },
 						);
 
 						// Кэшируем данные в Dexie для будущего offline-доступа
@@ -306,11 +310,13 @@ export function useInfiniteModelList<TData = unknown>({
 
 						if (err instanceof Error && err.name === "CanceledError") {
 							reject(new Error("Request was cancelled"));
+							return;
 						}
 						onError?.(err as Error);
 						reject(err instanceof Error ? err : new Error(String(err)));
 					}
-				});
+				// Снят из очереди, не начавшись, — промис ОТКЛОНЯЕТСЯ (раньше висел вечно).
+				}, reject, signal);
 			});
 		},
 		[model, onError, addRequest],
@@ -339,12 +345,17 @@ export function useInfiniteModelList<TData = unknown>({
 		staleTime: 2 * 60 * 1000,
 		gcTime: 30 * 60 * 1000,
 		retry: (failureCount, error: unknown) => {
+			// Запрос сняли из очереди («Обновить», смена отбора), а список ещё на экране —
+			// сразу ставим заново: это не сбой, ошибку показывать не за что.
+			if (isRequestCancelled(error)) return failureCount < 3;
 			// Не ретраить при сетевых ошибках
 			const e = error as { code?: string; message?: string };
 			if (e?.code === "ERR_NETWORK" || e?.message === "Network Error")
 				return false;
 			return failureCount < 1;
 		},
+		retryDelay: (failureCount, error: unknown) =>
+			isRequestCancelled(error) ? 0 : Math.min(1000 * 2 ** failureCount, 30000),
 		refetchOnWindowFocus: false,
 		placeholderData: (previousData) => previousData,
 		...restQueryOptions,

@@ -2,6 +2,7 @@
 import { FC, useId, type ChangeEvent } from "react";
 import styles from "./Field.module.scss";
 import { useFieldBase, FieldLabelNode, FieldHintNode, type FieldVariant } from "./fieldBase";
+import { isoToLocalInput } from "src/utils/datetime";
 
 interface TypeFieldDateTimeProps {
   label?: string;
@@ -76,10 +77,14 @@ export const FieldDate: FC<TypeFieldDateTimeProps> = ({
   variant = 'default',
   hint,
 }) => {
-  // Гарантируем, что value для input[type=date] имеет формат YYYY-MM-DD
+  // Гарантируем, что value для input[type=date] имеет формат YYYY-MM-DD.
+  // ISO с часовым поясом (…Z / ±hh:mm) — МЕСТНАЯ дата в настроенном поясе, как её
+  // показывает getFormatDateOnly: обрезка по UTC давала день −1 для 00:00–05:00 по
+  // Алматы (аудит 26.09, У5). Без пояса («YYYY-MM-DDTHH:mm») время уже местное.
   const safeValue = (() => {
     if (!value) return '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    if (/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return isoToLocalInput(value).slice(0, 10);
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
     return '';
   })();

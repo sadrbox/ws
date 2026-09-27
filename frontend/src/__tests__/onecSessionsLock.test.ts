@@ -5,7 +5,7 @@
  * обе кнопки стояли всегда. Теперь состояние хранит реестр, и метка говорит, откуда оно известно.
  */
 import { describe, it, expect } from "vitest";
-import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
+import { lockOutcome, sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
 import { translate } from "src/i18";
 
 describe("состояние блокировки сеансов", () => {
@@ -43,5 +43,38 @@ describe("состояние блокировки сеансов", () => {
 		});
 		expect(v.details).toContain(translate("onecSessionsLockCodeSet"));
 		expect(v.details).toContain(translate("onecSessionsLockReadAt"));
+	});
+});
+
+// И26: «Закрыть вход» — «Выполнено» только если вход реально закрыт (общий разбор для «Сеансов» и карточки базы).
+describe("итог «Закрыть вход» по ответу", () => {
+	it("закрыт и действует — успех", () => {
+		expect(lockOutcome({ ok: true, state: { lock: { enabled: true, active: true } }, reset: "all" }, true))
+			.toEqual({ tone: "success", text: translate("onecLockEnabled") });
+	});
+
+	it("включили, но не действует (окно прошлой блокировки) — предупреждение", () => {
+		expect(lockOutcome({ ok: true, state: { lock: { enabled: true, active: false } } }, true))
+			.toEqual({ tone: "warning", text: translate("onecLockNotActive") });
+	});
+
+	it("кластер не подтвердил запись — «не проверено»", () => {
+		expect(lockOutcome({ ok: true, unverified: ["enabled"] }, true))
+			.toEqual({ tone: "warning", text: translate("onecLockUnverified") });
+	});
+
+	it("прочитанное не то, что просили — «не применено»", () => {
+		expect(lockOutcome({ ok: true, state: { lock: { enabled: false } } }, true))
+			.toEqual({ tone: "warning", text: translate("onecLockNotApplied") });
+	});
+
+	it("предупреждение агента и неполный сброс — словами", () => {
+		const out = lockOutcome({ ok: true, warning: "Осталось окно до 18:00", reset: "dates", note: "Сообщение осталось" }, true);
+		expect(out).toEqual({ tone: "warning", text: "Осталось окно до 18:00. Сообщение осталось" });
+	});
+
+	it("открыли вход — успех", () => {
+		expect(lockOutcome({ ok: true, state: { lock: { enabled: false } } }, false))
+			.toEqual({ tone: "success", text: translate("onecLockDisabled") });
 	});
 });

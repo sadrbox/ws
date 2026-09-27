@@ -27,7 +27,7 @@ import { runBatch, type BatchType } from "src/services/onec/api";
 import {
 	publishLabel, reportBatchStart, useOnecErrorActions, useOnecWrite, usePublishAddressHint,
 } from "src/models/OneCAdmin/shared";
-import { attachBatch, startOp } from "src/models/OneCAdmin/progress";
+import { startBatchOp } from "src/models/OneCAdmin/progress";
 import { useNoticeScope } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
@@ -75,13 +75,11 @@ export const BasePublication: FC<{
 			const spec = SPEC[job];
 			// Операция видна в «Прогрессе запросов и команд» — как и всё остальное, что
 			// панель поручает агенту: «команда отправлена» без продолжения не ответ.
-			const op = startOp({
+			// Отказ постановки закрывает запись — не вечное «Выполняется» (И26).
+			return startBatchOp({
 				kind: "update", title: translate(spec.title), target: baseKey,
 				total: 1, scope: { bases: [baseKey] },
-			});
-			const r = await runBatch(spec.type, [baseKey], {});
-			attachBatch(op, r.batchId, r.total);
-			return r;
+			}, () => runBatch(spec.type, [baseKey], {}));
 		},
 		onSuccess: (r) => {
 			setConfirm(null);

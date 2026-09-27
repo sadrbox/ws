@@ -35,6 +35,7 @@ import {
 	tokenTtlHours,
 	verifyTokenSignature,
 } from "../../services/esfLicense.js";
+import { isValidBin } from "../../utils/bin.js";
 
 /** Нормализованный БИН из тела/квери: непустая строка (обрезаем, ограничиваем длину). */
 function normBin(v) {
@@ -50,6 +51,50 @@ function normInstallId(v) {
 }
 
 const ipOf = (req) => req.ip || null;
+
+/*
+ * ЗАПИСЬ С ПУБЛИЧНОГО ВХОДА (п. 25 отчёта инспекции маршрутов, аудит 26.09).
+ *
+ * heartbeat и activation-request без авторизации: любой мог завести запись лицензии на
+ * выдуманный «БИН» до 32 символов и накрутить чужому БИН установки случайными installId —
+ * при LICENSE_INSTALL_LIMIT_ENFORCE=true платящий клиент получил бы отказ в токене. Лимиты
+ * express-rate-limit живут в памяти воркера и обходятся сменой БИН. Теперь:
+ *   - НОВУЮ запись лицензии заводим только на БИН с верным контрольным разрядом (utils/bin.js);
+ *     уже существующие записи обслуживаются как раньше — отказ на живых данных недопустим;
+ *   - новую установку heartbeat регистрирует только у ДЕЙСТВУЮЩЕЙ лицензии (у неактивной сигнал
+ *     остаётся в журнале запросов), а число новых installId на БИН за сутки ограничено счётом в БД.
+ * Контракт 1С не меняется: ответы те же, отклонённая регистрация установки ответ не портит.
+ *
+ * Проверить потом: регистрировать установку только по действующему токену — нужна парная
+ * правка контракта в 1С (heartbeat с токеном), её здесь сделать нельзя.
+ */
+export function newInstallsPerDay() {
+	const n = Number(process.env.LICENSE_NEW_INSTALLS_PER_DAY);
+	return Number.isInteger(n) && n > 0 ? n : 5;
+}
+
+/** Можно ли завести запись лицензии на этот БИН (существующую — всегда). */
+export function binAcceptableForNewLicense(bin) {
+	return isValidBin(bin, { strict: true });
+}
+
+/**
+ * Зарегистрировать установку, если это не наводнение новыми installId.
+ * @returns {Promise<"known"|"registered"|"flood"|"skipped">}
+ */
+export async function registerInstallGuarded(client, { bin, installId, ip, build = null, allowNew = true, now = Date.now() }) {
+	if (!bin || !installId) return "skipped";
+	const known = await client.esfLicenseInstall.findUnique({ where: { bin_installId: { bin, installId } }, select: { id: true } });
+	if (known) {
+		await registerInstall(client, { bin, installId, ip, build });
+		return "known";
+	}
+	if (!allowNew) return "skipped";
+	const fresh = await client.esfLicenseInstall.count({ where: { bin, firstSeenAt: { gte: new Date(now - 24 * 3600 * 1000) } } });
+	if (fresh >= newInstallsPerDay()) return "flood";
+	await registerInstall(client, { bin, installId, ip, build });
+	return "registered";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ПУБЛИЧНЫЙ РОУТЕР (1С)
@@ -158,6 +203,13 @@ publicRouter.post("/heartbeat", writeIpLimiter, writeBinLimiter, async (req, res
 		const installId = normInstallId(req.body?.installId);
 		const build = normBuildInfo(req.body);
 
+		// Выдуманный номер не заводит новую запись лицензии (см. выше); известный БИН — как раньше.
+		const known = await prisma.esfLicense.findUnique({ where: { bin }, select: { id: true } });
+		if (!known && !binAcceptableForNewLicense(bin)) {
+			logLicenseRequest({ bin, installId, endpoint: "heartbeat", result: "denied", reason: "bad_bin", status: 400, ip });
+			return res.status(400).json({ error: "bad_request", message: "Некорректный БИН." });
+		}
+
 		// Пишем heartbeat даже для неизвестного/неактивного БИН — это и есть сигнал
 		// несанкционированного использования (кто-то обошёл проверку в копии расширения).
 		const lic = await prisma.esfLicense.upsert({
@@ -168,12 +220,16 @@ publicRouter.post("/heartbeat", writeIpLimiter, writeBinLimiter, async (req, res
 
 		// Сравниваем сборку с прошлым heartbeat этой же базы ДО записи новой.
 		let buildChange = null;
+		let installFlood = false;
 		if (installId) {
 			if (hasBuildInfo(build)) {
 				const prev = await prisma.esfLicenseInstall.findUnique({ where: { bin_installId: { bin, installId } } });
 				buildChange = detectBuildChange(prev, build);
 			}
-			await registerInstall(prisma, { bin, installId, ip, build });
+			// Новую установку заводит только действующая лицензия; известная — обновляется всегда.
+			const reg = await registerInstallGuarded(prisma, { bin, installId, ip, build, allowNew: isLicenseActive(lic) });
+			installFlood = reg === "flood";
+			if (installFlood) console.warn(`[esf-license] БИН ${bin}: превышен предел новых установок за сутки — installId ${installId} не зарегистрирован`);
 		}
 		if (buildChange) {
 			console.warn(`[esf-license] БИН ${bin} (installId=${installId}): ${buildChange}, знак ${build.buildWatermark ?? "-"}, версия ${build.buildVersion ?? "-"}`);
@@ -193,7 +249,7 @@ publicRouter.post("/heartbeat", writeIpLimiter, writeBinLimiter, async (req, res
 			installId,
 			endpoint: "heartbeat",
 			result: revoked ? "revoked" : "ok",
-			reason: buildChange ?? (revoked ? licenseDenyReason(lic) : observe ? "observe" : null),
+			reason: buildChange ?? (installFlood ? "install_flood" : revoked ? licenseDenyReason(lic) : observe ? "observe" : null),
 			status: 200,
 			ip,
 		});
@@ -215,14 +271,19 @@ publicRouter.post("/activation-request", writeIpLimiter, writeBinLimiter, async 
 		// Идемпотентно: есть — обновляем дату/счётчик (active НЕ трогаем, активация ручная);
 		// нет — создаём заявку active:false. Повторная заявка не плодит записи (S-09).
 		const existing = await prisma.esfLicense.findUnique({ where: { bin } });
+		// Заявка на выдуманный номер — не заявка: новую запись заводим только на настоящий БИН.
+		if (!existing && !binAcceptableForNewLicense(bin)) {
+			logLicenseRequest({ bin, installId, endpoint: "activation-request", result: "denied", reason: "bad_bin", status: 400, ip });
+			return res.status(400).json({ error: "bad_request", message: "Некорректный БИН." });
+		}
 		await prisma.esfLicense.upsert({
 			where: { bin },
 			update: { lastRequestAt: new Date(), lastRequestInstallId: installId, requestCount: { increment: 1 } },
 			create: { bin, active: false, lastRequestAt: new Date(), lastRequestInstallId: installId, requestCount: 1 },
 		});
-		if (installId) await registerInstall(prisma, { bin, installId, ip });
+		const reg = installId ? await registerInstallGuarded(prisma, { bin, installId, ip }) : "skipped";
 
-		logLicenseRequest({ bin, installId, endpoint: "activation-request", result: "ok", reason: existing ? "repeat" : "new", status: 200, ip });
+		logLicenseRequest({ bin, installId, endpoint: "activation-request", result: "ok", reason: reg === "flood" ? "install_flood" : existing ? "repeat" : "new", status: 200, ip });
 		void notifyActivationRequest({ bin, installId, isNew: !existing || existing.lastRequestAt == null });
 		return res.status(200).json({ ok: true });
 	} catch (err) {

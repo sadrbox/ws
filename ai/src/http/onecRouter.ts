@@ -40,6 +40,7 @@ import type { Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import { requireErpUser } from "../auth/index.ts";
 import { rateLimit } from "./rateLimit.ts";
+import { safeRouter } from "./safeRouter.ts";
 import type { AgentService } from "../agents/service.ts";
 import { publicationReport, type BaseService, type BaseState, type PublicationItem } from "../bases/service.ts";
 import type { CommandQueue, CommandRow } from "../commands/queue.ts";
@@ -79,7 +80,7 @@ type Deps = {
 	/** Запросы активации БИНов (СВ4, часть 2). */
 	activation: ActivationStore;
 	/** Организации базы (задачи и заметки чата 1С): их БИНы база вправе называть. */
-	baseOrgs?: Pick<BaseOrganizationsStore, "remember"> | null;
+	baseOrgs?: Pick<BaseOrganizationsStore, "remember" | "approve" | "rejectPending" | "pending"> | null;
 	/** Заявки на подключение агентов по коду (СВ5). */
 	enrollments: EnrollmentStore;
 };
@@ -117,21 +118,11 @@ export function onecRouter(deps: Deps) {
 	const gatePath = (req: Request): string => req.path.replace(/\/+$/, "") || "/";
 
 	/*
-	 * ОТКАЗ ПРОМИСА — ЭТО ОТВЕТ 500, А НЕ ПОВИСШИЙ ЗАПРОС (аудит 21.09). Обработчики здесь асинхронные, а express 4
-	 * их отказы не ловит: сбой БД оставлял запрос без ответа (панель ждала до своего предела), а Node считал это
-	 * необработанным отказом промиса. Оборачиваем ВСЕ маршруты роутера разом — по одному их забывают.
+	 * ОТКАЗ ПРОМИСА — ЭТО ОТВЕТ 500, А НЕ ПОВИСШИЙ ЗАПРОС (аудит 21.09, Н1 аудита 26.09). Обработчики здесь
+	 * асинхронные, а express 4 их отказы не ловит. Оборачиваем ВСЕ маршруты роутера разом — и промежуточные
+	 * `r.use(...)` тоже: проверка JWT и гейты прав при сбое БД раньше оставляли запрос висеть до обрыва прокси.
 	 */
-	for (const method of ["get", "post", "put", "patch", "delete"] as const) {
-		const original = r[method].bind(r);
-		(r as unknown as Record<string, (path: string, ...h: RequestHandler[]) => void>)[method] = (path: string, ...handlers: RequestHandler[]) => {
-			original(path, ...handlers.map((h): RequestHandler => (req, res, next) => {
-				Promise.resolve(h(req, res, next)).catch((e: unknown) => {
-					log.error({ err: e instanceof Error ? e.message : String(e), path: req.path, method: req.method }, "маршрут панели 1С: сбой");
-					if (!res.headersSent) send(res, fail(500, "INTERNAL", "Внутренняя ошибка сервиса — повторите позже"));
-				});
-			}));
-		};
-	}
+	safeRouter(r, log, "маршрут панели 1С");
 
 	/*
 	 * НЕСКОЛЬКО СЕРВЕРОВ 1С (C9–C11). Имя базы уникально только в пределах сервера, поэтому база адресуется парой
@@ -190,6 +181,21 @@ export function onecRouter(deps: Deps) {
 		return a.role === "admin" ? !!a.serverId && allowed.has(a.serverId) : req.erpUser!.allowedOrgUuids.includes(a.organizationUuid);
 	};
 
+	/**
+	 * КОМАНДА ПО ИДЕНТИФИКАТОРУ (Б11 аудита 26.09). Агент должен быть виден, а команда БИЗНЕС-агента — ещё и
+	 * принадлежать организации пользователя, В ЛЮБОМ режиме видимости серверов. В режиме `all` агенты видны всем
+	 * с правом «1С: просмотр», и по `/commands/:id` читались результаты команд чата и карточки организации ЧУЖИХ
+	 * организаций — долги, остатки, созданные документы. Команды агента кластера по-прежнему видит вся панель.
+	 */
+	const commandVisible = async (req: Request, row: Pick<CommandRow, "agent_id" | "organization_uuid"> | null): Promise<boolean> => {
+		if (!row) return false;
+		if (!(await agentVisible(req, row.agent_id))) return false;
+		const u = req.erpUser!;
+		if (u.isSuperAdmin) return true;
+		const a = await agents.findById(row.agent_id);
+		return !a || a.role === "admin" || u.allowedOrgUuids.includes(row.organization_uuid);
+	};
+
 	/** Задание и команда адресуются по id: чужую организацию не показываем и не трогаем. */
 	const batchVisible = async (req: Request, batchId: string): Promise<boolean> => {
 		if (cfg.ONEC_SERVER_SCOPE !== "organizations" || req.erpUser!.isSuperAdmin) return true;
@@ -203,6 +209,12 @@ export function onecRouter(deps: Deps) {
 	 */
 	const sharedListsAllowed = (req: Request): boolean =>
 		cfg.ONEC_SERVER_SCOPE !== "organizations" || !!req.erpUser!.isSuperAdmin;
+
+	/** Видимые серверы списком (C11); null — все. Для выборок, где выбранный кластер не сужает ответ. */
+	const allowedList = async (req: Request): Promise<string[] | null> => {
+		const allowed = await allowedServers(req);
+		return allowed ? [...allowed] : null;
+	};
 
 	/** Серверы, по которым считать сводки: выбранный кластер, иначе все видимые; null — все (один сервер). */
 	const scopeServers = async (req: Request): Promise<string[] | null> => {
@@ -274,7 +286,9 @@ export function onecRouter(deps: Deps) {
 		},
 		message: "Слишком часто обращаемся к кластеру 1С — подождите немного",
 	});
-	r.use(clusterLimit);
+	// Сам лимит ставится ПОСЛЕ проверок прав (ниже, Б11 аудита 26.09): раньше он считался до них, и любой
+	// пользователь ERP без права 60 запросами в минуту держал общую квоту кластера на нуле — администраторы
+	// получали 429.
 
 	// Доступ даёт ПРАВО, а не организация: сервер 1С один на установку и никакой
 	// организации ERP не принадлежит. Активная организация здесь ни при чём — раньше
@@ -339,27 +353,44 @@ export function onecRouter(deps: Deps) {
 		} catch (e) { next(e); }
 	});
 
+	/**
+	 * ВЛОЖЕННОЕ РАЗРЕШЕНИЕ НА ДЕЙСТВИЕ НАД БАЗАМИ — одно правило для пакета, повтора задания и РАСПИСАНИЯ (Б11 аудита
+	 * 26.09: расписание его обходило — то, что запрещено через /batch, заводилось расписанием по ста базам и
+	 * запускалось кнопкой «Запустить сейчас»). null — можно (или тип вложенным разрешением не управляется).
+	 */
+	const sectionRefusal = async (u: NonNullable<Request["erpUser"]>, type: string, baseKeys: string[], payload: unknown): Promise<Outcome | null> => {
+		const t = type.toUpperCase();
+		const sec = SECTION_OF_TYPE[t];
+		if (!sec) return null;
+		const keys = [...new Set(baseKeys.filter((k) => typeof k === "string" && !!k))];
+		let action = sec.action;
+		// Установка расширения туда, где оно уже есть, — обновление: это «редактирование», а не «создание».
+		if (t === "IB_INSTALL_EXTENSION") {
+			const name = String(((payload ?? {}) as { name?: unknown }).name ?? "").trim().toLowerCase();
+			if (name && keys.length) {
+				const all = await bases.listAll();
+				const has = (key: string) => all.find((b) => b.key.toLowerCase() === key.toLowerCase())
+					?.extensionNames.some((n) => n.toLowerCase() === name) === true;
+				if (keys.every(has)) action = "edit";
+			}
+		}
+		if (sectionAllows(u.onec, sec.section, action, keys.length)) return null;
+		return fail(403, "FORBIDDEN_ONEC_PERMISSION", deniedMessage({ kind: "section", section: sec.section, action, bases: keys.length, type: t, baseKeys: keys }, u.onec));
+	};
+
 	r.use(async (req, res, next) => {
 		try {
 			const u = req.erpUser!;
 			const need = onecRequirement(req.method, gatePath(req), req.body);
 			if (!need || need.kind === "deferred") { next(); return; }
-			let check = need;
-			// Установка расширения туда, где оно уже есть, — обновление: это «редактирование», а не «создание».
-			if (need.kind === "section" && need.type === "IB_INSTALL_EXTENSION") {
-				const name = String(((req.body ?? {}) as { payload?: { name?: unknown } }).payload?.name ?? "").trim().toLowerCase();
-				if (name && need.baseKeys.length) {
-					const all = await bases.listAll();
-					const has = (key: string) => all.find((b) => b.key.toLowerCase() === key.toLowerCase())
-						?.extensionNames.some((n) => n.toLowerCase() === name) === true;
-					if (need.baseKeys.every(has)) check = { ...need, action: "edit" };
-				}
+			if (need.kind === "section") {
+				const refused = await sectionRefusal(u, need.type, need.baseKeys, ((req.body ?? {}) as { payload?: unknown }).payload);
+				if (refused) { send(res, refused); return; }
+				next();
+				return;
 			}
-			const allowed = check.kind === "agents"
-				? agentsAllow(u.onec, check.level)
-				: sectionAllows(u.onec, check.section, check.action, check.bases);
-			if (!allowed) {
-				res.status(403).json({ success: false, error: { code: "FORBIDDEN_ONEC_PERMISSION", message: deniedMessage(check, u.onec) } });
+			if (!agentsAllow(u.onec, need.level)) {
+				res.status(403).json({ success: false, error: { code: "FORBIDDEN_ONEC_PERMISSION", message: deniedMessage(need, u.onec) } });
 				return;
 			}
 			next();
@@ -381,6 +412,9 @@ export function onecRouter(deps: Deps) {
 		}
 		next();
 	});
+
+	// Квота кластера — только для прошедших проверки прав (Б11 аудита 26.09): отказ 403 квоту не тратит.
+	r.use(clusterLimit);
 
 	/**
 	 * Общий путь админ-команды: проверка payload → выбор админ-агента (по базе, если она
@@ -428,7 +462,7 @@ export function onecRouter(deps: Deps) {
 		return { status: 200, body: { success: true, data: done.result }, data: done.result };
 	}
 
-	async function run(req: Request, type: string, input: unknown, target?: { agentId: string }): Promise<Outcome> {
+	async function run(req: Request, type: string, input: unknown, target?: { agentId: string }, opts: { waitMs?: number } = {}): Promise<Outcome> {
 		const u = req.erpUser!;
 		// Организация нужна только для журнала: команда адресуется серверу, а не орг.
 		const org = u.organizationUuid;
@@ -445,7 +479,15 @@ export function onecRouter(deps: Deps) {
 		const serverId = serverOf(req);
 		const allowed = await allowedServers(req);
 		if (built.baseKey && !target) {
-			const { visible } = await visibleServersOf(req, built.baseKey);
+			const { all, visible } = await visibleServersOf(req, built.baseKey);
+			/*
+			 * БАЗА НЕВИДИМОГО СЕРВЕРА — КАК НЕСУЩЕСТВУЮЩАЯ (Б14 аудита 26.09). Раньше поиск по ключу находил её на чужом
+			 * сервере, агента для неё не находилось, и ответ 409 «числится за другим сервером» подтверждал, что такая
+			 * база у кого-то есть. Отказ тот же, что у базы, которой нет вовсе.
+			 */
+			if (all.length && !visible.length) {
+				return fail(404, "UNKNOWN_BASE", `Базы «${built.baseKey}» нет в реестре. Обновите список из кластера — возможно, она появилась или была удалена`);
+			}
 			if (!serverId && visible.length > 1) return ambiguous(built.baseKey, visible);
 		}
 		if (built.baseKey) {
@@ -520,7 +562,7 @@ export function onecRouter(deps: Deps) {
 		});
 		log.info({ type: spec.type, baseKey: built.baseKey, agentId: agent.id, userUuid: u.uuid }, "админ-команда 1С");
 
-		const done: CommandRow | null = await queue.waitResult(cmd.id, cfg.ONEC_COMMAND_TIMEOUT_SECS * 1000);
+		const done: CommandRow | null = await queue.waitResult(cmd.id, opts.waitMs ?? cfg.ONEC_COMMAND_TIMEOUT_SECS * 1000);
 		if (!done || done.state === "queued" || done.state === "dispatched") {
 			// НЕ ошибка: команда исполняется. Отдаём её идентификатор, клиент дождётся
 			// короткими опросами. Держать HTTP-запрос дольше нельзя — вход в базу занимает
@@ -725,7 +767,9 @@ export function onecRouter(deps: Deps) {
 			: withDbCheck ? { checked: dbChecks.reduce((n, d) => n + d.checked, 0), missing: dbChecks.reduce((n, d) => n + d.missing, 0) } : undefined;
 		const publications = one ? one.publications : ok.find((x) => x.publications)?.publications;
 		send(res, { status: 200, body: { success: true, data: {
-			items: (await bases.listAll()).filter((b) => !allowed || allowed.has(b.serverId)),
+			// Только выбранный кластер (передача от фронта, аудит 26.09): иначе «Обновить» одного сервера отдавало
+			// список баз всех видимых серверов — лишняя нагрузка и чужой кластер в ответе.
+			items: (await bases.listAll()).filter((b) => (!allowed || allowed.has(b.serverId)) && (!only || b.serverId === only)),
 			...(publications ? { publications } : {}),
 			...(dbCheck ? { dbCheck } : {}),
 			...(one ? {} : { servers: results.map((x) => ({ serverId: x.serverId, status: x.outcome.status, publications: x.publications, dbCheck: x.dbCheck,
@@ -736,6 +780,9 @@ export function onecRouter(deps: Deps) {
 	/** «Обновить» одного сервера: список баз, публикации и выборочная проверка баз данных — через его админ-агента. */
 	async function refreshServer(req: Request, agentId: string, serverId: string, withPublications: boolean, withDbCheck: boolean) {
 		const target = { agentId };
+		// Один срок на весь запрос (аудит 26.09): проверка баз шла ПОСЛЕ списка и ждала ещё полный срок — вдвое дольше
+		// обещанного, и при сроке больше 50 с запрос переживал прокси (~100 с) и обрывался без CORS.
+		const deadline = Date.now() + cfg.ONEC_COMMAND_TIMEOUT_SECS * 1000;
 		const [outcome, pub] = await Promise.all([
 			run(req, "CLUSTER_LIST_INFOBASES", {}, target),
 			withPublications ? run(req, "CLUSTER_LIST_PUBLICATIONS", {}, target) : Promise.resolve(null),
@@ -761,7 +808,8 @@ export function onecRouter(deps: Deps) {
 		if (withDbCheck) {
 			const stale = await bases.staleDbCheck(serverId, DB_CHECK_STALE_HOURS, DB_CHECK_MAX_BASES);
 			if (stale.length) {
-				const checked = await run(req, "CLUSTER_CHECK_BASES", { baseKeys: stale }, target);
+				// Остаток срока; не осталось — команда ставится и панель дождётся её сама (202).
+				const checked = await run(req, "CLUSTER_CHECK_BASES", { baseKeys: stale }, target, { waitMs: Math.max(500, deadline - Date.now()) });
 				dbCheck = checked.status === 200
 					? {
 						checked: (checked.data as { checked?: number } | null)?.checked ?? stale.length,
@@ -963,12 +1011,22 @@ export function onecRouter(deps: Deps) {
 	 * в очереди». Медленное чтение базы и мгновенная команда кластера не смешиваются —
 	 * среднее считается по каждому типу отдельно.
 	 */
-	r.get("/queue-stats", async (_req, res) => {
+	r.get("/queue-stats", async (req, res) => {
 		const stats = await queue.stats();
-		const holders = await queue.runningCommands();
+		const all = await agents.listAll();
+		/*
+		 * ЧУЖИЕ КОМАНДЫ НЕ ПОКАЗЫВАЕМ (аудит 26.09): агент кластера — по видимости сервера, бизнес-агент — только своей
+		 * организации (как у `/commands/:id`). Раньше список держателей очереди шёл по всей установке.
+		 */
+		const allowed = await allowedServers(req);
+		const u = req.erpUser!;
+		const visibleIds = new Set(all.filter((a) => u.isSuperAdmin || (a.role === "admin"
+			? !allowed || (!!a.serverId && allowed.has(a.serverId))
+			: u.allowedOrgUuids.includes(a.organizationUuid))).map((a) => a.id));
+		const holders = (await queue.runningCommands()).filter((c) => visibleIds.has(c.agentId));
 		// «Некому забрать» и «занят» — разные ответы, и различает их наличие живого
 		// админ-агента, а не длина очереди.
-		const live = (await agents.listAll()).filter((a) => a.role === "admin" && a.online && !a.disabled);
+		const live = all.filter((a) => a.role === "admin" && a.online && !a.disabled);
 		res.json({ success: true, data: {
 			...stats,
 			agentsOnline: live.length,
@@ -1268,10 +1326,16 @@ export function onecRouter(deps: Deps) {
 		const all = (await agents.listAll()).filter((a) => !allowed
 			|| (a.role === "admin" ? !!a.serverId && allowed.has(a.serverId) : orgs.includes(a.organizationUuid)));
 		const slices = await agentBases.listMany(all.filter((a) => a.role === "business").map((a) => a.id));
+		// Экземпляры и владельцы — одним запросом на весь список (аудит 26.09), а не по два на агента.
+		const ids = all.map((a) => a.id);
+		const [instances, owners] = await Promise.all([
+			agents.instancesOf(ids, 24 * 60 * 60, cfg.AGENT_OFFLINE_AFTER_SECS),
+			agents.ownersOf(ids),
+		]);
 		// Экземпляры (процессы) агента: два процесса под одним токеном разбирают одну
 		// очередь, и если их настройки разошлись — команды отказывают ЧЕРЕЗ РАЗ. Ни в одном
 		// логе это не написано, поэтому показываем счёт прямо в панели.
-		const items = await Promise.all(all.map(async (a) => ({
+		const items = all.map((a) => ({
 			id: a.id, name: a.name, role: a.role, online: a.online,
 			// Лимит тарифа бизнес-агента (СВ3); у админ-агента его нет.
 			...(a.role === "business" ? { limits: a.limits } : {}),
@@ -1300,10 +1364,10 @@ export function onecRouter(deps: Deps) {
 			// (займёт аренду, как поднимется). Признак `live` у каждой строки отделяет
 			// работающие процессы от прежних запусков: смешивать их нельзя, иначе панель
 			// объявляет двойным запуском обычную историю перезапусков.
-			instances: await agents.liveInstances(a.id, 24 * 60 * 60, cfg.AGENT_OFFLINE_AFTER_SECS),
+			instances: instances.get(a.id) ?? [],
 			// Владелец токена: единственный экземпляр, которому разрешено работать.
-			owner: await agents.owner(a.id),
-		})));
+			owner: owners.get(a.id) ?? { instanceId: null, seenAt: null },
+		}));
 		res.json({ success: true, data: { items, limits: {
 			checkParallel: cfg.ONEC_CHECK_PARALLEL,
 			// Эталон сборки и откуда её брать (задача агенту §2): панель заполняет ими окно обновления.
@@ -1470,7 +1534,7 @@ export function onecRouter(deps: Deps) {
 			send(res, outcome);
 			return;
 		}
-		res.json({ success: true, data: { items: await registry.knownRoles(baseKey) } });
+		res.json({ success: true, data: { items: await registry.knownRoles(baseKey, await allowedList(req)) } });
 	});
 
 	/**
@@ -1478,12 +1542,13 @@ export function onecRouter(deps: Deps) {
 	 * Кэш, без обращения к 1С.
 	 */
 	r.get("/roles/:role/holders", async (req, res) => {
-		res.json({ success: true, data: { items: await registry.roleHolders(req.params.role) } });
+		// Только видимые серверы (C11, аудит 26.09): список держателей роли выдавал ключи баз всей установки.
+		res.json({ success: true, data: { items: await registry.roleHolders(req.params.role, await allowedList(req)) } });
 	});
 
 	/** Что делали с пользователем из панели — по журналу команд. */
 	r.get("/users/:name/history", async (req, res) => {
-		res.json({ success: true, data: { items: await registry.userHistory(req.params.name) } });
+		res.json({ success: true, data: { items: await registry.userHistory(req.params.name, 50, await allowedList(req)) } });
 	});
 
 	/**
@@ -1497,7 +1562,7 @@ export function onecRouter(deps: Deps) {
 	r.get("/users/:name", async (req, res) => {
 		const name = req.params.name.trim();
 		if (!name) { send(res, fail(400, "VALIDATION_ERROR", "name: укажите имя пользователя")); return; }
-		res.json({ success: true, data: { items: await registry.findUser(name) } });
+		res.json({ success: true, data: { items: await registry.findUser(name, await allowedList(req)) } });
 	});
 
 	r.get("/extensions", async (req, res) => {
@@ -1623,6 +1688,21 @@ export function onecRouter(deps: Deps) {
 		return { ok: true, value: out };
 	};
 
+	/**
+	 * Можно ли этому пользователю такое расписание (Б11 аудита 26.09): вложенные разрешения — как у пакета по тем же
+	 * базам, а сервер расписания — только видимый ему (C11). Проверка на сохранении и на «Запустить сейчас»: ночной
+	 * запуск идёт от сервиса, и решать за него должен тот, кто расписание завёл.
+	 */
+	const scheduleRefusal = async (req: Request, type: string, baseKeys: string[], payload: unknown, serverId: string | null): Promise<Outcome | null> => {
+		const refused = await sectionRefusal(req.erpUser!, type, baseKeys, payload);
+		if (refused) return refused;
+		if (serverId) {
+			const allowed = await allowedServers(req);
+			if (allowed && !allowed.has(serverId)) return fail(403, "SERVER_FORBIDDEN", "Этот сервер 1С вам недоступен");
+		}
+		return null;
+	};
+
 	r.get("/schedules", async (req, res) => {
 		const u = req.erpUser!;
 		const items = await schedules.list(u.organizationUuid ?? "");
@@ -1639,6 +1719,8 @@ export function onecRouter(deps: Deps) {
 		const u = req.erpUser!;
 		const parsed = parseSchedule(req, (req.body ?? {}) as Record<string, unknown>, false);
 		if (!parsed.ok) { send(res, fail(400, "VALIDATION_ERROR", parsed.message)); return; }
+		const refused = await scheduleRefusal(req, parsed.value.type!, parsed.value.baseKeys!, parsed.value.payload ?? {}, parsed.value.serverId ?? null);
+		if (refused) { send(res, refused); return; }
 
 		const created = await schedules.create({
 			organizationUuid: u.organizationUuid ?? "",
@@ -1668,6 +1750,10 @@ export function onecRouter(deps: Deps) {
 		}
 		const parsed = parseSchedule(req, (req.body ?? {}) as Record<string, unknown>, true, existing);
 		if (!parsed.ok) { send(res, fail(400, "VALIDATION_ERROR", parsed.message)); return; }
+		// Проверяется то, что получится после правки: включить чужое по правам расписание тоже нельзя.
+		const refused = await scheduleRefusal(req, parsed.value.type ?? existing.type, parsed.value.baseKeys ?? existing.baseKeys,
+			parsed.value.payload ?? existing.payload, parsed.value.serverId !== undefined ? parsed.value.serverId : existing.serverId);
+		if (refused) { send(res, refused); return; }
 
 		const saved = await schedules.update(existing.id, parsed.value);
 		await audit.write({
@@ -1706,6 +1792,9 @@ export function onecRouter(deps: Deps) {
 			send(res, fail(404, "NOT_FOUND", "Расписание не найдено")); return;
 		}
 
+		const refused = await scheduleRefusal(req, existing.type, existing.baseKeys, existing.payload, existing.serverId);
+		if (refused) { send(res, refused); return; }
+
 		const started = await startBatch({ agents, queue, batches, bases }, {
 			type: existing.type, baseKeys: existing.baseKeys, payload: existing.payload,
 			organizationUuid: existing.organizationUuid, userUuid: u.uuid,
@@ -1728,12 +1817,10 @@ export function onecRouter(deps: Deps) {
 	 * что и синхронный путь: либо `{pending:true}`, либо результат, либо ошибку агента.
 	 */
 	r.get("/commands/:id", async (req, res) => {
-		if (!(await agentVisible(req, (await queue.get(req.params.id))?.agent_id))) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
-		// Просроченное закрываем здесь же: агент, который замолчал, этого не сделает, а
-		// панель иначе опрашивает несуществующую работу до своего предела.
-		await queue.expireOverdue();
-		// И то, что ждёт агента, которого нет: забирать команду некому — ждать нечего.
-		await queue.expireOrphaned(cfg.AGENT_OFFLINE_AFTER_SECS * 2);
+		if (!(await commandVisible(req, await queue.get(req.params.id)))) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
+		// Просроченное и «забрать некому» снимает таймер сервиса (Н4 аудита 26.09); опрос панели лишь подгоняет его,
+		// но не чаще раза в 5 с: раньше каждый опрос (раз в 2–3 с на вкладку) делал два UPDATE по всей таблице.
+		await queue.sweep(cfg.AGENT_OFFLINE_AFTER_SECS * 2, 5000);
 		const row = await queue.get(req.params.id);
 		if (!row) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
 		if (row.state === "queued" || row.state === "dispatched") {
@@ -1832,8 +1919,7 @@ export function onecRouter(deps: Deps) {
 		// Задания опрашивает панель, пока в них есть незавершённое, — здесь и закрываем то,
 		// чему уже не суждено выполниться. Иначе групповая операция висела бы «в работе»
 		// до истечения срока каждой команды, хотя службы агента давно нет.
-		await queue.expireOverdue();
-		await queue.expireOrphaned(cfg.AGENT_OFFLINE_AFTER_SECS * 2);
+		await queue.sweep(cfg.AGENT_OFFLINE_AFTER_SECS * 2, 5000);
 		res.json({ success: true, data: { items: await batches.list(req.erpUser!.organizationUuid ?? "") } });
 	});
 
@@ -1853,7 +1939,7 @@ export function onecRouter(deps: Deps) {
 		const ids: string[] = [];
 		for (const id of asked) {
 			const cmd = await queue.get(id);
-			if (cmd && await agentVisible(req, cmd.agent_id)) ids.push(id);
+			if (cmd && await commandVisible(req, cmd)) ids.push(id);
 		}
 		const canceled = ids.length ? await queue.cancel(ids, req.erpUser!.uuid) : 0;
 		res.json({ success: true, data: { canceled, asked: asked.length } });
@@ -1871,7 +1957,7 @@ export function onecRouter(deps: Deps) {
 	 */
 	r.post("/commands/:id/abort", async (req, res) => {
 		const cmd = await queue.get(req.params.id);
-		if (!cmd || !(await agentVisible(req, cmd.agent_id))) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
+		if (!cmd || !(await commandVisible(req, cmd))) { send(res, fail(404, "NOT_FOUND", "Команда не найдена")); return; }
 		if (cmd.state === "queued") {
 			send(res, fail(409, "COMMAND_NOT_STARTED", "Команда ещё не начата — используйте отмену до начала"));
 			return;
@@ -1925,6 +2011,8 @@ export function onecRouter(deps: Deps) {
 	 */
 	r.post("/batches/:id/retry", async (req, res) => {
 		const u = req.erpUser!;
+		// Видимость — ДО прогресса (аудит 26.09): progress() пишет в БД, а ответ 409 на чужое задание подтверждал его.
+		if (!(await batchVisible(req, req.params.id))) { send(res, fail(404, "NOT_FOUND", "Задание не найдено")); return; }
 		const src = await batches.progress(req.params.id);
 		if (!src) { send(res, fail(404, "NOT_FOUND", "Задание не найдено")); return; }
 
@@ -1947,7 +2035,6 @@ export function onecRouter(deps: Deps) {
 			return;
 		}
 
-		if (!(await batchVisible(req, req.params.id))) { send(res, fail(404, "NOT_FOUND", "Задание не найдено")); return; }
 		const spec = findAdminCommand(src.type);
 		if (!spec) { send(res, fail(400, "UNKNOWN_COMMAND", `Команда ${src.type} больше не поддерживается`)); return; }
 		// Повтор — то же действие, что и задание: пользователи и расширения — по вложенным разрешениям, прочее — полный доступ.
@@ -2319,7 +2406,7 @@ export function onecRouter(deps: Deps) {
 		// пришёл в заявке; дальше база пополняет его сама. Сбой здесь не отменяет одобрение — база
 		// перешлёт список при первом открытии чата.
 		if (baseOrgs) {
-			await baseOrgs.remember(target.baseId, reg.body.organizations ?? [])
+			await baseOrgs.remember(target.baseId, reg.body.organizations ?? [], { approvedBy: u.uuid, source: "registration" })
 				.catch((e: unknown) => log.warn({ err: e, baseId: target!.baseId }, "организации базы не сохранены"));
 		}
 		await audit.write({ event: "base.registration.approved", userUuid: u.uuid, organizationUuid,
@@ -2345,6 +2432,41 @@ export function onecRouter(deps: Deps) {
 	 * БухПроф-AI» — про все сразу: вопрос «каким базам вообще открыт чат» иначе решался обходом карточек.
 	 * Кривой идентификатор — по-прежнему отказ: «не разобрали» не должно молча превращаться в «покажи всё».
 	 */
+	/*
+	 * ОРГАНИЗАЦИИ БАЗ, ЖДУЩИЕ ОДОБРЕНИЯ (Б11 аудита 26.09). База называет свои БИНы сама (`POST /v1/onec-chat/
+	 * organizations`), и раньше каждый названный БИН сразу открывал ей задачи и заметки этой организации в ERP.
+	 * Теперь новый БИН ждёт решения администратора BuhProf — как заявка на подключение базы: одобрение выдаёт доступ.
+	 * БИНы из одобренной заявки и БИН организации токена базы одобряются сами и сюда не попадают.
+	 */
+	r.get("/base-organizations/pending", async (req, res) => {
+		if (!req.erpUser!.isSuperAdmin) { send(res, fail(403, "FORBIDDEN", "Организации баз одобряет только администратор BuhProf")); return; }
+		if (!baseOrgs) { res.json({ success: true, data: { items: [] } }); return; }
+		const rows = await baseOrgs.pending();
+		const byId = new Map((await bases.listAll()).map((b) => [b.id, b]));
+		res.json({ success: true, data: { items: rows.map((x) => {
+			const b = byId.get(x.baseId);
+			return { baseId: x.baseId, baseKey: b?.key ?? null, baseName: b?.name ?? null, server: b?.serverName ?? null,
+				bin: x.bin, name: x.name, onecId: x.onecId, requestedAt: x.createdAt.toISOString(), updatedAt: x.updatedAt.toISOString() };
+		}) } });
+	});
+
+	for (const action of ["approve", "reject"] as const) {
+		r.post(`/base-organizations/:baseId/:bin/${action}`, async (req, res) => {
+			const u = req.erpUser!;
+			if (!u.isSuperAdmin) { send(res, fail(403, "FORBIDDEN", "Организации баз одобряет только администратор BuhProf")); return; }
+			if (!baseOrgs) { send(res, fail(404, "NOT_FOUND", "Организации баз в этой установке не ведутся")); return; }
+			const baseId = String(req.params.baseId);
+			const bin = String(req.params.bin).trim();
+			if (!UUID_RE.test(baseId) || !/^\d{12}$/.test(bin)) { send(res, fail(400, "VALIDATION_ERROR", "Ожидаются идентификатор базы и БИН из 12 цифр")); return; }
+			const done = action === "approve"
+				? await baseOrgs.approve(baseId, bin, u.uuid, "panel")
+				: await baseOrgs.rejectPending(baseId, bin);
+			if (!done) { send(res, fail(409, "ALREADY_DECIDED", action === "approve" ? "Организация уже одобрена" : "Ожидающей организации с таким БИН у базы нет")); return; }
+			await audit.write({ event: `base.organization.${action === "approve" ? "approved" : "rejected"}`, userUuid: u.uuid, details: { baseId, bin } });
+			res.json({ success: true, data: { ok: true } });
+		});
+	}
+
 	r.get("/base-tokens", async (req, res) => {
 		if (!sharedListsAllowed(req)) { send(res, fail(403, "FORBIDDEN", "Этот список открыт администратору BuhProf")); return; }
 		const baseId = String((req.query as Record<string, unknown>).baseId ?? "").trim();
@@ -2499,10 +2621,19 @@ export function onecRouter(deps: Deps) {
 		const state = typeof q.state === "string" && ["PENDING", "APPROVED", "REJECTED", "EXPIRED"].includes(q.state) ? q.state as EnrollmentState : null;
 		const rows = await enrollments.list({ state, q: typeof q.q === "string" ? q.q : null });
 		// Повторное подключение той же службы — тот же агент: панель показывает, кого заявка заменит.
-		const items = await Promise.all(rows.map(async (x) => ({
+		// Одним запросом на весь список (аудит 26.09): список опрашивается раз в 10 с, а заявок до трёхсот.
+		const pending = rows.filter((x) => x.state === "PENDING");
+		const previous = await enrollments.previousAgents(pending);
+		// Две ожидающие заявки одной службы (Б11 аудита 26.09): повтор без секрета заводит новую, и одобрять надо
+		// строго по продиктованному коду — панель предупреждает.
+		const hostKey = (x: { computer: string; serviceName: string }) => `${x.computer.toLowerCase()}\u0000${x.serviceName.toLowerCase()}`;
+		const perHost = new Map<string, number>();
+		for (const x of pending) perHost.set(hostKey(x), (perHost.get(hostKey(x)) ?? 0) + 1);
+		const items = rows.map((x) => ({
 			...x,
-			previousAgentId: x.state === "PENDING" ? await enrollments.previousAgent(x.computer, x.serviceName, x.id) : null,
-		})));
+			previousAgentId: x.state === "PENDING" ? previous.get(x.id) ?? null : null,
+			pendingSiblings: x.state === "PENDING" ? (perHost.get(hostKey(x)) ?? 1) - 1 : 0,
+		}));
 		res.json({ success: true, data: { items, canDecide: !!req.erpUser!.isSuperAdmin } });
 	});
 

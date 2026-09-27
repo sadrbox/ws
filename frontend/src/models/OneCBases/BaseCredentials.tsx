@@ -26,8 +26,10 @@ import main from "src/styles/main.module.scss";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { getFormatDate } from "src/utils/datetime";
-import { QueryError, useAgents, useOnecWrite } from "src/models/OneCAdmin/shared";
+import { useAgents, useOnecWrite } from "src/models/OneCAdmin/shared";
+import { QueryError } from "src/models/OneCAdmin/sharedUi";
 import { withOp } from "src/models/OneCAdmin/progress";
+import { useAppActions } from "src/app/context";
 import {
 	clearBaseCredentials, fetchBaseCredentials, hasCapability, saveBaseCredentials,
 } from "src/services/onec/api";
@@ -40,6 +42,7 @@ export const BaseCredentialsTab: FC<{
 }> = ({ baseKey, embedded, className }) => {
 	const canWrite = useOnecWrite();
 	const qc = useQueryClient();
+	const { confirm } = useAppActions().actions;
 	const key = ["onec", "base-credentials", baseKey];
 	const creds = useQuery({ queryKey: key, queryFn: () => fetchBaseCredentials(baseKey), enabled: !!baseKey });
 	// Учётная запись базы работает только с агентом, который умеет её применять: он
@@ -84,6 +87,15 @@ export const BaseCredentialsTab: FC<{
 		onError: (e) => reportError(e, { source: translate("onecTabAccess") }),
 	});
 
+	/*
+	 * ОЧИСТКА — С ПОДТВЕРЖДЕНИЕМ (И26 аудита 26.09). Раньше служебный вход стирался одним щелчком: пароль
+	 * восстановить нельзя, а агент откатывается на общего администратора баз. Спрашиваем, называя базу и имя.
+	 */
+	const askDrop = async () => {
+		const text = translate("onecCredsClearAsk").replace("{base}", baseKey).replace("{user}", creds.data?.user ?? "—");
+		if (await confirm(text)) drop.mutate();
+	};
+
 	const stored = creds.data;
 	const busy = save.isPending || drop.isPending || creds.isLoading;
 	const isSet = !!stored?.user;
@@ -114,7 +126,7 @@ export const BaseCredentialsTab: FC<{
 					</Button>
 					<Button icon="clear" variant="secondary" disabled={busy || !isSet}
 						title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
-						onClick={() => drop.mutate()}>
+						onClick={() => void askDrop()}>
 						{translate("onecCredsClear")}
 					</Button>
 				</GroupRow>

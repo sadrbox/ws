@@ -4,7 +4,7 @@ import { FC, useCallback, useEffect, useRef, useState } from "react";
 import styles from "../../styles/main.module.scss";
 import { translate, getLanguage, setLanguage } from 'src/i18';
 import { getEffectiveTheme, toggleTheme } from 'src/services/theme';
-import { useAppContext } from 'src/app/context';
+import { useAppAuth, useAppNavbar } from 'src/app/context';
 import {
   useActiveNoticeCount, setTechMessagesOpen, useTechMessagesOpen,
 } from 'src/components/TechMessages/store';
@@ -97,11 +97,13 @@ const NavbarPaneBell: FC = () => {
 };
 
 export const Navbar: React.FC = () => {
-  const context = useAppContext();
+  // Навбар и пользователь — свои части контекста: переключение панелей навбар не перерисовывает.
+  const navbar = useAppNavbar();
+  const auth = useAppAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
 
-  const { props, setProps } = context.navbar;
+  const { props, setProps } = navbar;
   const activeNav = props.find(nav => nav.isActive);
 
   // Измеряем высоту навбара → CSS custom property для overlay
@@ -177,15 +179,15 @@ export const Navbar: React.FC = () => {
           <NavbarPaneBell />
           <OfflineIndicator />
           <OrgSwitcher />
-          {context.auth?.user && (
+          {auth.user && (
             <span className={styles.NavbarUserName}>
-              {context.auth.user.employee?.fullName || context.auth.user.username}
+              {auth.user.employee?.fullName || auth.user.username}
             </span>
           )}
-          {context.auth?.logout && (
+          {auth.logout && (
             <a
               href="#"
-              onClick={(e) => { e.preventDefault(); context.auth.logout(); }}
+              onClick={(e) => { e.preventDefault(); auth.logout(); }}
               className={styles.NavbarLogout}
               title={translate("logoutTooltip")}
             >

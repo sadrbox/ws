@@ -6,8 +6,9 @@
 import express from "express";
 import { listProfiles, findProfile, expandProfile } from "../../services/permissionProfiles.js";
 import { applyProfile, grantMembership, normalizeRole } from "../../services/orgMembership.js";
-import { orgIsAccessible, hasUnconditionalAccess } from "../../utils/auth.js";
+import { isAdminOfOrg } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
+import { prisma } from "../../prisma/prisma-client.js";
 
 const router = express.Router();
 
@@ -15,10 +16,12 @@ const router = express.Router();
  * Назначать профиль может тот, кто и так распоряжается доступом: суперадмин или администратор
  * организации. Проверяем ИМЕННО это, а не право на модель `AccessPermission`: выдав себе
  * «полный доступ к правам», обычный пользователь иначе присвоил бы себе что угодно.
+ *
+ * Администратор — ИМЕННО ЭТОЙ организации, по членству (Б2 аудита 26.09): раньше хватало быть
+ * админом любой, и профиль owner с ролью admin выдавался себе в чужой фирме.
  */
 function canAssign(req, organizationUuid) {
-	if (!hasUnconditionalAccess(req)) return false;
-	return orgIsAccessible(req, organizationUuid);
+	return isAdminOfOrg(req, organizationUuid);
 }
 
 // GET /permission-profiles → список профилей; ?code=... → ещё и разворот по моделям.
@@ -58,6 +61,19 @@ router.post("/permission-profiles/apply", async (req, res) => {
 		}
 		if (!findProfile(profile)) {
 			return res.status(400).json({ success: false, message: "Неизвестный профиль прав" });
+		}
+		// Роль admin раздаёт только суперадмин — как в /users и /access-rights.
+		if (role && normalizeRole(role) === "admin" && !req.user?.isSuperAdmin) {
+			return res.status(403).json({ success: false, message: "Назначить роль admin может только суперадмин" });
+		}
+		// Без смены роли профиль ставится только СУЩЕСТВУЮЩЕМУ участнику: иначе права
+		// появились бы у человека, который в организации не состоит.
+		if (!role) {
+			const member = await prisma.accessRight.findUnique({
+				where: { userUuid_organizationUuid: { userUuid, organizationUuid } },
+				select: { role: true },
+			});
+			if (!member) return res.status(404).json({ success: false, message: "Пользователь не состоит в этой организации" });
 		}
 
 		// Роль передали — значит меняется и членство: тогда одно действие, а не два запроса,

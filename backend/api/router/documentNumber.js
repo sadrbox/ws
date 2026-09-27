@@ -13,6 +13,7 @@
 import express from "express";
 import { resolveDocumentNumber } from "../../services/documentNumberAssign.js";
 import { lookupDocumentNumber, isNumberTaken, peekNextNumber } from "../../services/documentNumbering.js";
+import { orgIsAccessible } from "../../utils/auth.js";
 
 const router = express.Router();
 
@@ -49,7 +50,12 @@ router.get("/document-number/next", async (req, res) => {
 		const endpoint = String(req.query.endpoint || "");
 		const docType = ENDPOINT_DOCTYPE[endpoint];
 		if (!docType) return res.status(400).json({ success: false, message: "Неизвестный тип документа" });
-		const organizationUuid = req.query.organizationUuid ? String(req.query.organizationUuid) : null;
+		// Организация — доступная пользователю (аудит 26.09): иначе по чужому uuid читался ход
+		// нумерации (и номер документа по его uuid) другой организации. Не передана — активная.
+		const organizationUuid = req.query.organizationUuid ? String(req.query.organizationUuid) : (req.user?.organizationUuid ?? null);
+		if (organizationUuid && !orgIsAccessible(req, organizationUuid)) {
+			return res.status(403).json({ success: false, message: "Организация недоступна" });
+		}
 		// Год берём из даты документа (если передана) — превью соответствует ряду
 		// нужного года; иначе текущий год.
 		const date = req.query.date ? String(req.query.date) : null;

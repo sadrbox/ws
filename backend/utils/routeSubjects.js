@@ -50,7 +50,10 @@ export const ROUTE_SUBJECTS = {
 
 	// ── Право проверяется внутри роутера ─────────────────────────────────────
 	documents: { kind: "guarded", note: "цепочка «на основании»: модель зависит от :type, внутри canAccessModel" },
-	sync: { kind: "guarded", note: "обмен офлайн-данными: предмет в теле запроса" },
+	sync: { kind: "guarded", note: "обмен офлайн-данными: по каждой таблице право на модель и изоляция организации внутри (Б1 аудита 26.09)" },
+	"access-rights": { kind: "guarded", note: "членства и роли: суперадмин или администратор активной организации, проверка membershipChangeDenied внутри" },
+	"user-defaults": { kind: "guarded", note: "умолчания пользователя: свои — в доступной организации, чужие — администратор этой организации" },
+	"onec-bases": { kind: "guarded", note: "прокси реестра баз сервиса ai: право «Администрирование 1С» проверяет сам ai" },
 	prune: { kind: "guarded", note: "чистка истории действий: предмет — ActivityHistory, проверка внутри" },
 	data: { kind: "guarded", note: "обобщённые выборки api/v1.js" },
 
@@ -79,6 +82,10 @@ export const ROUTE_SUBJECTS = {
 
 	// ── Общие справочники ────────────────────────────────────────────────────
 	classifiers: { kind: "shared", note: "ГСВС/ТНВЭД: общие для всех организаций, нужны при вводе документов" },
+	taxes: { kind: "shared", note: "налоги — общий справочник установки: читают все, правит суперадмин (в режиме group — и админ организации)" },
+
+	// ── Обслуживание установки ───────────────────────────────────────────────
+	"ref-replace": { kind: "operator", note: "поиск и замена ссылок по всей базе: только суперадмин (проверка внутри роутера)" },
 
 	// ── Отчёты ───────────────────────────────────────────────────────────────
 	reports: { kind: "report", note: "право по предмету отчёта — REPORT_SUBJECTS ниже" },
@@ -97,6 +104,18 @@ export const ROUTE_SUBJECTS = {
 	awp: { kind: "todo", model: "Sale", note: "ЭАВР: гос-документы по реализациям" },
 	snt: { kind: "todo", model: "Sale", note: "СНТ: гос-документы по реализациям" },
 	egov: { kind: "todo", model: "Counterparty", note: "автозаполнение ЮЛ по БИН из открытых данных" },
+	// Описаны по Б12 аудита 26.09: изоляция организации внутри есть (или передана в зону роутера),
+	// а право по модели не раздавалось — перенос в ROUTE_TO_MODEL после раздачи профилей.
+	"price-types": { kind: "todo", model: "PriceType", note: "типы цен (общие в режиме group): изоляция directoryScope внутри" },
+	"product-prices": { kind: "todo", model: "ProductPrice", note: "цены номенклатуры: доступ по товару-владельцу внутри" },
+	"product-register": { kind: "todo", model: "Product", note: "остатки для контроля в документах и терминале: кассиру права Product не выдано" },
+	"organization-accounting-settings": { kind: "todo", model: "OrganizationAccountingSetting", note: "учётная политика: orgIsAccessible внутри" },
+	esf: { kind: "todo", model: "OutgoingInvoice", note: "ЭСФ: выписка и отправка по счёту-фактуре своей организации (tenantFilter внутри)" },
+	"esf-inbounds": { kind: "todo", model: "IncomingInvoice", note: "входящие ЭСФ из ИС ЭСФ" },
+	edo: { kind: "todo", model: "EdoDocument", note: "ЭДО с контрагентами: отправитель/получатель — своя организация" },
+	"fiscal-receipts": { kind: "todo", model: "FiscalReceipt", note: "фискальные чеки терминала продаж: кассиру право не выдавалось" },
+	fixedassets: { kind: "todo", model: "FixedAsset", note: "основные средства (изоляция — см. KNOWN_GAPS в utils/isolationAudit.js)" },
+	"fixed-asset-acceptances": { kind: "todo", model: "FixedAssetAcceptance", note: "принятие ОС к учёту: фабрика документов, изоляция внутри" },
 };
 
 /**

@@ -12,7 +12,7 @@
 import { type FC, useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import Modal from "src/components/Modal";
 import Notice, { type NoticeItem } from "src/components/Notice";
 import { Button } from "src/components/Button";
@@ -25,7 +25,7 @@ import { routeError } from "src/services/errors/route";
 import { getAppUtcOffset, getFormatDateOnly } from "src/utils/datetime";
 import { createMeasure, deleteMeasure, fetchMeasures, type Measure } from "src/services/quality/api";
 import { localYmd } from "src/models/_quality/month";
-import { measureKindLabel, measureKindOptions, validateMeasure } from "./bonus";
+import { measureDateIso, measureKindLabel, measureKindOptions, validateMeasure } from "./bonus";
 import main from "src/styles/main.module.scss";
 import styles from "./QualityBonus.module.scss";
 
@@ -40,7 +40,8 @@ interface Props {
 
 export const MeasuresModal: FC<Props> = ({ userUuid, userName, canAdd, isAdmin, onClose }) => {
 	const queryClient = useQueryClient();
-	const { auth, actions } = useAppContext();
+	const { actions } = useAppActions();
+	const auth = useAppAuth();
 	const [kind, setKind] = useState("talk");
 	const [note, setNote] = useState("");
 	const [date, setDate] = useState(() => localYmd(getAppUtcOffset() * 60));
@@ -64,7 +65,9 @@ export const MeasuresModal: FC<Props> = ({ userUuid, userName, canAdd, isAdmin, 
 		setBusy(true);
 		setNotices([]);
 		try {
-			await createMeasure({ userUuid, kind, note: note.trim(), ...(date ? { date } : {}) });
+			// Дата — концом местного дня: мера в день нарушения снимает «мер нет» (И24).
+			const at = date ? measureDateIso(date, getAppUtcOffset()) : null;
+			await createMeasure({ userUuid, kind, note: note.trim(), ...(at ? { date: at } : {}) });
 			showToast(translate("measureAdded"), "success");
 			setNote("");
 			await refresh();

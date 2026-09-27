@@ -21,6 +21,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
+import { useFormLateResponseGuard } from "src/models/_shared/lateResponseGuard";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
@@ -45,10 +46,11 @@ import PrintDropdownButton from "src/components/Toolbar/PrintDropdownButton";
 import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { useGovDocs } from "src/hooks/useGovDocs";
 import { notify } from "src/components/TechMessages/store";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 import { api } from "src/services/api/client";
-import { openDocumentFromBasis, mapCommonTradeFields, mapPaymentFromBasis, fetchDocumentItems, resolveOrgChangeFields, type BasisSource } from "src/utils/createFromBasis";
+import { openDocumentFromBasis, mapCommonTradeFields, mapPaymentFromBasis, fetchDocumentItems, resolveOrgChangeFields, confirmBasisItemsRefresh, type BasisSource } from "src/utils/createFromBasis";
+import { reportError } from "src/services/errors/route";
 import { CashReceiptOrdersForm } from "src/models/CashReceiptOrders";
 import { useRefillFromBasis } from "src/hooks/useRefillFromBasis";
 import { useRefillAction } from "src/hooks/useRefillAction";
@@ -65,7 +67,8 @@ import DocumentTotals from "src/components/DocumentTotals";
 const MODEL_ENDPOINT = "sales";
 const LIST_NAME = "SalesList";
 const FORM_LABEL = "Реализация ТМЗ и услуг";
-const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns", "cash-receipt-orders"];
+// ПКО здесь нет: оплат по реализации может быть несколько — меню всегда создаёт новый (И21).
+const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns"];
 
 
 interface TFields {
@@ -184,7 +187,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   const defaultOrg = useDefaultOrganization();
   const queryClient = useQueryClient();
   const { canWrite } = useAccessPermission("Sale");
-  const { windows: { addPane }, auth: { user: currentUser } } = useAppContext();
+  // Стабильные части контекста (О3): useAppContext() перерисовывал форму при любом переключении вкладки.
+  const { windows: { addPane }, actions: { confirm } } = useAppActions();
+  const { user: currentUser } = useAppAuth();
 
   const initialFields: TFields | undefined = (() => {
     const data = paneProps.data as SalesPaneData | undefined;
@@ -354,6 +359,9 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         documentType: "sale",
         documentUuid: fd.uuid || undefined,
         warehouseUuid: fd.warehouseUuid || null,
+        // Резерв-основание не считается чужим резервом (У8).
+        basisDocumentType: fd.basisDocumentType || null,
+        basisDocumentUuid: fd.basisDocumentUuid || null,
         items: rows.map((r) => { const row = r as SaleItemRow; return { productUuid: row.productUuid, quantity: row.quantity }; }),
       });
       return shortages.length ? formatStockShortages(shortages) : null;
@@ -507,16 +515,17 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
   // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
   // LookupField зовёт onSelect("", "", {}).
+  // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+  // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
+  const guardFields = useFormLateResponseGuard<TFields>(form);
   const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
     form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
-    const cur = form.store.getSnapshot().fields;
-    const patch = await syncContract({
+    await guardFields((cur) => syncContract({
       counterpartyUuid: uuid,
       organizationUuid: cur.organizationUuid,
       currentContractUuid: cur.contractUuid,
-    });
-    if (patch) form.setFields(patch as Partial<TFields>);
-  }, [form.setFields, form.store, syncContract]);
+    }), ["counterpartyUuid", "organizationUuid"]);
+  }, [form.setFields, guardFields, syncContract]);
 
   // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
   // новой орг, иначе очистка (значение принадлежало прежней организации).
@@ -524,12 +533,11 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
     form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
-    const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+    await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
       { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
       { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-    ]);
-    form.setFields(patch as Partial<TFields>);
-  }, [form.setFields, form.store, currentUser?.uuid]);
+    ]), ["organizationUuid"]);
+  }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
 
   // ── Печать: накладная З-2 и акт выполненных работ ──────────────────
 
@@ -634,8 +642,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         },
       });
     } catch (e) {
-      console.error("[print] failed", e);
-      alert("Не удалось подготовить документ к печати");
+      // Системный сбой — тостом и в журнал, а не alert(), который замораживает приложение (И22).
+      reportError(e, { source: translate("saleRealization"), fallback: translate("printPrepareFailed") });
     }
   }, [
     form.fields.uuid, form.fields.id, form.fields.date,
@@ -661,6 +669,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
     // реализации — переопределяем маппер и обнуляем перенос строк.
     mapFieldsFn: (src: BasisSource) => Record<string, unknown> = mapCommonTradeFields,
     mapItemsFn?: (items: DocRow[]) => DocRow[],
+    // Платёж: всегда новый, сумма — остаток к оплате (см. BasisFromTarget.paidByEndpoint).
+    paidByEndpoint?: string,
   ) => {
     await openDocumentFromBasis(
       form.fields as unknown as BasisSource,
@@ -675,6 +685,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         ...(mapItemsFn ? { mapItems: mapItemsFn } : {}),
         existingCheckEndpoint,
         knownExisting: existingCheckEndpoint ? (existingDeps[existingCheckEndpoint] ?? null) : null,
+        paidByEndpoint,
       },
       addPane,
     );
@@ -719,12 +730,12 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             options={[
               { id: "outgoing", label: formatDependentOption(translate("outgoingInvoice"), existingDeps["outgoing-invoices"]) },
               { id: "saleReturn", label: formatDependentOption(translate("SaleReturnsList"), existingDeps["sale-returns"]) },
-              { id: "cashReceipt", label: formatDependentOption(translate("CashReceiptOrdersList"), existingDeps["cash-receipt-orders"]) },
+              { id: "cashReceipt", label: formatDependentOption(translate("CashReceiptOrdersList"), null) },
             ]}
             onSelect={(id) => {
               if (id === "outgoing") void handleCreateFromBasis(OutgoingInvoicesForm, translate("outgoingInvoice"), "sale", "saleitems", "outgoing-invoices");
               if (id === "saleReturn") void handleCreateFromBasis(SaleReturnsForm, translate("SaleReturnsList"), "sale", "saleitems", "sale-returns");
-              if (id === "cashReceipt") void handleCreateFromBasis(CashReceiptOrdersForm, translate("CashReceiptOrdersList"), "sale", "saleitems", "cash-receipt-orders", mapPaymentFromBasis, () => []);
+              if (id === "cashReceipt") void handleCreateFromBasis(CashReceiptOrdersForm, translate("CashReceiptOrdersList"), "sale", "saleitems", undefined, mapPaymentFromBasis, () => [], "cash-receipt-orders");
             }}
           />
         )}
@@ -762,6 +773,16 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   );
 
   const assignNumber = useAssignNumber();
+  // «Обновить» таблицы у документа с основанием перезаполняет строки — ручные правки
+  // спрашиваем, а не теряем молча (И20).
+  const refreshItemsFromBasis = useCallback(async () => {
+    const ok = await confirmBasisItemsRefresh({
+      basisType: form.fields.basisDocumentType, basisUuid: form.fields.basisDocumentUuid,
+      displayed: allItemsRef.current, confirm,
+    });
+    if (ok) await handleRefillFromBasis(true);
+  }, [form.fields.basisDocumentType, form.fields.basisDocumentUuid, confirm, handleRefillFromBasis]);
+
   const tabs = useMemo(() => [
     {
       id: "tab-details", label: translate("general"), component: (
@@ -878,6 +899,8 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
             </GroupCol>
             <GroupCol className={styles.FormNotice}>
               <Notice items={notices} />
+              {/* Сбой выписки ЭАВР/СНТ (NCALayer не запущен, отказ сервера) раньше не показывался нигде (И19). */}
+              {govDocs.error && <Notice items={[{ type: "attention", text: `${translate("govDocsSection")}: ${govDocs.error}` }]} />}
               <GovDocErrors groups={[
                 { label: translate("govAwpIssue"), text: govFields.awpErrorText },
                 { label: translate("govSntIssue"), text: govFields.sntErrorText },
@@ -904,7 +927,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
           priceTypeUuid={form.fields.priceTypeUuid}
           disabled={form.isLoading}
           deferRemoteChanges
-          onRefresh={hasBasis ? () => handleRefillFromBasis(true) : undefined}
+          onRefresh={hasBasis ? () => void refreshItemsFromBasis() : undefined}
           key={itemsTableKey}
           initialPendingRows={itemsTableKey > 0 ? basisItems : (saleItems.pending.length > 0 ? saleItems.pending : basisItems)}
           onTotalChange={handleTotalChange}
@@ -915,7 +938,7 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
         />
       )
     },
-  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber]);
+  ], [form.fields, form.formUid, form.isLoading, form.isEditMode, form.setField, form.setFields, handleTotalChange, handleContractSelect, handleOrganizationSelect, contractExtraParams, saleItems, isVatEnabled, useDiscount, basisItems, itemsTableKey, basisMismatch, notices, assignNumber, govDocs.error, refreshItemsFromBasis]);
 
   return (
     <FormRequiredScope docType="sale" active>

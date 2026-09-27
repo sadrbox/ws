@@ -61,6 +61,34 @@ export type TypeAppContextProps = {
 	};
 };
 
+/**
+ * ДЕЙСТВИЯ ПРИЛОЖЕНИЯ — только стабильные ссылки (аудит 26.09, О3).
+ *
+ * Полный контекст (TypeAppContextProps) меняется на каждое переключение вкладки, открытие
+ * меню и смену подписи панели, и все его потребители перерисовываются вместе с ним — в том
+ * числе каждая открытая форма и каждый список. Большинству же нужно только «открыть панель»,
+ * «закрыть» или «спросить подтверждение»: эти функции не меняются, и такие потребители
+ * берут их через useAppActions() — перерисовки от чужих панелей до них не доходят.
+ */
+export type TypeAppActions = {
+	screenRef: TypeAppContextProps["screenRef"];
+	windows: Pick<
+		TypeAppContextProps["windows"],
+		"addPane" | "requestClose" | "reloadPane" | "setActivePane" | "updatePaneLabel" | "registerBeforeClose"
+	> & {
+		/** Панели на момент вызова — для обработчиков: читать список в рендере значит подписаться на него (useAppPanes). */
+		getPanes: () => TPane[];
+		/** Активная панель на момент вызова. */
+		getActivePane: () => string | null;
+	};
+	actions: TypeAppContextProps["actions"];
+	navbar: Pick<TypeAppContextProps["navbar"], "setProps">;
+	auth: Pick<TypeAppContextProps["auth"], "logout">;
+};
+
+/** Состояние панелей: меняется на каждое открытие, закрытие и переключение. */
+export type TypeAppPanesState = Pick<TypeAppContextProps["windows"], "panes" | "paneOrder" | "activePane">;
+
 export type TypeNavbarProps = {
 	id: string;
 	isActive: boolean;

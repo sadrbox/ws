@@ -33,9 +33,8 @@ import {
 import { SplitView } from "src/components/SplitPane";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
-import {
-	CapabilityGuard, EchoDelayNotice, QueryError, isApplicable, useBaseUsersCheck, useOnecPermissions,
-} from "./shared";
+import { isApplicable, useBaseUsersCheck, useOnecPermissions } from "./shared";
+import { CapabilityGuard, EchoDelayNotice, QueryError } from "./sharedUi";
 import { sectionAllows } from "./onecPermissions";
 import { useOpenBaseUser } from "./BaseUserForm";
 import { useOpenBaseUserWizard } from "./BaseUserWizard";
@@ -156,8 +155,13 @@ export const UsersTab: FC = () => {
 			{ kind: "read", title: translate("onecRefreshFromCluster"), target: translate("onecTabBases") },
 			refreshBases,
 		),
-		onSuccess: (d) => {
-			qc.setQueryData(["onec", "bases"], d);
+		onSuccess: () => {
+			/*
+			 * Ответ обновления НЕ кладём в кэш списка (И26 аудита 26.09): `/bases/refresh` отдаёт базы ВСЕХ
+			 * серверов, а список — только выбранного кластера. Чужие базы попадали в таблицы, фильтр «Сеансов»
+			 * и цели групповых команд. Перечитываем список его собственным запросом (он сужен сервером).
+			 */
+			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
 			showToast(translate("onecBasesRefreshed"), "success");
 		},
 		onError: (e) => reportError(e, { source: translate("onecTabUsers") }),

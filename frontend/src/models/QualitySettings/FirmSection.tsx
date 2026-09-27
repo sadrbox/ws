@@ -14,7 +14,7 @@
 import { type FC, useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import LookupField from "src/components/Field/LookupField";
 import { Field } from "src/components/Field";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
@@ -37,7 +37,7 @@ interface Props {
 
 export const FirmSection: FC<Props> = ({ firmName, firmExplicit, isAdmin }) => {
 	const queryClient = useQueryClient();
-	const { confirm } = useAppContext().actions;
+	const { confirm } = useAppActions().actions;
 	const [pick, setPick] = useState<{ uuid: string; name: string }>({ uuid: "", name: "" });
 	const [busy, setBusy] = useState(false);
 	const [notices, setNotices] = useState<NoticeItem[]>([]);

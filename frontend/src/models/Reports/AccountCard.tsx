@@ -11,6 +11,7 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
+import { useReportLoadError } from "./_shared/reportLoadError";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { docTypeLabel } from "src/utils/accountingDocTypes";
 import { ReportSheet, ReportTable, Th, Td, SubtotalRow, TotalRow, Money } from "./_shared/reportLayout";
@@ -22,6 +23,8 @@ import reportCss from "./report.module.scss?inline";
 interface CardRow {
   uuid: string; date: string;
   documentType: string; documentId: number | null; documentUuid: string;
+  /** Номер документа — когда сервер его отдаёт. */
+  documentNumber?: string | null;
   corrAccountCode: string; corrAccountName: string;
   debit: number; credit: number; balance: number;
   description: string; analytics: string;
@@ -75,7 +78,7 @@ const AccountCard: FC<Props> = ({
   });
   const drill = useReportDrill({ orgName: fields.orgName });
 
-  const { data, isLoading } = useQuery<AccountCardResponse>({
+  const { data, isLoading, error: loadError } = useQuery<AccountCardResponse>({
     queryKey: ["accounting-account-card", applied],
     queryFn: async () => {
       const p: Record<string, string> = { accountCode: applied!.accountCode };
@@ -86,6 +89,7 @@ const AccountCard: FC<Props> = ({
     },
     enabled: !!applied && !!applied.accountCode,
   });
+  const loadErrorText = useReportLoadError(loadError, translate("accountCardTitle"));
 
   const rows: CardRow[] = data?.items ?? [];
   const opening = data?.opening ?? 0;
@@ -139,7 +143,8 @@ const AccountCard: FC<Props> = ({
               <Td col="date">{r.date}</Td>
               <Td col="name">
                 <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid)}>
-                  {docTypeLabel(r.documentType)}{r.documentId ? ` №${r.documentId}` : ""}
+                  {/* Внутренний id в подписи не показываем (И22): «№» — только номер документа. */}
+                  {docTypeLabel(r.documentType)}{r.documentNumber ? ` № ${r.documentNumber}` : ""}
                 </DrillLink>
               </Td>
               <Td col="uom">{r.corrAccountCode}</Td>
@@ -173,8 +178,8 @@ const AccountCard: FC<Props> = ({
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!applied || !fields.accountCode)}
-      emptyMessage={!fields.accountCode ? translate("selectAccount") : (!applied ? translate("reportPressGenerate") : undefined)}
+      isEmpty={!!loadErrorText || (!isLoading && (!applied || !fields.accountCode))}
+      emptyMessage={loadErrorText ?? (!fields.accountCode ? translate("selectAccount") : (!applied ? translate("reportPressGenerate") : undefined))}
       onGenerate={handleGenerate}
       generateDisabled={generateDisabled}
       fileBaseName={translate("accountCardTitle")}

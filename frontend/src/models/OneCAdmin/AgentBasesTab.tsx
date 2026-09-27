@@ -12,6 +12,7 @@
 import { FC, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
+import { usePanePollInterval } from "src/hooks/usePaneActive";
 import { Button } from "src/components/Button";
 import Modal from "src/components/Modal";
 import { Field } from "src/components/Field";
@@ -21,7 +22,7 @@ import { reportError } from "src/services/errors/route";
 import { fetchAgentBases, setAgentActiveBins, setAgentLimits, type AgentBasesView } from "src/services/onec/api";
 import ActivationRequestsTab from "./ActivationRequestsTab";
 import { withOp } from "./progress";
-import { QueryError } from "./shared";
+import { QueryError } from "./sharedUi";
 import {
 	baseState, baseStateLabel, limitInput, overUsage, parseLimitInput, sameLimits, transportLabel, usageText,
 } from "./agentBasesView";
@@ -30,12 +31,14 @@ import styles from "./OneCAdmin.module.scss";
 export const AgentBasesTab: FC<{ agentId: string; agentName: string }> = ({ agentId, agentName }) => {
 	const qc = useQueryClient();
 	const queryKey = ["onec", "agent-bases", agentId];
+	const pollInterval = usePanePollInterval(30_000);
 	const q = useQuery({
 		queryKey,
 		queryFn: () => fetchAgentBases(agentId),
 		enabled: !!agentId,
 		// Срез обновляется heartbeat'ом агента — раз в полминуты достаточно, чтобы увидеть новую базу.
-		refetchInterval: 30_000,
+		// Только пока панель на экране (О4 аудита 26.09).
+		refetchInterval: pollInterval,
 	});
 	const v = q.data;
 

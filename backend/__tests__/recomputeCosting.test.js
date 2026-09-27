@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { recomputeCosting, unmappedDocTypes } from "../services/recomputeCosting.js";
+import {
+	recomputeCosting,
+	unmappedDocTypes,
+	scheduleRecompute,
+	_setRecomputeLockRunner,
+	costingFieldsChanged,
+	recomputeIfRetroactive,
+	recomputeLockName,
+} from "../services/recomputeCosting.js";
 import { REGISTER_DOC_TYPES } from "../services/productRegister.js";
 import { POSTING_DOC_TYPES } from "../services/accountingPosting.js";
 
@@ -37,11 +45,14 @@ test("recomputeCosting: применяет org+dateFilter ко всем выбо
 
 	assert.deepEqual(res, { registers: 0, entries: 0 }, "нет документов → нули");
 	assert.ok(calls.length > 0, "были выборки документов");
-	for (const { where } of calls) {
+	for (const { table, where } of calls) {
 		assert.equal(where.posted, true, "только проведённые");
 		assert.equal(where.deletedAt, null, "не удалённые");
 		assert.equal(where.organizationUuid, "org1", "ограничено организацией");
-		assert.equal(where.date, dateFilter, "применён dateFilter (не трогаем закрытый период)");
+		// Закрытие месяца отбирается по концу периода (его проводки датированы концом
+		// периода — аудит 26.09, У6), остальные — по дате документа.
+		const field = table === "monthClose" ? "periodEnd" : "date";
+		assert.equal(where[field], dateFilter, "применён dateFilter (не трогаем закрытый период)");
 	}
 	// Обе фазы: sale присутствует и в регистре, и в проводках → ≥2 выборки sale.
 	assert.ok(calls.filter((x) => x.table === "sale").length >= 2, "sale обработан в обеих фазах");
@@ -50,7 +61,10 @@ test("recomputeCosting: применяет org+dateFilter ко всем выбо
 test("recomputeCosting: без dateFilter — без ограничения по дате", async () => {
 	const calls = [];
 	await recomputeCosting({ organizationUuid: "org1" }, mockClient(calls));
-	for (const { where } of calls) assert.equal("date" in where, false, "поле date не задано");
+	for (const { where } of calls) {
+		assert.equal("date" in where, false, "поле date не задано");
+		assert.equal("periodEnd" in where, false, "поле periodEnd не задано");
+	}
 });
 
 test("ПКО и РКО делят модель cashOrder и различаются по direction", async () => {
@@ -78,4 +92,53 @@ test("складские документы зарегистрированы в 
 		assert.ok(REGISTER_DOC_TYPES.includes(t), `${t} нет в REGISTER_DOC_TYPES`);
 		assert.ok(POSTING_DOC_TYPES.includes(t), `${t} нет в POSTING_DOC_TYPES`);
 	}
+});
+
+// ─── Аудит 26.09: пересчёт по организации, в фоне, с объединением запросов ─────
+
+
+test("фоновый пересчёт: запросы объединяются от самой ранней даты, организации не мешают друг другу", async () => {
+	const runs = [];
+	_setRecomputeLockRunner(async (name, run) => { runs.push(name); return run(); });
+	try {
+		const calls = [];
+		const client = mockClient(calls);
+		const pA = scheduleRecompute("orgA", new Date("2026-06-10"), client);
+		scheduleRecompute("orgA", new Date("2026-06-05"), client); // слился с первым
+		const pB = scheduleRecompute("orgB", new Date("2026-06-07"), client);
+		await Promise.all([pA, pB]);
+		assert.ok(runs.includes(recomputeLockName("orgA")) && runs.includes(recomputeLockName("orgB")), "B не отменён пересчётом A");
+		const aDates = calls.filter((c) => c.where.organizationUuid === "orgA" && c.table === "sale").map((c) => c.where.date.gte.toISOString());
+		assert.ok(aDates.includes(new Date("2026-06-05").toISOString()), "проход A — от самой ранней даты");
+	} finally {
+		_setRecomputeLockRunner(null);
+	}
+});
+
+test("фоновый пересчёт: лок занят другим воркером — повтор, а не потеря запроса", async () => {
+	let attempts = 0;
+	_setRecomputeLockRunner(async (_name, run) => { attempts++; return attempts === 1 ? undefined : run(); });
+	const orig = globalThis.setTimeout;
+	globalThis.setTimeout = (fn) => orig(fn, 0); // не ждать RETRY_MS в тесте
+	try {
+		await scheduleRecompute("orgC", new Date("2026-06-01"), mockClient([]));
+		assert.equal(attempts, 2);
+	} finally {
+		globalThis.setTimeout = orig;
+		_setRecomputeLockRunner(null);
+	}
+});
+
+test("costingFieldsChanged: комментарий и номер не запускают пересчёт, дата и склад — запускают", () => {
+	const ex = { date: new Date("2026-06-01"), posted: true, warehouseUuid: "w1", comment: "a" };
+	assert.equal(costingFieldsChanged(ex, { comment: "b", number: "7" }), false);
+	assert.equal(costingFieldsChanged(ex, { date: new Date("2026-06-01") }), false);
+	assert.equal(costingFieldsChanged(ex, { date: new Date("2026-06-02") }), true);
+	assert.equal(costingFieldsChanged(ex, { warehouseUuid: "w2" }), true);
+});
+
+test("recomputeIfRetroactive: не ретроактив — пересчёта нет; changed=false — даже без запроса", async () => {
+	const client = { productRegister: { findFirst: async () => null } };
+	assert.equal((await recomputeIfRetroactive({ organizationUuid: "o", date: new Date() }, client)).reason, "not_retroactive");
+	assert.equal((await recomputeIfRetroactive({ organizationUuid: "o", date: new Date(), changed: false }, client)).reason, "not_changed");
 });

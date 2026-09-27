@@ -196,10 +196,34 @@ export function withSaleItemRecalc<T extends SaleItemCalcInput>(
 }
 
 /**
+ * Процент скидки (4 знака — как в БД, Decimal(7,4)) для введённой суммы скидки.
+ *
+ * Сервер хранит только процент и сумму скидки пересчитывает из него:
+ * round2(base × pct / 100). Поэтому берём тот 4-значный процент, из которого сервер получит
+ * ровно введённую сумму; ближайший к точному отношению — единственный кандидат, соседние
+ * проверяем на случай погрешности округления. Если такого нет (крупная база: шаг процента
+ * 0,0001 % даёт шаг суммы больше копейки) — ближайший.
+ */
+export function discountPercentForAmount(base: number, discAmt: number): number {
+	if (!(base > 0)) return 0;
+	const k0 = Math.round((discAmt / base) * 100 * 10000);
+	for (const k of [k0, k0 - 1, k0 + 1]) {
+		const pct = k / 10000;
+		if (Math.round(((base * pct) / 100) * 100) / 100 === discAmt) return pct;
+	}
+	return k0 / 10000;
+}
+
+/**
  * Пересчёт строки при прямом вводе суммы скидки.
  * Обратная формула: discountPercent = (discountAmount / base) * 100
  *
  * Учитывает акциз (exciseRate) и НДС (vatRate с методом из vatRateRef).
+ *
+ * Сумма скидки в строке — та, что получится из сохранённого процента, как её посчитает сервер
+ * (аудит 26.09, И22). Раньше в строку клалась введённая сумма, а итог строки считался через
+ * процент с 4 знаками: примерно в половине случаев «скидка» и «сумма» расходились на 0,01,
+ * а после записи сервер пересчитывал и то и другое по проценту.
  */
 export function withSaleItemRecalcFromDiscountAmount<
 	T extends SaleItemCalcInput,
@@ -207,9 +231,8 @@ export function withSaleItemRecalcFromDiscountAmount<
 	const q = toNumber(current.quantity);
 	const p = toNumber(current.price);
 	const base = Math.round(q * p * 100) / 100;
-	const discAmt = Math.min(Math.max(toNumber(discountAmount), 0), base);
-	const discPct =
-		base > 0 ? Math.round((discAmt / base) * 100 * 10000) / 10000 : 0;
+	const discAmt = Math.round(Math.min(Math.max(toNumber(discountAmount), 0), base) * 100) / 100;
+	const discPct = discountPercentForAmount(base, discAmt);
 
 	const method = (current as { vatCalculationMethod?: string }).vatCalculationMethod;
 	const recalc = recalcSaleItemAmounts(
@@ -223,7 +246,6 @@ export function withSaleItemRecalcFromDiscountAmount<
 
 	return {
 		...recalc,
-		discountAmount: discAmt,
 		discountPercent: discPct,
 	};
 }

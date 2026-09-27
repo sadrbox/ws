@@ -7,6 +7,13 @@
 //  * повторяемость — уже вопрос соответствия должности (флаг систематичности).
 
 import { addMonths } from "./time.js";
+import { calendarDateOf, orgTimeZone } from "../periodBounds.js";
+
+/** Местная дата значения числом ГГГГММДД — для сравнения дней; пусто/мусор → null. */
+const dayKey = (value, tz) => {
+	const c = calendarDateOf(value, tz);
+	return c ? c.y * 10000 + c.m * 100 + c.d : null;
+};
 
 export const VIOLATION_STATUSES = ["candidate", "confirmed", "disputed", "rejected"];
 export const MEASURE_KINDS = ["talk", "training", "warning", "other"];
@@ -27,9 +34,10 @@ export function windowMonths(month, n) {
  * Итог месяца по сотрудникам.
  * @param {{month:string, staff:{userUuid:string,userName?:string,groupName?:string,role?:string}[],
  *          violations:object[], measures?:object[], settings:object}} p
- *   violations — ВСЕ нарушения окна систематичности (для флага), не только месяца.
+ *   violations — ВСЕ нарушения окна систематичности (для флага), не только месяца;
+ *   tz — пояс организации (IANA, services/periodBounds.js); по умолчанию — пояс установки.
  */
-export function computeBonusResults({ month, staff, violations, measures = [], settings }) {
+export function computeBonusResults({ month, staff, violations, measures = [], settings, tz = orgTimeZone() }) {
 	const n = settings?.violations?.systematicMonths ?? 3;
 	const threshold = settings?.violations?.systematicThreshold ?? 3;
 	const window = new Set(windowMonths(month, n));
@@ -56,8 +64,11 @@ export function computeBonusResults({ month, staff, violations, measures = [], s
 	return [...byUser.values()]
 		.map((r) => {
 			const systematic = r.windowCount >= threshold;
-			// Мера после первого нарушения окна — реакция была (п. 30).
-			const measured = measures.some((m) => !m.deletedAt && m.userUuid === r.userUuid && r.firstWindowAt && new Date(m.date) >= r.firstWindowAt);
+			// Мера не раньше первого нарушения окна — реакция была (п. 30). Сравниваются МЕСТНЫЕ ДАТЫ, а не
+			// моменты (И24): дата меры хранится моментом — старые записи голой датой (00:00Z, 05:00 по Алматы),
+			// новые — концом местного дня, — а нарушение выявляется среди дня; мера в день выявления — реакция.
+			const first = r.firstWindowAt ? dayKey(r.firstWindowAt, tz) : null;
+			const measured = first != null && measures.some((m) => !m.deletedAt && m.userUuid === r.userUuid && (dayKey(m.date, tz) ?? -1) >= first);
 			return {
 				userUuid: r.userUuid,
 				userName: r.userName ?? r.userUuid,

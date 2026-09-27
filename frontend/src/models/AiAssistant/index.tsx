@@ -16,18 +16,14 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentUser, getToken } from "src/services/auth";
 import { translate } from "src/i18";
+import { getAiUrl } from "src/services/ai/endpoint";
+import { PaneActiveProvider, usePaneOnScreen } from "src/hooks/usePaneActive";
 import styles from "./AiAssistant.module.scss";
 
-const LOCAL_AI_URL = (import.meta.env.VITE_LOCAL_AI_URL as string | undefined) || "http://192.168.1.112:3100";
-const REMOTE_AI_URL = (import.meta.env.VITE_AI_URL as string | undefined) || "https://ai.buhprof.kz";
-
-function getAiUrl(): string {
-	if (typeof window === "undefined") return REMOTE_AI_URL;
-	if ("__TAURI_INTERNALS__" in window) return REMOTE_AI_URL;
-	const { hostname } = window.location;
-	const isLocal = hostname.includes("192.168.") || hostname === "localhost" || hostname === "127.0.0.1";
-	return isLocal ? LOCAL_AI_URL : REMOTE_AI_URL;
-}
+/*
+ * Адрес сервиса — только общий getAiUrl (И25 аудита 26.09): своя копия здесь не знала
+ * VITE_AI_SERVICE_URL, и у клиента со своим сервисом токен и выписки уходили к нам.
+ */
 
 /** Файл из хранилища сервиса (печатная форма, отчёт): скачивается по ссылке с JWT. */
 type Attachment = { fileId: string; fileName: string; mimeType: string; size: number; url: string };
@@ -116,7 +112,7 @@ function onecTitle(status: StatusData): string {
 	return `${what} ${status.onec.version ?? ""}`.trim();
 }
 
-export const AiAssistantList: FC = () => {
+const AiAssistantBody: FC = () => {
 	const org = getCurrentUser()?.organizationUuid ?? null;
 	const orgQuery = org ? `?organizationUuid=${encodeURIComponent(org)}` : "";
 
@@ -207,11 +203,14 @@ export const AiAssistantList: FC = () => {
 			setStatusError(translate("aiAgentUnavailable"));
 		}
 	}, []);
+	// Только пока панель на экране и вкладка видна (О4 аудита 26.09); вернулись — сводка сразу.
+	const onScreen = usePaneOnScreen();
 	useEffect(() => {
+		if (!onScreen) return;
 		void refreshStatus();
 		const timer = setInterval(() => { void refreshStatus(); }, 30_000);
 		return () => clearInterval(timer);
-	}, [org, refreshStatus]);
+	}, [org, refreshStatus, onScreen]);
 
 	// При открытии панели: недавние диалоги, восстановление последнего.
 	useEffect(() => {
@@ -419,5 +418,12 @@ export const AiAssistantList: FC = () => {
 		</div>
 	);
 };
+
+/** Корень панели: сводка состояния опрашивается, только пока панель на экране (О4 аудита 26.09). */
+export const AiAssistantList: FC<{ uniqId?: string }> = ({ uniqId }) => (
+	<PaneActiveProvider uniqId={uniqId}>
+		<AiAssistantBody />
+	</PaneActiveProvider>
+);
 
 export default AiAssistantList;

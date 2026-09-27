@@ -42,7 +42,7 @@ const task = (over: Partial<ErpTask> = {}): ErpTask => ({
 
 const onecUser = (bin = BIN): ChatUser => ({
 	uuid: `1c:${BASE_ID}:${USER}`, organizationUuid: ORG, channel: "1c",
-	onec: { baseId: BASE_ID, userName: "Директор", organization: { bin, name: "ТОО Алеппо", id: null } },
+	onec: { baseId: BASE_ID, baseKey: "Dev_01", userName: "Директор", organization: { bin, name: "ТОО Алеппо", id: null } },
 } as ChatUser);
 
 const seen = (...ids: string[]) => ({ seenIds: new Set(ids) });
@@ -132,18 +132,18 @@ test("исполнитель: закрытие несёт результат, н
 	const done = await h.run("complete_task", { taskId: TASK, result: "Сдана форма 200.00 за 3 квартал", close: true });
 	assert.equal(done.ok, true);
 	const upd = h.calls.find((c) => c.method === "updateTask")!;
-	assert.deepEqual(upd.args[0], { bin: BIN, user: { name: "Директор" } });
+	assert.deepEqual(upd.args[0], { bin: BIN, user: { name: "Директор (1С: Dev_01)" } });
 	assert.equal(upd.args[1], TASK);
 	assert.equal((upd.args[2] as { result?: string }).result, "Сдана форма 200.00 за 3 квартал");
 	assert.equal((upd.args[2] as { close?: boolean }).close, true);
 	assert.equal(done.ok && (done.data as { result?: string }).result, "Сдана форма 200.00 за 3 квартал", "модель видит, с чем закрыто");
 
 	const reminded = await h.run("remind_task", { taskId: TASK, note: "ждём до пятницы" });
-	assert.deepEqual(h.calls.find((c) => c.method === "remindTask")!.args, [{ bin: BIN, user: { name: "Директор" } }, TASK, "ждём до пятницы"]);
+	assert.deepEqual(h.calls.find((c) => c.method === "remindTask")!.args, [{ bin: BIN, user: { name: "Директор (1С: Dev_01)" } }, TASK, "ждём до пятницы"]);
 	assert.equal(reminded.ok && (reminded.data as { reminderCount?: number }).reminderCount, 2);
 
 	const rated = await h.run("rate_task", { taskId: TASK, rating: 4, comment: "быстро" });
-	assert.deepEqual(h.calls.find((c) => c.method === "rateTask")!.args, [{ bin: BIN, user: { name: "Директор" } }, TASK, 4, "быстро"]);
+	assert.deepEqual(h.calls.find((c) => c.method === "rateTask")!.args, [{ bin: BIN, user: { name: "Директор (1С: Dev_01)" } }, TASK, 4, "быстро"]);
 	assert.equal(rated.ok && (rated.data as { clientRating?: number }).clientRating, 4);
 });
 
@@ -272,7 +272,10 @@ test("ErpTasks: результаты проверок — POST /bpai/checks/resu
 			catalog: { apiVersion: "1.7.0", checks: [], snapshots: [] }, runs: [], snapshots: [],
 		};
 		assert.deepEqual(await erp.sendCheckResults(body), { findings: 12, tasksCreated: 3 });
-		assert.deepEqual(stub.seen[0]!.body, body);
+		// Посылка несёт свой ключ (Н9 аудита 26.09): повтор той же посылки ERP узнаёт и не принимает дважды.
+		const { idempotencyKey, ...sent } = stub.seen[0]!.body as Record<string, unknown>;
+		assert.deepEqual(sent, body);
+		assert.match(String(idempotencyKey), /^checks:[0-9a-f]{40}$/);
 		assert.equal(stub.seen[0]!.key, "k-1");
 
 		const off = new ErpTasks({ url: stub.url, key: "", timeoutMs: 5000, log: silent });
@@ -294,7 +297,7 @@ test("форма 1С: результат закрытия и вид задачи
 	app.use("/v1/onec-chat", onecChatRouter({
 		workflow: null, erp: { query: async () => ({ rows: [], rowCount: 0 }) } as never, log: silent, version: "0.4.0",
 		tokens: { resolve: async () => ({ tokenId: "t1", baseId: BASE_ID, baseKey: "Dev_01", baseName: "Dev_01", organizationUuid: ORG, revoked: false, baseDisabled: false }) },
-		tasks: tasksStub as never, baseOrgs: { has: async (_b: string, bin: string) => bin === BIN, list: async () => [], remember: async () => 1 } as never,
+		tasks: tasksStub as never, baseOrgs: { has: async (_b: string, bin: string) => bin === BIN, list: async () => [], remember: async () => ({ remembered: 1, pending: [] }) } as never,
 	}));
 	const srv = await new Promise<import("node:http").Server>((ok) => { const s = app.listen(0, () => ok(s)); });
 	const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/v1/onec-chat`;

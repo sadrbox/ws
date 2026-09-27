@@ -10,6 +10,7 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
+import { useReportLoadError } from "./_shared/reportLoadError";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
 import { useReportDrill, DrillLink } from "./_shared/reportDrill";
@@ -35,7 +36,7 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ applied, orgName: fields.orgName });
 
-  const { data, isLoading } = useQuery<{ items: OsvRow[]; totals?: OsvRow }>({
+  const { data, isLoading, error: loadError } = useQuery<{ items: OsvRow[]; totals?: OsvRow }>({
     queryKey: ["accounting-osv", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
@@ -47,6 +48,7 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
     },
     enabled: !!applied,
   });
+  const loadErrorText = useReportLoadError(loadError, translate("osvTitle"));
 
   const rows = data?.items ?? [];
   const totals = data?.totals;
@@ -125,8 +127,8 @@ const TurnoverBalanceSheet: FC<Props> = ({ uniqId }) => {
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!applied || rows.length === 0)}
-      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      isEmpty={!!loadErrorText || (!isLoading && (!applied || rows.length === 0))}
+      emptyMessage={loadErrorText ?? (!applied ? translate("reportPressGenerate") : undefined)}
       onGenerate={handleGenerate}
       fileBaseName={translate("osvTitle")}
       title={translate("osvTitle")}

@@ -2,28 +2,71 @@
 // API бухгалтерских отчётов: проводки документа, журнал проводок, ОСВ,
 // карточка счёта, аналитика по субконто. Все эндпоинты под префиксом /accounting
 // (права — модель AccountingEntry; см. ROUTE_TO_MODEL в utils/auth.js).
+//
+// Аудит 26.09:
+//   • организация из `?organizationUuid=` больше НЕ перезаписывает tenantFilter — она
+//     пересекается с доступными пользователю (services/reportScope.js), чужая → 403 (Б6);
+//   • сутки периода — местные, в поясе организации (services/periodBounds.js), а не UTC (У5);
+//   • ОСВ, начальное сальдо карточки, субконто и взаиморасчёты считаются агрегатами в SQL,
+//     а не выгрузкой всей истории проводок в память; проведённость документа — EXISTS в
+//     запросе (postedEntrySql). Удаления «осиротевших» проводок на GET больше нет.
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter } from "../../utils/auth.js";
-import { getDocumentEntries, filterPostedEntries } from "../../services/accountingPosting.js";
+import { tenantFilter, isAdminOfOrg } from "../../utils/auth.js";
+import { getDocumentEntries, filterPostedEntries, postedEntrySql, documentNumbers } from "../../services/accountingPosting.js";
 import { getClosedBoundary } from "../../services/periodLock.js";
-import { recomputeCosting } from "../../services/recomputeCosting.js";
+import { recomputeCosting, recomputeLockName } from "../../services/recomputeCosting.js";
+import { withClusterLock } from "../../services/clusterLock.js";
+import { reportOrgs, orgWhere, respondReportScopeError } from "../../services/reportScope.js";
+import { dateRangeWhere, startOfLocalDay, endOfLocalDay, orgTimeZone, respondBadDateError, BadDateError } from "../../services/periodBounds.js";
+import { r2 } from "../../services/money.js";
 
 const router = express.Router();
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-// Where по проводкам: tenant + период + организация.
+// Пояс организации отчёта (сейчас общий для установки — см. periodBounds).
+const tzOf = (orgs) => orgTimeZone(orgs?.[0] ?? null);
+
+/** Начало/конец периода отчёта (местные сутки). Мусор → BadDateError (400). */
+function periodOf(orgs, dateFrom, dateTo) {
+	const tz = tzOf(orgs);
+	const from = dateFrom ? startOfLocalDay(dateFrom, tz) : null;
+	if (dateFrom && !from) throw new BadDateError("dateFrom", dateFrom);
+	const to = dateTo ? endOfLocalDay(dateTo, tz) : null;
+	if (dateTo && !to) throw new BadDateError("dateTo", dateTo);
+	return { from, to };
+}
+
+// Where по проводкам: организации отчёта + период (местные сутки).
 function entryWhere(req, { dateFrom, dateTo, organizationUuid } = {}) {
-	const where = { ...tenantFilter(req) };
-	if (organizationUuid) where.organizationUuid = organizationUuid;
-	if (dateFrom || dateTo) {
-		where.date = {};
-		if (dateFrom) where.date.gte = new Date(dateFrom);
-		if (dateTo) where.date.lte = new Date(dateTo + "T23:59:59.999Z");
-	}
+	const orgs = reportOrgs(req, organizationUuid);
+	const where = { ...orgWhere(orgs) };
+	const range = dateRangeWhere(dateFrom, dateTo, tzOf(orgs));
+	if (range) where.date = range;
 	return where;
 }
+
+/**
+ * Общая часть SQL-условия по проводкам «e»: организации, верхняя граница даты,
+ * проведённость документа. Параметры дописываются в params. orgs = [] → null (пусто).
+ */
+function sqlScope(orgs, { to = null } = {}, params) {
+	if (orgs !== null && orgs.length === 0) return null;
+	const conds = [];
+	if (orgs !== null) {
+		params.push(orgs);
+		conds.push(`e."organizationUuid" = ANY($${params.length}::text[])`);
+	}
+	if (to) {
+		params.push(to.toISOString());
+		conds.push(`e."date" <= $${params.length}::timestamp`);
+	}
+	conds.push(postedEntrySql("e"));
+	return conds;
+}
+const num = (v) => Number(v ?? 0) || 0;
+/** Параметр-момент для SQL: ISO в UTC, `::timestamp` отбрасывает зону — как хранит Prisma. */
+const tsParam = (params, d) => { params.push(d.toISOString()); return `$${params.length}::timestamp`; };
 
 // Карта код→{name, accountType} для счетов в области видимости.
 async function loadAccountMap(req, _organizationUuid) {
@@ -63,6 +106,17 @@ function analyticsText(list, side) {
 		.join(", ");
 }
 
+/** Дата проводки для строки отчёта — местная, как её видит бухгалтер. */
+function localDay(d, tz) {
+	if (!d) return "";
+	return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d));
+}
+
+/** Общий ответ на ошибки отчётов: 400 (дата), 403/400 (организация). true — ответ отправлен. */
+function respondReportError(err, res) {
+	return respondBadDateError(err, res) || respondReportScopeError(err, res);
+}
+
 // ─── GET /accounting/document-entries ────────────────────────────────────────
 // Проводки конкретного документа (для Drawer в форме документа).
 // Params: documentType, documentUuid
@@ -71,8 +125,11 @@ router.get("/accounting/document-entries", async (req, res) => {
 		const { documentType, documentUuid } = req.query;
 		if (!documentType || !documentUuid)
 			return res.status(400).json({ success: false, message: "documentType и documentUuid обязательны" });
-		// Только проводки проведённого документа (непроведённый/удалённый — пусто).
-		const entries = await filterPostedEntries(await getDocumentEntries(documentType, documentUuid));
+		// Только проводки проведённого документа (непроведённый/удалённый — пусто) и только
+		// доступных пользователю организаций: чужой документ по uuid ничего не отдаёт.
+		const orgs = reportOrgs(req, null);
+		const all = await filterPostedEntries(await getDocumentEntries(documentType, documentUuid));
+		const entries = orgs === null ? all : all.filter((e) => orgs.includes(e.organizationUuid));
 		const accMap = await loadAccountMap(req, entries[0]?.organizationUuid);
 		const rows = entries.map((e) => ({
 			uuid: e.uuid,
@@ -89,6 +146,7 @@ router.get("/accounting/document-entries", async (req, res) => {
 		const total = r2(rows.reduce((s, r) => s + r.amount, 0));
 		return res.json({ success: true, items: rows, count: rows.length, total });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/document-entries error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -97,11 +155,14 @@ router.get("/accounting/document-entries", async (req, res) => {
 // ─── GET /accounting/journal ─────────────────────────────────────────────────
 // Журнал проводок. Params: dateFrom, dateTo, organizationUuid, accountCode,
 // counterpartyUuid, productUuid, warehouseUuid, documentType, documentUuid, limit.
+// Журнал — постраничный просмотр периода, выгрузка не больше JOURNAL_MAX строк.
+const JOURNAL_MAX = 20000;
 router.get("/accounting/journal", async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, accountCode, counterpartyUuid, productUuid, warehouseUuid, documentType, documentUuid } = req.query;
 		const rawLimit = req.query.limit;
-		const limit = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 2000, 1), 100000);
+		const parsed = rawLimit !== undefined ? Number(rawLimit) : 2000;
+		const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 2000, 1), JOURNAL_MAX);
 
 		const where = entryWhere(req, { dateFrom, dateTo, organizationUuid });
 		if (accountCode) where.OR = [{ debitAccountCode: accountCode }, { creditAccountCode: accountCode }];
@@ -122,14 +183,17 @@ router.get("/accounting/journal", async (req, res) => {
 			take: limit,
 		}));
 		const accMap = await loadAccountMap(req, organizationUuid);
+		const tz = orgTimeZone(organizationUuid || null);
+		const numbers = await documentNumbers(entries);
 
 		const rows = entries.map((e) => ({
 			uuid: e.uuid,
-			date: e.date?.toISOString().slice(0, 10) ?? "",
+			date: localDay(e.date, tz),
 			documentType: e.documentType,
 			documentTypeLabel: DOC_TYPE_LABELS[e.documentType] ?? e.documentType,
 			documentId: e.documentId,
 			documentUuid: e.documentUuid,
+			documentNumber: numbers.get(`${e.documentType}:${e.documentUuid}`) ?? null,
 			debitAccountCode: e.debitAccountCode,
 			debitAccountName: accMap.get(e.debitAccountCode)?.name ?? "",
 			creditAccountCode: e.creditAccountCode,
@@ -140,8 +204,9 @@ router.get("/accounting/journal", async (req, res) => {
 			creditAnalytics: analyticsText(e.analytics, "credit"),
 		}));
 		const total = r2(rows.reduce((s, x) => s + x.amount, 0));
-		return res.json({ success: true, items: rows, count: rows.length, total });
+		return res.json({ success: true, items: rows, count: rows.length, total, truncated: rows.length >= limit });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/journal error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -150,38 +215,38 @@ router.get("/accounting/journal", async (req, res) => {
 // ─── GET /accounting/balance-sheet ───────────────────────────────────────────
 // Оборотно-сальдовая ведомость. Params: dateFrom, dateTo, organizationUuid.
 // Сальдо считается через нетто (Дт−Кт): >0 → дебетовое, <0 → кредитовое.
+// Один агрегат в SQL: начальное сальдо (до dateFrom) и обороты периода по каждому счёту.
 router.get("/accounting/balance-sheet", async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid } = req.query;
-		// Все проводки до конца периода (включительно) — для начального сальдо
-		// нужны движения ДО dateFrom.
-		const where = entryWhere(req, { dateTo, organizationUuid });
-		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
-			where,
-			// documentType/documentUuid нужны фильтру проведённости.
-			select: { debitAccountCode: true, creditAccountCode: true, amount: true, date: true, documentType: true, documentUuid: true },
-		}));
-		const from = dateFrom ? new Date(dateFrom) : null;
+		const orgs = reportOrgs(req, organizationUuid);
+		const { from, to } = periodOf(orgs, dateFrom, dateTo);
+		const params = [];
+		const conds = sqlScope(orgs, { to }, params);
 		const accMap = await loadAccountMap(req, organizationUuid);
-
-		// agg[code] = { openNet, turnDebit, turnCredit }
 		const agg = new Map();
-		const ensure = (code) => {
-			if (!agg.has(code)) agg.set(code, { openNet: 0, turnDebit: 0, turnCredit: 0 });
-			return agg.get(code);
-		};
-		for (const e of entries) {
-			const amt = Number(e.amount) || 0;
-			const inPeriod = !from || e.date >= from;
-			const d = ensure(e.debitAccountCode);
-			const c = ensure(e.creditAccountCode);
-			if (inPeriod) {
-				d.turnDebit += amt;
-				c.turnCredit += amt;
-			} else {
-				d.openNet += amt; // дебет до периода
-				c.openNet -= amt; // кредит до периода
-			}
+		if (conds) {
+			const before = from ? `e."date" < ${tsParam(params, from)}` : "false";
+			const where = conds.join(" AND ");
+			const rows = await prisma.$queryRawUnsafe(
+				`SELECT code, SUM(open_net)::text AS open_net, SUM(turn_debit)::text AS turn_debit, SUM(turn_credit)::text AS turn_credit
+				   FROM (
+					SELECT e."debitAccountCode" AS code,
+					       CASE WHEN ${before} THEN e."amount" ELSE 0 END AS open_net,
+					       CASE WHEN ${before} THEN 0 ELSE e."amount" END AS turn_debit,
+					       0::numeric AS turn_credit
+					  FROM "accounting_entries" e WHERE ${where}
+					UNION ALL
+					SELECT e."creditAccountCode",
+					       CASE WHEN ${before} THEN -e."amount" ELSE 0 END,
+					       0::numeric,
+					       CASE WHEN ${before} THEN 0 ELSE e."amount" END
+					  FROM "accounting_entries" e WHERE ${where}
+				   ) x
+				  GROUP BY code`,
+				...params,
+			);
+			for (const r of rows) agg.set(r.code, { openNet: num(r.open_net), turnDebit: num(r.turn_debit), turnCredit: num(r.turn_credit) });
 		}
 
 		const rows = [];
@@ -216,6 +281,7 @@ router.get("/accounting/balance-sheet", async (req, res) => {
 		);
 		return res.json({ success: true, items: rows, totals });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/balance-sheet error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -224,39 +290,50 @@ router.get("/accounting/balance-sheet", async (req, res) => {
 // ─── GET /accounting/account-card ────────────────────────────────────────────
 // Карточка счёта. Params: accountCode (обязателен), dateFrom, dateTo,
 // organizationUuid. Возвращает начальное сальдо, обороты по строкам с
-// нарастающим остатком, конечное сальдо.
+// нарастающим остатком, конечное сальдо. Начальное сальдо — агрегатом в SQL;
+// построчно читаются только проводки периода.
 router.get("/accounting/account-card", async (req, res) => {
 	try {
 		const { accountCode, dateFrom, dateTo, organizationUuid } = req.query;
 		if (!accountCode) return res.status(400).json({ success: false, message: "accountCode обязателен" });
+		const orgs = reportOrgs(req, organizationUuid);
+		const { from } = periodOf(orgs, dateFrom, dateTo);
 
-		const where = entryWhere(req, { dateTo, organizationUuid });
+		let opening = 0; // нетто Дт−Кт до периода
+		if (from) {
+			const params = [];
+			const conds = sqlScope(orgs, {}, params);
+			if (conds) {
+				params.push(String(accountCode));
+				const acc = `$${params.length}`;
+				const [row] = await prisma.$queryRawUnsafe(
+					`SELECT COALESCE(SUM(CASE WHEN e."debitAccountCode" = ${acc} THEN e."amount" ELSE -e."amount" END), 0)::text AS opening
+					   FROM "accounting_entries" e
+					  WHERE (e."debitAccountCode" = ${acc} OR e."creditAccountCode" = ${acc})
+					    AND e."date" < ${tsParam(params, from)} AND ${conds.join(" AND ")}`,
+					...params,
+				);
+				opening = num(row?.opening);
+			}
+		}
+
+		const where = entryWhere(req, { dateFrom, dateTo, organizationUuid });
 		where.OR = [{ debitAccountCode: accountCode }, { creditAccountCode: accountCode }];
 		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
 			where,
 			include: { analytics: true },
 			orderBy: [{ date: "asc" }, { id: "asc" }],
 		}));
-		const from = dateFrom ? new Date(dateFrom) : null;
 		const accMap = await loadAccountMap(req, organizationUuid);
+		const tz = tzOf(orgs);
+		const numbers = await documentNumbers(entries);
 
-		let opening = 0; // нетто Дт−Кт до периода
 		let turnDebit = 0;
 		let turnCredit = 0;
 		const rows = [];
 		// Нарастающий остаток внутри периода (от начального сальдо).
-		// Сначала посчитаем opening по движениям до периода.
-		for (const e of entries) {
-			const amt = Number(e.amount) || 0;
-			const isDebit = e.debitAccountCode === accountCode;
-			const signed = isDebit ? amt : -amt;
-			if (from && e.date < from) {
-				opening += signed;
-			}
-		}
 		let running = opening;
 		for (const e of entries) {
-			if (from && e.date < from) continue;
 			const amt = Number(e.amount) || 0;
 			const isDebit = e.debitAccountCode === accountCode;
 			running += isDebit ? amt : -amt;
@@ -265,11 +342,12 @@ router.get("/accounting/account-card", async (req, res) => {
 			const corr = isDebit ? e.creditAccountCode : e.debitAccountCode;
 			rows.push({
 				uuid: e.uuid,
-				date: e.date?.toISOString().slice(0, 10) ?? "",
+				date: localDay(e.date, tz),
 				documentType: e.documentType,
 				documentTypeLabel: DOC_TYPE_LABELS[e.documentType] ?? e.documentType,
 				documentId: e.documentId,
 				documentUuid: e.documentUuid,
+				documentNumber: numbers.get(`${e.documentType}:${e.documentUuid}`) ?? null,
 				corrAccountCode: corr,
 				corrAccountName: accMap.get(corr)?.name ?? "",
 				debit: isDebit ? r2(amt) : 0,
@@ -290,6 +368,7 @@ router.get("/accounting/account-card", async (req, res) => {
 			items: rows,
 		});
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/account-card error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -297,45 +376,51 @@ router.get("/accounting/account-card", async (req, res) => {
 
 // ─── GET /accounting/subkonto ────────────────────────────────────────────────
 // Аналитика по субконто. Params: subkontoType (обязателен), dateFrom, dateTo,
-// organizationUuid, accountCode (опц.). Группирует обороты по объекту аналитики.
+// organizationUuid, accountCode (опц.). Группирует обороты по объекту аналитики —
+// агрегатом в SQL.
 router.get("/accounting/subkonto", async (req, res) => {
 	try {
 		const { subkontoType, dateFrom, dateTo, organizationUuid, accountCode } = req.query;
 		if (!subkontoType) return res.status(400).json({ success: false, message: "subkontoType обязателен" });
-
-		const where = entryWhere(req, { dateFrom, dateTo, organizationUuid });
-		if (accountCode) where.OR = [{ debitAccountCode: accountCode }, { creditAccountCode: accountCode }];
-		where.analytics = { some: { subkontoType } };
-
-		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
-			where,
-			include: { analytics: true },
-			orderBy: [{ date: "asc" }, { id: "asc" }],
-		}));
-
-		// group[objectUuid] = { objectName, debit, credit }
-		const group = new Map();
-		for (const e of entries) {
-			const amt = Number(e.amount) || 0;
-			for (const a of e.analytics) {
-				if (a.subkontoType !== subkontoType) continue;
-				const key = a.objectUuid ?? "__none__";
-				if (!group.has(key)) group.set(key, { objectUuid: a.objectUuid, objectName: a.objectName || a.objectUuid || "—", debit: 0, credit: 0 });
-				const g = group.get(key);
-				if (a.side === "debit") g.debit += amt;
-				else g.credit += amt;
+		const orgs = reportOrgs(req, organizationUuid);
+		const { from, to } = periodOf(orgs, dateFrom, dateTo);
+		const params = [];
+		const conds = sqlScope(orgs, { to }, params);
+		let items = [];
+		if (conds) {
+			if (from) conds.push(`e."date" >= ${tsParam(params, from)}`);
+			params.push(String(subkontoType));
+			const st = `$${params.length}`;
+			if (accountCode) {
+				params.push(String(accountCode));
+				conds.push(`(e."debitAccountCode" = $${params.length} OR e."creditAccountCode" = $${params.length})`);
 			}
+			const rows = await prisma.$queryRawUnsafe(
+				`SELECT a."objectUuid" AS object_uuid, MAX(a."objectName") AS object_name,
+				        SUM(CASE WHEN a."side" = 'debit' THEN e."amount" ELSE 0 END)::text AS debit,
+				        SUM(CASE WHEN a."side" = 'debit' THEN 0 ELSE e."amount" END)::text AS credit
+				   FROM "accounting_entry_analytics" a
+				   JOIN "accounting_entries" e ON e."uuid" = a."accountingEntryUuid"
+				  WHERE a."subkontoType" = ${st} AND ${conds.join(" AND ")}
+				  GROUP BY a."objectUuid"`,
+				...params,
+			);
+			items = rows.map((g) => {
+				const debit = r2(num(g.debit));
+				const credit = r2(num(g.credit));
+				return {
+					objectUuid: g.object_uuid ?? null,
+					objectName: g.object_name || g.object_uuid || "—",
+					debit,
+					credit,
+					balance: r2(debit - credit),
+				};
+			});
 		}
-		const rows = Array.from(group.values()).map((g) => ({
-			objectUuid: g.objectUuid,
-			objectName: g.objectName,
-			debit: r2(g.debit),
-			credit: r2(g.credit),
-			balance: r2(g.debit - g.credit),
-		}));
-		rows.sort((a, b) => String(a.objectName).localeCompare(String(b.objectName), "ru"));
-		return res.json({ success: true, subkontoType, items: rows });
+		items.sort((a, b) => String(a.objectName).localeCompare(String(b.objectName), "ru"));
+		return res.json({ success: true, subkontoType, items });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/subkonto error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -345,77 +430,75 @@ router.get("/accounting/subkonto", async (req, res) => {
 // Взаиморасчёты по контрагентам (дебиторка 1210 / кредиторка 3310): входящее
 // сальдо, обороты Дт/Кт за период, исходящее сальдо + старение долга (aging).
 // Params: dateFrom, dateTo, organizationUuid, accountCode (1210|3310, по умолч.
-// 1210), counterpartyUuid (опц.).
+// 1210), counterpartyUuid (опц.). Всё — одним агрегатом в SQL; контрагент проводки —
+// субконто «Контрагент» той стороны, где наш счёт (иначе любое).
 router.get("/accounting/settlements", async (req, res) => {
 	try {
 		const { dateFrom, dateTo, organizationUuid, counterpartyUuid } = req.query;
 		const acc = req.query.accountCode === "3310" ? "3310" : "1210";
 		const accMap = await loadAccountMap(req, organizationUuid);
 		const isActive = (accMap.get(acc)?.accountType ?? (acc[0] === "1" ? "active" : "passive")) === "active";
+		const orgs = reportOrgs(req, organizationUuid);
+		const period = periodOf(orgs, dateFrom, dateTo);
+		const from = period.from;
+		const to = period.to ?? new Date();
 
-		const where = entryWhere(req, { dateTo, organizationUuid });
-		where.OR = [{ debitAccountCode: acc }, { creditAccountCode: acc }];
-		if (counterpartyUuid) where.analytics = { some: { subkontoType: "Counterparty", objectUuid: counterpartyUuid } };
-
-		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
-			where, include: { analytics: true }, orderBy: [{ date: "asc" }, { id: "asc" }],
-		}));
-
-		const from = dateFrom ? new Date(dateFrom) : null;
-		const to = dateTo ? new Date(dateTo + "T23:59:59.999Z") : new Date();
-		const dayMs = 86400000;
-
-		// group[cpUuid] = { name, opening, turnDebit, turnCredit, b0_30, b31_60, b61_90, b90 }
-		const group = new Map();
-		const ensure = (uuid, name) => {
-			const k = uuid ?? "__none__";
-			if (!group.has(k)) group.set(k, { counterpartyUuid: uuid ?? null, counterpartyName: name || "— без контрагента —", opening: 0, turnDebit: 0, turnCredit: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0 });
-			return group.get(k);
-		};
-
-		for (const e of entries) {
-			const amt = Number(e.amount) || 0;
-			const onDebit = e.debitAccountCode === acc;
-			const side = onDebit ? "debit" : "credit";
-			// Контрагент берём из аналитики той стороны, где наш счёт.
-			const cpAn = (e.analytics || []).find((a) => a.side === side && a.subkontoType === "Counterparty")
-				|| (e.analytics || []).find((a) => a.subkontoType === "Counterparty");
-			const g = ensure(cpAn?.objectUuid, cpAn?.objectName);
-			// Дт/Кт оборот самого счёта.
-			const accDebit = onDebit ? amt : 0;
-			const accCredit = onDebit ? 0 : amt;
-			// Вклад в сальдо: активный = Дт−Кт, пассивный = Кт−Дт.
-			const contrib = isActive ? accDebit - accCredit : accCredit - accDebit;
-
-			const inPeriod = !from || e.date >= from;
-			if (inPeriod) {
-				g.turnDebit += accDebit;
-				g.turnCredit += accCredit;
-			} else {
-				g.opening += contrib;
+		const params = [];
+		const conds = sqlScope(orgs, { to: period.to }, params);
+		let rows = [];
+		if (conds) {
+			params.push(acc);
+			const accP = `$${params.length}`;
+			conds.push(`(e."debitAccountCode" = ${accP} OR e."creditAccountCode" = ${accP})`);
+			if (counterpartyUuid) {
+				params.push(String(counterpartyUuid));
+				conds.push(`EXISTS (SELECT 1 FROM "accounting_entry_analytics" f WHERE f."accountingEntryUuid" = e."uuid" AND f."subkontoType" = 'Counterparty' AND f."objectUuid" = $${params.length})`);
 			}
-			// Старение исходящего сальдо по возрасту проводки (приближённо, без
-			// FIFO-сопоставления оплат): сумма по бакетам = исходящее сальдо.
-			const age = Math.floor((to - e.date) / dayMs);
-			if (age <= 30) g.b0_30 += contrib;
-			else if (age <= 60) g.b31_60 += contrib;
-			else if (age <= 90) g.b61_90 += contrib;
-			else g.b90 += contrib;
-		}
-
-		const rows = [];
-		for (const g of group.values()) {
-			const opening = r2(g.opening);
-			const turnDebit = r2(g.turnDebit);
-			const turnCredit = r2(g.turnCredit);
-			const closing = r2(opening + (isActive ? turnDebit - turnCredit : turnCredit - turnDebit));
-			if (!opening && !turnDebit && !turnCredit && !closing) continue;
-			rows.push({
-				counterpartyUuid: g.counterpartyUuid,
-				counterpartyName: g.counterpartyName,
-				opening, turnDebit, turnCredit, closing,
-				aging: { d0_30: r2(g.b0_30), d31_60: r2(g.b31_60), d61_90: r2(g.b61_90), d90: r2(g.b90) },
-			});
+			const before = from ? `t."date" < ${tsParam(params, from)}` : "false";
+			const toP = tsParam(params, to);
+			const sign = isActive ? 1 : -1; // вклад в сальдо: активный Дт−Кт, пассивный Кт−Дт
+			const raw = await prisma.$queryRawUnsafe(
+				`WITH s AS (
+					SELECT e."amount" AS amount, e."date" AS "date", (e."debitAccountCode" = ${accP}) AS on_debit,
+					       cp."objectUuid" AS cp_uuid, cp."objectName" AS cp_name
+					  FROM "accounting_entries" e
+					  LEFT JOIN LATERAL (
+						SELECT a."objectUuid", a."objectName" FROM "accounting_entry_analytics" a
+						 WHERE a."accountingEntryUuid" = e."uuid" AND a."subkontoType" = 'Counterparty'
+						 ORDER BY (a."side" = CASE WHEN e."debitAccountCode" = ${accP} THEN 'debit' ELSE 'credit' END) DESC, a."id"
+						 LIMIT 1
+					  ) cp ON true
+					 WHERE ${conds.join(" AND ")}
+				), t AS (
+					SELECT s.*, (CASE WHEN on_debit THEN amount ELSE -amount END) * ${sign} AS contrib,
+					       FLOOR(EXTRACT(EPOCH FROM (${toP} - s."date")) / 86400) AS age
+					  FROM s
+				)
+				SELECT cp_uuid, MAX(cp_name) AS cp_name,
+				       SUM(CASE WHEN ${before} THEN contrib ELSE 0 END)::text AS opening,
+				       SUM(CASE WHEN ${before} THEN 0 WHEN on_debit THEN amount ELSE 0 END)::text AS turn_debit,
+				       SUM(CASE WHEN ${before} THEN 0 WHEN on_debit THEN 0 ELSE amount END)::text AS turn_credit,
+				       SUM(CASE WHEN age <= 30 THEN contrib ELSE 0 END)::text AS b0_30,
+				       SUM(CASE WHEN age > 30 AND age <= 60 THEN contrib ELSE 0 END)::text AS b31_60,
+				       SUM(CASE WHEN age > 60 AND age <= 90 THEN contrib ELSE 0 END)::text AS b61_90,
+				       SUM(CASE WHEN age > 90 THEN contrib ELSE 0 END)::text AS b90
+				  FROM t
+				 GROUP BY cp_uuid`,
+				...params,
+			);
+			for (const g of raw) {
+				const opening = r2(num(g.opening));
+				const turnDebit = r2(num(g.turn_debit));
+				const turnCredit = r2(num(g.turn_credit));
+				const closing = r2(opening + (isActive ? turnDebit - turnCredit : turnCredit - turnDebit));
+				if (!opening && !turnDebit && !turnCredit && !closing) continue;
+				rows.push({
+					counterpartyUuid: g.cp_uuid ?? null,
+					counterpartyName: g.cp_name || "— без контрагента —",
+					opening, turnDebit, turnCredit, closing,
+					aging: { d0_30: r2(num(g.b0_30)), d31_60: r2(num(g.b31_60)), d61_90: r2(num(g.b61_90)), d90: r2(num(g.b90)) },
+				});
+			}
 		}
 		rows.sort((a, b) => Math.abs(b.closing) - Math.abs(a.closing));
 
@@ -428,6 +511,7 @@ router.get("/accounting/settlements", async (req, res) => {
 
 		return res.json({ success: true, accountCode: acc, accountName: accMap.get(acc)?.name ?? "", items: rows, totals });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/settlements error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -441,9 +525,11 @@ router.get("/accounting/closed-period", async (req, res) => {
 	try {
 		const organizationUuid = typeof req.query.organizationUuid === "string" ? req.query.organizationUuid : null;
 		if (!organizationUuid) return res.json({ success: true, boundary: null });
+		reportOrgs(req, organizationUuid); // чужая организация → 403
 		const boundary = await getClosedBoundary(organizationUuid);
 		return res.json({ success: true, boundary: boundary ? boundary.toISOString() : null });
 	} catch (err) {
+		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/closed-period error:", err);
 		return res.status(500).json({ success: false, message: "Ошибка сервера" });
 	}
@@ -454,17 +540,18 @@ router.get("/accounting/closed-period", async (req, res) => {
 // документа задним числом). Две фазы (регистр → проводки), идемпотентно.
 // Закрытые периоды не затрагиваются: нижняя граница строго ПОСЛЕ границы закрытия.
 // Body: { organizationUuid (обяз.), fromDate? }. Доступ: суперадмин или
-// админ активной организации (только своей орг).
+// админ этой организации. Пересчёт одной организации в кластере идёт в одном месте
+// (межпроцессный лок, как у фонового авто-пересчёта): второй запрос — 409.
 router.post("/accounting/recompute-costing", async (req, res) => {
 	try {
 		const organizationUuid = typeof req.body?.organizationUuid === "string" ? req.body.organizationUuid : null;
 		if (!organizationUuid) return res.status(400).json({ success: false, message: "organizationUuid обязателен" });
 
-		const allowed = req.user?.isSuperAdmin
-			|| (req.user?.isOrgAdmin && organizationUuid === req.user?.organizationUuid);
-		if (!allowed) return res.status(403).json({ success: false, message: "Недостаточно прав" });
+		if (!isAdminOfOrg(req, organizationUuid)) return res.status(403).json({ success: false, message: "Недостаточно прав" });
 
-		const fromDate = typeof req.body?.fromDate === "string" && req.body.fromDate ? new Date(req.body.fromDate) : null;
+		const tz = orgTimeZone(organizationUuid);
+		const fromDate = typeof req.body?.fromDate === "string" && req.body.fromDate ? startOfLocalDay(req.body.fromDate, tz) : null;
+		if (req.body?.fromDate && !fromDate) return res.status(400).json({ success: false, message: "Некорректная дата fromDate" });
 		const boundary = await getClosedBoundary(organizationUuid);
 
 		// Нижняя граница диапазона: не трогаем закрытые периоды (≤ boundary).
@@ -472,7 +559,10 @@ router.post("/accounting/recompute-costing", async (req, res) => {
 		if (fromDate && (!boundary || fromDate > boundary)) dateFilter = { gte: fromDate };
 		else if (boundary) dateFilter = { gt: boundary };
 
-		const result = await recomputeCosting({ organizationUuid, dateFilter });
+		const result = await withClusterLock(recomputeLockName(organizationUuid), () => recomputeCosting({ organizationUuid, dateFilter }));
+		if (result === undefined) {
+			return res.status(409).json({ success: false, message: "Пересчёт себестоимости этой организации уже идёт — повторите позже" });
+		}
 		return res.json({ success: true, ...result, boundary: boundary ? boundary.toISOString() : null });
 	} catch (err) {
 		console.error("POST /accounting/recompute-costing error:", err);

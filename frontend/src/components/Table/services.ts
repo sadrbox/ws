@@ -138,11 +138,15 @@ const currentRows = (rows: readonly RowIdentity[]) => {
 	return { byUuid, alive };
 };
 
-/** Куда переехал номер строки: новый номер, `null` — строки больше нет, `undefined` — остаётся как был. */
+/**
+ * Куда переехал номер строки: новый номер, `null` — строки больше нет, `undefined` — остаётся как был.
+ * `cur` считается ОДИН раз на весь набор отметок (currentRows): раньше он пересобирался на каждый id —
+ * O(n·m), 5000×5000 = 7–13 с на букву быстрого поиска после «выбрать все» (аудит 26.09, О6).
+ */
 function movedTo(
-	id: number, was: ReadonlyMap<number, string>, rows: readonly RowIdentity[], narrowed: boolean,
+	id: number, was: ReadonlyMap<number, string>, cur: ReturnType<typeof currentRows>, narrowed: boolean,
 ): number | null | undefined {
-	const { byUuid, alive } = currentRows(rows);
+	const { byUuid, alive } = cur;
 	const key = was.get(id);
 	if (key) {
 		const now = byUuid.get(key);
@@ -167,8 +171,9 @@ export function remapSelection(
 	if (ids.size === 0 || rows.length === 0) return null;
 	const next = new Set<number>();
 	let changed = false;
+	const cur = currentRows(rows);
 	for (const id of ids) {
-		const to = movedTo(id, was, rows, narrowed);
+		const to = movedTo(id, was, cur, narrowed);
 		if (to === undefined) { next.add(id); continue; }
 		changed = true;
 		if (to !== null) next.add(to);
@@ -184,7 +189,7 @@ export function remapActiveRow(
 	narrowed: boolean,
 ): number | null | undefined {
 	if (active === null || rows.length === 0) return undefined;
-	return movedTo(active, was, rows, narrowed);
+	return movedTo(active, was, currentRows(rows), narrowed);
 }
 
 export function pruneSelection(selected: ReadonlySet<number>, rowIds: readonly number[]): Set<number> | null {
@@ -233,11 +238,19 @@ export function getModelColumns(
 				.sort()
 				.join(",");
 			if (initSig === cachedSig) {
-				// Берём кэш (ширины, видимость), но sortable всегда из JSON-определения,
-				// чтобы изменения в исходных схемах колонок применялись без сброса кэша.
+				// Из кэша — ТОЛЬКО то, что настраивает пользователь: порядок, ширина, видимость.
+				// Всё остальное (footer, decimals, hint, sortable, подпись…) — из JSON-определения:
+				// раньше закэшированная колонка перекрывала JSON целиком, и у пользователя, хоть раз
+				// менявшего ширину, новые свойства колонок не применялись (аудит 26.09, И17).
+				const byId = new Map(defaults.map((d) => [d.identifier, d] as const));
 				columns = cached.map((c) => {
-					const def = defaults.find((d) => d.identifier === c.identifier);
-					return def ? { ...c, sortable: def.sortable } : c;
+					const def = byId.get(c.identifier);
+					if (!def) return c;
+					return {
+						...def,
+						...(c.width !== undefined ? { width: c.width } : {}),
+						...(c.visible !== undefined ? { visible: c.visible } : {}),
+					};
 				});
 			} else {
 				// Столбцы изменились — сбрасываем устаревший кэш

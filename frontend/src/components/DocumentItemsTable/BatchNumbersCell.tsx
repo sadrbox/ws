@@ -14,7 +14,8 @@ import { Field } from "src/components/Field";
 import styles from "./SerialNumbersCell.module.scss";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { openDocumentByType } from "src/utils/accountingDocTypes";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
+import { useProductTracking, type RowProductTracking } from "./productTracking";
 
 export interface BatchCellProps {
   productUuid: string;
@@ -25,6 +26,8 @@ export interface BatchCellProps {
   warehouseUuid?: string;
   /** Дата документа — учёт по партиям не применяется задним числом (batchTrackingSince). */
   documentDate?: string | null;
+  /** Карточка товара из строки документа: признаки учёта берутся из неё без запроса. */
+  product?: RowProductTracking | null;
   disabled?: boolean;
 }
 
@@ -47,26 +50,14 @@ interface Batch {
 // Раньше здесь был сырой slice(0,10) → ISO-вид «2026-08-21» вместо «21.08.2026».
 const fmtDate = (d?: string | null) => (d ? (getFormatDateOnly(String(d)) ?? "") : "");
 
-export const BatchNumbersCell: FC<BatchCellProps> = ({ productUuid, mode, batchUuid, onChange, organizationUuid, warehouseUuid, documentDate, disabled }) => {
+export const BatchNumbersCell: FC<BatchCellProps> = ({ productUuid, mode, batchUuid, onChange, organizationUuid, warehouseUuid, documentDate, product, disabled }) => {
   const [open, setOpen] = useState(false);
 
   // Учитывается ли товар по партиям НА ДАТУ ЭТОГО ДОКУМЕНТА. Учёт не применяется
   // задним числом: контроль действует только с batchTrackingSince (момент включения
   // флага) — тот же инвариант держит бэкенд (services/batches.js → batchTrackedProducts).
-  const { data: trackState } = useQuery({
-    queryKey: ["product-batch-flag", productUuid, documentDate ?? ""],
-    queryFn: async (): Promise<{ ok: boolean; since: string | null }> => {
-      const r = await apiClient.get<{ item?: { trackBatches?: boolean; batchTrackingSince?: string | null } }>(`products/${productUuid}`);
-      const item = r.data?.item;
-      if (item?.trackBatches !== true) return { ok: false, since: null };
-      const since = item.batchTrackingSince ? new Date(item.batchTrackingSince) : null;
-      if (!since) return { ok: true, since: null };
-      const docAt = documentDate ? new Date(documentDate) : new Date();
-      // since возвращаем только для «документ старше включения учёта» — на нём строится подсказка.
-      return docAt >= since ? { ok: true, since: null } : { ok: false, since: item.batchTrackingSince ?? null };
-    },
-    enabled: !!productUuid, staleTime: 5 * 60_000,
-  });
+  // Признаки — из строки или один общий с ячейкой серий запрос на товар (productTracking).
+  const trackState = useProductTracking(productUuid, "batch", product, documentDate);
   const tracked = trackState?.ok === true;
 
   // Метка выбранной партии (номер + срок).
@@ -112,7 +103,7 @@ const BatchModal: FC<{
   productUuid: string; mode: "receipt" | "issue"; organizationUuid?: string; warehouseUuid?: string; currentUuid: string;
   onClose: () => void; onPicked: (uuid: string) => void;
 }> = ({ productUuid, mode, organizationUuid, warehouseUuid, currentUuid, onClose, onPicked }) => {
-  const { windows: { addPane } } = useAppContext();
+  const { windows: { addPane } } = useAppActions();
   const [number, setNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [picked, setPicked] = useState(currentUuid);

@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { parseDateParam, sendError } from "../../utils/listQuery.js";
 import { publish } from "../../services/chatBus.js";
 
 const router = express.Router();
@@ -36,7 +37,8 @@ router.get("/chat/messages", async (req, res) => {
 		if (!canAccessOrg(req, organizationUuid)) return res.status(403).json({ success: false, message: "Нет доступа к чату этой организации" });
 
 		const limit = Math.min(Number(req.query.limit) || 100, 300);
-		const before = req.query.before ? new Date(String(req.query.before)) : null;
+		// Кривая дата — 400, а не Invalid Date в Prisma и 500 (Н10 аудита 26.09).
+		const before = parseDateParam(req.query.before, "before");
 
 		const items = await prisma.chatMessage.findMany({
 			where: {
@@ -51,8 +53,7 @@ router.get("/chat/messages", async (req, res) => {
 		// Отдаём в хронологическом порядке (от старых к новым) — как в чате.
 		return res.json({ success: true, items: items.reverse() });
 	} catch (err) {
-		console.error("GET /chat/messages error:", err);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		return sendError(res, err, { label: "GET /chat/messages" });
 	}
 });
 

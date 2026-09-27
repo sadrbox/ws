@@ -1,6 +1,7 @@
 import { createDocumentHeaderRouter } from "./_documentHeaderFactory.js";
 import { prisma } from "../../prisma/prisma-client.js";
 import { importBankStatements } from "../../services/bank/importBankStatements.js";
+import { resolveWritableOrg, respondOrgAccessError, checkFkOwnership } from "../../utils/auth.js";
 
 const router = createDocumentHeaderRouter({
 	MODEL: "bankStatement",
@@ -28,11 +29,17 @@ router.post("/bank-statements/import", async (req, res) => {
 		const { text, organizationUuid, bankAccountUuid } = req.body || {};
 		if (!text || typeof text !== "string") return res.status(400).json({ success: false, message: "Пустой файл выписки" });
 		if (!bankAccountUuid) return res.status(400).json({ success: false, message: "Не указан банковский счёт организации" });
+		// Организация и счёт — доступные пользователю (Б8 аудита 26.09): импорт создавал
+		// выписки в чужой организации по чужому счёту.
+		const orgUuid = resolveWritableOrg(req, organizationUuid);
+		const fkError = await checkFkOwnership(req, prisma, [{ model: "bankAccount", uuid: bankAccountUuid }]);
+		if (fkError) return res.status(403).json({ success: false, message: "Банковский счёт недоступен" });
 		const result = await importBankStatements(prisma, {
-			text, organizationUuid: organizationUuid || null, bankAccountUuid, authorUuid: req.user.uuid,
+			text, organizationUuid: orgUuid, bankAccountUuid, authorUuid: req.user.uuid,
 		});
 		return res.json({ success: true, ...result });
 	} catch (e) {
+		if (respondOrgAccessError(e, res)) return;
 		console.error("POST /bank-statements/import error:", e);
 		return res.status(500).json({ success: false, message: e.message || "Ошибка импорта выписки" });
 	}

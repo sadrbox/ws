@@ -15,6 +15,7 @@
 // recomputeCosting / reconcile-all / удаление month_close), удаляет снапшоты.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
+import { compareMovements } from "./costingReplay.js";
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const r4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
@@ -29,11 +30,13 @@ const EPS = 1e-6;
  */
 export async function buildSnapshotsAt(organizationUuid, asOfDate, client = prisma) {
 	if (!organizationUuid || !asOfDate) return 0;
-	const rows = await client.productRegister.findMany({
+	// Порядок — единый порядок регистра (compareMovements: при равной дате приход раньше
+	// расхода, затем тип и id документа), как у себестоимости в проводках (У8 аудита 26.09).
+	const rows = (await client.productRegister.findMany({
 		where: { organizationUuid, date: { lte: asOfDate } },
-		select: { productUuid: true, warehouseUuid: true, movementType: true, quantity: true, amount: true },
+		select: { id: true, date: true, documentType: true, documentId: true, productUuid: true, warehouseUuid: true, movementType: true, quantity: true, amount: true },
 		orderBy: [{ date: "asc" }, { documentId: "asc" }, { id: "asc" }],
-	});
+	})).sort(compareMovements);
 
 	// Группируем по товар|склад и последовательно проигрываем ФИФО + среднюю.
 	const groups = new Map();

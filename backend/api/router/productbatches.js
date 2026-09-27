@@ -5,6 +5,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { tenantFilter } from "../../utils/auth.js";
 import { findOrCreateBatch, availableBatchesFEFO } from "../../services/batches.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 const ROUTE = "productbatches";
@@ -92,7 +93,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const rawLimit = req.query.limit;
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 500, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit);
 		const filter = req.query.filter && typeof req.query.filter === "object" ? req.query.filter : {};
 
 		const where = { deletedAt: null, ...tenantFilter(req) };
@@ -105,8 +107,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const total = await prisma.productBatch.count({ where });
 		return res.status(200).json({ success: true, items, total, hasMore: items.length === limitNumber, nextCursor: null });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

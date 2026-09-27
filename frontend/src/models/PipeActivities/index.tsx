@@ -274,10 +274,10 @@ const PipeActivitiesList: FC<{ variant?: TTableVariant; onSelectItem?: (item: TD
     // Предпросмотр: «Основное» (с реквизитами объект-нотацией) + «Исходный JSON».
     renderPreviewValue={renderPipePreviewValue}
     previewTabs={pipePreviewTabs}
-    // «Добавить» нет: события порождает 1С (POST /pipe), руками их не заводят.
-    // «Удалить» есть: журнал растёт, разобранные и ошибочные записи нужно убирать.
-    // Удаляется только ЗАПИСЬ ЖУРНАЛА — созданный ею элемент справочника остаётся.
-    hideAdd
+    // Ни «Добавить», ни «Удалить»: события порождает 1С (POST /pipe), а удалять их нельзя
+    // НИКОГДА — это след обмена, по нему разбирают расхождения с 1С. Сервер на DELETE и
+    // batch-delete отвечает 405 (аудит 26.09), поэтому и кнопки нет.
+    hideAddDelete
   />
 );
 PipeActivitiesList.displayName = LIST_NAME;

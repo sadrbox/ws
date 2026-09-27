@@ -155,18 +155,34 @@ export const TableHeader = memo(() => {
       return next;
     };
 
-    const onMouseMove = (ev: MouseEvent) => {
-      if (resizingRef.current) apply(ev.clientX);
-    };
+    // Последняя позиция курсора — для завершения без события mouseup (см. finish).
+    let lastX = e.clientX;
 
-    const onMouseUp = (ev: MouseEvent) => {
+    /*
+     * ЗАВЕРШЕНИЕ РЕСАЙЗА — не только по mouseup. Отпустили кнопку за окном, Alt+Tab, отмена
+     * указателя — mouseup не приходит, и раньше колонка ехала за курсором, пока первый же
+     * щелчок где угодно не фиксировал ширину (аудит 26.09, И17). Теперь ресайз завершается и
+     * по потере фокуса окна, и по pointercancel, и по движению с уже отпущенной кнопкой.
+     */
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      if (ev.buttons === 0 && ev.isTrusted) { finish(lastX); return; }
+      lastX = ev.clientX;
+      apply(ev.clientX);
+    };
+    const onMouseUp = (ev: MouseEvent) => finish(ev.clientX);
+    const onCancel = () => finish(lastX);
+
+    const finish = (clientX: number) => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('blur', onCancel);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       const r = resizingRef.current;
       if (!r) return;
-      const next = apply(ev.clientX);
+      const next = apply(clientX);
       // Сохраняем ВСЕ колонки, которых коснулась цепочка сужения, а не одну перетаскиваемую:
       // иначе после перерисовки левые соседи прыгнут обратно к прежней ширине.
       const byId = new Map<string, string>();
@@ -186,6 +202,8 @@ export const TableHeader = memo(() => {
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('pointercancel', onCancel);
+    window.addEventListener('blur', onCancel);
   }, [visibleColumns, columns, actions, componentName, showCheckbox]);
 
   /*

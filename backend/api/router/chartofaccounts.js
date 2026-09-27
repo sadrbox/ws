@@ -7,6 +7,7 @@ import { buildOrderBy } from "../../utils/sortOrder.js";
 import { tenantFilter, checkOwnership } from "../../utils/auth.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
 import { invalidateRefCache } from "../../services/refCache.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 
 const router = express.Router();
 const MODEL = "chartOfAccount";
@@ -14,7 +15,17 @@ const ROUTE = "chart-of-accounts";
 const TEXT_FIELDS = ["code", "name", "description"];
 
 // E3: любая запись в план счетов сбрасывает L2-кэш resolveAccount (постинг).
-router.use((req, _res, next) => { if (req.method !== "GET") invalidateRefCache("chartOfAccount"); next(); });
+// Только для СВОИХ путей (роутер смонтирован на /api/v1, и без проверки пути сброс — теперь ещё и
+// рассылка по всем воркерам — шёл на каждый POST соседних роутеров) и дважды: до записи и после
+// ответа. Сброс только «до» оставлял окно: запрос, пришедший между сбросом и фиксацией записи,
+// снова клал в кэш старое значение на весь TTL (Н7 аудита 26.09).
+router.use((req, res, next) => {
+	if (req.method !== "GET" && req.path.startsWith(`/${ROUTE}`)) {
+		invalidateRefCache("chartOfAccount");
+		res.on("finish", () => invalidateRefCache("chartOfAccount"));
+	}
+	next();
+});
 
 // Область видимости: типовые (org=null) + доступные организации.
 function scopeWhere(req) {
@@ -25,7 +36,8 @@ function scopeWhere(req) {
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const rawLimit = req.query.limit;
-		const limitNumber = Math.min(Math.max(rawLimit !== undefined ? Number(rawLimit) : 1000, 1), 999999);
+		// Потолок выдачи — общий (Н3 аудита 26.09): utils/listQuery.js.
+		const limitNumber = clampLimit(rawLimit, { def: 1000, max: 2000 });
 		const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
 		const rawCursor = req.query.cursor;
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
@@ -60,8 +72,9 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		if (cursorNumber === null) total = await prisma[MODEL].count({ where: baseWhere });
 		return res.status(200).json({ success: true, items, nextCursor, hasMore, ...(total !== undefined ? { total } : {}) });
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, неизвестное поле фильтра или сортировки) — 400, прочее — 500
+		// (Н10 аудита 26.09): utils/listQuery.js.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

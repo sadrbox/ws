@@ -3,7 +3,8 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { buildDocumentChain, DOC_REGISTRY } from "../../services/documentChain.js";
-import { canAccessModel } from "../../utils/auth.js";
+import { canAccessModel, checkOwnership } from "../../utils/auth.js";
+import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 
 /**
  * Имя модели ПРАВ по типу документа: cash_receipt_order → CashReceiptOrder.
@@ -27,6 +28,12 @@ router.get("/documents/:type/:uuid/document-chain", async (req, res) => {
 		}
 		if (!DOC_REGISTRY[type]) {
 			return res.status(400).json({ success: false, message: `Неизвестный тип документа: ${type}` });
+		}
+		// Корень цепочки — свой документ (У9 аудита 26.09): иначе по uuid чужого документа
+		// открывалось дерево связанных документов другой организации.
+		const root = await prisma[DOC_REGISTRY[type].model].findUnique({ where: { uuid }, select: { organizationUuid: true } });
+		if (!root || !checkOwnership(root, req, "organizationUuid", { allowShared: false })) {
+			return res.status(404).json({ success: false, message: "Документ не найден" });
 		}
 		const chain = await buildDocumentChain(type, uuid);
 		if (!chain) {
@@ -56,16 +63,19 @@ router.post("/documents/:type/:uuid/clear-basis", async (req, res) => {
 		if (!def.hasBasis) {
 			return res.status(400).json({ success: false, message: "Документ не может иметь основания" });
 		}
-		const existing = await prisma[def.model].findUnique({ where: { uuid }, select: { uuid: true } });
-		if (!existing) {
+		// Свой документ и открытый период (У9 аудита 26.09): очистка основания меняет документ.
+		const existing = await prisma[def.model].findUnique({ where: { uuid }, select: { uuid: true, organizationUuid: true, date: true } });
+		if (!existing || !checkOwnership(existing, req, "organizationUuid", { allowShared: false })) {
 			return res.status(404).json({ success: false, message: "Документ не найден" });
 		}
+		await assertPeriodOpen(existing.organizationUuid, existing.date);
 		await prisma[def.model].update({
 			where: { uuid },
 			data: { basisDocumentType: null, basisDocumentUuid: null, basisDocumentLabel: null },
 		});
 		return res.status(200).json({ success: true, message: "Связь основания очищена" });
 	} catch (error) {
+		if (respondPeriodLockError(error, res)) return;
 		if (error.code === "P2025") {
 			return res.status(404).json({ success: false, message: "Документ не найден" });
 		}

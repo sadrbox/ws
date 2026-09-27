@@ -10,6 +10,7 @@ import { FieldDate } from "src/components/Field";
 import LookupField from "src/components/Field/LookupField";
 import { GroupCol, GroupRow } from "src/components/UI";
 import ReportPane from "src/components/ReportPane";
+import { useReportLoadError } from "./_shared/reportLoadError";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { docTypeLabel } from "src/utils/accountingDocTypes";
 import { ReportSheet, ReportTable, Th, Td, TotalRow, Money } from "./_shared/reportLayout";
@@ -21,6 +22,8 @@ import reportCss from "./report.module.scss?inline";
 interface JournalRow {
   uuid: string; date: string;
   documentType: string; documentTypeLabel: string; documentId: number | null; documentUuid: string;
+  /** Номер документа — когда сервер его отдаёт. */
+  documentNumber?: string | null;
   debitAccountCode: string; debitAccountName: string;
   creditAccountCode: string; creditAccountName: string;
   amount: number; description: string;
@@ -48,7 +51,7 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
   });
   const drill = useReportDrill({ orgName: fields.orgName });
 
-  const { data, isLoading } = useQuery<{ items: JournalRow[]; total: number }>({
+  const { data, isLoading, error: loadError } = useQuery<{ items: JournalRow[]; total: number }>({
     queryKey: ["accounting-journal", applied],
     queryFn: async () => {
       const p: Record<string, string> = {};
@@ -64,6 +67,7 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
     },
     enabled: !!applied,
   });
+  const loadErrorText = useReportLoadError(loadError, translate("accountingJournalTitle"));
 
   const rows = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -115,7 +119,8 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
               <Td col="date">{r.date}</Td>
               <Td col="name">
                 <DrillLink onOpen={() => drill.toDocument(r.documentType, r.documentUuid)}>
-                  {docTypeLabel(r.documentType)}{r.documentId ? ` №${r.documentId}` : ""}
+                  {/* Внутренний id в подписи не показываем (И22): «№» — только номер документа. */}
+                  {docTypeLabel(r.documentType)}{r.documentNumber ? ` № ${r.documentNumber}` : ""}
                 </DrillLink>
               </Td>
               <Td col="uom">{r.debitAccountCode}</Td>
@@ -145,8 +150,8 @@ const AccountingJournal: FC<Props> = ({ uniqId }) => {
       layout={layout}
       layoutStyles={reportCss}
       isLoading={isLoading}
-      isEmpty={!isLoading && (!applied || rows.length === 0)}
-      emptyMessage={!applied ? translate("reportPressGenerate") : undefined}
+      isEmpty={!!loadErrorText || (!isLoading && (!applied || rows.length === 0))}
+      emptyMessage={loadErrorText ?? (!applied ? translate("reportPressGenerate") : undefined)}
       onGenerate={handleGenerate}
       fileBaseName={translate("accountingJournalTitle")}
       title={translate("accountingJournalTitle")}

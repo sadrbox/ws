@@ -15,7 +15,8 @@ import { useAssignNumber } from "src/hooks/useAssignNumber";
 import { useRefillAction } from "src/hooks/useRefillAction";
 import ConfirmModal from "src/components/ConfirmModal";
 import { useBasisMismatch } from "src/hooks/useBasisMismatch";
-import { refillFromBasisSource, type BasisSource } from "src/utils/createFromBasis";
+import { refillFromBasisSource, reportBasisRefillError, type BasisSource } from "src/utils/createFromBasis";
+import { cashAmountError } from "./cashOrderAmount";
 import { cashOperationTypes, defaultCashOperationType, findCashOperationType, type CashDirection } from "src/models/_shared/cashOperationTypes";
 import HeaderTogglePosted from "src/components/PaneHeader/HeaderTogglePosted";
 import { FormLookup } from "src/components/Field/FormLookup";
@@ -26,13 +27,14 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
+import { useFormLateResponseGuard } from "./lateResponseGuard";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
 import { useUserDefaults } from "src/hooks/useUserDefaults";
 import { useApplyUserDefaults } from "src/hooks/useApplyUserDefaults";
 import { resolveOrgChangeFields } from "src/utils/createFromBasis";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { makeDocLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import { getFormatDateOnly, isoToLocalInput, localInputToIso } from "src/utils/datetime";
 import ModelForm from "src/components/ModelForm";
@@ -131,13 +133,15 @@ function mapCashRefill(src: BasisSource): Record<string, unknown> {
   return out;
 }
 // Обязательные поля зависят от типа операции (перевод банк↔касса не требует контрагента/договора).
+// Сумма обязательна всегда: ПКО/РКО без суммы проводился без единой проводки (У8).
 function cashRequiredKeys(operationType: string, direction: CashDirection): string[] {
   const op = findCashOperationType(operationType) ?? cashOperationTypes(direction)[0];
-  if (op.requiresEmployee) return ["date", "organizationUuid", "employeeUuid"];
+  if (op.requiresEmployee) return ["date", "organizationUuid", "employeeUuid", "amount"];
   return op.requiresCounterparty
-    ? ["date", "organizationUuid", "counterpartyUuid", "contractUuid"]
-    : ["date", "organizationUuid"];
+    ? ["date", "organizationUuid", "counterpartyUuid", "contractUuid", "amount"]
+    : ["date", "organizationUuid", "amount"];
 }
+
 
 export function createCashOrderForm(cfg: CashOrderFormConfig): {
   Form: FC<Partial<TPane>>;
@@ -149,7 +153,9 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
   const Form: FC<Partial<TPane>> = (paneProps) => {
     const defaultOrg = useDefaultOrganization();
     const { canWrite } = useAccessPermission(cfg.accessPermissionModel);
-    const { auth: { user: currentUser }, windows: { addPane } } = useAppContext();
+    // Стабильные части контекста (О3): useAppContext() перерисовывал форму при любом переключении вкладки.
+    const { windows: { addPane } } = useAppActions();
+    const { user: currentUser } = useAppAuth();
     const [isRefilling, setIsRefilling] = useState(false);
     const assignNumber = useAssignNumber();
 
@@ -218,6 +224,8 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
         const reqKeys = cashRequiredKeys(fd.operationType, direction);
         const validation = validateRequiredFields(reqKeys, fd as unknown as Record<string, unknown>);
         if (!validation.isValid) return formatValidationErrors(validation.errors);
+        const amountError = cashAmountError(fd);
+        if (amountError) return amountError;
         return {
           number: fd.number?.trim() || null,
           date: localInputToIso(fd.date),
@@ -249,16 +257,17 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
     // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
     // LookupField зовёт onSelect("", "", {}).
+    // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+    // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
+    const guardFields = useFormLateResponseGuard<TFields>(form);
     const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
       form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
-      const cur = form.store.getSnapshot().fields;
-      const patch = await syncContract({
+      await guardFields((cur) => syncContract({
         counterpartyUuid: uuid,
         organizationUuid: cur.organizationUuid,
         currentContractUuid: cur.contractUuid,
-      });
-      if (patch) form.setFields(patch as Partial<TFields>);
-    }, [form.setFields, form.store, syncContract]);
+      }), ["counterpartyUuid", "organizationUuid"]);
+    }, [form.setFields, guardFields, syncContract]);
 
     // ── Тип операции + документ-основание ──────────────────────────────────
     const opTypeOptions = useMemo(
@@ -278,7 +287,8 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
         const res = await refillFromBasisSource(type, uuid, mapCashRefill);
         if (res?.fields) form.setFields(res.fields as Partial<TFields>);
       } catch (e) {
-        console.error("[cash refill] failed", e);
+        // Ошибку «Перезаполнить» — человеку, а не в консоль (И22).
+        reportBasisRefillError(e);
       }
     }, [form.setFields]);
 
@@ -341,12 +351,11 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
       const cur = form.store.getSnapshot().fields;
       if (cur.organizationUuid === uuid) return;
       form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
-      const patch = await resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
+      await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
         { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
         { valueType: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
-      ]);
-      form.setFields(patch as Partial<TFields>);
-    }, [form.setFields, form.store, currentUser?.uuid]);
+      ]), ["organizationUuid"]);
+    }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
 
     const contractScope = useMemo<Record<string, string> | null>(() => {
       if (!form.fields.organizationUuid) return null;
@@ -472,10 +481,13 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
     const handlePrint = useCallback(() => {
       if (!form.fields.uuid) return;
       const title = isReceipt ? "ПРИХОДНЫЙ КАССОВЫЙ ОРДЕР" : "РАСХОДНЫЙ КАССОВЫЙ ОРДЕР";
+      // Подпись — номер документа или «б/н», не внутренний id (reference_doc_label_no_id, И22).
+      const number = form.fields.number?.trim() ?? "";
+      const ref = number ? `№ ${number}` : translate("docNoNumber");
       addPane({
         component: PrintDocumentPane,
         isSelector: true,
-        label: `${cfg.formLabel} № ${form.fields.id ?? "—"}`,
+        label: `${cfg.formLabel} ${ref}`,
         data: {
           id: Number(form.fields.id ?? 0),
           uuid: String(form.fields.uuid ?? ""),
@@ -499,8 +511,8 @@ export function createCashOrderForm(cfg: CashOrderFormConfig): {
               comment: form.fields.comment,
             }} />
           ),
-          fileBaseName: `${isReceipt ? "ПКО" : "РКО"}_${form.fields.id ?? "новый"}`,
-          title: `${cfg.formLabel} № ${form.fields.id ?? "—"}`,
+          fileBaseName: `${isReceipt ? "ПКО" : "РКО"}_${number || "бн"}`,
+          title: `${cfg.formLabel} ${ref}`,
         },
       });
     }, [form.fields, addPane, currentOp.label]);

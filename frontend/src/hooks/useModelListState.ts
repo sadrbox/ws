@@ -275,6 +275,36 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		defaultSort,
 	]);
 
+	// ── Стабильные части пропсов Table ───────────────────────────────────────
+	// buildTableProps вызывается на каждый рендер списка. Раньше он каждый раз собирал НОВЫЕ
+	// pagination/sorting/filtering/search/actions — contextValue таблицы менялся, и все
+	// видимые строки перерисовывались в обход memo на любой рендер владельца (аудит 26.09, О3).
+	const pagination = useMemo(() => ({
+		page: 1,
+		limit: adaptiveLimit,
+		onPageChange: () => {},
+		onLimitChange: () => {},
+	}), [adaptiveLimit]);
+	const sorting = useMemo(() => ({ sort, onSortChange: handleSortChange }), [sort, handleSortChange]);
+	const filtering = useMemo(() => ({
+		filters: filter,
+		onFilterChange: handleFilterChange,
+		onClearAll: clearFilters,
+	}), [filter, handleFilterChange, clearFilters]);
+	const searchProp = useMemo(() => ({ value: search, onChange: handleSearch }), [search, handleSearch]);
+	const baseActions = useMemo(() => ({
+		refetch: handleCleanRefresh,
+		setColumns,
+		fetchNextPage,
+		setAdaptiveLimit: updateAdaptiveLimit,
+	}), [handleCleanRefresh, setColumns, fetchNextPage, updateAdaptiveLimit]);
+	// actions зависят ещё и от openModelForm вызывающего — кэш по паре (openModelForm, baseActions).
+	const actionsCacheRef = useRef<{
+		open: (formProps: TOpenModelFormProps) => void;
+		base: typeof baseActions;
+		value: typeof baseActions & { openModelForm: (formProps: TOpenModelFormProps) => void };
+	} | null>(null);
+
 	// ── tableProps — готовый объект для <Table /> ──────────────────────────
 	const buildTableProps = useCallback(
 		(extra: {
@@ -301,26 +331,17 @@ export function useModelListState(opts: UseModelListStateOptions) {
 			error,
 			hasNextPage,
 			isFetchingNextPage,
-			pagination: {
-				page: 1,
-				limit: adaptiveLimit,
-				onPageChange: () => {},
-				onLimitChange: () => {},
-			},
-			sorting: { sort, onSortChange: handleSortChange },
-			filtering: {
-				filters: filter,
-				onFilterChange: handleFilterChange,
-				onClearAll: clearFilters,
-			},
-			search: { value: search, onChange: handleSearch },
-			actions: {
-				openModelForm: extra.openModelForm,
-				refetch: handleCleanRefresh,
-				setColumns,
-				fetchNextPage,
-				setAdaptiveLimit: updateAdaptiveLimit,
-			},
+			pagination,
+			sorting,
+			filtering,
+			search: searchProp,
+			actions: (() => {
+				const c = actionsCacheRef.current;
+				if (c && c.open === extra.openModelForm && c.base === baseActions) return c.value;
+				const value = { openModelForm: extra.openModelForm, ...baseActions };
+				actionsCacheRef.current = { open: extra.openModelForm, base: baseActions, value };
+				return value;
+			})(),
 			onDelete: handleDelete,
 			readonly: !canWrite,
 			renderCell: extra.renderCell,
@@ -335,17 +356,11 @@ export function useModelListState(opts: UseModelListStateOptions) {
 			error,
 			hasNextPage,
 			isFetchingNextPage,
-			sort,
-			search,
-			filter,
-			handleSortChange,
-			handleFilterChange,
-			handleSearch,
-			clearFilters,
-			handleCleanRefresh,
-			setColumns,
-			fetchNextPage,
-			updateAdaptiveLimit,
+			pagination,
+			sorting,
+			filtering,
+			searchProp,
+			baseActions,
 			handleDelete,
 			canWrite,
 		],
@@ -356,6 +371,8 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		columns,
 		total,
 		error,
+		// Загружена ли хоть одна страница: ошибка ДОГРУЗКИ не должна заменять таблицу (И16).
+		hasData: allItems.length > 0,
 		refetch,
 		isAnythingLoading,
 		canRead,

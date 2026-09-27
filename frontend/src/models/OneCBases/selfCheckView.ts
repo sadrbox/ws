@@ -62,7 +62,7 @@ export function selfCheckSummary(result: SelfCheckResult | null): SelfCheckSumma
 	const lines = selfCheckLines(result);
 	const failed = lines.filter((l) => l.ok === false).length;
 	const unknown = lines.filter((l) => l.ok === null).length;
-	const orgs = Array.isArray(result?.organizations) ? result!.organizations : [];
+	const orgs = Array.isArray(result?.organizations) ? result.organizations : [];
 	return {
 		// `ok` расширения главнее нашего подсчёта: оно знает про проверки, которых панель ещё не понимает.
 		ok: typeof result?.ok === "boolean" ? result.ok && failed === 0 : failed === 0,

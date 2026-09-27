@@ -10,16 +10,18 @@ import { GroupRow } from "src/components/UI";
 import styles from "./ProductImportExport.module.scss";
 import apiClient from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { showToast } from "src/components/UIToast";
 import { notify } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
 import type { TPane } from "src/app/types";
 import type { TColumn, TDataItem } from "src/components/Table/types";
 import { readWorkbookAoa, downloadAoa } from "src/utils/sheetIO";
+import { isoToLocalInput } from "src/utils/datetime";
 
 const ENDPOINT = "products";
-const today = () => new Date().toISOString().slice(0, 10);
+// Сегодня — по часовому поясу приложения, а не по UTC: с 00:00 до 05:00 по Алматы UTC-дата ещё вчерашняя (аудит 26.09).
+const today = () => isoToLocalInput(new Date()).slice(0, 10);
 
 // Фиксированные колонки файла (RU/EN-синонимы). Остальные колонки = типы цен.
 const FIXED: Record<string, string[]> = {
@@ -187,7 +189,7 @@ const makeCellRenderer = (priceDate: string) =>
 
 export const ProductImportExport: FC<Partial<TPane>> = () => {
   const { canWrite } = useAccessPermission("Product");
-  const { actions: { confirm } } = useAppContext();
+  const { actions: { confirm } } = useAppActions();
   const [file, setFile] = useState<File | null>(null);
   const [priceDate, setPriceDate] = useState(today());
   const [allRows, setAllRows] = useState<SheetRow[]>([]);
@@ -223,7 +225,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
     if (!file) return;
     setIsLoading(true);
     try {
-      const raw = readWorkbookAoa(await file.arrayBuffer());
+      const raw = await readWorkbookAoa(await file.arrayBuffer());
       if (!raw || raw.length === 0) { showToast(translate("fileEmpty"), "warning"); return; }
       const header = raw[0].map((h) => asText(h).trim());
       const headerL = header.map((h) => h.toLowerCase());
@@ -370,7 +372,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
         return [p.sku ?? "", p.name ?? "", p.brand?.name ?? "", p.unitOfMeasure?.name ?? "", p.isService ? 1 : 0, bcs.join(";"),
         ...typeNames.map((n) => (latest[n] != null ? latest[n] : ""))];
       })];
-      downloadAoa(aoa, { sheetName: "products", fileName: `products_export_${today()}.xlsx` });
+      await downloadAoa(aoa, { sheetName: "products", fileName: `products_export_${today()}.xlsx` });
       showToast(`${translate("productsExported")}: ${items.length}`, "success");
     } catch (err) {
       console.error(err);
@@ -390,7 +392,7 @@ export const ProductImportExport: FC<Partial<TPane>> = () => {
       } catch { /* ignore */ }
       const header = ["sku", "name", "brand", "unit", "isService", "barcodes", ...typeNames];
       const sample = ["ART-001", "Пример товара", "Бренд", "шт", 0, "4870000000001;4870000000002", ...typeNames.map((_, i) => (i === 0 ? 1000 : ""))];
-      downloadAoa([header, sample], { sheetName: "template", fileName: "products_template.xlsx" });
+      await downloadAoa([header, sample], { sheetName: "template", fileName: "products_template.xlsx" });
     } catch (err) {
       console.error(err);
       notify({ severity: "error", text: translate("templateError"), source: translate("ProductImportExport") });

@@ -43,11 +43,17 @@ describe('Modal focus-trap and restore', () => {
     await userEvent.tab();
     expect(document.activeElement === second).toBe(true);
 
+    // после тела — кнопки шапки (аудит 26.09, И14: раньше «Отмена» была недостижима с клавиатуры)
+    await userEvent.tab();
+    expect(document.activeElement?.textContent).toBe('Отмена');
+
     // tab cycles back to first
     await userEvent.tab();
     expect(document.activeElement === first).toBe(true);
 
-    // shift+tab should go to second
+    // shift+tab from first wraps to the header button, then to second
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement?.textContent).toBe('Отмена');
     await userEvent.tab({ shift: true });
     expect(document.activeElement === second).toBe(true);
   });

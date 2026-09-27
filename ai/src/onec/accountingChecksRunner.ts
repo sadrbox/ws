@@ -40,7 +40,7 @@ import type { AgentService, AgentView } from "../agents/service.ts";
 import { evaluateLimits, type AgentBasesStore } from "../agents/agentBases.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { agentKnowsType } from "../commands/admin.ts";
-import { ErpRefused, ErpUnavailable, type ErpCheckResults, type ErpCheckRun, type ErpSnapshotRun, type ErpTasks } from "../erp/tasks.ts";
+import { ErpRefused, ErpTimeout, ErpUnavailable, type ErpCheckResults, type ErpCheckRun, type ErpSnapshotRun, type ErpTasks } from "../erp/tasks.ts";
 import {
 	CAPABILITY_MISSING, CATALOG_CHECK, GET_SNAPSHOT, LIST_CHECKS, RUN_CHECK, checksWindowDate, isUnresponsive, localDate, parseCatalog,
 	planOrganization, uncheckedReason, unwrapData, type CheckCatalog, type CommandFailure,
@@ -149,7 +149,7 @@ export type ChecksDeps = {
 	agentBases: Pick<AgentBasesStore, "listMany">;
 	/** База ERP, только чтение: БИН → организация. */
 	erp: Pick<Db, "query">;
-	queue: Pick<CommandQueue, "enqueue" | "waitResult">;
+	queue: Pick<CommandQueue, "enqueue" | "waitResult"> & Partial<Pick<CommandQueue, "cancel" | "basesUnderMaintenance">>;
 	/** Куда отправлять результаты: служебный канал ERP. */
 	sink: Pick<ErpTasks, "enabled" | "sendCheckResults">;
 	store: Pick<AccountingCheckRunStore, "claim" | "finish" | "interruptUnfinished">;
@@ -223,6 +223,8 @@ export type SkipReport = {
 	agentsWithoutCapability: string[];
 	basesOverLimit: string[];
 	basesOffline: string[];
+	/** В базе идёт обслуживание агентом кластера (выгрузка, проверка, обновление): проверять её сейчас нельзя (аудит 26.09). */
+	basesUnderMaintenance: string[];
 	basesWithoutOrganizations: string[];
 	binsOverLimit: string[];
 	binsInOtherBase: string[];
@@ -256,7 +258,7 @@ export class AccountingChecksRunner {
 	private readonly cfg: ChecksConfig;
 	private readonly clock: () => Date;
 	/** Прогон, идущий в этом процессе. Ставится ДО первого await в start(): два запуска разом не пройдут оба. */
-	private current: { id: string | null; kind: RunKind; startedAt: string } | null = null;
+	private current: { id: string | null; kind: RunKind; startedAt: string; baseKey?: string | null } | null = null;
 	/** Дата окна последнего планового прогона: чтобы не стучаться в журнал каждую минуту окна. */
 	private lastRunDate: string | null = null;
 	private cleanup: Promise<unknown> | null = null;
@@ -279,10 +281,22 @@ export class AccountingChecksRunner {
 	async tick(): Promise<"disabled" | "busy" | "not-due" | "started" | "already-ran" | "refused"> {
 		if (!this.cfg.enabled) return "disabled";
 		await this.cleanupOnce();
-		if (this.current) return "busy";
 		const now = this.clock();
 		const day = checksWindowDate(now, this.cfg.at);
+		if (this.current) {
+			/*
+			 * РУЧНОЙ ПОЛНЫЙ ПРОГОН В ОКНЕ ЗАМЕНЯЕТ ПЛАНОВЫЙ (аудит 26.09). Раньше тик отвечал «занят» и отметку не ставил:
+			 * ручной кончался внутри трёхчасового окна — и в ту же ночь стартовал второй полный прогон по всем базам.
+			 * Ручной по одной базе (обкатка) плановый не заменяет.
+			 */
+			if (day && this.current.kind === "manual" && !this.current.baseKey) this.lastRunDate = day;
+			return "busy";
+		}
 		if (!day || day === this.lastRunDate) return "not-due";
+		// Проверить потом (аудит 26.09, P3): плановый прогон, оборванный перезапуском или упавший на старте, «сжигает»
+		// ночь — запись за дату уже занята уникальным индексом 044, продолжения нет. Нужны: список пройденных баз в
+		// summary и продолжение той же записи, а при сбое до первой команды — освобождение записи. Не сделано: меняет
+		// журнал прогонов и требует согласования, что считать «пройденной» базой.
 		const r = await this.start({ kind: "schedule", runDate: day, userUuid: null });
 		// Отметку ставим и при отказе: иначе «ERP не настроена» писалась бы в журнал каждую минуту окна.
 		this.lastRunDate = day;
@@ -304,7 +318,7 @@ export class AccountingChecksRunner {
 			return { ok: false, code: "ERP_DISABLED", message: "Служебный канал ERP не настроен (ERP_API_KEY): результатам проверок некуда идти" };
 		}
 		const startedAt = this.clock();
-		const slot = { id: null as string | null, kind: opts.kind, startedAt: startedAt.toISOString() };
+		const slot = { id: null as string | null, kind: opts.kind, startedAt: startedAt.toISOString(), baseKey: opts.baseKey ?? null };
 		this.current = slot;
 		let id: string | null;
 		try {
@@ -403,10 +417,19 @@ export class AccountingChecksRunner {
 	 */
 	async collectTargets(baseKey: string | null = null): Promise<{ targets: CheckTarget[]; skipped: SkipReport; scope: CheckScope | null }> {
 		const skipped: SkipReport = {
-			agentsWithoutCapability: [], basesOverLimit: [], basesOffline: [], basesWithoutOrganizations: [],
+			agentsWithoutCapability: [], basesOverLimit: [], basesOffline: [], basesUnderMaintenance: [], basesWithoutOrganizations: [],
 			binsOverLimit: [], binsInOtherBase: [], binsNotInErp: [], binsNotServed: [],
 		};
+		/*
+		 * БАЗЫ ПОД ОБСЛУЖИВАНИЕМ ПРОПУСКАЕМ (P2 отчёта очереди, аудит 26.09). Ночные IB_BACKUP/IB_CHECK админ-агента
+		 * (часы на сотню баз, с блокировкой входа) и проверки шли в одни базы разом: проверки отказывали, выгрузки
+		 * получали IB_BUSY и сжигали повторы. Ручной запуск по названной базе правило не применяет — оператор видит.
+		 * Проверить потом: пропущенная база в эту ночь не проверяется вовсе; если обслуживание регулярно попадает
+		 * в окно проверок, разнести окна (ACCOUNTING_CHECKS_AT против времени расписаний) или ставить проверки в
+		 * очередь ПОСЛЕ обслуживания.
+		 */
 		const wanted = baseKey?.trim().toLowerCase() || null;
+		const maintained = wanted || !this.d.queue.basesUnderMaintenance ? new Set<string>() : await this.d.queue.basesUnderMaintenance();
 		const agents = (await this.d.agents.listAll()).filter((a) => a.role === "business" && !a.disabled && a.online);
 		const able: AgentView[] = [];
 		const unable: AgentView[] = [];
@@ -444,6 +467,7 @@ export class AccountingChecksRunner {
 				const label = `${b.key}@${a.id}`;
 				if (v.overBases.includes(b.key)) { skipped.basesOverLimit.push(label); continue; }
 				if (b.status === "OFFLINE") { skipped.basesOffline.push(label); continue; }
+				if (maintained.has(b.key.toLowerCase())) { skipped.basesUnderMaintenance.push(label); continue; }
 				if (!b.organizations?.length) { skipped.basesWithoutOrganizations.push(label); continue; }
 				const bins: Candidate["bins"] = [];
 				for (const o of b.organizations) {
@@ -581,7 +605,17 @@ export class AccountingChecksRunner {
 					if (gone) {
 						res = { ok: false, error: { code: "NOT_RUN", message: `Не выполнялась: база перестала отвечать (${gone.code}: ${gone.message})` } };
 					} else {
-						res = await this.exec(t, c.kind === "check" ? RUN_CHECK : GET_SNAPSHOT, c.payload);
+						/*
+						 * СБОЙ СВОЕЙ СТОРОНЫ — ИТОГ ВЫЗОВА, А НЕ ВСЕЙ БАЗЫ (аудит 26.09). Исключение (БД очереди при ожидании)
+						 * раньше выбрасывало собранное по организации, а остальные организации базы в ERP не уходили вовсе —
+						 * ERP видела молчание. Теперь это отказ вызова: остальные вызовы — «не выполнялась», посылки — все.
+						 */
+						try {
+							res = await this.exec(t, c.kind === "check" ? RUN_CHECK : GET_SNAPSHOT, c.payload);
+						} catch (e) {
+							res = { ok: false, error: { code: "INTERNAL", message: `Сбой сервиса BuhProf AI: ${e instanceof Error ? e.message : String(e)}` } };
+							gone = res.error;
+						}
 						report.commands++;
 						if (!res.ok && isUnresponsive(res.error.code)) {
 							gone = res.error;
@@ -662,9 +696,25 @@ export class AccountingChecksRunner {
 			return { ok: false, error: { code: "ENQUEUE_FAILED", message: `Команда не поставлена в очередь: ${e instanceof Error ? e.message : String(e)}` } };
 		}
 		// Ожидание очереди (по умолчанию — как срок выполнения) плюс само выполнение и запас на доставку ответа.
-		const done = await this.d.queue.waitResult(id, (ttl * 2 + 30) * 1000);
+		let deadline = Date.now() + (ttl * 2 + 30) * 1000;
+		let done = await this.d.queue.waitResult(id, (ttl * 2 + 30) * 1000);
+		/*
+		 * ПРОДЛЁННУЮ АГЕНТОМ — ЖДЁМ ДАЛЬШЕ (аудит 26.09). Долгую проверку агент подтверждает в heartbeat, и её срок
+		 * продлевается (queue.extendRunning); ожидание «2·ttl + 30» этого не знало — проверка, которая честно шла,
+		 * получала NO_ANSWER, а её поздний ответ выбрасывался.
+		 */
+		while (done && done.state === "dispatched" && done.expires_at) {
+			const until = new Date(done.expires_at).getTime() + 30_000;
+			if (until <= deadline || until <= Date.now()) break;
+			deadline = until;
+			done = await this.d.queue.waitResult(id, Math.max(1_000, deadline - Date.now()));
+		}
 		if (!done || done.state === "queued" || done.state === "dispatched") {
-			return { ok: false, error: { code: "NO_ANSWER", message: `1С не ответила за ${ttl * 2 + 30} с — команда осталась в очереди` } };
+			// Не выданную снимаем: ответ на неё уже никто не ждёт, а место базы она заняла бы позже (аудит 26.09).
+			const canceled = done?.state === "queued" && this.d.queue.cancel ? (await this.d.queue.cancel([id], "accounting-checks")) > 0 : false;
+			return { ok: false, error: { code: "NO_ANSWER", message: done?.state === "dispatched"
+				? "1С не ответила за отведённое время: проверка выполнялась у агента без ответа"
+				: `1С не ответила за ${ttl * 2 + 30} с — команда не дождалась очереди базы${canceled ? " и снята" : ""}` } };
 		}
 		if (done.state !== "done") {
 			const e = done.error;
@@ -686,6 +736,9 @@ export class AccountingChecksRunner {
 	 * посылке 1500 находок (≈0,6 МБ). ПРОВЕРИТЬ ПОТОМ: если живые базы дадут больше 25 МБ — делить посылку по проверкам.
 	 */
 	private async forward(body: ErpCheckResults, report: BaseReport): Promise<void> {
+		// Проверить потом: посылка сериализуется дважды — здесь (для счёта байт) и в ErpTasks (для отправки); на
+		// 20×1000 находок это ~8 МБ лишней памяти на базу (аудит 26.09, P3, «вероятно»). Лечится передачей готовой
+		// строки в ErpTasks или делением посылки по проверкам — сделать, если живые базы дадут посылки крупнее.
 		const bytes = Buffer.byteLength(JSON.stringify(body));
 		for (let attempt = 1; ; attempt++) {
 			try {
@@ -694,7 +747,13 @@ export class AccountingChecksRunner {
 				this.d.log.info({ bin: body.bin, baseKey: body.baseKey, runs: body.runs.length, snapshots: body.snapshots.length, bytes, erp: counters }, "проверки учёта: результаты отправлены в ERP");
 				return;
 			} catch (e) {
-				const retry = e instanceof ErpUnavailable && attempt < 2;
+				/*
+				 * ПОВТОР — ТОЛЬКО ПОСЛЕ ОБРЫВА СОЕДИНЕНИЯ (Н9 аудита 26.09). После таймаута ERP продолжает разбирать первую
+				 * посылку (двадцать тысяч находок — дольше 120 с), и повтор шёл вторым приёмом поверх первого: дубли
+				 * строк и сводных задач. Такая посылка не повторяется; ключ посылки (Idempotency-Key) ERP получает и в
+				 * первый раз — по нему она узнает и повтор, если он всё же случится.
+				 */
+				const retry = e instanceof ErpUnavailable && !(e instanceof ErpTimeout) && attempt < 2;
 				if (retry) {
 					await new Promise((r) => setTimeout(r, this.d.retryDelayMs ?? 5_000));
 					continue;

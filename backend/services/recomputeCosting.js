@@ -23,11 +23,19 @@ import { reconcileDocumentRegister, REGISTER_DOC_TYPES } from "./productRegister
 import { reconcileDocumentEntries, POSTING_DOC_TYPES } from "./accountingPosting.js";
 import { getClosedBoundary } from "./periodLock.js";
 import { buildSnapshotsAt, deleteSnapshotsAfter } from "./costSnapshot.js";
+import { withClusterLock } from "./clusterLock.js";
 
-// Пересчёт сам вызывает reconcile* по каждому документу; без этого флага
-// авто-триггер (recomputeIfRetroactive) запустил бы пересчёт из пересчёта.
-let running = false;
-export const isRecomputing = () => running;
+// Идущие пересчёты — ПО ОРГАНИЗАЦИИ (аудит 26.09). Раньше флаг был один на процесс:
+// пересчёт организации A молча отменял авто-пересчёт организации B («already_recomputing»),
+// и COGS у B оставался устаревшим. Межпроцессно пересчёт одной организации сериализует
+// advisory-лок (withClusterLock) — воркеров в проде четыре.
+const runningOrgs = new Set();
+/** Идёт ли пересчёт (организации или хоть какой-то в этом процессе). */
+export const isRecomputing = (organizationUuid = null) =>
+	organizationUuid ? runningOrgs.has(organizationUuid) : runningOrgs.size > 0;
+const orgKey = (organizationUuid) => organizationUuid ?? "__all__";
+/** Имя межпроцессного лока пересчёта организации. */
+export const recomputeLockName = (organizationUuid) => `recompute-costing:${orgKey(organizationUuid)}`;
 
 // documentType → { model, where? }. ПКО и РКО делят одну модель cashOrder и
 // различаются полем direction: без этого фильтра расходный ордер пересчитался бы
@@ -47,9 +55,21 @@ const MODEL_BY_TYPE = {
 	payroll_calculation: { model: "payrollCalculation" },
 	payroll_payment: { model: "payrollPayment" },
 	// Закрытие месяца агрегирует обороты 6010/6280/7010/7210, которые пересчёт как
-	// раз меняет. По дате (конец периода) оно естественно попадает в конец очереди.
-	month_close: { model: "monthClose" },
+	// раз меняет. Его место в хронологии и отбор по диапазону — по КОНЦУ ПЕРИОДА, а не
+	// по дате документа: закрытие июня, сделанное 03.07, относится к июню (его проводки
+	// датированы 30.06), и пересчёт хвоста после границы закрытия его не трогает.
+	month_close: { model: "monthClose", dateField: "periodEnd" },
 };
+
+// При равной дате: приходы раньше расходов (как compareMovements в регистре), денежные
+// документы после товарных, закрытие месяца — последним.
+const PHASE_RANK = {
+	purchase: 0, import_declaration: 0, goods_receipt: 0, sale_return: 0,
+	inventory_transfer: 1,
+	sale: 2, write_off: 2, purchase_return: 2,
+	month_close: 9,
+};
+const rankOf = (type) => PHASE_RANK[type] ?? 5;
 
 /**
  * Типы документов, которые пересчёт НЕ обслуживает (нет модели в карте).
@@ -72,7 +92,6 @@ export function unmappedDocTypes() {
 export async function recomputeCosting({ organizationUuid = null, dateFilter = null } = {}, client = prisma) {
 	const docWhere = { posted: true, deletedAt: null };
 	if (organizationUuid) docWhere.organizationUuid = organizationUuid;
-	if (dateFilter) docWhere.date = dateFilter;
 
 	/** Собрать документы указанных типов и упорядочить хронологически. */
 	async function collect(types) {
@@ -80,22 +99,37 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 		for (const type of types) {
 			const cfg = MODEL_BY_TYPE[type];
 			if (!cfg || !client[cfg.model]) continue;
+			const dateField = cfg.dateField ?? "date";
 			const rows = await client[cfg.model].findMany({
-				where: { ...docWhere, ...(cfg.where ?? {}) },
-				select: { uuid: true, date: true, id: true },
+				where: { ...docWhere, ...(dateFilter ? { [dateField]: dateFilter } : {}), ...(cfg.where ?? {}) },
+				select: { uuid: true, id: true, [dateField]: true },
 			});
-			for (const r of rows) docs.push({ type, uuid: r.uuid, date: r.date, id: r.id });
+			for (const r of rows) docs.push({ type, uuid: r.uuid, date: r[dateField], id: r.id });
 		}
 		docs.sort((a, b) => {
 			const d = new Date(a.date).getTime() - new Date(b.date).getTime();
-			return d !== 0 ? d : a.id - b.id;
+			if (d !== 0) return d;
+			const rk = rankOf(a.type) - rankOf(b.type);
+			if (rk !== 0) return rk;
+			if (a.type !== b.type) return a.type < b.type ? -1 : 1;
+			return a.id - b.id;
 		});
 		return docs;
 	}
 
+	// Ошибка одного документа не обрывает пересчёт и не глушится: документ остаётся в
+	// прежнем состоянии (его перепроведение атомарно), а список сбоев возвращается.
+	const failed = [];
 	async function phase(types, fn, extraArg) {
 		const docs = await collect(types);
-		for (const d of docs) await fn(d.type, d.uuid, client, extraArg);
+		for (const d of docs) {
+			try {
+				await fn(d.type, d.uuid, client, extraArg);
+			} catch (err) {
+				console.error(`recomputeCosting: ${d.type} ${d.uuid}:`, err?.message ?? err);
+				failed.push({ documentType: d.type, documentUuid: d.uuid, message: String(err?.message ?? err) });
+			}
+		}
 		return docs.length;
 	}
 
@@ -106,7 +140,8 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 	const fullRebuild = !dateFilter;
 	if (fullRebuild) await deleteSnapshotsAfter(organizationUuid, null, client);
 
-	running = true;
+	const key = orgKey(organizationUuid);
+	runningOrgs.add(key);
 	try {
 		// Порядок важен: регистр целиком (фаза мутирует регистр — БЕЗ общего кэша!),
 		// затем проводки. На фазе проводок регистр НЕизменен, поэтому историю
@@ -121,9 +156,9 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 			const boundary = await getClosedBoundary(organizationUuid, client);
 			if (boundary) await buildSnapshotsAt(organizationUuid, boundary, client);
 		}
-		return { registers, entries };
+		return failed.length ? { registers, entries, failed } : { registers, entries };
 	} finally {
-		running = false;
+		runningOrgs.delete(key);
 	}
 }
 
@@ -136,13 +171,20 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
  * если по организации уже есть движения ПОЗЖЕ даты документа — пересчитываем
  * хвост истории (не залезая в закрытый период).
  *
- * Ничего не делает, если документ — самый поздний (обычный ввод «сегодня»),
- * поэтому в типовом сценарии стоит один дешёвый запрос.
+ * В ФОНЕ, А НЕ В ЗАПРОСЕ (аудит 26.09). Раньше хвост пересчитывался синхронно на любой
+ * PUT старого документа — даже правку комментария — и ответ мог не уложиться в таймаут
+ * клиента. Теперь здесь только дешёвая проверка «ретроактив ли это», а сам пересчёт
+ * ставится в очередь организации: запросы, пришедшие пока он идёт, сливаются в один
+ * проход от самой ранней даты. Между воркерами пересчёт одной организации сериализует
+ * advisory-лок; занят — повтор через RETRY_MS.
  *
- * @returns {Promise<{recomputed:boolean, reason?:string, registers?:number, entries?:number}>}
+ * @param {object} p
+ * @param {boolean} [p.changed] — false: влияющие на себестоимость поля не менялись
+ *   (см. costingFieldsChanged) — пересчёт не нужен.
+ * @returns {Promise<{recomputed:boolean, scheduled?:boolean, reason?:string}>}
  */
-export async function recomputeIfRetroactive({ organizationUuid, date }, client = prisma) {
-	if (running) return { recomputed: false, reason: "already_recomputing" };
+export async function recomputeIfRetroactive({ organizationUuid, date, changed = true }, client = prisma) {
+	if (!changed) return { recomputed: false, reason: "not_changed" };
 	if (!organizationUuid || !date) return { recomputed: false, reason: "no_scope" };
 	const docDate = new Date(date);
 	if (isNaN(docDate.getTime())) return { recomputed: false, reason: "bad_date" };
@@ -154,18 +196,77 @@ export async function recomputeIfRetroactive({ organizationUuid, date }, client 
 			select: { id: true },
 		});
 		if (!later) return { recomputed: false, reason: "not_retroactive" };
-
-		// Закрытый период не трогаем: пересчитываем строго после его границы.
-		const boundary = await getClosedBoundary(organizationUuid, client);
-		const dateFilter = boundary && boundary >= docDate ? { gt: boundary } : { gte: docDate };
-
-		const res = await recomputeCosting({ organizationUuid, dateFilter }, client);
-		return { recomputed: true, ...res };
 	} catch (err) {
-		// Пересчёт не должен ронять сохранение документа.
+		// Проверка не должна ронять уже сохранённый документ.
 		console.error("recomputeIfRetroactive error:", err.message);
 		return { recomputed: false, reason: "error" };
 	}
+	scheduleRecompute(organizationUuid, docDate, client);
+	return { recomputed: false, scheduled: true, reason: "scheduled" };
 }
 
-export default { recomputeCosting, recomputeIfRetroactive, unmappedDocTypes, isRecomputing };
+/** Пауза перед повтором, если пересчёт организации ведёт другой воркер. */
+export const RETRY_MS = 5_000;
+const queue = new Map(); // org → { from: Date, running: boolean, done: Promise }
+let lockRunner = withClusterLock; // подменяется в тестах
+
+/** Для тестов: подменить межпроцессный лок (name, run) → результат | undefined (занят). */
+export function _setRecomputeLockRunner(fn) {
+	lockRunner = fn ?? withClusterLock;
+}
+
+/**
+ * Поставить пересчёт хвоста организации с даты `from` в очередь. Возвращает промис
+ * завершения текущего прохода очереди (роутеры его не ждут; тесты — ждут).
+ */
+export function scheduleRecompute(organizationUuid, from, client = prisma) {
+	let st = queue.get(organizationUuid);
+	if (!st) { st = { from: null, running: false, done: null }; queue.set(organizationUuid, st); }
+	if (!st.from || from < st.from) st.from = from;
+	if (!st.running) {
+		st.running = true;
+		st.done = drain(organizationUuid, st, client).finally(() => { st.running = false; if (!st.from) queue.delete(organizationUuid); });
+	}
+	return st.done;
+}
+
+async function drain(organizationUuid, st, client) {
+	while (st.from) {
+		const from = st.from;
+		st.from = null;
+		try {
+			// Закрытый период не трогаем: пересчитываем строго после его границы.
+			const boundary = await getClosedBoundary(organizationUuid, client);
+			const dateFilter = boundary && boundary >= from ? { gt: boundary } : { gte: from };
+			const res = await lockRunner(recomputeLockName(organizationUuid), () => recomputeCosting({ organizationUuid, dateFilter }, client));
+			if (res === undefined) {
+				// Пересчёт этой организации ведёт другой процесс — наш запрос мог прийти
+				// после того, как он собрал документы. Повторяем позже, а не теряем.
+				if (!st.from || from < st.from) st.from = from;
+				await new Promise((r) => setTimeout(r, RETRY_MS).unref?.());
+			} else if (res?.failed?.length) {
+				console.error(`recomputeCosting(${organizationUuid}): не пересчитано документов — ${res.failed.length}`);
+			}
+		} catch (err) {
+			console.error("scheduled recomputeCosting error:", err?.message ?? err);
+		}
+	}
+}
+
+/**
+ * Поменялось ли в документе что-то, влияющее на себестоимость и движения: дата,
+ * проведение, склад(ы), организация. Правка комментария, номера, договора — нет.
+ * Строки документа меняются своими роутерами (они и зовут пересчёт).
+ */
+export function costingFieldsChanged(existing, data) {
+	const fields = ["date", "posted", "warehouseUuid", "fromWarehouseUuid", "toWarehouseUuid", "organizationUuid", "deletedAt", "basisDocumentUuid"];
+	for (const f of fields) {
+		if (data?.[f] === undefined) continue;
+		const a = existing?.[f] instanceof Date ? existing[f].getTime() : existing?.[f] ?? null;
+		const b = data[f] instanceof Date ? data[f].getTime() : data[f] ?? null;
+		if (a !== b) return true;
+	}
+	return false;
+}
+
+export default { recomputeCosting, recomputeIfRetroactive, scheduleRecompute, costingFieldsChanged, unmappedDocTypes, isRecomputing, recomputeLockName };

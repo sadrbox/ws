@@ -5,7 +5,7 @@ import { asText } from "src/utils/asText";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import type { TPane } from "src/app/types";
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useEdoDocument } from "src/hooks/useEdoDocument";
 import Notice, { type NoticeItem } from "src/components/Notice";
@@ -45,7 +45,7 @@ const listColumns = (mode: "inbox" | "outbox"): TColumn[] => ([
 ] as unknown as TColumn[]);
 
 const EdoList: FC<{ mode: "inbox" | "outbox" }> = ({ mode }) => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const [columns, setColumns] = useState<TColumn[]>(() => getModelColumns(listColumns(mode), `Edo_${mode}`));
 	const { data, isLoading, refetch } = useQuery({
 		queryKey: ["edo", mode],
@@ -89,7 +89,7 @@ EdoOutboxList.displayName = "EdoOutboxList";
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const EdoDocumentCreateForm: FC<Partial<TPane>> = () => {
-	const { addPane } = useAppContext().windows;
+	const { addPane } = useAppActions().windows;
 	const queryClient = useQueryClient();
 	const [receiverBin, setReceiverBin] = useState("");
 	const [receiverName, setReceiverName] = useState("");

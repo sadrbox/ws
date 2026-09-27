@@ -246,20 +246,27 @@ export async function loadErpUser(erp: Db, uuid: string): Promise<ErpUser | null
 	// Уровни СЧИТАЕМ ПОРОЗНЬ: `readonly` даёт чтение, `full` — ещё и разрушающие действия.
 	// Берём максимум по организациям: право в одной из них — это право на сервер 1С, а
 	// сервер один, и делить его по организациям нечем.
+	//
+	// ТОЛЬКО ОРГАНИЗАЦИИ, ГДЕ ОН СОСТОИТ (Б11 аудита 26.09). ERP при снятии членства права не удаляет
+	// (удаляется только access_rights), а сам ERP учитывает права лишь по организациям членства и глобальные
+	// (NULL) — canAccessModel в backend/utils/auth.js. Здесь считались права ВСЕХ организаций: бывший
+	// администратор организации сохранял полный доступ к 1С, пока состоял хоть в одной другой.
 	const onec = await erp.query<{ full: string; any: string }>(
 		`SELECT count(*) FILTER (WHERE "accessLevel" = 'full')::text AS full,
 		        count(*)::text AS any
 		   FROM access_permissions
 		  WHERE "userUuid" = $1 AND "modelName" = 'OneCAdmin'
-		    AND "accessLevel" IN ('full', 'readonly') AND "deletedAt" IS NULL`,
-		[uuid],
+		    AND "accessLevel" IN ('full', 'readonly') AND "deletedAt" IS NULL
+		    AND ("organizationUuid" IS NULL OR "organizationUuid" = ANY($2::text[]))`,
+		[uuid, allowed],
 	);
-	// Вложенные разрешения «Администрирования 1С» — со всех организаций, как и общее право.
+	// Вложенные разрешения «Администрирования 1С» — с тех же организаций, что и общее право.
 	const nested = await erp.query<{ model_name: string; access_level: string }>(
 		`SELECT "modelName" AS model_name, "accessLevel" AS access_level
 		   FROM access_permissions
-		  WHERE "userUuid" = $1 AND "modelName" LIKE 'OneCAdmin.%' AND "deletedAt" IS NULL`,
-		[uuid],
+		  WHERE "userUuid" = $1 AND "modelName" LIKE 'OneCAdmin.%' AND "deletedAt" IS NULL
+		    AND ("organizationUuid" IS NULL OR "organizationUuid" = ANY($2::text[]))`,
+		[uuid, allowed],
 	);
 	let active = row.organization_uuid;
 	if (active && !row.is_super_admin && !allowed.includes(active)) active = null;

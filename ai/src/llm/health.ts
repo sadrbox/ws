@@ -19,6 +19,8 @@ export function noteLlmSuccess(): void {
 }
 
 export function noteLlmError(code: string, message: string): void {
+	// Отказ по запросу (400: негодная история одного диалога) — не «модель недоступна» для всех (И28 аудита 26.09).
+	if (code === "LLM_BAD_REQUEST") return;
 	state.lastError = { code, message, at: new Date() };
 }
 

@@ -12,6 +12,7 @@
  */
 import { FC, useState } from "react";
 import { translate } from "src/i18";
+import { PaneActiveProvider, usePanePollInterval } from "src/hooks/usePaneActive";
 import Tabs from "src/components/Tabs";
 import AgentsTab from "./AgentsTab";
 import ProcessesTab from "./ProcessesTab";
@@ -19,7 +20,8 @@ import ActivationRequestsTab from "./ActivationRequestsTab";
 import EnrollmentsTab from "./EnrollmentsTab";
 import { useQuery } from "@tanstack/react-query";
 import { fetchActivationRequests, fetchEnrollments } from "src/services/onec/api";
-import { ReadonlyNotice, useAgents, useOnecPermissions } from "./shared";
+import { useAgents, useOnecPermissions } from "./shared";
+import { ReadonlyNotice } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
 import main from "src/styles/main.module.scss";
 
@@ -55,12 +57,14 @@ const RequestsSection: FC = () => {
  * Считаются только СВОИ заявки раздела: агентские и активация БИН. Заявки баз считает раздел расширения.
  */
 function usePendingRequests(): number {
-	const enr = useQuery({ queryKey: ["onec", "enrollments", "PENDING", ""], queryFn: () => fetchEnrollments({ state: "PENDING" }), refetchInterval: 60_000, retry: false });
-	const act = useQuery({ queryKey: ["onec", "activation-requests", "PENDING", ""], queryFn: () => fetchActivationRequests({ state: "PENDING" }), refetchInterval: 60_000, retry: false });
+	// Опрос — только пока панель на экране (О4 аудита 26.09).
+	const pollInterval = usePanePollInterval(60_000);
+	const enr = useQuery({ queryKey: ["onec", "enrollments", "PENDING", ""], queryFn: () => fetchEnrollments({ state: "PENDING" }), refetchInterval: pollInterval, retry: false });
+	const act = useQuery({ queryKey: ["onec", "activation-requests", "PENDING", ""], queryFn: () => fetchActivationRequests({ state: "PENDING" }), refetchInterval: pollInterval, retry: false });
 	return (enr.data?.items.length ?? 0) + (act.data?.items.length ?? 0);
 }
 
-export const OneCAgentsList: FC = () => {
+const AgentsPaneBody: FC = () => {
 	const perms = useOnecPermissions();
 	const [tab, setTab] = useState<AgentsPaneTab>("agents");
 	const pending = usePendingRequests();
@@ -103,5 +107,12 @@ export const OneCAgentsList: FC = () => {
 		</div>
 	);
 };
+
+/** Корень панели: опросы внутри идут, только пока панель на экране (О4 аудита 26.09). */
+export const OneCAgentsList: FC<{ uniqId?: string }> = ({ uniqId }) => (
+	<PaneActiveProvider uniqId={uniqId}>
+		<AgentsPaneBody />
+	</PaneActiveProvider>
+);
 
 export default OneCAgentsList;

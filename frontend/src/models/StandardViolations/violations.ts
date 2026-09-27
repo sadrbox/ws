@@ -180,15 +180,37 @@ export interface ViolationActions {
 /**
  * Что можно сделать с записью. `canDecide`/`isMine` приходят с сервера в GET /:id.
  * Самовыявленную ошибку оспаривать незачем: нарушением она не считается и бонус не снимает.
+ *
+ * По возражению решает «уровень выше подтвердившего»: не тот, кто подтверждал, и не его коллега того же
+ * уровня; администратор фирмы и суперадмин — всегда. Правило считает сервер и отдаёт `canResolveDispute`
+ * в GET /:id (И24 аудита 26.09): панель уровни не знает. Старый сервер поля не отдаёт — тогда, как раньше,
+ * отсекаем только самого подтверждавшего (decidedByUuid), иначе кнопка «Решить» вела к 403.
  */
-export function availableActions(v: Pick<Violation, "status" | "selfDetected" | "canDecide" | "isMine">): ViolationActions {
+export function availableActions(
+	v: Pick<Violation, "status" | "selfDetected" | "canDecide" | "isMine" | "canResolveDispute">,
+	who: { decidedByMe?: boolean; isAdmin?: boolean } = {},
+): ViolationActions {
 	const canDecide = !!v.canDecide;
 	return {
 		confirm: canDecide && v.status === "candidate",
 		reject: canDecide && (v.status === "candidate" || v.status === "confirmed"),
 		dispute: !!v.isMine && v.status === "confirmed" && !v.selfDetected,
-		resolve: canDecide && v.status === "disputed",
+		resolve: canDecide && v.status === "disputed" && canResolveDispute(v, who),
 	};
+}
+
+/** Решение по возражению: слово сервера, а без него — прежнее правило «не тот, кто подтверждал, кроме администратора». */
+function canResolveDispute(v: Pick<Violation, "canResolveDispute">, who: { decidedByMe?: boolean; isAdmin?: boolean }): boolean {
+	if (typeof v.canResolveDispute === "boolean") return v.canResolveDispute;
+	return !(who.decidedByMe && !who.isAdmin);
+}
+
+/** Возражение ждёт решения уровня выше: решать по этому сотруднику я вправе, но не по этому возражению. */
+export function resolveNeedsHigherLevel(
+	v: Pick<Violation, "status" | "canDecide" | "canResolveDispute">,
+	who: { decidedByMe?: boolean; isAdmin?: boolean },
+): boolean {
+	return !!v.canDecide && v.status === "disputed" && !canResolveDispute(v, who);
 }
 
 export const MIN_DESCRIPTION = 10;

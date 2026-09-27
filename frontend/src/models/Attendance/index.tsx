@@ -29,7 +29,7 @@ import { Group, GroupCol } from "src/components/UI";
 import { HelpBox, HelpText } from "src/components/HelpBox";
 import { getModelColumns } from "src/components/Table/services";
 import { showToast } from "src/components/UIToast";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { usePaneToolbar } from "src/hooks/usePaneToolbar";
 import { useQualityMe } from "src/hooks/useQualityMe";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
@@ -75,7 +75,7 @@ const renderRequestCell = (row: TDataItem, col: TColumn) => {
 
 export const AttendanceMyDay: FC<Partial<TPane>> = ({ uniqId }) => {
 	const qc = useQueryClient();
-	const { confirm } = useAppContext().actions;
+	const { confirm } = useAppActions().actions;
 	const q = useQuery({ queryKey: ME_KEY, queryFn: fetchAttendanceMe, retry: false });
 	const d = q.data;
 	const [showRequest, setShowRequest] = useState(false);
@@ -203,8 +203,8 @@ type JournalTab = "journal" | "requests" | "schedules";
 
 export const AttendanceJournal: FC<Partial<TPane>> = ({ uniqId }) => {
 	const qc = useQueryClient();
-	const { confirm } = useAppContext().actions;
-	const { addPane } = useAppContext().windows;
+	const { confirm } = useAppActions().actions;
+	const { addPane } = useAppActions().windows;
 	const { isController } = useQualityMe();
 	const [tab, setTab] = useState<JournalTab>("journal");
 	const [date, setDate] = useState(() => localYmd(getAppUtcOffset() * 60));
@@ -397,9 +397,9 @@ async function findRequest(uuid: string): Promise<AbsenceRequest | null> {
 
 export const AbsenceRequestsForm: FC<Partial<TPane>> = ({ uniqId, data }) => {
 	const uuid = asText(data?.uuid);
-	const { requestClose, updatePaneLabel } = useAppContext().windows;
-	const { confirm } = useAppContext().actions;
-	const me = useAppContext().auth.user;
+	const { requestClose, updatePaneLabel } = useAppActions().windows;
+	const { confirm } = useAppActions().actions;
+	const me = useAppAuth().user;
 	const { isController } = useQualityMe();
 	const qc = useQueryClient();
 	const q = useQuery({ queryKey: ["quality", "attendance", "request", uuid], queryFn: () => findRequest(uuid), enabled: !!uuid, retry: false });

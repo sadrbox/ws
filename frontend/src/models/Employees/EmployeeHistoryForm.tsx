@@ -11,6 +11,7 @@ import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { makePaneLabel, type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
+import { isoToLocalInput } from "src/utils/datetime";
 
 const MODEL_ENDPOINT = "employee-histories";
 
@@ -34,7 +35,7 @@ interface TFields {
 }
 
 const DEFAULT_FIELDS: TFields = {
-  eventDate: new Date().toISOString().slice(0, 10),
+  eventDate: isoToLocalInput(new Date()).slice(0, 10),
   eventType: "hire",
   organizationUuid: "",
   organizationName: "",
@@ -79,7 +80,7 @@ const EmployeeHistoryForm: FC<Partial<TPane>> = (paneProps) => {
       ...(prev ?? DEFAULT_FIELDS),
       id: d.id,
       uuid: d.uuid,
-      eventDate: d.eventDate ? new Date(d.eventDate).toISOString().slice(0, 10) : "",
+      eventDate: d.eventDate ? isoToLocalInput(String(d.eventDate)).slice(0, 10) : "",
       eventType: d.eventType ?? "hire",
       organizationUuid: d.organizationUuid ?? "",
       organizationName: d.organization?.name ?? "",

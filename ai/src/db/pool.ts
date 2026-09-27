@@ -42,10 +42,18 @@ export function guardPool(pool: pg.Pool, name: string, log?: PoolLog): void {
 }
 
 export function createPools(databaseUrl: string, erpDatabaseUrl: string, log?: PoolLog): { db: Db; erp: Db } {
+	/*
+	 * СРОКИ ОЖИДАНИЯ (аудит 26.09). Без них запрос, не получивший соединения из пула (все заняты), ждал вечно, а
+	 * зависший запрос держал соединение без предела — один медленный запрос под нагрузкой оставлял сервис без
+	 * ответа, не сообщая ничего. Теперь ожидание соединения — 10 с (ошибка, а не зависание), запрос — не дольше
+	 * 2 минут у своей базы (разбор выписок, очистка по сроку) и минуты у ERP (только чтения).
+	 */
 	const db = new pg.Pool({
 		connectionString: databaseUrl,
 		max: 10,
 		idleTimeoutMillis: 30_000,
+		connectionTimeoutMillis: 10_000,
+		statement_timeout: 120_000,
 		application_name: "buhprof-ai",
 	});
 
@@ -53,6 +61,8 @@ export function createPools(databaseUrl: string, erpDatabaseUrl: string, log?: P
 		connectionString: erpDatabaseUrl,
 		max: 4,
 		idleTimeoutMillis: 30_000,
+		connectionTimeoutMillis: 10_000,
+		statement_timeout: 60_000,
 		application_name: "buhprof-ai-readonly",
 		options: "-c default_transaction_read_only=on",
 	});

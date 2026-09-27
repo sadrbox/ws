@@ -14,6 +14,7 @@
 // агент для этого канала не нужен.
 
 import express, { Router, type Request, type Response } from "express";
+import { safeRouter } from "./safeRouter.ts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { ChatWorkflow, ChatReply, ChatUser, OnecOrganization, WorkflowState } from "../chat/workflow.ts";
@@ -26,7 +27,7 @@ import type { TurnKeyStore } from "../chat/turnKeys.ts";
 import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
 import { rateLimit } from "./rateLimit.ts";
-import { ErpRefused, ErpUnavailable, type ErpTasks } from "../erp/tasks.ts";
+import { ErpRefused, ErpUnavailable, onecActorName, type ErpTasks } from "../erp/tasks.ts";
 import { isBin, type BaseOrganizationsStore } from "../bases/organizations.ts";
 
 /** Версия протокола канала: форма показывает её в «Проверить связь». */
@@ -105,6 +106,14 @@ function toClient(r: ChatReply): Record<string, unknown> {
 	};
 }
 
+/** Копия ответа без `data.baseToken` — для хранения: токен не должен оседать в БД открытым текстом. */
+export function withoutBaseToken(body: unknown): unknown {
+	const b = body as { data?: Record<string, unknown> } | null;
+	if (!b || typeof b !== "object" || !b.data || typeof b.data !== "object" || !("baseToken" in b.data)) return body;
+	const { baseToken: _token, ...data } = b.data;
+	return { ...b, data };
+}
+
 /** Что сервис умеет сверх базового контракта: список уходит в `GET /ping` (§4). */
 export type OnecChatFeature = "uploads" | "idempotency" | "token-rotation";
 
@@ -159,6 +168,8 @@ export function onecChatRouter(deps: {
 	tasks?: ErpTasks | null;
 	baseOrgs?: BaseOrganizationsStore | null;
 	maxAttachmentBytes?: number;
+	/** Сколько байт вложений принимать в одном ходе (CHAT_ATTACHMENTS_TURN_MAX_MB). По умолчанию 80 МБ. */
+	maxTurnAttachmentBytes?: number;
 	/** Сколько файлов принимать в одном сообщении (CHAT_ATTACHMENTS_MAX). По умолчанию 20. */
 	maxAttachments?: number;
 	chatPerMin?: number;
@@ -177,8 +188,11 @@ export function onecChatRouter(deps: {
 	const rotationMinExtVersion = deps.rotationMinExtVersion ?? "";
 	const minExtVersion = deps.minExtVersion ?? "";
 	const maxAttachmentBytes = deps.maxAttachmentBytes ?? 20 * 1048576;
+	const maxTurnAttachmentBytes = deps.maxTurnAttachmentBytes ?? 80 * 1048576;
 	const turnTimeoutMs = deps.turnTimeoutMs ?? 90_000;
 	const r = Router();
+	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
+	safeRouter(r, log, "маршрут чата 1С");
 	r.use(requireOnecUser(tokens));
 
 	// ── Кто спрашивает: версия расширения и номер запроса (§4) ────────────────────
@@ -240,11 +254,21 @@ export function onecChatRouter(deps: {
 	const chatPerMin = deps.chatPerMin ?? 30;
 	const messageLimiter = rateLimit({ max: chatPerMin, windowMs: 60_000, key: pairKey, applies: (req) => !isResults(req), message: "Слишком много сообщений подряд — подождите минуту" });
 	const resultsLimiter = rateLimit({ max: chatPerMin > 0 ? chatPerMin * 4 : 0, windowMs: 60_000, key: pairKey, applies: isResults, message: "Слишком много шагов подряд — подождите минуту" });
+	const hasAttachments = (req: Request) => Array.isArray((req.body as { attachments?: unknown[] } | undefined)?.attachments) && ((req.body as { attachments: unknown[] }).attachments.length > 0);
 	const attachmentLimiter = rateLimit({
 		max: deps.attachmentsPerMin ?? 6, windowMs: 60_000, key: pairKey,
-		applies: (req) => Array.isArray((req.body as { attachments?: unknown[] } | undefined)?.attachments) && ((req.body as { attachments: unknown[] }).attachments.length > 0),
+		applies: hasAttachments,
 		message: "Слишком много вложений подряд — подождите минуту",
 	});
+	/*
+	 * И ЛИМИТ НА БАЗУ (аудит 26.09). Пара «база + пользователь» опирается на X-1C-User-Id, а его называет сам
+	 * клиент: новый UUID на каждый запрос — и лимиты ходов и загрузок не действуют вовсе (расход модели, база
+	 * сервиса забивается файлами на месяц). Лимит на базу — по токену; он шире парного в несколько раз, чтобы
+	 * бухгалтерия с десятком пользователей в одной базе его не чувствовала.
+	 */
+	const baseOnly = (req: Request) => `base:${req.onecUser!.baseId}`;
+	const baseMessageLimiter = rateLimit({ max: chatPerMin > 0 ? chatPerMin * 5 : 0, windowMs: 60_000, key: baseOnly, applies: (req) => !isResults(req), message: "Слишком много сообщений из этой базы подряд — подождите минуту" });
+	const baseResultsLimiter = rateLimit({ max: chatPerMin > 0 ? chatPerMin * 20 : 0, windowMs: 60_000, key: baseOnly, applies: isResults, message: "Слишком много шагов из этой базы подряд — подождите минуту" });
 
 	r.get("/ping", async (req, res) => {
 		const u = req.onecUser!;
@@ -292,6 +316,11 @@ export function onecChatRouter(deps: {
 		max: deps.attachmentsPerMin ?? 6, windowMs: 60_000, key: pairKey,
 		message: "Слишком много вложений подряд — подождите минуту",
 	});
+	// Загрузки на базу целиком (аудит 26.09): X-1C-User-Id называет клиент, по нему одному лимит обходится.
+	const baseUploadLimiter = rateLimit({
+		max: (deps.attachmentsPerMin ?? 6) * 3, windowMs: 60_000, key: baseOnly,
+		message: "Слишком много вложений из этой базы подряд — подождите минуту",
+	});
 	const rawUpload = express.raw({ type: ["application/pdf", "application/octet-stream", XLSX_MIME], limit: `${Math.ceil(maxAttachmentBytes / 1048576)}mb` });
 	const tooLarge = (res: Response) =>
 		res.status(413).json({ success: false, error: { code: "FILE_TOO_LARGE", message: `Файл больше ${Math.round(maxAttachmentBytes / 1048576)} МБ` } });
@@ -322,7 +351,7 @@ export function onecChatRouter(deps: {
 		res.json({ success: true, data: { revoked: true } });
 	});
 
-	r.post("/uploads", uploadLimiter, rawUpload,
+	r.post("/uploads", uploadLimiter, baseUploadLimiter, rawUpload,
 		// Предел разборщика — это отказ 413, а не «необработанная ошибка»: обработчик ошибок в цепочке
 		// маршрута ловит его там же, где он возник, иначе наружу ушло бы обезличенное 500.
 		(err: unknown, _req: Request, res: Response, next: import("express").NextFunction) => {
@@ -366,7 +395,7 @@ export function onecChatRouter(deps: {
 			}
 		});
 
-	r.post("/turn", messageLimiter, resultsLimiter, attachmentLimiter, async (req, res) => {
+	r.post("/turn", messageLimiter, resultsLimiter, attachmentLimiter, baseMessageLimiter, baseResultsLimiter, async (req, res) => {
 		if (!workflow) {
 			noChat(res);
 			return;
@@ -398,7 +427,13 @@ export function onecChatRouter(deps: {
 			const send = res.json.bind(res);
 			res.json = ((body: unknown) => {
 				const status = res.statusCode || 200;
-				const done = status >= 500 ? turnKeys.release(keyPair) : turnKeys.finish(keyPair, status, body);
+				/*
+				 * БЕЗ ТОКЕНА БАЗЫ (Б11 аудита 26.09). Обёртка смены токена (§3) ставится позже этой и дописывает
+				 * `data.baseToken` раньше, чем ответ доходит сюда: новый токен лежал открытым текстом в
+				 * onec_chat_turn_keys сутки и попадал в резервные копии. Повтор с тем же ключом получит ответ без
+				 * токена — неподтверждённый токен и так отдаётся снова на следующем ходе (redeliver).
+				 */
+				const done = status >= 500 ? turnKeys.release(keyPair) : turnKeys.finish(keyPair, status, withoutBaseToken(body));
 				void done.catch((e) => log.warn({ err: e, ...who(req), key }, "не записан итог хода по ключу"));
 				return send(body as never);
 			}) as typeof res.json;
@@ -471,6 +506,7 @@ export function onecChatRouter(deps: {
 		 * того чтобы принять многомегабайтное тело, которое больше никто не шлёт.
 		 */
 		const attachments: { fileName: string; mimeType: string; content: Buffer }[] = [];
+		let turnBytes = 0;
 		for (const a of attachmentsIn) {
 			if (a.content) {
 				res.status(415).json({ success: false, error: { code: "UNSUPPORTED_ATTACHMENT", message: `Вложение «${a.fileName}» пришло в теле хода: загрузите файл запросом POST /v1/onec-chat/uploads и пришлите fileId — обновите BuhProf AI` } });
@@ -485,6 +521,12 @@ export function onecChatRouter(deps: {
 				res.status(400).json({ success: false, error: { code: "UNKNOWN_FILE", message: "Загруженный файл не найден или устарел — отправьте его заново" } });
 				return;
 			}
+			turnBytes += stored.content.length;
+			// Файлы хода держатся в памяти разом (аудит 26.09): пачку сверх предела просим прислать частями.
+			if (turnBytes > maxTurnAttachmentBytes) {
+				res.status(413).json({ success: false, error: { code: "PAYLOAD_TOO_LARGE", message: `Вложения одного сообщения больше ${Math.round(maxTurnAttachmentBytes / 1048576)} МБ — отправьте файлы в нескольких сообщениях` } });
+				return;
+			}
 			attachments.push({ fileName: a.fileName || stored.fileName, mimeType: a.mimeType || stored.mimeType, content: stored.content });
 		}
 		const tooBig = attachments.find((a) => a.content.length > maxAttachmentBytes);
@@ -496,7 +538,7 @@ export function onecChatRouter(deps: {
 		const organization: OnecOrganization | null = b.organization ? { bin: b.organization.bin ?? null, name: b.organization.name ?? null, id: b.organization.id ?? null } : null;
 		const user: ChatUser = {
 			uuid: onecOwnerUuid(u.baseId, u.userId), organizationUuid: u.organizationUuid, channel: "1c",
-			onec: { baseId: u.baseId, userName: b.user.name, organization },
+			onec: { baseId: u.baseId, baseKey: u.baseKey, userName: b.user.name, organization },
 		};
 		req.setTimeout(300_000);
 		try {
@@ -607,10 +649,13 @@ export function onecChatRouter(deps: {
 		return raw;
 	}
 
-	/** Имя пользователя 1С: по нему ERP находит автора, а нет такого — заводит (как у событий 1С). */
+	/**
+	 * Автор для ERP: имя пользователя 1С с пометкой базы из ТОКЕНА (Б11 аудита 26.09). Голое имя из тела ERP искала
+	 * среди всех своих пользователей — и «ivanov» из любой базы становился сотрудником фирмы с этим логином.
+	 */
 	function actorOf(req: Request, bin: string): { bin: string; user: { name: string } } | null {
 		const name = String((req.body as { user?: { name?: unknown } } | undefined)?.user?.name ?? "").trim();
-		return name ? { bin, user: { name } } : null;
+		return name ? { bin, user: { name: onecActorName(name, req.onecUser!.baseKey) } } : null;
 	}
 
 	const needActor = (res: import("express").Response) =>
@@ -666,8 +711,29 @@ export function onecChatRouter(deps: {
 			res.json({ success: true, data: { remembered: 0, unchanged: true } });
 			return;
 		}
-		const remembered = await baseOrgs.remember(req.onecUser!.baseId, parsed.data.organizations);
-		res.json({ success: true, data: { remembered, unchanged: false } });
+		/*
+		 * НОВЫЙ БИН ОТ БАЗЫ — НА ОДОБРЕНИЕ (Б11 аудита 26.09). Раньше присланное сразу становилось «организацией
+		 * базы», и по нему открывались задачи и заметки чужой организации. Теперь база только заявляет БИН; действует
+		 * он после одобрения: из заявки на регистрацию, по организации токена базы (её выбрал оператор, выдавая
+		 * токен) или решением администратора BuhProf в панели («Подключение баз» → «Организации баз»).
+		 */
+		const u = req.onecUser!;
+		const saved = await baseOrgs.remember(u.baseId, parsed.data.organizations, { source: "base" });
+		let pending = saved.pending;
+		if (pending.length) {
+			try {
+				const o = await erp.query<{ bin: string | null }>(`SELECT bin FROM organizations WHERE uuid = $1`, [u.organizationUuid]);
+				const tokenBin = (o.rows[0]?.bin ?? "").trim();
+				if (tokenBin && pending.includes(tokenBin)) {
+					await baseOrgs.approve(u.baseId, tokenBin, `токен базы ${u.baseKey}`, "token");
+					pending = pending.filter((b) => b !== tokenBin);
+				}
+			} catch (e) {
+				log.warn({ err: e, ...who(req) }, "организации базы: БИН организации токена не прочитан");
+			}
+		}
+		if (pending.length) log.info({ ...who(req), pending }, "организации базы ждут одобрения");
+		res.json({ success: true, data: { remembered: saved.remembered, pending, unchanged: false } });
 	});
 
 	/*
@@ -729,6 +795,15 @@ export function onecChatRouter(deps: {
 				sourceType: b.sourceType ?? null, sourceUuid: b.sourceUuid ?? null, sourceLabel: b.sourceLabel ?? null,
 				// Вид задачи (E17, СК1.1): только известные значения; прочее — не передаём, ERP поставит `task`.
 				...(b.kind === "client_request" || b.kind === "task" ? { kind: b.kind } : {}),
+			}, {
+				/*
+				 * КЛЮЧ ЗАПРОСА — В ERP (аудит 26.09): повтор создания после обрыва по таймауту (15 с) давал вторую
+				 * задачу. Ключ, присланный расширением, уходит в ERP с пометкой базы — чужой ключ не совпадёт с нашим.
+				 */
+				idempotencyKey: (() => {
+					const k = String(req.headers["idempotency-key"] ?? "").trim().slice(0, 200);
+					return k ? `1c:${req.onecUser!.baseId}:${k}` : null;
+				})(),
 			});
 			res.status(201).json({ success: true, data: { item: withUrl(item) } });
 		} catch (e) {

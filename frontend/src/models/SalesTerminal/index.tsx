@@ -15,24 +15,31 @@
 import { FC, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { translate } from "src/i18";
 import { api } from "src/services/api/client";
-import { reportError } from "src/services/errors/route";
-import Notice from "src/components/Notice";
+import { reportError, routeError } from "src/services/errors/route";
+import { notify } from "src/components/TechMessages/store";
+import Notice, { type NoticeItem } from "src/components/Notice";
 import LookupField from "src/components/Field/LookupField";
 import FieldActionButton from "src/components/Field/FieldActionButton";
 import { Button } from "src/components/Button";
 import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocumentItemsTable";
 import type { SubTableApi } from "src/components/SubTable";
 import type { TDataItem } from "src/components/Table/types";
-import { usePersistentState } from "src/hooks/usePersistentState";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
-import { useAppContext } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
 import { recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
 import FiscalReceiptPane from "src/models/FiscalReceipts/FiscalReceiptPane";
 import { getFormatDateOnly } from "src/utils/datetime";
 import { checkStockAvailability, formatStockShortages } from "src/utils/stockControl";
 import { openFormByRef } from "src/utils/openFormByRef";
+import { useContractSync } from "src/hooks/useContractSync";
+import {
+  performTerminalSale, discardTerminalDraft, isOfflineStub, TerminalOfflineError,
+  unpricedRowNames, terminalBlockedReason, useTerminalHotkeys, useSubmitLock, useTerminalRequisites, type TerminalRequisites,
+} from "src/models/SalesTerminal/terminalSale";
+import { useLateResponseGuard } from "src/models/_shared/lateResponseGuard";
+import { isNetworkError } from "src/services/networkUtils";
 import Tabs from "src/components/Tabs";
 import type { TPane } from "src/app/types";
 import styles from "./SalesTerminal.module.scss";
@@ -43,29 +50,45 @@ const fmt = (n: number) =>
   Number(n || 0).toLocaleString("ru-KZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface RetailRef { counterpartyUuid: string; counterpartyName: string; contractUuid: string }
-interface RecentSale { uuid: string; number?: string | null; date?: string | null; amount?: number | null; counterparty?: { name?: string } | null }
+interface RecentSale { uuid: string; number?: string | null; date?: string | null; amount?: number | null; posted?: boolean | null; counterparty?: { name?: string } | null }
 interface ViewItem { name: string; quantity: number; price: number; amount: number }
-interface ViewSale { uuid: string; number: string; date?: string | null; amount: number; items: ViewItem[]; rawItems: TDataItem[] }
+interface ViewSale { uuid: string; number: string; date?: string | null; amount: number; posted: boolean; items: ViewItem[]; rawItems: TDataItem[] }
 
-const SalesTerminal: FC<Partial<TPane>> = () => {
+const SalesTerminal: FC<Partial<TPane>> = ({ uniqId }) => {
   const { organizationUuid: defOrgUuid, organizationName: defOrgName } = useDefaultOrganization();
-  const { auth: { user }, windows: { addPane } } = useAppContext();
+  // Стабильные части контекста (О3): useAppContext() перерисовывал терминал при любом переключении
+  // вкладки. Активную панель читаем в момент нажатия клавиши (getActivePane), а не подпиской.
+  const { windows: { addPane, getActivePane }, actions: { confirm } } = useAppActions();
+  const { user } = useAppAuth();
 
-  const [orgUuid, setOrgUuid] = useState(defOrgUuid || "");
-  const [orgName, setOrgName] = useState(defOrgName || "");
-  const [warehouseUuid, setWarehouseUuid] = usePersistentState("terminal.warehouseUuid", "");
-  const [warehouseName, setWarehouseName] = usePersistentState("terminal.warehouseName", "");
+  /*
+   * Склад, касса, тип цен и договор подставляются по организации и покупателю асинхронно —
+   * реквизиты живут в useTerminalRequisites со снимком для сверки после await: без него поздний
+   * ответ по прежней организации ставил её склад и кассу в продажу новой (И13).
+   */
+  const {
+    orgUuid, orgName, buyerUuid, buyerName, contractUuid, contractName,
+    warehouseUuid, warehouseName, cashboxUuid, cashboxName, priceTypeUuid, priceTypeName,
+    setRequisites, getRequisites,
+  } = useTerminalRequisites({ orgUuid: defOrgUuid || "", orgName: defOrgName || "" });
+  const guardRequisites = useLateResponseGuard<TerminalRequisites>(getRequisites, setRequisites);
   const [managerUuid, setManagerUuid] = useState((user as { employee?: { uuid?: string } })?.employee?.uuid ?? "");
   const [managerName, setManagerName] = useState((user as { employee?: { fullName?: string } })?.employee?.fullName ?? "");
-  const [priceTypeUuid, setPriceTypeUuid] = usePersistentState("terminal.priceTypeUuid", "");
-  const [priceTypeName, setPriceTypeName] = usePersistentState("terminal.priceTypeName", "");
-  const [cashboxUuid, setCashboxUuid] = usePersistentState("terminal.cashboxUuid", "");
-  const [cashboxName, setCashboxName] = usePersistentState("terminal.cashboxName", "");
-
-  const [buyerUuid, setBuyerUuid] = useState("");
-  const [buyerName, setBuyerName] = useState("");
-  const [contractUuid, setContractUuid] = useState("");
-  const [contractName, setContractName] = useState("");
+  /*
+   * Именной покупатель — со СВОИМ основным договором (И5). Раньше в продажу уходил договор
+   * «Розничная продажа» розничного покупателя, и сервер отвечал 409 «договор другого
+   * контрагента» (а из-за проглоченных ошибок кассир этого не видел).
+   */
+  const syncContract = useContractSync();
+  const selectBuyer = useCallback(async (u: string, d: string) => {
+    setRequisites({ buyerUuid: u, buyerName: d, contractUuid: "", contractName: "" });
+    if (!u) return;
+    // Пока грузился договор, кассир мог сменить покупателя или организацию — поздний ответ мимо (И13).
+    await guardRequisites(async (cur) => {
+      const p = await syncContract({ counterpartyUuid: u, organizationUuid: cur.orgUuid || null, currentContractUuid: "" });
+      return p?.contractUuid ? { contractUuid: p.contractUuid, contractName: p.contractName } : null;
+    }, ["buyerUuid", "orgUuid"]);
+  }, [guardRequisites, setRequisites, syncContract]);
 
   // Розничный покупатель + договор по умолчанию (для submit; имя не отображаем).
   const retailRef = useRef<RetailRef | null>(null);
@@ -80,14 +103,29 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         retailRef.current = { counterpartyUuid: r.counterparty.uuid, counterpartyName: r.counterparty.name, contractUuid: r.contract?.uuid ?? "" };
         setRetailReady(true);
       })
-      .catch(() => { });
+      // Без розничного покупателя оплатить нельзя — причину покажет подпись под кнопкой,
+      // а сам сбой (нет связи, 5xx) — тост и журнал.
+      .catch((e) => { if (!cancelled) reportError(e, { source: translate("salesTerminal"), fallback: translate("retailBuyerNotReady") }); });
     return () => { cancelled = true; };
   }, []);
 
   const [mode, setMode] = useState<"sale" | "return">("sale");
   const isReturn = mode === "return";
   const [payment, setPayment] = useState<"cash" | "card" | "kaspi">("cash");
-  const [submitting, setSubmitting] = useState(false);
+  // Замок оплаты (И1): повторный клик или F9, пока идёт оплата, ничего не делает (terminalSale.ts).
+  const { busy: submitting, run: runLocked } = useSubmitLock();
+  /** Отказ оплаты по существу (409/422/423…) — над кнопкой, пока корзину не поправят (И2). */
+  const [payError, setPayError] = useState<NoticeItem[]>([]);
+  /** Товар, который терминал не продаёт (серии/партии), — под полем поиска (И4). */
+  const [addError, setAddError] = useState("");
+  /** Прайс-лист не загрузился — цены не подставляются (И6). */
+  const [priceListFailed, setPriceListFailed] = useState(false);
+  /**
+   * Черновик неудачной оплаты (И4): повтор проводит его же, а не создаёт ещё один. Ref — для
+   * submit, состояние — для подсказки кассиру.
+   */
+  const draftRef = useRef<{ uuid: string; isReturn: boolean } | null>(null);
+  const [draftPending, setDraftPending] = useState(false);
 
   const [total, setTotal] = useState(0);
   const [cartCount, setCartCount] = useState(0);
@@ -110,6 +148,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   const searchWrapRef = useRef<HTMLDivElement>(null);
 
   const priceMapRef = useRef<Map<string, number>>(new Map());
+  const priceLoadSeqRef = useRef(0);
   const priceTypeUuidRef = useRef(priceTypeUuid);
   priceTypeUuidRef.current = priceTypeUuid;
 
@@ -120,71 +159,89 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
       if (orgUuid) params["filter[organizationUuid][equals]"] = orgUuid;
       const resp = await api.get<{ items?: RecentSale[] }>("sales", { params });
       setRecent(resp?.items ?? []);
-    } catch { /* перехватчик api покажет ошибку */ }
+    } catch (e) {
+      // Раньше — пустой catch «покажет перехватчик», а перехватчик показывает только 403.
+      reportError(e, { source: translate("terminalRecentSales"), fallback: translate("terminalRecentFailed") });
+    }
   }, [orgUuid]);
   useEffect(() => { void loadRecent(); }, [loadRecent]);
 
   const loadPriceMap = useCallback(async (typeUuid: string, reprice: boolean) => {
+    // Организация — из снимка, а не из замыкания: после смены организации обработчик держал
+    // прежнюю, и прайс грузился по ней. Поздний ответ (успели сменить тип цен или организацию) — мимо (И13).
+    const seq = ++priceLoadSeqRef.current;
     try {
+      const orgNow = getRequisites().orgUuid;
       const params: Record<string, string> = {};
-      if (orgUuid) params.organizationUuid = orgUuid;
+      if (orgNow) params.organizationUuid = orgNow;
       if (typeUuid) params.priceTypeUuid = typeUuid;
       const resp = await api.get<{ priceTypeUuid: string | null; priceTypeName: string | null; items: Array<{ productUuid: string; price: number | null }> }>(
         "product-prices/price-list", { params },
       );
+      if (seq !== priceLoadSeqRef.current) return;
       const map = new Map<string, number>();
       for (const it of resp?.items ?? []) if (it.price != null) map.set(it.productUuid, Number(it.price));
       priceMapRef.current = map;
-      if (!typeUuid && resp?.priceTypeUuid) { setPriceTypeUuid(resp.priceTypeUuid); setPriceTypeName(resp.priceTypeName ?? ""); }
+      setPriceListFailed(false);
+      if (!typeUuid && resp?.priceTypeUuid) setRequisites({ priceTypeUuid: resp.priceTypeUuid, priceTypeName: resp.priceTypeName ?? "" });
       if (reprice && cartApiRef.current) {
         for (const r of cartApiRef.current.getRows()) {
           const p = map.get(String(r.productUuid));
           if (p != null) {
-            const calc = recalcSaleItemAmounts(Number(r.quantity) || 0, p, vatRate, 0, vatMethod, 0);
+            // Скидку и акциз строки сохраняем: переоценка меняет только цену.
+            const calc = recalcSaleItemAmounts(Number(r.quantity) || 0, p, vatRate, r.discountPercent, vatMethod, r.exciseRate);
             cartApiRef.current.updateRow(r, { price: p, ...calc });
           }
         }
       }
-    } catch { /* перехватчик api покажет ошибку */ }
-  }, [orgUuid, vatRate, vatMethod, setPriceTypeUuid, setPriceTypeName]);
+    } catch (e) {
+      if (seq !== priceLoadSeqRef.current) return;
+      // Раньше сбой молча оставлял пустой прайс, и вся корзина шла по 0 ₸ (И6).
+      setPriceListFailed(true);
+      reportError(e, { source: translate("salesTerminal"), fallback: translate("terminalPriceListFailed") });
+    }
+  }, [vatRate, vatMethod, getRequisites, setRequisites]);
 
   useEffect(() => { void loadPriceMap(priceTypeUuidRef.current, false); }, [loadPriceMap]);
 
   const handleOrgChange = useCallback(async (u: string, d: string) => {
-    setOrgUuid(u);
-    setOrgName(d);
+    setRequisites({ orgUuid: u, orgName: d, buyerUuid: "", buyerName: "", contractUuid: "", contractName: "" });
     setManagerUuid(""); setManagerName("");
-    setBuyerUuid(""); setBuyerName("");
-    setContractUuid(""); setContractName("");
-    const patch = await resolveOrgChangeFields(u, userUuid, [
+    // Дефолты новой организации. Поздний ответ по прежней — мимо; склад, касса или тип цен,
+    // выбранные вручную за время запроса, не перетираются (И13).
+    const applied = await guardRequisites(() => resolveOrgChangeFields(u, userUuid, [
       { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
       { valueType: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
       { valueType: "salePriceType", uuidKey: "priceTypeUuid", nameKey: "priceTypeName" },
-    ]);
-    setWarehouseUuid(patch.warehouseUuid ?? ""); setWarehouseName(patch.warehouseName ?? "");
-    setCashboxUuid(patch.cashboxUuid ?? ""); setCashboxName(patch.cashboxName ?? "");
-    setPriceTypeUuid(patch.priceTypeUuid ?? ""); setPriceTypeName(patch.priceTypeName ?? "");
-    void loadPriceMap(patch.priceTypeUuid ?? "", true);
-  }, [userUuid, loadPriceMap, setWarehouseUuid, setWarehouseName, setCashboxUuid, setCashboxName, setPriceTypeUuid, setPriceTypeName]);
+    ]), ["orgUuid"]);
+    // Прайс — по применённому типу цен; выбранный вручную за время запроса уже грузит свой.
+    if (applied && applied.priceTypeUuid !== undefined) void loadPriceMap(applied.priceTypeUuid, true);
+  }, [guardRequisites, setRequisites, userUuid, loadPriceMap]);
 
   const addProduct = useCallback((uuid: string, name: string, item: Record<string, unknown>) => {
     if (!uuid) return;
     const cart = cartApiRef.current;
     if (!cart) return;
+    // Серии и партии через терминал не продать — говорим сразу, а не отказом при оплате (И4).
+    const blocked = terminalBlockedReason(item);
+    if (blocked) { setAddError(`«${name || (item?.name as string) || ""}»: ${blocked}`); return; }
+    setAddError("");
     const existing = cart.getRows().find((r) => r.productUuid === uuid);
     if (existing) {
       const q = (Number(existing.quantity) || 0) + 1;
-      const calc = recalcSaleItemAmounts(q, Number(existing.price) || 0, vatRate, 0, vatMethod, 0);
+      const calc = recalcSaleItemAmounts(q, Number(existing.price) || 0, vatRate, existing.discountPercent, vatMethod, existing.exciseRate);
       cart.updateRow(existing, { quantity: q, ...calc });
       return;
     }
+    // Товара нет в прайсе — цена 0; оплата по 0 ₸ потребует подтверждения (И6).
     const price = priceMapRef.current.get(uuid) ?? 0;
     const calc = recalcSaleItemAmounts(1, price, vatRate, 0, vatMethod, 0);
     const umUuid = (item?.unitOfMeasureUuid as string) ?? null;
     const um = item?.unitOfMeasure as { name?: string } | undefined;
     cart.addRow({
       productUuid: uuid,
-      product: { uuid, name: name || (item?.name as string) || "" },
+      // isService — услуга не проверяется на остаток (utils/stockControl).
+      product: { uuid, name: name || (item?.name as string) || "", isService: item?.isService === true },
       quantity: 1,
       price,
       unitOfMeasureUuid: umUuid,
@@ -194,7 +251,31 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     });
   }, [vatRate, vatMethod]);
 
-  const clearCart = useCallback(() => { cartApiRef.current?.clear(); setBasisSale(null); }, []);
+  /*
+   * Брошенный черновик неудачной оплаты убираем, когда корзину очищают или меняют режим:
+   * иначе он так и висел бы в «Реализациях». Если он всё же проведён (ответ потерялся) —
+   * не удаляем, а говорим об этом.
+   */
+  const dropDraft = useCallback(() => {
+    const d = draftRef.current;
+    if (!d) return;
+    draftRef.current = null;
+    setDraftPending(false);
+    void discardTerminalDraft(d.isReturn, d.uuid).then((postedNumber) => {
+      if (postedNumber === null) return;
+      notify({
+        severity: "warning", source: translate("salesTerminal"),
+        text: `${translate(d.isReturn ? "terminalReturnDone" : "terminalDone")}${postedNumber ? ` № ${postedNumber}` : ""}`,
+        ref: { endpoint: d.isReturn ? "sale-returns" : "sales", uuid: d.uuid },
+      });
+    });
+  }, []);
+
+  const clearCart = useCallback(() => {
+    cartApiRef.current?.clear(); setBasisSale(null);
+    setPayError([]); setAddError("");
+    dropDraft();
+  }, [dropDraft]);
 
   /*
    * Нулевое количество держит кнопку выключенной; нехватка остатка висит над кнопкой, пока
@@ -203,13 +284,17 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
    */
   const [badQty, setBadQty] = useState(false);
   const [shortage, setShortage] = useState<string[]>([]);
+  /** Товары без цены — предупреждение над кнопкой (И6). */
+  const [unpriced, setUnpriced] = useState<string[]>([]);
   const cartKeyRef = useRef("");
   const handleTableTotal = useCallback((t: number, items?: TDataItem[]) => {
     setTotal(t);
     setCartCount((items ?? []).length);
     setBadQty((items ?? []).some((r) => !!r.productUuid && !(Number(r.quantity) > 0)));
-    const key = JSON.stringify((items ?? []).map((r) => [r.productUuid, r.quantity]));
-    if (key !== cartKeyRef.current) { cartKeyRef.current = key; setShortage([]); }
+    const names = unpricedRowNames(items ?? []);
+    setUnpriced((prev) => (prev.join("\n") === names.join("\n") ? prev : names));
+    const key = JSON.stringify((items ?? []).map((r) => [r.productUuid, r.quantity, r.price]));
+    if (key !== cartKeyRef.current) { cartKeyRef.current = key; setShortage([]); setPayError([]); }
   }, []);
 
   // ── Просмотр недавней продажи (activeRow) ────────────────────────────────
@@ -224,8 +309,10 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         amount: Number(r.amount) || (Number(r.quantity) || 0) * (Number(r.price) || 0),
       }));
       const num = s.number ?? "";
-      setViewSale({ uuid: s.uuid, number: num, date: s.date, amount: Number(s.amount) || 0, items, rawItems: raw });
-    } catch { /* перехватчик api */ }
+      setViewSale({ uuid: s.uuid, number: num, date: s.date, amount: Number(s.amount) || 0, posted: s.posted !== false, items, rawItems: raw });
+    } catch (e) {
+      reportError(e, { source: translate("terminalRecentSales"), fallback: translate("terminalRecentFailed") });
+    }
   }, []);
   const closeSaleView = useCallback(() => setViewSale(null), []);
 
@@ -240,8 +327,10 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
     const cart = cartApiRef.current;
     if (!cart) return;
     cart.clear();
+    dropDraft();
     for (const r of v.rawItems) {
-      const calc = recalcSaleItemAmounts(Number(r.quantity) || 0, Number(r.price) || 0, vatRate, 0, vatMethod, 0);
+      // Скидку и акциз исходной строки переносим — раньше возврат шёл по полной цене.
+      const calc = recalcSaleItemAmounts(Number(r.quantity) || 0, Number(r.price) || 0, vatRate, r.discountPercent, vatMethod, r.exciseRate);
       cart.addRow({
         productUuid: r.productUuid,
         product: r.product ?? { uuid: r.productUuid, name: (r.product as { name?: string } | undefined)?.name ?? "" },
@@ -250,19 +339,26 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
         unitOfMeasureUuid: r.unitOfMeasureUuid ?? null,
         unitOfMeasure: r.unitOfMeasure ?? null,
         vatRate: r.vatRate != null ? Number(r.vatRate) : (vatRate || 0),
+        discountPercent: Number(r.discountPercent) || 0,
+        exciseRate: Number(r.exciseRate) || 0,
+        batchUuid: r.batchUuid ?? null,
+        sourceRowId: r.uuid ?? null,
         ...calc,
       });
     }
     setMode("return");
     setBasisSale({ uuid: v.uuid, label: saleLabel(v) });
     setViewSale(null);
-  }, [vatRate, vatMethod, saleLabel]);
+  }, [vatRate, vatMethod, saleLabel, dropDraft]);
 
   const printReceipt = useCallback(async (v: ViewSale) => {
+    // Чек — только по проведённой продаже: черновик фискализировать нельзя (И4).
+    if (!v.posted) return;
     try {
       const fr = await api.post<{ item?: Record<string, unknown> }>("fiscal-receipts", {
         documentType: "sale", documentUuid: v.uuid, paymentMethod: "cash",
       });
+      if (isOfflineStub(fr)) throw new TerminalOfflineError();
       if (fr?.item) {
         addPane({
           component: FiscalReceiptPane,
@@ -270,7 +366,9 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
           data: { receipt: fr.item, items: v.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })), organizationName: orgName },
         });
       }
-    } catch { /* перехватчик api */ }
+    } catch (e) {
+      reportError(e, { source: translate("salesTerminal"), fallback: translate("terminalReceiptFailed") });
+    }
   }, [addPane, orgName]);
 
   const showBanner = useCallback((number: string, tot: number, ret: boolean, uuid: string, endpoint: string) => {
@@ -304,92 +402,96 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
   }, [orgUuid, warehouseUuid, buyerUuid, retailReady, isReturn, payment, cashboxUuid, badQty]);
   const payReasonId = useId();
 
-  const submit = useCallback(async () => {
-    const rows = (cartApiRef.current?.getRows() ?? []).filter((r) => r.productUuid);
-    const cpUuid = buyerUuid || retailRef.current?.counterpartyUuid || "";
-    const ctUuid = contractUuid || retailRef.current?.contractUuid || "";
-    // Страховка для F9: он зовёт submit в обход выключенной кнопки. Сказать ничего не нужно —
-    // причина уже написана под кнопкой.
-    if (blockReason || !cpUuid || rows.length === 0 || rows.some((r) => !(Number(r.quantity) > 0))) return;
-    setShortage([]);
-
-    // Best practice: контроль остатка ДО создания документа — не оставляем «висящий»
-    // непроведённый черновик, а сразу показываем, каких товаров не хватает.
-    if (!isReturn) {
-      const shortages = await checkStockAvailability({
-        organizationUuid: orgUuid || null,
-        documentType: "sale",
-        warehouseUuid: warehouseUuid || null,
-        items: rows.map((r) => ({ productUuid: String(r.productUuid), quantity: Number(r.quantity) || 0 })),
-      });
-      // Нехватка — списком над кнопкой, пока корзину не поправят: за 9 секунд тоста не прочитать.
-      if (shortages.length) { setShortage(formatStockShortages(shortages).split("\n").filter(Boolean)); return; }
-    }
-
-    const docEndpoint = isReturn ? "sale-returns" : "sales";
-    const itemsEndpoint = isReturn ? "sale-return-items/batch" : "saleitems/batch";
-    const parentField = isReturn ? "saleReturnUuid" : "saleUuid";
-
-    setSubmitting(true);
+  const submit = useCallback(() => runLocked(async () => {
     try {
-      const resp = await api.post<{ item?: { uuid?: string; number?: string } }>(docEndpoint, {
-        date: new Date().toISOString(),
-        organizationUuid: orgUuid,
-        counterpartyUuid: cpUuid,
-        contractUuid: ctUuid || null,
-        warehouseUuid,
-        managerUuid: managerUuid || null,
-        ...(isReturn ? {} : { priceTypeUuid: priceTypeUuid || null }),
-        // Связь возврата с продажей (basis) — цепочка «Реализация → Возврат».
-        ...(isReturn && basisSale ? { basisDocumentType: "sale", basisDocumentUuid: basisSale.uuid, basisDocumentLabel: basisSale.label } : {}),
-        posted: false,
-      });
-      const docUuid = resp?.item?.uuid;
-      if (!docUuid) throw new Error(translate("serverError"));
+      const rows = (cartApiRef.current?.getRows() ?? []).filter((r) => r.productUuid);
+      const cpUuid = buyerUuid || retailRef.current?.counterpartyUuid || "";
+      // Договор «Розничная продажа» — только розничному покупателю. Именному — его договор
+      // (основной подставляется при выборе) или без договора: чужой договор сервер отклонял 409 (И5).
+      const ctUuid = buyerUuid ? contractUuid : (retailRef.current?.contractUuid || "");
+      // Страховка для F9: он зовёт submit в обход выключенной кнопки. Сказать ничего не нужно —
+      // причина уже написана под кнопкой.
+      if (blockReason || !cpUuid || rows.length === 0 || rows.some((r) => !(Number(r.quantity) > 0))) return;
+      setShortage([]);
+      setPayError([]);
 
-      await api.post(itemsEndpoint, {
-        operations: rows.map((r) => ({
-          action: "create",
-          data: {
-            [parentField]: docUuid,
-            productUuid: r.productUuid,
-            quantity: Number(r.quantity) || 0,
-            price: Number(r.price) || 0,
-            vatRate: r.vatRate != null ? Number(r.vatRate) : vatRate,
-            unitOfMeasureUuid: r.unitOfMeasureUuid || null,
-          },
-        })),
-      });
+      // Товар без цены по 0 ₸ — только с явного согласия кассира (И6).
+      const zero = unpricedRowNames(rows);
+      if (zero.length && !(await confirm(translate("terminalZeroPriceConfirm").replace("{items}", zero.join(", "))))) return;
 
-      const posted = await api.put<{ item?: { number?: string } }>(`${docEndpoint}/${docUuid}`, { posted: true });
-      const docNumber = posted?.item?.number ?? resp?.item?.number ?? "";
+      // Best practice: контроль остатка ДО создания документа — не оставляем «висящий»
+      // непроведённый черновик, а сразу показываем, каких товаров не хватает.
+      if (!isReturn) {
+        const shortages = await checkStockAvailability({
+          organizationUuid: orgUuid || null,
+          documentType: "sale",
+          warehouseUuid: warehouseUuid || null,
+          items: rows.map((r) => ({
+            productUuid: String(r.productUuid), quantity: Number(r.quantity) || 0,
+            isService: (r.product as { isService?: boolean } | undefined)?.isService === true,
+          })),
+        });
+        // Нехватка — списком над кнопкой, пока корзину не поправят: за 9 секунд тоста не прочитать.
+        if (shortages.length) { setShortage(formatStockShortages(shortages).split("\n").filter(Boolean)); return; }
+      }
+
+      // Черновик прошлой неудачной попытки — того же режима; иначе он брошен (И4).
+      const draft = draftRef.current && draftRef.current.isReturn === isReturn ? draftRef.current.uuid : null;
+      const sale = await performTerminalSale({
+        isReturn,
+        vatRate,
+        rows,
+        draftUuid: draft,
+        onDraft: (uuid) => { draftRef.current = { uuid, isReturn }; setDraftPending(true); },
+        header: {
+          date: new Date().toISOString(),
+          organizationUuid: orgUuid,
+          counterpartyUuid: cpUuid,
+          contractUuid: ctUuid || null,
+          warehouseUuid,
+          managerUuid: managerUuid || null,
+          ...(isReturn ? {} : { priceTypeUuid: priceTypeUuid || null }),
+          // Связь возврата с продажей (basis) — цепочка «Реализация → Возврат».
+          ...(isReturn && basisSale ? { basisDocumentType: "sale", basisDocumentUuid: basisSale.uuid, basisDocumentLabel: basisSale.label } : {}),
+        },
+      });
+      // Проведено: черновика больше нет.
+      draftRef.current = null;
+      setDraftPending(false);
+      const { docUuid, docNumber } = sale;
+      const docEndpoint = isReturn ? "sale-returns" : "sales";
+      // Итог — как его посчитал сервер (скидка, акциз, НДС сверху), а не как показывала корзина.
+      const docTotal = sale.amount ?? total;
 
       // Нал при ПРОДАЖЕ → проведённый ПКО, СВЯЗАННЫЙ с продажей (basis) → цепочка.
-      if (!isReturn && payment === "cash" && total > 0) {
+      if (!isReturn && payment === "cash" && docTotal > 0) {
         try {
-          await api.post("cash-receipt-orders", {
+          const cash = await api.post("cash-receipt-orders", {
             date: new Date().toISOString(),
             organizationUuid: orgUuid,
             counterpartyUuid: cpUuid,
+            contractUuid: ctUuid || null,
             cashboxUuid: cashboxUuid || null,
-            amount: total,
+            amount: docTotal,
             posted: true,
             comment: translate("terminalPaymentForSale"),
             basisDocumentType: "sale",
             basisDocumentUuid: docUuid,
             basisDocumentLabel: saleLabel({ number: docNumber, date: new Date().toISOString() }),
           });
+          if (isOfflineStub(cash)) throw new TerminalOfflineError();
         } catch (e) {
           reportError(e, { source: translate("salesTerminal"), fallback: translate("terminalCashOrderFailed") });
         }
       }
 
-      // Фискальный чек (продажа).
+      // Фискальный чек (продажа) — только по проведённой продаже, а она проведена выше.
       if (!isReturn) {
         try {
           const fr = await api.post<{ item?: Record<string, unknown> }>("fiscal-receipts", {
             documentType: "sale", documentUuid: docUuid, paymentMethod: payment,
           });
+          if (isOfflineStub(fr)) throw new TerminalOfflineError();
           if (fr?.item) {
             addPane({
               component: FiscalReceiptPane,
@@ -401,36 +503,41 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
               },
             });
           }
-        } catch { /* перехватчик api */ }
+        } catch (e) {
+          // Раньше — пустой catch: QR Kaspi не открывался, а баннер писал «проведена» (И2).
+          reportError(e, { source: translate("salesTerminal"), fallback: translate("terminalReceiptFailed") });
+        }
       }
 
       // Inline-баннер успеха (понятно кассиру) + очистка корзины + фокус в поиск.
-      showBanner(docNumber, total, isReturn, docUuid, docEndpoint);
+      showBanner(docNumber, docTotal, isReturn, docUuid, docEndpoint);
       cartApiRef.current?.clear();
       setBasisSale(null);
       void loadRecent();
       requestAnimationFrame(() => searchWrapRef.current?.querySelector("input")?.focus());
-    } catch {
-      // Тосты ошибок (422/409/500) показывает перехватчик api-клиента.
-    } finally {
-      setSubmitting(false);
+    } catch (e) {
+      /*
+       * ОТКАЗ ВИДЕН (И2). Раньше — пустой catch «тосты покажет перехватчик», а перехватчик
+       * показывает только 403: кассир жал «Оплатить» и не видел ничего. Отказ по существу
+       * (остаток, закрытый период, договор) — над кнопкой; нет связи и 5xx — тост и журнал.
+       * Корзина остаётся, черновик (если создан) повтор проведёт тот же.
+       */
+      // Обрыв связи по контракту api-клиента — reject без статуса: routeError отдаёт его тостом и в
+      // журнал (над кнопкой остаётся только отказ по существу), а подпись говорит, что продажа не
+      // завершена и корзина цела.
+      const fallback = isNetworkError(e) ? translate("terminalOffline") : translate("terminalSaleFailed");
+      setPayError(routeError(e, { source: translate("salesTerminal"), fallback }));
+      void loadRecent();
     }
-  }, [orgUuid, warehouseUuid, buyerUuid, contractUuid, managerUuid, priceTypeUuid, total, vatRate, payment, cashboxUuid, isReturn, basisSale, addPane, orgName, saleLabel, showBanner, loadRecent, blockReason]);
+  }), [runLocked, orgUuid, warehouseUuid, buyerUuid, contractUuid, managerUuid, priceTypeUuid, total, vatRate, payment, cashboxUuid, isReturn, basisSale, addPane, orgName, saleLabel, showBanner, loadRecent, blockReason, confirm]);
 
-  // Горячие клавиши: F9 — провести, F4 — очистить.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F9") { e.preventDefault(); void submit(); }
-      else if (e.key === "F4") { e.preventDefault(); clearCart(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [submit, clearCart]);
+  // Горячие клавиши: F9 — провести, F4 — очистить. Только в своей активной панели (И5).
+  const handleHotkey = useTerminalHotkeys({ uniqId, getActivePane, onSubmit: () => void submit(), onClear: clearCart });
 
   const orgParams = useMemo(() => (orgUuid ? { organizationUuid: orgUuid } : undefined), [orgUuid]);
 
   return (
-    <div className={styles.Terminal}>
+    <div className={styles.Terminal} tabIndex={-1} onKeyDown={handleHotkey}>
       {/* ЛЕВО: поиск + корзина, ИЛИ просмотр выбранной продажи */}
       <div className={styles.Left}>
         {viewSale ? (
@@ -440,7 +547,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
                 {saleLabel(viewSale)} · <b>{fmt(viewSale.amount)} ₸</b>
               </div>
               <div className={styles.ViewActions}>
-                <Button size="sm" onClick={() => void printReceipt(viewSale)}>🧾 {translate("terminalPrintReceipt")}</Button>
+                <Button size="sm" onClick={() => void printReceipt(viewSale)} disabled={!viewSale.posted}
+                  title={viewSale.posted ? undefined : translate("terminalDraftNoReceipt")}>🧾 {translate("terminalPrintReceipt")}</Button>
                 <Button size="sm" variant="secondary" onClick={() => openDoc("sales", viewSale.uuid, saleLabel(viewSale))}>✎ {translate("edit")}</Button>
                 <Button size="sm" variant="secondary" onClick={() => returnFromSale(viewSale)}>↩ {translate("terminalReturnBased")}</Button>
                 <Button size="sm" variant="secondary" onClick={closeSaleView}>✕ {translate("close")}</Button>
@@ -468,6 +576,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
                 onSelect={(u, d, item) => addProduct(u, d, (item as Record<string, unknown>) ?? {})}
                 extraParams={orgParams}
               />
+              {addError && <Notice inline wide items={[{ type: "warning", text: addError }]} />}
             </div>
             <div className={styles.CartWrap}>
               <TradeDocumentItemsTable
@@ -495,8 +604,8 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
                 <div className={styles.TabBody}>
                   {/* Режим */}
                   <div className={styles.Segmented}>
-                    <button type="button" className={[styles.Seg, !isReturn && styles.SegOn].filter(Boolean).join(" ")} onClick={() => { setMode("sale"); setBasisSale(null); }}>🛒 {translate("terminalModeSale")}</button>
-                    <button type="button" className={[styles.Seg, isReturn && styles.SegReturnOn].filter(Boolean).join(" ")} onClick={() => setMode("return")}>↩ {translate("terminalModeReturn")}</button>
+                    <button type="button" className={[styles.Seg, !isReturn && styles.SegOn].filter(Boolean).join(" ")} onClick={() => { if (isReturn) dropDraft(); setMode("sale"); setBasisSale(null); }}>🛒 {translate("terminalModeSale")}</button>
+                    <button type="button" className={[styles.Seg, isReturn && styles.SegReturnOn].filter(Boolean).join(" ")} onClick={() => { if (!isReturn) dropDraft(); setMode("return"); }}>↩ {translate("terminalModeReturn")}</button>
                   </div>
                   {basisSale && isReturn && (
                     <div className={styles.BasisChip}>{translate("basisDocument")}: {basisSale.label}</div>
@@ -527,6 +636,13 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
                   )}
 
                   <Notice inline wide items={shortage.map((text) => ({ type: "error" as const, text }))} />
+                  {/* Отказ оплаты по существу, незавершённая продажа, цены (И2, И4, И6). */}
+                  <Notice inline wide items={[
+                    ...payError,
+                    ...(draftPending ? [{ type: "warning" as const, text: translate("terminalDraftPending") }] : []),
+                    ...(priceListFailed ? [{ type: "warning" as const, text: translate("terminalPriceListFailed") }] : []),
+                    ...(unpriced.length ? [{ type: "warning" as const, text: `${translate("terminalNoPrice")}: ${unpriced.join(", ")}` }] : []),
+                  ]} />
 
                   <div className={styles.Actions}>
                     <Button variant="secondary" onClick={clearCart} disabled={submitting || cartCount === 0}>{translate("terminalClear")} (F4)</Button>
@@ -550,28 +666,28 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
                     onSelect={(u, d) => { void handleOrgChange(u, d); }} onClear={() => { void handleOrgChange("", ""); }} />
                   <LookupField label={translate("warehouse")} name="t_wh" value={warehouseUuid} displayValue={warehouseName}
                     endpoint="warehouses" displayField="name" extraParams={orgParams}
-                    onSelect={(u, d) => { setWarehouseUuid(u); setWarehouseName(d); }} onClear={() => { setWarehouseUuid(""); setWarehouseName(""); }} />
+                    onSelect={(u, d) => setRequisites({ warehouseUuid: u, warehouseName: d })} onClear={() => setRequisites({ warehouseUuid: "", warehouseName: "" })} />
                   <LookupField label={translate("manager")} name="t_mgr" value={managerUuid} displayValue={managerName}
                     endpoint="employees" displayField="fullName" extraParams={orgParams}
                     onSelect={(u, d) => { setManagerUuid(u); setManagerName(d); }} onClear={() => { setManagerUuid(""); setManagerName(""); }} />
                   <LookupField label={translate("priceType")} name="t_pt" value={priceTypeUuid} displayValue={priceTypeName}
                     endpoint="price-types" displayField="name"
-                    onSelect={(u, d) => { setPriceTypeUuid(u); setPriceTypeName(d); void loadPriceMap(u, true); }}
-                    onClear={() => { setPriceTypeUuid(""); setPriceTypeName(""); void loadPriceMap("", true); }} />
+                    onSelect={(u, d) => { setRequisites({ priceTypeUuid: u, priceTypeName: d }); void loadPriceMap(u, true); }}
+                    onClear={() => { setRequisites({ priceTypeUuid: "", priceTypeName: "" }); void loadPriceMap("", true); }} />
                   <LookupField label={translate("terminalNamedBuyer")} name="t_buyer" value={buyerUuid} displayValue={buyerName}
                     endpoint="counterparties" displayField="name"
-                    onSelect={(u, d) => { setBuyerUuid(u); setBuyerName(d); setContractUuid(""); setContractName(""); }}
-                    onClear={() => { setBuyerUuid(""); setBuyerName(""); setContractUuid(""); setContractName(""); }} />
+                    onSelect={(u, d) => { void selectBuyer(u, d); }}
+                    onClear={() => { void selectBuyer("", ""); }} />
                   {buyerUuid && (
                     <LookupField label={translate("contract")} name="t_contract" value={contractUuid} displayValue={contractName}
                       endpoint="contracts" displayField="name"
-                      onSelect={(u, d) => { setContractUuid(u); setContractName(d); }}
-                      onClear={() => { setContractUuid(""); setContractName(""); }}
+                      onSelect={(u, d) => setRequisites({ contractUuid: u, contractName: d })}
+                      onClear={() => setRequisites({ contractUuid: "", contractName: "" })}
                       extraParams={{ ...(orgParams ?? {}), counterpartyUuid: buyerUuid }} />
                   )}
                   <LookupField label={translate("cashbox")} name="t_cashbox" value={cashboxUuid} displayValue={cashboxName}
                     endpoint="cashboxes" displayField="name" extraParams={orgParams}
-                    onSelect={(u, d) => { setCashboxUuid(u); setCashboxName(d); }} onClear={() => { setCashboxUuid(""); setCashboxName(""); }} />
+                    onSelect={(u, d) => setRequisites({ cashboxUuid: u, cashboxName: d })} onClear={() => setRequisites({ cashboxUuid: "", cashboxName: "" })} />
                 </div>
               ),
             },
@@ -588,7 +704,7 @@ const SalesTerminal: FC<Partial<TPane>> = () => {
                         className={[styles.RecentItem, viewSale?.uuid === s.uuid && styles.RecentItemOn].filter(Boolean).join(" ")}
                         onClick={() => void openSaleView(s)}
                       >
-                        <span className={styles.RecentNum}>{s.number ? `№ ${s.number}` : translate("docNoNumber")}</span>
+                        <span className={styles.RecentNum}>{s.number ? `№ ${s.number}` : translate("docNoNumber")}{s.posted === false ? ` · ${translate("draft")}` : ""}</span>
                         <span className={styles.RecentDate}>{s.date ? getFormatDateOnly(String(s.date)) : ""}</span>
                         <span className={styles.RecentAmt}>{fmt(Number(s.amount) || 0)} ₸</span>
                       </button>

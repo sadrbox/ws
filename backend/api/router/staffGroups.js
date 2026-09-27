@@ -15,7 +15,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { orgIsAccessible } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
-import { qualityContext, canManage, userNames, orgNames } from "../../services/quality/access.js";
+import { qualityContext, canManage, canManageGroup, groupCompositionDenied, firmMembersAmong, userNames, orgNames } from "../../services/quality/access.js";
 import { listQuery, pageArgs, listResponse, fail, handler, text } from "../../services/quality/http.js";
 
 const router = express.Router();
@@ -72,13 +72,15 @@ router.get("/staff-groups/:id", handler("GET /staff-groups/:id", async (req, res
 	const ctx = await qualityContext(req);
 	const g = await prisma.staffGroup.findUnique({ where: byParam(req.params.id), include: { members: true, clients: true } });
 	if (!g || g.deletedAt || g.organizationUuid !== ctx.firmOrgUuid || !orgIsAccessible(req, g.organizationUuid)) return fail(res, 404, "Группа не найдена");
-	res.json({ success: true, item: { ...(await decorateGroup(g)), canEdit: canManage(ctx) } });
+	res.json({ success: true, item: { ...(await decorateGroup(g)), canEdit: canManageGroup(ctx, g) } });
 }));
 
 async function saveGroup(req, res, existing) {
 	const ctx = await qualityContext(req);
 	if (!canManage(ctx)) return fail(res, 403, "Группы сотрудников настраивают администратор или руководитель");
 	if (!ctx.firmOrgUuid) return fail(res, 400, "Не определена организация-фирма: назначьте её в настройках качества");
+	// Руководитель правит только свою группу (Б9 аудита 26.09).
+	if (existing && !canManageGroup(ctx, existing)) return fail(res, 403, "Группу правит её руководитель или администратор фирмы");
 	const b = req.body || {};
 	const name = text(b.name) || existing?.name || "";
 	if (!name) return fail(res, 400, "Укажите название группы");
@@ -95,6 +97,13 @@ async function saveGroup(req, res, existing) {
 		comment: b.comment !== undefined ? text(b.comment) || null : existing?.comment ?? null,
 	};
 	if (data.headUuid && data.headUuid === data.managerUuid) return fail(res, 400, "Главбух и руководитель группы — разные люди: подтверждение нарушений идёт уровнем выше");
+	const finalMembers = Array.isArray(b.members) ? comp.members : existing ? (await prisma.staffGroupMember.findMany({ where: { groupUuid: existing.uuid }, select: { userUuid: true } })).map((m) => m.userUuid) : [];
+	const compDenied = groupCompositionDenied(ctx, { headUuid: data.headUuid, managerUuid: data.managerUuid, members: finalMembers });
+	if (compDenied) return fail(res, 403, compDenied);
+	// В группу — только сотрудники фирмы (члены организации-фирмы): раньше годился любой userUuid.
+	const people = [data.headUuid, data.managerUuid, ...comp.members, ...comp.clients.map((c) => c.responsibleUuid)].filter(Boolean);
+	const staff = await firmMembersAmong(ctx.firmOrgUuid, people);
+	if (people.some((u) => !staff.has(u))) return fail(res, 400, "В группу можно включить только сотрудников организации-фирмы");
 	const replaceMembers = Array.isArray(b.members);
 	const replaceClients = Array.isArray(b.clients);
 	const g = await prisma.$transaction(async (tx) => {
@@ -129,6 +138,7 @@ router.delete("/staff-groups/:id", handler("DELETE /staff-groups/:id", async (re
 	if (!canManage(ctx)) return fail(res, 403, "Удаляют группу администратор или руководитель");
 	const g = await prisma.staffGroup.findUnique({ where: byParam(req.params.id) });
 	if (!g || g.deletedAt || g.organizationUuid !== ctx.firmOrgUuid) return fail(res, 404, "Группа не найдена");
+	if (!canManageGroup(ctx, g)) return fail(res, 403, "Группу удаляет её руководитель или администратор фирмы");
 	await prisma.staffGroup.update({ where: { uuid: g.uuid }, data: { deletedAt: new Date() } });
 	void recordAudit({ actionType: "delete", objectType: "StaffGroup", objectId: g.uuid, objectName: g.name, organizationUuid: g.organizationUuid, user: { uuid: req.user?.uuid, username: req.user?.username }, host: req.hostname, ip: req.ip });
 	res.json({ success: true, message: "Удалено" });

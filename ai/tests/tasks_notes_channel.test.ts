@@ -72,7 +72,8 @@ function harness(opts: { tasks?: Partial<ErpTasks>; enabled?: boolean; panelUrl?
 		statuses: async () => [{ code: "new", name: "Новая", isFinal: false, sortOrder: 1 }, { code: "done", name: "Выполнена", isFinal: true, sortOrder: 9 }],
 		...opts.tasks,
 	} as unknown as ErpTasks;
-	const baseOrgs = { has: async (_b: string, bin: string) => bin === BIN, list: async () => [], remember: async () => 1 };
+	// Одобренные БИНы базы (Б11 аудита 26.09): присланные самой базой ждут одобрения — remember их и называет.
+	const baseOrgs = { has: async (_b: string, bin: string) => bin === BIN, list: async () => [], remember: async () => ({ remembered: 1, pending: [] }), approve: async () => true };
 	const tokens = { resolve: async (t: string) => t === TOKEN
 		? { tokenId: "t1", baseId: BASE_ID, baseKey: "Dev_01", baseName: "Бухгалтерия (Dev_01)", organizationUuid: ORG, revoked: false, baseDisabled: false }
 		: null };

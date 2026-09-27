@@ -24,7 +24,7 @@ import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingUsageStats from "src/hooks/useOrgAccountingUsageStats";
-import { getFormatDateOnly } from "src/utils/datetime";
+import { getFormatDateOnly, isoToLocalInput } from "src/utils/datetime";
 import { makePaneLabel , type LabelSource } from "src/utils/buildPaneLabel";
 import ModelForm from "src/components/ModelForm";
 import ModelList from "src/components/ModelList";
@@ -56,7 +56,8 @@ interface TFields {
   costingMethod: "AVERAGE" | "FIFO";
 }
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+// Сегодня — по часовому поясу приложения, а не по UTC: с 00:00 до 05:00 по Алматы UTC-дата ещё вчерашняя (аудит 26.09).
+const todayIso = () => isoToLocalInput(new Date()).slice(0, 10);
 
 const DEFAULT_FIELDS: TFields = {
   organizationUuid: null,

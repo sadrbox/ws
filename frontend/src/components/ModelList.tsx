@@ -4,7 +4,7 @@ import { consumePendingHighlight, subscribeHighlight } from "src/utils/listHighl
 import type { ReactNode } from "react";
 
 // 2. Контекст приложения
-import { useAppContext } from "src/app/context";
+import { useAppActions } from "src/app/context";
 
 // 3. Хуки
 import { useModelListState } from "src/hooks/useModelListState";
@@ -19,6 +19,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 
 // 6. Utils / i18n
 import { translate } from "src/i18";
+import { showToast } from "src/components/UIToast";
 import { getFormatColumnValue } from "src/components/Table/services";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { Button } from "src/components/Button";
@@ -266,7 +267,7 @@ const ModelList: FC<ModelListProps> = ({
   const isPartOf = !!ownerUuid;
   const componentName = isPartOf ? `${listName}_part` : listName;
 
-  const { addPane } = useAppContext().windows;
+  const { addPane } = useAppActions().windows;
 
   // Вид списка: "list" (обычный) | "split" (список + предпросмотр справа).
   // Персист per-list в localStorage; тумблер в тулбаре Table шлёт "listLayoutToggle".
@@ -329,7 +330,7 @@ const ModelList: FC<ModelListProps> = ({
     return Object.keys(f).length > 0 ? f : undefined;
   }, [ownerUuid, ownerField, extraFilter]);
 
-  const { error, refetch, buildTableProps } = useModelListState({
+  const { error, hasData, refetch, buildTableProps } = useModelListState({
     model: endpoint,
     componentName,
     columnsJson,
@@ -338,6 +339,11 @@ const ModelList: FC<ModelListProps> = ({
     ownerFilter,
     extraQueryParams,
   });
+
+  // Сбой догрузки при показанных строках — системная ошибка: тостом, один раз на ошибку.
+  useEffect(() => {
+    if (error && hasData) showToast(error.message || translate("errorTitle"), "error");
+  }, [error, hasData]);
 
   const openModelForm = useCallback(
     (formProps: TOpenModelFormProps) => {
@@ -403,7 +409,10 @@ const ModelList: FC<ModelListProps> = ({
     [addPane, refetch, componentName, ownerUuid, ownerField, extraQueryParams, FormComponent, getLabel, endpoint],
   );
 
-  if (error) {
+  // Ошибка ПЕРВОЙ загрузки — экран ошибки. Ошибка догрузки следующей страницы (или повторного
+  // чтения) при уже показанных строках таблицу не заменяет: отметки и позиция сохраняются,
+  // сбой сообщается тостом (эффект выше), а следующая прокрутка догрузит снова (аудит 26.09, И16).
+  if (error && !hasData) {
     return (
       <ErrorState
         message={error?.message ?? "Неизвестная ошибка"}

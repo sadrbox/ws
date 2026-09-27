@@ -1,11 +1,37 @@
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
+import { clampLimit, sendError } from "../../utils/listQuery.js";
 import { handleDelete, handleBatchDelete } from "../../utils/checkReferences.js";
+import { hasUnconditionalAccess } from "../../utils/auth.js";
+import { getInstallation } from "../../services/installation.js";
+import { modeAllowsShared } from "../../services/recordScope.js";
 
 const router = express.Router();
 
 const MODEL = "tax";
 const ROUTE = "taxes";
+
+/*
+ * НАЛОГИ — ОБЩИЙ СПРАВОЧНИК УСТАНОВКИ (Б12 аудита 26.09). У `Tax` нет организации: ставка одна
+ * на всех арендаторов, и раньше её мог создать, поменять или удалить ЛЮБОЙ вошедший — сегмент не
+ * был описан в карте прав. Читают все (ставки нужны при вводе документов); правят суперадмин и —
+ * там, где режим установки допускает общие записи (group или не выбран), — администратор
+ * организации. На общем сервере (isolated/service) чужие ставки не правит никто, кроме оператора.
+ */
+async function requireTaxWriter(req, res, next) {
+	if (req.method === "GET") return next();
+	try {
+		if (req.user?.isSuperAdmin) return next();
+		const { mode } = await getInstallation();
+		if (hasUnconditionalAccess(req) && modeAllowsShared(mode)) return next();
+		return res.status(403).json({ success: false, message: "Налоги — общий справочник установки: изменяет суперадминистратор" });
+	} catch (error) {
+		console.error(`${req.method} /${ROUTE} guard error:`, error);
+		return res.status(503).json({ success: false, message: "Проверка доступа временно недоступна" });
+	}
+}
+router.use(`/${ROUTE}`, requireTaxWriter);
+
 const TEXT_FIELDS = ["name", "code"];
 
 // ── GET list ────────────────────────────────────────────────────────────
@@ -15,8 +41,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 		const rawCursor = req.query.cursor;
 		const search =
 			typeof req.query.search === "string" ? req.query.search.trim() : "";
-		const parsedLimit = rawLimit !== undefined ? Number(rawLimit) : 500;
-		const limitNumber = Math.min(Math.max(parsedLimit, 1), 999999);
+		const limitNumber = clampLimit(rawLimit);
 		const cursorNumber = rawCursor !== undefined ? Number(rawCursor) : null;
 		if (rawCursor !== undefined && (isNaN(cursorNumber) || cursorNumber <= 0))
 			return res
@@ -96,8 +121,8 @@ router.get(`/${ROUTE}`, async (req, res) => {
 			...(total !== undefined ? { total } : {}),
 		});
 	} catch (error) {
-		console.error(`GET /${ROUTE} error:`, error);
-		return res.status(500).json({ success: false, message: "Ошибка сервера" });
+		// Ошибка ввода (кривая дата, поле фильтра) — 400, остальное — 500 с записью в журнал.
+		return sendError(res, error, { message: "Ошибка сервера", label: `GET /${ROUTE}` });
 	}
 });
 

@@ -10,7 +10,7 @@
  */
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAppContext } from "src/app/context";
+import { useAppAuth } from "src/app/context";
 import { switchOrganization, type OrgEntry } from "src/services/auth";
 import { getOrgScope, setOrgScope, type OrgScope } from "src/services/orgScope";
 import { translate } from "src/i18";
@@ -22,7 +22,7 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
 };
 
 const OrgSwitcher: FC = () => {
-  const { auth } = useAppContext();
+  const auth = useAppAuth();
   const user = auth.user;
   const [open, setOpen] = useState(false);
   /*
