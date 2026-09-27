@@ -20,6 +20,7 @@ import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
+import { EXCLUSIVE_TYPES, ExclusiveRunner } from "../onec/exclusiveOps.ts";
 import { BUSY_RETRY_DELAYS_SECS, isBusyFailure, runningLeaseSecs } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
@@ -929,6 +930,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// То же — «агент занят» и «служба останавливалась до начала» (С31, С25): команда не выполнялась.
 		if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id) {
 			const again = await queue.retryBusy(row.id, BATCH_QUEUE_WAIT_SECS);
+			if (again && EXCLUSIVE_TYPES.has(row.type) && row.base_key) {
+				// Повтор монопольной операции — через ту же подготовку (exclusiveOps.ts): копия без неё уходила агенту
+				// с открытой базой и висела те же 6 минут (27.09, `_transition`). Пауза повтора сохраняется: подготовка
+				// начнётся сразу, а операция выпустится, когда база закрыта.
+				const spec = findAdminCommand(row.type);
+				const agent = await agents.get(row.agent_id);
+				if (spec && agent && await queue.defer(again, BATCH_QUEUE_WAIT_SECS)) {
+					void new ExclusiveRunner(queue, log).run(
+						{ agent, baseKey: row.base_key, commandId: again, userUuid: row.user_uuid, queueWaitSeconds: BATCH_QUEUE_WAIT_SECS },
+						spec,
+					).catch((e: unknown) => log.warn({ commandId: again, err: e instanceof Error ? e.message : String(e) }, "монопольная операция: сбой сервиса при повторе"));
+				}
+			}
 			if (again) {
 				const attempt = (row.attempt ?? 1) + 1;
 				log.info({

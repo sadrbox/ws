@@ -267,6 +267,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 											<GroupRow>
 												<Field name="el_name" label={isUser ? translate("onecUserName") : translate("onecExtName")}
 													value={name} width={FIELD_WIDTH.wide} noAutofill
+													hint={isUser ? undefined : translate("onecExtNameHint")}
 													onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 												{isUser ? (
 													<Field name="el_full" label={translate("onecUserFullName")} value={fullName} width={FIELD_WIDTH.wide} noAutofill

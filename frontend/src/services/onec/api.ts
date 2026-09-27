@@ -327,6 +327,12 @@ export const fetchBaseExtensions = (baseKey: string) =>
 	aiFetch<{ items: IbExtension[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`)
 		.then((d) => awaitCommand<{ items: IbExtension[] }>(d));
 
+/** Выгрузка расширения в файл .cfe (карточка базы, 27.09): файл — в `contentBase64`, агент читает базу. */
+export type ExtensionExport = { name?: string; contentBase64: string; version?: string | null; fileName?: string | null };
+export const exportExtension = (baseKey: string, name: string) =>
+	aiFetch<ExtensionExport | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions/${encodeURIComponent(name)}/export`, { method: "POST" })
+		.then((d) => awaitCommand<ExtensionExport>(d));
+
 /** Конфигурация базы, как прочитана (С35): `version: null` — в конфигурации версия не задана. */
 export type IbConfigInfo = { name: string | null; version: string | null; synonym?: string | null; readAt?: string | null };
 

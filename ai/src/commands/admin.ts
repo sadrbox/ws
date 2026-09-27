@@ -89,6 +89,14 @@ const baseKey = z.string().min(1).max(200);
 // Имя пользователя ИБ и имя расширения — то, чем 1С их адресует.
 // Пустое имя и имя из одних пробелов не принимаются (П19): 1С такое имя не адресует, а панель показала бы «—».
 const ibName = z.string().trim().min(1, "не может быть пустым").max(200);
+/**
+ * Имя расширения — идентификатор конфигуратора, а не подпись (27.09): `ibcmd extension create` отказывает
+ * «Имя должно состоять из одного слова, начинаться с буквы и не содержать специальных символов кроме "_"» —
+ * и только после того, как база закрыта и сеансы сняты. Ловим до постановки.
+ */
+export const EXT_NAME_RE = /^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9_]*$/;
+const extName = z.string().trim().min(1, "не может быть пустым").max(80)
+	.regex(EXT_NAME_RE, "имя расширения — как в конфигураторе: одно слово, начинается с буквы, только буквы, цифры и «_» (например buhprof_api), а не подпись");
 
 /**
  * СПИСОК РОЛЕЙ БАЗЫ.
@@ -403,6 +411,21 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 	},
 	{
 		/*
+		 * ВЫГРУЗКА РАСШИРЕНИЯ В ФАЙЛ .cfe (27.09, карточка базы → «Расширения» → «Выгрузить»). Чтение: базу не
+		 * меняет. Ответ агента — `{name, contentBase64, version?, fileName?}`; файл целиком идёт в результате команды
+		 * (как `contentBase64` при установке — в обратную сторону), поэтому предел тела ответа агента — JSON_BODY_MAX_MB.
+		 * Сборка агента без этой команды — отказ CAPABILITY_MISSING до постановки (agentKnowsType).
+		 */
+		type: "IB_EXPORT_EXTENSION",
+		title: "Выгрузить расширение",
+		operation: "READ",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey, name: extName }).strict(),
+	},
+	{
+		/*
 		 * СВЕДЕНИЯ О БАЗЕ (С35, агент 23:24). Только чтение и только по запросу — фонового чтения нет: версия
 		 * конфигурации меняется загрузкой и обновлением, а там она приходит в эхе. Одним входом — конфигурация и
 		 * расширения; блокировка и регистрация — из `rac`. Ответ применяется тем же разбором, что эхо
@@ -426,7 +449,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		// Файл .cfe передаётся телом команды: агент не ходит за ним в сеть.
 		schema: z.object({
 			baseKey,
-			name: ibName,
+			name: extName,
 			contentBase64: z.string().min(1),
 			safeMode: z.boolean().optional(),
 		}).strict(),
@@ -571,7 +594,7 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		capability: "ib.admin",
 		role: "admin",
 		requiresBase: true,
-		schema: z.object({ baseKey, name: ibName }).strict(),
+		schema: z.object({ baseKey, name: extName }).strict(),
 	},
 	{
 		type: "CLUSTER_DROP_INFOBASE",

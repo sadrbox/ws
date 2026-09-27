@@ -4,6 +4,7 @@ import { DateRangeBar, FieldDateRangeModal, FieldFastSearchInternal } from './Ta
 import { TableArea } from './TableArea';
 import { useRowDragSelect } from './useRowDragSelect';
 import { ROW_HEIGHT } from './constants';
+import { copyTableCell, hasTextSelectionIn, isCopyShortcut } from './cellClipboard';
 
 import {
   TColumn,
@@ -972,7 +973,7 @@ const Table: FC<TableProps> = memo((props) => {
   handleDeleteClickRef.current = handleDeleteClick;
 
   // ── Клавиатурная навигация по таблице (Insert / Delete / Home / End /
-  // PgUp / PgDn / ArrowUp / ArrowDown) ───────────────────────────────────
+  // PgUp / PgDn / ArrowUp / ArrowDown / Ctrl+C) ──────────────────────────
   // Обрабатывает события на контейнере скролла (tabIndex={0}). Срабатывает
   // только когда фокус на самом контейнере или на не-input элементе внутри
   // (чтобы не мешать вводу). Для select-режима (onSelectItem) стрелки/Enter
@@ -1001,6 +1002,20 @@ const Table: FC<TableProps> = memo((props) => {
       return;
     }
     if (isEditable) return;
+    // ── Ctrl+C (⌘C): скопировать значение активной ячейки ─────────────────
+    // В поле ввода (isEditable выше) и при выделенном мышью тексте копирует браузер сам.
+    // Колонка отметок — не значение, её не копируем.
+    if (isCopyShortcut(e)) {
+      if (activeRow === null || activeCell === null || activeCell === CHECKBOX_COL_ID) return;
+      if (hasTextSelectionIn(e.currentTarget)) return;
+      const row = rows.find(r => r.id === activeRow);
+      const column = columns.find(c => c.identifier === activeCell);
+      if (!row || !column) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void copyTableCell(scrollRef.current, row, column);
+      return;
+    }
     // Delete: удалить выбранные/активную
     if (e.key === 'Delete') {
       if (!canRemove) return;

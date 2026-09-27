@@ -308,6 +308,7 @@ const GroupCommandWizardBody: FC<Partial<TPane>> = (paneProps) => {
 								<GroupRow>
 									<Field name="gcw_name" noAutofill width={FIELD_WIDTH.wide}
 										label={translate(spec.needsName === "user" ? "onecUserName" : "onecExtName")}
+										hint={spec.needsName === "extension" ? translate("onecExtNameHint") : undefined}
 										value={name}
 										onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 								</GroupRow>

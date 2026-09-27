@@ -55,6 +55,7 @@ import type { StatementExtractor } from "./bank/extract.ts";
 import type { LLMProvider } from "./llm/provider.ts";
 import { ChatWorkflow } from "./chat/workflow.ts";
 import { recoverInterruptedTurns } from "./chat/recovery.ts";
+import { recoverExclusive } from "./onec/exclusiveOps.ts";
 import { BankExtractor, RetryingExtractor } from "./bank/extract.ts";
 import { StatementStore } from "./bank/store.ts";
 import { PurchaseDocumentStore } from "./purchase/store.ts";
@@ -388,6 +389,8 @@ async function main(): Promise<void> {
 	await recoverInterruptedTurns(db, log).catch((e) => log.warn({ err: e }, "восстановление оборванных ходов"));
 
 	const { app, queue } = createApp({ cfg, log, db, erp });
+	// Монопольные операции, оборванные прошлым запуском (вход закрыт, задания запрещены), — вернуть базы (27.09).
+	void recoverExclusive(queue, log).catch((e) => log.warn({ err: e }, "восстановление монопольных операций"));
 	const server = app.listen(cfg.PORT, () => log.info({ port: cfg.PORT }, "слушаю"));
 	// Long-poll агентов держит соединения до 30 с — таймауты сервера должны быть больше.
 	server.keepAliveTimeout = 75_000;

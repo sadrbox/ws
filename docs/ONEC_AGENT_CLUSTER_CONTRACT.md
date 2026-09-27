@@ -544,6 +544,15 @@ Payload (`admin.ts:619-628`):
 сеансы (`CLUSTER_TERMINATE_SESSION`) → выполнить операцию → **вернуть прежнее значение** по `was`.
 Агент сам ничего не возвращает: команда одна, и обратный вызов делает тот, кто её ставил.
 
+> Сервис делает это САМ для `IB_INSTALL_EXTENSION` и `IB_DELETE_EXTENSION` (27.09, `ai/src/onec/exclusiveOps.ts`):
+> команда операции ставится в задание с отложенной выдачей, рядом идут `CLUSTER_SET_SCHEDULED_JOBS {denied:true}` →
+> `CLUSTER_SET_SESSIONS_LOCK {enabled:true}` → `CLUSTER_LIST_SESSIONS` → `CLUSTER_TERMINATE_SESSION` по каждому
+> сеансу, затем операция выпускается агенту; после неё — вход открывается, запрет возвращается по `was`. Не удалась
+> подготовка — операция завершается отказом `EXCLUSIVE_PREP_FAILED`, агенту не выдаётся. Причина: `ibcmd extension
+> create` без монопольного доступа висит до предела агента (`IB_TIMEOUT` «занятый рабочий каталог или блокировка»).
+> Живой прогон 27.09 показал: и при нуле сеансов `ibcmd` базу кластера не получает (держит соединение rphost с
+> СУБД) — путь через кластер (COM) за агентом, см. `TASK_AGENT_EXTENSION_INSTALL_CLUSTER_2026-09-27.md`.
+
 ### `CLUSTER_DROP_INFOBASE` — **CRITICAL**, база обязательна
 
 Удаляет **регистрацию** базы в кластере, а не данные: ключи `--drop-database`/`--clear-database` агент не передаёт

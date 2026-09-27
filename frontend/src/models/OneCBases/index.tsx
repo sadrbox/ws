@@ -46,6 +46,7 @@ import { useOpenElement } from "src/models/OneCAdmin/ElementForm";
 import { useOpenBaseUser } from "src/models/OneCAdmin/BaseUserForm";
 import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import BaseUserCommands from "src/models/OneCAdmin/BaseUserCommands";
+import BaseExtensionCommands from "src/models/OneCAdmin/BaseExtensionCommands";
 import BaseCredentialsTab from "./BaseCredentials";
 import BaseAvailability from "./BaseAvailability";
 import BasePublication from "./BasePublication";
@@ -261,6 +262,8 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 		seenAtLabel: seenLabel(x),
 	}));
 	const extView = useStaticTableView(extRows, { name: "asc" });
+	/** Расширение, выбранное в таблице, — цель «Выгрузить расширение в .cfe» (27.09). */
+	const [activeExt, setActiveExt] = useState("");
 
 	/*
 	 * ПОЧЕМУ ВКЛАДКА ПУСТА — В САМОЙ ТАБЛИЦЕ. «Расширений нет» и «их ещё не читали» —
@@ -325,6 +328,11 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 						// Таблица при этом показывает известное из реестра: гасить её незачем.
 						onReload: () => void extCheck.run([baseKey]),
 						reloadTitle: translate("onecExtCheck"),
+						onActiveRowChange: (r) => setActiveExt(r ? asText(r.name) : ""),
+						// Загрузить .cfe в ЭТУ базу и выгрузить расширение в файл — без групповой формы (27.09).
+						extraButtons: (
+							<BaseExtensionCommands baseKey={baseKey} activeExt={activeExt} extensions={ext.data?.items ?? []} />
+						),
 					})} />
 				</>
 			),

@@ -591,6 +591,13 @@
 	padding: 4px 6px 6px;
 }
 
+// Черта между двумя отборами в одной строке («Агенты 1С»: роль | состояние) — иначе плашки читаются одним рядом.
+.FilterDivider {
+	align-self: stretch;
+	width: 1px;
+	background: $color33;
+}
+
 .BasesTable {
 	td {
 		vertical-align: top;

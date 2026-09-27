@@ -943,6 +943,15 @@ export function onecRouter(deps: Deps) {
 		send(res, outcome);
 	});
 
+	/**
+	 * Выгрузить расширение базы в файл .cfe (27.09): карточка базы → «Расширения» → «Выгрузить расширение в .cfe».
+	 * Чтение (POST — потому что вход в базу и работа агента, а не выборка из реестра); 202 — панель дождётся по
+	 * /commands/:id. Файл — в `contentBase64` ответа, панель отдаёт его на скачивание.
+	 */
+	r.post("/bases/:key/extensions/:name/export", async (req, res) => {
+		send(res, await run(req, "IB_EXPORT_EXTENSION", { baseKey: req.params.key, name: req.params.name }));
+	});
+
 	/** Общая часть двух ручек выше: успешный список → в кэш базы. */
 	async function cacheList(
 		key: string,
@@ -1581,7 +1590,7 @@ export function onecRouter(deps: Deps) {
 		const type = String(body.type ?? "").toUpperCase();
 		const keys = Array.isArray(body.baseKeys) ? body.baseKeys.filter((k): k is string => typeof k === "string" && !!k) : [];
 
-		const started = await startBatch({ agents, queue, batches, bases }, {
+		const started = await startBatch({ agents, queue, batches, bases, log }, {
 			type, baseKeys: keys, payload: body.payload ?? {},
 			organizationUuid: u.organizationUuid ?? "", userUuid: u.uuid,
 			serverId: serverOf(req), allowedServers: await allowedServers(req),
@@ -1795,7 +1804,7 @@ export function onecRouter(deps: Deps) {
 		const refused = await scheduleRefusal(req, existing.type, existing.baseKeys, existing.payload, existing.serverId);
 		if (refused) { send(res, refused); return; }
 
-		const started = await startBatch({ agents, queue, batches, bases }, {
+		const started = await startBatch({ agents, queue, batches, bases, log }, {
 			type: existing.type, baseKeys: existing.baseKeys, payload: existing.payload,
 			organizationUuid: existing.organizationUuid, userUuid: u.uuid,
 			// Сервер расписания (C10), а не выбранный сейчас в панели: ручной прогон должен идти туда же, куда ночной.

@@ -18,6 +18,7 @@ import Notice from "src/components/Notice";
 import Modal from "src/components/Modal";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
+import { SegmentedControl, type SegmentOption } from "src/components/SegmentedControl";
 import { showToast } from "src/components/UIToast";
 import { getFormatDate } from "src/utils/datetime";
 import { reportError } from "src/services/errors/route";
@@ -77,6 +78,23 @@ export const AgentsTab: FC = () => {
 	const [dialog, setDialog] = useState<null | "create" | "enroll" | "disable" | "enable" | "restart" | "update">(null);
 	const [roleFilter, setRoleFilter] = useState<AgentRoleFilter>("");
 	const [stateFilter, setStateFilter] = useState<AgentStateFilter>("");
+	// Отборы — плашками, как заявки на подключение (SegmentedControl): вариантов мало, переключают часто.
+	// У состояний — число агентов в каждом: «Не на связи 2» видно до того, как переключишь отбор.
+	const roleOptions = useMemo<SegmentOption<AgentRoleFilter>[]>(() => [
+		{ value: "", label: translate("onecAgentsAllRoles"), tone: "all" },
+		{ value: "business", label: translate("onecRoleBusiness") },
+		{ value: "admin", label: translate("onecRoleAdmin") },
+	], []);
+	const stateOptions = useMemo<SegmentOption<AgentStateFilter>[]>(() => {
+		const all = agents.data?.items ?? [];
+		const count = (state: AgentStateFilter) => all.filter((a) => agentMatches(a, roleFilter, state)).length;
+		return [
+			{ value: "", label: translate("onecAgentsAllStates"), tone: "all" },
+			{ value: "online", label: translate("onecAgentOnline"), tone: "ok", count: count("online") },
+			{ value: "offline", label: translate("onecAgentOffline"), tone: "bad", count: count("offline") },
+			{ value: "disabled", label: translate("onecAgentDisabled"), tone: "off", count: count("disabled") },
+		];
+	}, [agents.data, roleFilter]);
 	const [selected, setSelected] = useState<string[]>([]);
 	const [name, setName] = useState("");
 	// Агент кластера заводится без организации: он обслуживает сервер целиком (см. подсказку в окне).
@@ -225,22 +243,12 @@ export const AgentsTab: FC = () => {
 				}]} />
 			)}
 			<QueryError error={agents.error} noticeKey="agents" source={translate("onecTabAgents")} />
-			<div className={styles.BasesLimits}>
-				<FieldSelect name="agents_role" label={translate("role")} size="sm" value={roleFilter}
-					onChange={(e) => setRoleFilter(e.target.value as AgentRoleFilter)}
-					options={[
-						{ value: "", label: translate("onecAgentsAllRoles") },
-						{ value: "business", label: translate("onecRoleBusiness") },
-						{ value: "admin", label: translate("onecRoleAdmin") },
-					]} />
-				<FieldSelect name="agents_state" label={translate("onlineLabel")} size="sm" value={stateFilter}
-					onChange={(e) => setStateFilter(e.target.value as AgentStateFilter)}
-					options={[
-						{ value: "", label: translate("onecAgentsAllStates") },
-						{ value: "online", label: translate("onecAgentOnline") },
-						{ value: "offline", label: translate("onecAgentOffline") },
-						{ value: "disabled", label: translate("onecAgentDisabled") },
-					]} />
+			<div className={styles.StatusFilter}>
+				<SegmentedControl name="agents_role" label={translate("role")} value={roleFilter} options={roleOptions}
+					onChange={setRoleFilter} />
+				<span className={styles.FilterDivider} aria-hidden="true" />
+				<SegmentedControl name="agents_state" label={translate("onlineLabel")} value={stateFilter} options={stateOptions}
+					onChange={setStateFilter} />
 			</div>
 			<Table {...buildStaticTableProps({
 				componentName: "OneCAdmin_agents", rows, columns: cols, setColumns: setCols,

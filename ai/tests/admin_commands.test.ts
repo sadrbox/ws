@@ -157,7 +157,7 @@ test("IB_INSTALL_EXTENSION: без содержимого файла коман�
 });
 
 test("списки содержимого базы — чтение: подтверждения не требуют", () => {
-	for (const t of ["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]) {
+	for (const t of ["IB_LIST_USERS", "IB_LIST_EXTENSIONS", "IB_EXPORT_EXTENSION"]) {
 		assert.equal(findAdminCommand(t)!.operation, "READ", t);
 		assert.equal(findAdminCommand(t)!.requiresBase, true, t);
 	}

@@ -826,8 +826,9 @@ const SubTable: FC<SubTableProps> = ({
       required: !errorMsg && isCellEmpty,
       error: !!errorMsg,
       errorMessage: errorMsg || undefined,
+      // data-copy-skip: Ctrl+C по ячейке копирует её значение, а не текст ошибки (Table/cellClipboard).
       errorTooltip: errorMsg
-        ? <div className={styles.CellErrorTooltip}>{errorMsg}</div>
+        ? <div className={styles.CellErrorTooltip} data-copy-skip>{errorMsg}</div>
         : null,
     };
   }, [cellErrors, requiredFields]);

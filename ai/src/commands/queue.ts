@@ -46,6 +46,18 @@ export type EnqueueInput = {
 	 * должны загораживать одиночный запрос.
 	 */
 	priority?: number;
+	/**
+	 * Раньше этого времени агенту не выдавать (С19). Команда стоит в очереди и видна в задании, но её
+	 * место занимает подготовка: монопольная операция (установка расширения) выпускается `release()`
+	 * после того, как сервис закрыл базу и снял сеансы (exclusiveOps.ts, 27.09).
+	 */
+	availableAt?: Date | null;
+};
+
+/** Строка для восстановления монопольной операции (listExclusivePending). */
+export type ExclusivePendingRow = {
+	id: string; agent_id: string; organization_uuid: string; base_key: string | null; state: CommandState; ttl_seconds: number | null;
+	exclusive: { jobsWas?: boolean | null; locked?: boolean; restored?: boolean } | null;
 };
 
 export type CommandRow = {
@@ -271,14 +283,14 @@ export class CommandQueue {
 		const r = await this.db.query<CommandRow>(
 			// expires_at при постановке — предел ОЖИДАНИЯ очереди; срок выполнения (ttl_seconds)
 			// отсчитывается заново при выдаче агенту (С2).
-			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at, priority, in_base, ttl_seconds)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11, $12, $13)
+			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at, priority, in_base, ttl_seconds, available_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11, $12, $13, $14)
 			 ON CONFLICT (agent_id, COALESCE(base_key, ''), request_id)
 			     WHERE request_id IS NOT NULL AND state IN ('queued', 'dispatched') DO NOTHING
 			 RETURNING *`,
 			[id, input.agentId, input.organizationUuid, baseKey, input.requestId ?? null, input.type,
 				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(queueWait),
-				input.priority ?? 0, inBase, ttl],
+				input.priority ?? 0, inBase, ttl, input.availableAt ?? null],
 		);
 		if (!r.rows[0]) {
 			const existing = await this.db.query<CommandRow>(
@@ -451,6 +463,68 @@ export class CommandQueue {
 	 * Возвращает, сколько команд действительно отменено: ноль значит «не успели» — и это
 	 * честный ответ, а не ошибка.
 	 */
+	/**
+	 * ВЫПУСТИТЬ ОТЛОЖЕННУЮ КОМАНДУ (exclusiveOps.ts): подготовка базы закончена — снять `available_at`, чтобы
+	 * ближайший опрос агента её забрал. Только для ещё не выданной; иначе `false`.
+	 */
+	async release(id: string): Promise<boolean> {
+		const r = await this.db.query<{ agent_id: string }>(
+			`UPDATE commands SET available_at = NULL WHERE id = $1 AND state = 'queued' RETURNING agent_id`,
+			[id],
+		);
+		const row = r.rows[0];
+		if (!row) return false;
+		this.bell.emit(row.agent_id);
+		return true;
+	}
+
+	/**
+	 * ЗАВЕРШИТЬ ОТКАЗОМ КОМАНДУ, КОТОРУЮ АГЕНТУ НЕ ОТДАВАЛИ: подготовка базы не удалась (не закрылся вход, не снялись
+	 * сеансы) — задание должно показать причину у этой базы, а не «отменена» без объяснения и не вечное «в очереди».
+	 */
+	async failQueued(id: string, error: { code: string; message: string; details?: unknown }): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE commands
+			    SET state = 'failed', result_status = 'ERROR', error = $2::jsonb, finished_at = now()
+			  WHERE id = $1 AND state = 'queued'`,
+			[id, JSON.stringify(error)],
+		);
+		const ok = (r.rowCount ?? 0) > 0;
+		if (ok) this.bell.emit("result:" + id);
+		return ok;
+	}
+
+	/** Отложить выдачу ещё не выданной команды на `seconds` вперёд (повтор монопольной операции ждёт подготовки). */
+	async defer(id: string, seconds: number): Promise<boolean> {
+		const r = await this.db.query(
+			`UPDATE commands SET available_at = now() + make_interval(secs => $2::int) WHERE id = $1 AND state = 'queued'`,
+			[id, Math.max(1, Math.round(seconds))],
+		);
+		return (r.rowCount ?? 0) > 0;
+	}
+
+	/** Дописать ключи в payload команды (состояние монопольной операции — exclusiveOps.ts): верхний уровень сливается. */
+	async patchPayload(id: string, patch: Record<string, unknown>): Promise<void> {
+		await this.db.query(`UPDATE commands SET payload = payload || $2::jsonb WHERE id = $1`, [id, JSON.stringify(patch)]);
+	}
+
+	/**
+	 * Монопольные операции, у которых база ещё не возвращена в прежнее состояние (`payload.exclusive` без
+	 * `restored`) — для восстановления после перезапуска сервиса. Не старше двух суток: дальше вернуть уже нечего.
+	 */
+	async listExclusivePending(types: readonly string[]): Promise<ExclusivePendingRow[]> {
+		const r = await this.db.query<ExclusivePendingRow>(
+			`SELECT id, agent_id, organization_uuid, base_key, state, ttl_seconds, payload->'exclusive' AS exclusive
+			   FROM commands
+			  WHERE type = ANY($1::text[]) AND payload ? 'exclusive'
+			    AND COALESCE((payload->'exclusive'->>'restored')::boolean, false) = false
+			    AND created_at > now() - interval '2 days'
+			  ORDER BY created_at`,
+			[[...types]],
+		);
+		return r.rows;
+	}
+
 	async cancel(ids: string[], by: string): Promise<number> {
 		if (!ids.length) return 0;
 		const r = await this.db.query(
@@ -723,7 +797,7 @@ export class CommandQueue {
 			    INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload,
 			                          user_uuid, conversation_id, expires_at, priority, batch_id,
 			                          in_base, ttl_seconds, attempt, available_at)
-			    SELECT $2, agent_id, organization_uuid, base_key, NULL, type, payload,
+			    SELECT $2, agent_id, organization_uuid, base_key, NULL, type, payload - 'exclusive',
 			           user_uuid, conversation_id,
 			           now() + make_interval(secs => $4::int + (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)]),
 			           priority, batch_id, in_base, ttl_seconds, attempt + 1,
