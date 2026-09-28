@@ -1128,6 +1128,11 @@ export type AgentEnrollment = {
 	 * одной отклоняет остальные — одобрять надо строго по продиктованному коду. Нет поля — сервис старее панели.
 	 */
 	pendingSiblings?: number;
+	/**
+	 * Код более новой ожидающей заявки той же службы (КР-20 аудита 27.09): агент опрашивает её, эту одобрить нельзя
+	 * (сервис отвечает 409 NEWER_ENROLLMENT_PENDING). `null` — новее нет; нет поля — сервис старее панели.
+	 */
+	newerPendingCode?: string | null;
 };
 
 export const fetchEnrollments = (params: { state?: EnrollmentState | ""; q?: string } = {}) => {
@@ -1189,6 +1194,11 @@ export type BaseRegistration = {
 	tokenDelivered: boolean;
 	/** Что предложить при одобрении: организация по БИН, ключ базы, базы реестра с тем же ключом. */
 	suggestion: { organizationUuid: string | null; baseKey: string; candidates: { baseId: string; key: string; server: string }[] };
+	/**
+	 * Код более новой ожидающей заявки той же базы (КР-20 аудита 27.09): 1С опрашивает её, эту одобрить нельзя
+	 * (сервис отвечает 409 NEWER_REGISTRATION_PENDING). `null` — новее нет; нет поля — сервис старее панели.
+	 */
+	newerPendingCode?: string | null;
 };
 
 export const fetchRegistrations = (params: { state?: RegistrationState | ""; q?: string } = {}) => {

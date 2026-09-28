@@ -221,7 +221,13 @@ export class BatchService {
 			        c.type, COALESCE(a.capabilities ? 'agent.cancel', false) AS can_abort,
 			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_abort_check,
 			        c.payload->>'repair' AS repair, c.attempt, c.late,
-			        CASE WHEN c.state = 'queued' AND c.available_at > now() THEN c.available_at END AS retry_at,
+			        -- Удержанная монопольная операция (available_at позже срока, КР-12 аудита 27.09) ждёт подготовки базы,
+			        -- а не повтора: «повтор в …» — только когда её раннер назвал время выпуска копии.
+			        CASE WHEN c.state = 'queued' AND c.available_at > now()
+			             THEN CASE WHEN c.available_at <= c.expires_at THEN c.available_at
+			                       WHEN (c.payload->'exclusive'->>'releaseAt')::timestamptz > now()
+			                       THEN (c.payload->'exclusive'->>'releaseAt')::timestamptz END
+			        END AS retry_at,
 			        ${LATE_WAIT("c", "$2")} AS late_wait,
 			        ${TIMEOUT_STILL_RUNNING("c")} AS still_running,
 			        -- Итог проверки базы (С17): только числа и пропущенное, не весь отчёт.

@@ -19,6 +19,7 @@ import { FieldTextarea } from "src/components/Field/FieldTextarea";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Modal from "src/components/Modal";
 import Notice from "src/components/Notice";
+import { SegmentedControl } from "src/components/SegmentedControl";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
@@ -33,11 +34,14 @@ import {
 } from "src/services/onec/api";
 import { isSharedListForbidden, useAgents } from "./shared";
 import { QueryError, SharedListForbidden } from "./sharedUi";
-import { registrationStateLabel, stateTone } from "./requestsView";
-import { siblingsCount, siblingsWarning } from "./enrollmentsView";
+import { registrationStateLabel, stateFilterOptions, stateTone } from "./requestsView";
+import { approveBlockReason, siblingsCell, siblingsCount, siblingsWarning } from "./enrollmentsView";
 import styles from "./OneCAdmin.module.scss";
 
 const TONE_CLASS = { wait: styles.ReqWait, ok: styles.ReqOk, bad: styles.ReqBad, off: styles.ReqOff };
+
+/** Состояния заявки агента — для отбора плашками (stateFilterOptions). */
+const STATES: readonly EnrollmentState[] = ["PENDING", "APPROVED", "REJECTED", "EXPIRED"];
 
 const columns = (): TColumn[] => ([
 	{ identifier: "reqCode", type: "string", width: "110px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
@@ -67,10 +71,25 @@ export const EnrollmentsTab: FC = () => {
 		// Человек у компьютера с агентом ждёт одобрения — список обновляется сам.
 		refetchInterval: pollInterval,
 	});
+	/*
+	 * Сколько ждут решения — числом у «Ждут решения», при любом отборе (как у заявок баз). При «Все» — по уже
+	 * загруженному списку: сервис отдаёт нерешённые первыми. При другом отборе — отдельным запросом; его ключ общий со
+	 * списком «Ждут решения» и со счётчиком на вкладке «Заявки», так что лишнего обращения к сервису нет.
+	 */
+	const pendingList = useQuery({
+		queryKey: ["onec", "enrollments", "PENDING", ""],
+		queryFn: () => fetchEnrollments({ state: "PENDING" }),
+		refetchInterval: pollInterval,
+		enabled: state !== "",
+	});
 	const agents = useAgents();
 	const names = useMemo(() => new Map((agents.data?.items ?? []).map((a) => [a.id, a.name])), [agents.data]);
 	const nameOf = (id: string | null) => (id ? names.get(id) || id.slice(0, 8) : "");
 	const items = useMemo(() => list.data?.items ?? [], [list.data]);
+	const pendingCount = state === ""
+		? items.filter((e) => e.state === "PENDING").length
+		: pendingList.data?.items.length ?? 0;
+	const filterOptions = useMemo(() => stateFilterOptions(STATES, pendingCount), [pendingCount]);
 	const canDecide = !!list.data?.canDecide;
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_enrollments"));
 	const [activeId, setActiveId] = useState<string | null>(null);
@@ -98,12 +117,15 @@ export const EnrollmentsTab: FC = () => {
 			? `${(e.agentId && names.get(e.agentId)) || e.agentId?.slice(0, 8) || "—"} · ${e.tokenDeliveredAt ? translate("onecReqTokenDelivered") : translate("onecEnrollWaiting")}${e.note ? ` · ${e.note}` : ""}`
 			: e.note || "—",
 		onecEnrollReplaces: e.previousAgentId ? names.get(e.previousAgentId) || e.previousAgentId.slice(0, 8) : "—",
-		onecEnrollSiblings: siblingsCount(e) ? `${siblingsCount(e)} — ${translate("onecEnrollSiblingsShort")}` : "—",
-		__siblings: siblingsCount(e) > 0,
+		// Более новая заявка той же службы (КР-20 аудита 27.09) — её код, иначе счётчик.
+		onecEnrollSiblings: siblingsCell(e),
+		__siblings: siblingsCount(e) > 0 || !!approveBlockReason(e),
 		reqRepeats: e.repeats ? `${e.repeats}${e.ip ? ` · ${e.ip}` : ""}` : "—",
 	})), (r) => r.uuid), [items, names]);
 	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
 	const pending = active?.state === "PENDING" && canDecide;
+	// Есть более новая заявка той же службы — агент ждёт её, эту одобрять нельзя (КР-20): кнопка недоступна, причина — в подсказке.
+	const blocked = active ? approveBlockReason(active) : null;
 
 	// Сводный список закрыт установкой (С3.4): одно объяснение вместо таблицы, которая может только отказать.
 	if (isSharedListForbidden(list.error)) return <SharedListForbidden />;
@@ -111,16 +133,8 @@ export const EnrollmentsTab: FC = () => {
 	return (
 		<>
 			<div className={styles.Hint}>{translate("onecEnrollHint")}</div>
-			<div className={styles.BasesLimits}>
-				<FieldSelect name="enr_state" label={translate("status")} size="sm" value={state}
-					onChange={(e) => setState(e.target.value as EnrollmentState | "")}
-					options={[
-						{ value: "PENDING", label: translate("onecReqPending") },
-						{ value: "", label: translate("onecReqAll") },
-						{ value: "APPROVED", label: translate("onecReqApproved") },
-						{ value: "REJECTED", label: translate("onecReqRejected") },
-						{ value: "EXPIRED", label: translate("onecReqExpired") },
-					]} />
+			<div className={styles.StatusFilter}>
+				<SegmentedControl name="enr_state" label={translate("status")} value={state} options={filterOptions} onChange={setState} />
 			</div>
 			<QueryError error={list.error} noticeKey="onec-enrollments" source={translate("onecEnrollments")} />
 			<Table {...buildStaticTableProps({
@@ -142,7 +156,8 @@ export const EnrollmentsTab: FC = () => {
 				},
 				extraButtons: !canDecide ? undefined : (
 					<>
-						<Button variant="primary" disabled={!pending} onClick={() => active && setApproving(active)}>{translate("onecReqApprove")}</Button>
+						<Button variant="primary" disabled={!pending || !!blocked} title={blocked ?? undefined}
+							onClick={() => active && !blocked && setApproving(active)}>{translate("onecReqApprove")}</Button>
 						<Button disabled={!pending} onClick={() => active && setRejecting(active)}>{translate("onecReqReject")}</Button>
 					</>
 				),
@@ -165,6 +180,8 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 	const [reuse, setReuse] = useState(!!enr.previousAgentId);
 	const [note, setNote] = useState("");
 	const orgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
+	// Двойной щелчок по заявке, у которой есть более новая той же службы (КР-20): окно объясняет, «Применить» недоступно.
+	const blocked = approveBlockReason(enr);
 	const approve = useMutation({
 		mutationFn: () => approveEnrollment(enr.id, {
 			...(needsOrg ? { organizationUuid } : {}), name: name.trim() || undefined,
@@ -186,12 +203,13 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 		onError: (e) => reportError(e, { source: translate("onecEnrollments") }),
 	});
 	return (
-		<Modal title={`${translate("onecReqApprove")}: ${enr.code}`} onClose={onClose}
-			onApply={() => { if ((!needsOrg || organizationUuid) && !approve.isPending) approve.mutate(); }}>
+		<Modal title={`${translate("onecReqApprove")}: ${enr.code}`} onClose={onClose} applyDisabled={!!blocked}
+			onApply={() => { if (!blocked && (!needsOrg || organizationUuid) && !approve.isPending) approve.mutate(); }}>
 			<div className={styles.ModalForm}>
 				<div>{enr.computer} · {enr.serviceName} · {enr.role === "admin" ? translate("onecRoleAdmin") : translate("onecRoleBusiness")}</div>
+				{blocked && <Notice inline items={[{ type: "error", text: blocked }]} />}
 				{/* Две ожидающие заявки одной службы (Б11): одобрение этой отклонит остальные — сверить код, а не имя. */}
-				{siblingsWarning(enr) && <Notice inline items={[{ type: "warning", text: siblingsWarning(enr)! }]} />}
+				{!blocked && siblingsWarning(enr) && <Notice inline items={[{ type: "warning", text: siblingsWarning(enr)! }]} />}
 				{needsOrg
 					? (
 						<FieldSelect name="enr_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}

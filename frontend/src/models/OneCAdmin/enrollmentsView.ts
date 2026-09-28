@@ -16,3 +16,21 @@ export function siblingsWarning(e: Pick<AgentEnrollment, "state" | "pendingSibli
 	const n = siblingsCount(e);
 	return n > 0 ? translate("onecEnrollSiblingsWarn").replace("{n}", String(n)) : null;
 }
+
+/**
+ * ПОЧЕМУ ЭТУ ЗАЯВКУ НЕЛЬЗЯ ОДОБРИТЬ — есть более новая той же службы (КР-20 аудита 27.09; код называет сервис,
+ * `newerPendingCode`). Агент сборки 19.09 повторяет заявку без секрета опроса, получает НОВУЮ и опрашивает уже её:
+ * одобрение прежней отклонило бы ту, что ждёт агент, и токен не забрал бы никто. Сервис такое одобрение отклоняет
+ * (409), панель объясняет заранее. `null` — можно (и когда сервис старее панели и поля не отдаёт).
+ */
+export function approveBlockReason(e: Pick<AgentEnrollment, "state" | "code" | "newerPendingCode">): string | null {
+	if (e.state !== "PENDING" || !e.newerPendingCode) return null;
+	return translate("onecEnrollNewerPending").replace(/\{code\}/g, e.newerPendingCode).replace("{own}", e.code);
+}
+
+/** Колонка «Ещё заявки службы»: более новая заявка важнее счётчика — её код и надо искать в окне агента. */
+export function siblingsCell(e: Pick<AgentEnrollment, "state" | "pendingSiblings" | "newerPendingCode">): string {
+	if (e.state === "PENDING" && e.newerPendingCode) return `${translate("onecEnrollNewerShort")} ${e.newerPendingCode}`;
+	const n = siblingsCount(e);
+	return n ? `${n} — ${translate("onecEnrollSiblingsShort")}` : "—";
+}

@@ -5,6 +5,7 @@
  */
 import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
+import type { SegmentOption } from "src/components/SegmentedControl";
 import type {
 	ActivationState, BaseRegistration, ErpOrganization, OnecOrgDetails, RegistrationOrganization, RegistrationState,
 } from "src/services/onec/api";
@@ -26,6 +27,30 @@ export const activationStateLabel = (s: ActivationState): string => ({
 export const stateTone = (s: RegistrationState | ActivationState): "wait" | "ok" | "bad" | "off" =>
 	s === "PENDING" ? "wait" : s === "APPROVED" ? "ok" : s === "REJECTED" ? "bad" : "off";
 
+const FILTER_LABEL_KEY: Record<RegistrationState, string> = {
+	PENDING: "onecReqFilterPending",
+	APPROVED: "onecReqFilterApproved",
+	REJECTED: "onecReqFilterRejected",
+	EXPIRED: "onecReqFilterExpired",
+};
+
+/**
+ * Варианты отбора заявок по состоянию — плашками (SegmentedControl, группа радиокнопок); одни и те же у «Подключения
+ * баз», «Подключения агентов» и «Активации БИНов». Нерешённые — первыми (ради них вкладку и открывают), «Все» (`""`)
+ * — последним. Точка — тоном состояния, каким оно подкрашено в таблице; у «Ждут решения» — сколько их.
+ * `states` — состояния, которые у этих заявок бывают: у запроса активации нет срока, нет и «Просроченных».
+ */
+export function stateFilterOptions<S extends RegistrationState | ActivationState>(
+	states: readonly S[], pendingCount: number,
+): SegmentOption<S | "">[] {
+	return [
+		...states.map((s): SegmentOption<S | ""> => ({
+			value: s, label: translate(FILTER_LABEL_KEY[s]), tone: stateTone(s), count: s === "PENDING" ? pendingCount : null,
+		})),
+		{ value: "", label: translate("onecReqAll"), tone: "all" },
+	];
+}
+
 /** Конфигурация одной строкой: «БухгалтерияДляКазахстана 3.0.44.1». */
 export function configurationText(r: BaseRegistration): string {
 	const c = r.base.configuration;
@@ -46,6 +71,22 @@ export function approveDefaults(r: BaseRegistration): { organizationUuid: string
 		// Одна база реестра с этим ключом — она и есть; несколько — выбирает человек; нет — заведётся новая.
 		baseId: r.suggestion.candidates.length === 1 ? r.suggestion.candidates[0].baseId : "",
 	};
+}
+
+/**
+ * ПОЧЕМУ ЭТУ ЗАЯВКУ БАЗЫ НЕЛЬЗЯ ОДОБРИТЬ — есть более новая той же базы (КР-20 аудита 27.09; код называет сервис,
+ * `newerPendingCode`). Старое расширение повторяет заявку без секрета опроса — новой заявкой, и 1С опрашивает уже её:
+ * одобрение прежней отклонило бы ту, что ждёт база, и токен не забрал бы никто. Сервис такое одобрение отклоняет
+ * (409), панель объясняет заранее. `null` — можно (и когда сервис старее панели и поля не отдаёт).
+ */
+export function registrationApproveBlock(r: Pick<BaseRegistration, "state" | "code" | "newerPendingCode">): string | null {
+	if (r.state !== "PENDING" || !r.newerPendingCode) return null;
+	return translate("onecReqNewerPending").replace(/\{code\}/g, r.newerPendingCode).replace("{own}", r.code);
+}
+
+/** Пометка в строке заявки: «есть новее: КОД» — её код и надо сверять с тем, что показывает 1С. `null` — пометки нет. */
+export function registrationNewerMark(r: Pick<BaseRegistration, "state" | "newerPendingCode">): string | null {
+	return r.state === "PENDING" && r.newerPendingCode ? `${translate("onecEnrollNewerShort")} ${r.newerPendingCode}` : null;
 }
 
 /** Варианты выбора организации ERP: совпавшие по БИН — первыми, с пометкой. */

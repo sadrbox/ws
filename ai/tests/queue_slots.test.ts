@@ -70,7 +70,9 @@ describe("С10–С11: повтор при занятой базе и конец
 		assert.equal(calls[0].params[2], BUSY_MAX_ATTEMPTS);
 		// Пауза перед повтором (С19): не выдавать раньше available_at, срок очереди — от конца паузы.
 		assert.match(calls[0].sql, /attempt, available_at\)/);
-		assert.deepEqual(calls[0].params.slice(4), [...BUSY_RETRY_DELAYS_SECS]);
+		assert.deepEqual(calls[0].params.slice(4, 6), [...BUSY_RETRY_DELAYS_SECS]);
+		// Обычный повтор не удержан: копия выдаётся после паузы сама (удерживает только раннер монопольной операции, КР-12).
+		assert.equal(calls[0].params[6], false);
 	});
 
 	it("отменённая команда — конец ожидания, без лишних секунд", async () => {

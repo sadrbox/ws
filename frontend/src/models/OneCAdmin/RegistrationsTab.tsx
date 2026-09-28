@@ -19,12 +19,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { usePanePollInterval } from "src/hooks/usePaneActive";
 import Table from "src/components/Table";
-import { SegmentedControl, type SegmentOption } from "src/components/SegmentedControl";
+import { SegmentedControl } from "src/components/SegmentedControl";
 import { Button } from "src/components/Button";
 import { Field, FieldSelect } from "src/components/Field";
 import { FieldTextarea } from "src/components/Field/FieldTextarea";
 import { FIELD_WIDTH } from "src/components/Field/fieldWidths";
 import Modal from "src/components/Modal";
+import Notice from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { getModelColumns } from "src/components/Table/services";
@@ -40,7 +41,8 @@ import {
 import { QueryError } from "./sharedUi";
 import { MissingOrganizations } from "./MissingOrganizations";
 import {
-	approveDefaults, configurationText, organizationOptions, registrationStateLabel, stateTone, whereText,
+	approveDefaults, configurationText, organizationOptions, registrationApproveBlock, registrationNewerMark, registrationStateLabel,
+	stateFilterOptions, stateTone, whereText,
 } from "./requestsView";
 import styles from "./OneCAdmin.module.scss";
 
@@ -48,14 +50,8 @@ const TONE_CLASS = { wait: styles.ReqWait, ok: styles.ReqOk, bad: styles.ReqBad,
 
 type StateFilter = RegistrationState | "";
 
-/** Варианты отбора: нерешённые — первыми (ради них вкладку и открывают), «Все» — последним. */
-const STATE_FILTERS: readonly { value: StateFilter; labelKey: string; tone?: SegmentOption<StateFilter>["tone"] }[] = [
-	{ value: "PENDING", labelKey: "onecReqFilterPending", tone: "wait" },
-	{ value: "APPROVED", labelKey: "onecReqFilterApproved", tone: "ok" },
-	{ value: "REJECTED", labelKey: "onecReqFilterRejected", tone: "bad" },
-	{ value: "EXPIRED", labelKey: "onecReqFilterExpired", tone: "off" },
-	{ value: "", labelKey: "onecReqAll", tone: "all" },
-];
+/** Состояния заявок базы — для отбора плашками (stateFilterOptions). */
+const STATES: readonly RegistrationState[] = ["PENDING", "APPROVED", "REJECTED", "EXPIRED"];
 
 const columns = (): TColumn[] => ([
 	{ identifier: "reqCode", type: "string", width: "110px", minWidth: "90px", alignment: "left", visible: true, inlist: true },
@@ -105,10 +101,7 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 	const pendingCount = state === ""
 		? items.filter((r) => r.state === "PENDING").length
 		: pendingList.data?.items.length ?? 0;
-	const filterOptions = useMemo<SegmentOption<StateFilter>[]>(() => STATE_FILTERS.map((f) => ({
-		value: f.value, label: translate(f.labelKey), tone: f.tone,
-		count: f.value === "PENDING" ? pendingCount : null,
-	})), [pendingCount]);
+	const filterOptions = useMemo(() => stateFilterOptions(STATES, pendingCount), [pendingCount]);
 	const canDecide = !!list.data?.canDecide;
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_registrations"));
 	const [activeId, setActiveId] = useState<string | null>(null);
@@ -134,12 +127,16 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 		reqExpires: r.state === "PENDING" ? r.expiresAt : null,
 		reqResult: r.state === "APPROVED"
 			? `${r.baseKey ?? "—"} · ${r.tokenDelivered ? translate("onecReqTokenDelivered") : translate("onecReqTokenWaiting")}${r.note ? ` · ${r.note}` : ""}`
-			: r.note || "—",
+			// Есть более новая заявка той же базы (КР-20 аудита 27.09) — её код: одобрять надо её.
+			: registrationNewerMark(r) ?? (r.note || "—"),
+		__newer: !!registrationNewerMark(r),
 		reqRepeats: r.repeats ? `${r.repeats}${r.ip ? ` · ${r.ip}` : ""}` : "—",
 	})), (r) => r.uuid), [items]);
 	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
 
 	const pending = active?.state === "PENDING" && canDecide;
+	// Есть более новая заявка той же базы — 1С ждёт её, эту одобрять нельзя (КР-20): кнопка недоступна, причина — в подсказке.
+	const blocked = active ? registrationApproveBlock(active) : null;
 
 	return (
 		<>
@@ -159,7 +156,8 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 					? <span className={TONE_CLASS[asText(r.__tone) as keyof typeof TONE_CLASS]}>{asText(r.reqState)}</span>
 					// Код — крупнее и моноширинным: его диктуют по телефону и сверяют посимвольно.
 					: col.identifier === "reqCode" ? <span className={styles.ReqCode}>{asText(r.reqCode)}</span>
-						: undefined),
+						: col.identifier === "reqResult" && r.__newer ? <span className={styles.ReqWait}>{asText(r.reqResult)}</span>
+							: undefined),
 				onActiveRowChange: (r) => setActiveId(r ? asText(r.uuid) : null),
 				// Двойной щелчок по нерешённой заявке — сразу одобрение: ради него заявку и открывают.
 				onRowClick: (r) => {
@@ -168,7 +166,8 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 				},
 				extraButtons: !canDecide ? undefined : (
 					<>
-						<Button variant="primary" disabled={!pending} onClick={() => active && setApproving(active)}>{translate("onecReqApprove")}</Button>
+						<Button variant="primary" disabled={!pending || !!blocked} title={blocked ?? undefined}
+							onClick={() => active && !blocked && setApproving(active)}>{translate("onecReqApprove")}</Button>
 						<Button disabled={!pending} onClick={() => active && setRejecting(active)}>{translate("onecReqReject")}</Button>
 					</>
 				),
@@ -189,6 +188,8 @@ const ApproveModal: FC<{ reg: BaseRegistration; onClose: () => void; onDone: () 
 	const orgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
 	const candidates = reg.suggestion.candidates;
 	const ready = !!organizationUuid && !!baseKey.trim();
+	// Двойной щелчок по заявке, у которой есть более новая той же базы (КР-20): окно объясняет, «Применить» недоступно.
+	const blocked = registrationApproveBlock(reg);
 
 	const approve = useMutation({
 		mutationFn: () => approveRegistration(reg.id, { organizationUuid, baseKey: baseKey.trim(), baseId: baseId || null, note: note.trim() || undefined }),
@@ -200,9 +201,11 @@ const ApproveModal: FC<{ reg: BaseRegistration; onClose: () => void; onDone: () 
 	});
 
 	return (
-		<Modal title={`${translate("onecReqApprove")}: ${reg.code}`} onClose={onClose} onApply={() => { if (ready && !approve.isPending) approve.mutate(); }}>
+		<Modal title={`${translate("onecReqApprove")}: ${reg.code}`} onClose={onClose} applyDisabled={!!blocked}
+			onApply={() => { if (!blocked && ready && !approve.isPending) approve.mutate(); }}>
 			<div className={styles.ModalForm}>
 				<div>{reg.base.name} · {configurationText(reg)} · {whereText(reg)}</div>
+				{blocked && <Notice inline items={[{ type: "error", text: blocked }]} />}
 				<FieldSelect name="reg_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}
 					onChange={(e) => setOrganizationUuid(e.target.value)} options={organizationOptions(orgs.data?.items ?? [], reg)} />
 				{/* Организации базы нет в ERP — создать её из реквизитов 1С и сразу подставить (26.09). */}

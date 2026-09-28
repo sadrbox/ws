@@ -150,6 +150,25 @@ export class RegistrationStore {
 		return r.rows.map(toRow);
 	}
 
+	/**
+	 * БОЛЕЕ НОВАЯ ОЖИДАЮЩАЯ ЗАЯВКА ТОЙ ЖЕ БАЗЫ (`onec_base_id`) — её код (КР-20 аудита 27.09). Старое расширение
+	 * повторяет заявку без секрета опроса — новой заявкой, и база опрашивает уже её. Одобрить прежнюю значило бы
+	 * отклонить ту, что ждёт база («Одобрена другая заявка»), — токен не забрал бы никто. Панель и одобрение по этому
+	 * коду отказывают (как у агентов — EnrollmentStore.newerPending).
+	 */
+	async newerPending(id: string): Promise<string | null> {
+		await this.expire();
+		const r = await this.db.query<{ code: string }>(
+			`SELECT n.code FROM base_registrations e
+			   JOIN base_registrations n
+			     ON n.onec_base_id = e.onec_base_id AND n.id <> e.id AND n.state = 'PENDING' AND n.created_at > e.created_at
+			  WHERE e.id = $1
+			  ORDER BY n.created_at DESC LIMIT 1`,
+			[id],
+		);
+		return r.rows[0]?.code ?? null;
+	}
+
 	/** Одобрить нерешённую. false — заявки нет, она уже решена или просрочена. */
 	async approve(id: string, d: { organizationUuid: string; baseId: string; baseKey: string; decidedBy: string; note?: string | null }): Promise<boolean> {
 		await this.expire();

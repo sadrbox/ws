@@ -6,9 +6,9 @@
  * отмеченных баз из списка. Здесь наоборот: открыли карточку базы и ставите или забираете расширение ИМЕННО
  * в неё — без похода в список, отметки одной строки и мастера на три шага.
  *
- * ЗАГРУЗКА — тем же заданием, что и групповая (runBatch по одной базе): сервис перед установкой закрывает
- * базу (запрет заданий → вход → сеансы, exclusiveOps), поэтому и здесь об этом предупреждаем до нажатия.
- * Имя расширения — идентификатор конфигуратора; по умолчанию берётся из имени файла без «.cfe».
+ * ЗАГРУЗКА — тем же заданием, что и групповая (runBatch по одной базе). Агент ставит расширение через кластер
+ * (COM) и базу не закрывает: закрытый вход отказывал и самому агенту (КР-1 аудита 27.09). Имя расширения —
+ * идентификатор конфигуратора; по умолчанию берётся из имени файла без «.cfe».
  *
  * ВЫГРУЗКА — команда чтения `IB_EXPORT_EXTENSION`: агент входит в базу и отдаёт файл в ответе; панель
  * скачивает его как `<имя>.cfe`. Сборка агента без этой команды — отказ сразу, до постановки.
@@ -140,7 +140,7 @@ export const BaseExtensionCommands: FC<{
 						<Field name="bec_name" label={translate("onecExtName")} value={name} noAutofill hint={translate("onecExtNameHint")}
 							onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 						<FieldToggle name="bec_safe" label={translate("onecExtSafeMode")} value={safeMode} onChange={setSafeMode} />
-						<Notice inline items={[{ type: "warning", text: translate("onecExtUploadHere") }]} />
+						<Notice inline items={[{ type: "info", text: translate("onecExtUploadHere") }]} />
 					</div>
 				</Modal>
 			)}

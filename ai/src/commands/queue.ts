@@ -52,12 +52,41 @@ export type EnqueueInput = {
 	 * после того, как сервис закрыл базу и снял сеансы (exclusiveOps.ts, 27.09).
 	 */
 	availableAt?: Date | null;
+	/**
+	 * НЕ ВЫДАВАТЬ ДО `release()` (КР-12 аудита 27.09): монопольная операция ждёт, пока её раннер закроет базу.
+	 * Раньше это была дата «через 12 ч» — на миллисекунды (у копии повтора — на минуты) раньше срока ожидания, и в
+	 * это окно команда уходила агенту без подготовки. Теперь `available_at` на сутки ПОЗЖЕ `expires_at`: такая
+	 * команда может только истечь или быть выпущенной, но не уйти агенту сама.
+	 */
+	hold?: boolean;
+};
+
+/**
+ * Состояние подготовки монопольной операции в payload команды (`exclusive`, exclusiveOps.ts). Пустой объект —
+ * операция поставлена под подготовку, шагов ещё не было (пишется вместе с самой командой, КР-12).
+ */
+export type ExclusiveStateRow = {
+	/** Прежний запрет регламентных заданий: нет поля — запрет не ставился; null — ставился, прежнее неизвестно. */
+	jobsWas?: boolean | null;
+	/** requestId команды запрета: поставлена, ответа ещё нет — итог восстановление узнает по ней. */
+	jobsReq?: string;
+	locked?: boolean;
+	/** requestId команды закрытия входа — как `jobsReq`. */
+	lockReq?: string;
+	restored?: boolean;
+	problems?: string[];
+	/** false — у агента нет кластерных команд: операция выпущена без подготовки, повтор «база занята» обычный. */
+	prepared?: boolean;
+	/** Операцию продолжила копия-повтор того же раннера — состояние живёт в ней. */
+	movedTo?: string;
+	/** Когда раннер выпустит удержанную копию-повтор (для строки задания «повтор в …»). */
+	releaseAt?: string;
 };
 
 /** Строка для восстановления монопольной операции (listExclusivePending). */
 export type ExclusivePendingRow = {
 	id: string; agent_id: string; organization_uuid: string; base_key: string | null; state: CommandState; ttl_seconds: number | null;
-	exclusive: { jobsWas?: boolean | null; locked?: boolean; restored?: boolean } | null;
+	exclusive: ExclusiveStateRow | null;
 };
 
 export type CommandRow = {
@@ -120,6 +149,30 @@ export const BUSY_RETRY_DELAYS_SECS = [120, 300] as const;
 
 /** Сколько попыток даётся команде задания, когда база занята (IB_BUSY, С10). */
 export const BUSY_MAX_ATTEMPTS = 3;
+
+/**
+ * «Не выдавать до release» (КР-12 аудита 27.09): `available_at` на сутки позже срока ожидания `expires_at` —
+ * команда может только истечь или быть выпущенной раннером, но не уйти агенту сама.
+ */
+const HELD_AFTER_EXPIRY = "interval '1 day'";
+
+/**
+ * КАКУЮ ДОЛЮ СВОЕГО ОЖИДАНИЯ КОМАНДА ПЕРЕЖИДАЕТ МОЛЧАНИЕ АГЕНТА (КР-20 аудита 27.09). Таймер (`sweep`) закрывал
+ * все команды в очереди молчащего агента через `AGENT_OFFLINE_AFTER_SECS × 2` (3 мин) — и ночное задание на сто баз
+ * с ожиданием 12 ч гибло от обновления службы или её перезапуска. Теперь порог — не меньше этой доли ожидания самой
+ * команды: у задания 12 ч × 0,2 ≈ 2,4 ч, а у одиночной команды (ожидание 15 мин) — те же 3 мин, что и прежде.
+ */
+export const ORPHAN_WAIT_SHARE = 0.2;
+
+/**
+ * КОМАНДЫ ОБСЛУЖИВАНИЯ БАЗЫ (КР-12 п. 5 аудита 27.09): надолго занимают базу, меняют её конфигурацию или
+ * закрывают вход. Ночные проверки учёта в такую базу не идут (basesUnderMaintenance). Чтения и правки
+ * пользователей базу не занимают.
+ */
+export const MAINTENANCE_TYPES: readonly string[] = [
+	"IB_BACKUP", "IB_RESTORE", "IB_CHECK", "IB_APPLY_UPDATE", "IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION",
+	"CLUSTER_SET_SESSIONS_LOCK",
+];
 
 /** Внутрь базы: явный признак, а у старых команд — как прежде, по наличию базы (С1). */
 const IN_BASE = (a: string) => `COALESCE(${a}.in_base, ${a}.base_key IS NOT NULL)`;
@@ -235,9 +288,17 @@ export class CommandQueue {
 
 	/**
 	 * Сколько команд внутрь баз агент получает одновременно. См. AGENT_IB_PARALLEL:
-	 * значение по умолчанию — единица, и это защита, а не политика.
+	 * значение по умолчанию — единица, и это защита, а не политика. Открыто для цепочки монопольных операций
+	 * (exclusiveOps.ts, КР-12): готовить базу больше, чем агент выполнит, незачем.
 	 */
-	private readonly ibParallel: number;
+	readonly ibParallel: number;
+
+	/**
+	 * Срок ОЖИДАНИЯ очереди выданных команд — до выдачи (I8 аудита 27.09): выдача перезаписывает `expires_at`
+	 * сроком выполнения, а команде, возвращённой в очередь оборванным опросом (`requeue`), нужен прежний.
+	 * WeakMap — запись живёт, пока жив ответ агенту.
+	 */
+	private readonly queueDeadlines = new WeakMap<WireCommand, Date>();
 
 	/** Сколько секунд истёкшая, но выданная команда ещё держит место (С3). */
 	private readonly lateGraceSecs: number;
@@ -283,14 +344,16 @@ export class CommandQueue {
 		const r = await this.db.query<CommandRow>(
 			// expires_at при постановке — предел ОЖИДАНИЯ очереди; срок выполнения (ttl_seconds)
 			// отсчитывается заново при выдаче агенту (С2).
+			// Удержанная до release (КР-12): available_at позже собственного срока ожидания.
 			`INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload, user_uuid, conversation_id, expires_at, priority, in_base, ttl_seconds, available_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11, $12, $13, $14)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, now() + ($10 || ' seconds')::interval, $11, $12, $13,
+			         CASE WHEN $15::boolean THEN now() + ($10 || ' seconds')::interval + ${HELD_AFTER_EXPIRY} ELSE $14::timestamptz END)
 			 ON CONFLICT (agent_id, COALESCE(base_key, ''), request_id)
 			     WHERE request_id IS NOT NULL AND state IN ('queued', 'dispatched') DO NOTHING
 			 RETURNING *`,
 			[id, input.agentId, input.organizationUuid, baseKey, input.requestId ?? null, input.type,
 				JSON.stringify(input.payload ?? {}), input.userUuid ?? null, input.conversationId ?? null, String(queueWait),
-				input.priority ?? 0, inBase, ttl, input.availableAt ?? null],
+				input.priority ?? 0, inBase, ttl, input.availableAt ?? null, input.hold === true],
 		);
 		if (!r.rows[0]) {
 			const existing = await this.db.query<CommandRow>(
@@ -326,6 +389,27 @@ export class CommandQueue {
 	}
 
 	/**
+	 * ВЕРНУТЬ В ОЧЕРЕДЬ ВЫДАННОЕ, НО НЕ ПОЛУЧЕННОЕ: агент закрыл опрос, пока команды выдавались (обрыв long-poll).
+	 *
+	 * Срок — прежний срок ОЖИДАНИЯ очереди (I8 аудита 27.09). Раньше команда возвращалась с «выдача + срок
+	 * выполнения»: команда задания, ждущая очереди до 12 ч, истекала в очереди через 15 мин. Прежний срок
+	 * запомнен при выдаче (`queueDeadlines`); не запомнен (чужой объект) — срок не трогаем, как было.
+	 */
+	async requeue(cmds: readonly WireCommand[]): Promise<number> {
+		if (!cmds.length) return 0;
+		const until = cmds.map((c) => this.queueDeadlines.get(c)?.toISOString() ?? null);
+		const r = await this.db.query(
+			`UPDATE commands c
+			    SET state = 'queued', dispatched_at = NULL, dispatched_instance = NULL,
+			        expires_at = COALESCE(x.until, c.expires_at)
+			   FROM unnest($1::text[], $2::timestamptz[]) AS x(id, until)
+			  WHERE c.id = x.id AND c.state = 'dispatched'`,
+			[cmds.map((c) => c.id), until],
+		);
+		return r.rowCount ?? 0;
+	}
+
+	/**
 	 * Просроченные команды — в `expired`, независимо от того, приходил ли агент.
 	 *
 	 * Раньше это делалось ТОЛЬКО при опросе очереди самим агентом. Пока агент на связи,
@@ -346,6 +430,11 @@ export class CommandQueue {
 	 *
 	 * `silentSecs` — сколько агент должен молчать, чтобы счесть его отсутствующим.
 	 * Перезапуск службы занимает секунды, поэтому короткая пауза ничего не значит.
+	 *
+	 * ДОЛГОЕ ОЖИДАНИЕ — ДОЛЬШЕ ТЕРПИМ (КР-20 аудита 27.09). С таймера (Н4) это закрывало ВСЕ команды в очереди через
+	 * 3 мин молчания, в том числе ночное задание на сто баз, законно ждущее очереди до утра: обновление службы или её
+	 * перезапуск губили всю ночь. Порог команды — не меньше `ORPHAN_WAIT_SHARE` её собственного ожидания
+	 * (`expires_at − created_at`): у задания это часы, у одиночной команды — прежние минуты.
 	 */
 	async expireOrphaned(silentSecs: number): Promise<number> {
 		const r = await this.db.query(
@@ -358,8 +447,10 @@ export class CommandQueue {
 			  FROM agents a
 			 WHERE a.id = c.agent_id
 			   AND c.state = 'queued'
-			   AND (a.last_seen_at IS NULL OR a.last_seen_at < now() - make_interval(secs => $1::int))`,
-			[silentSecs],
+			   AND (a.last_seen_at IS NULL OR a.last_seen_at < now() - make_interval(secs => GREATEST(
+			         $1::double precision,
+			         $2::double precision * EXTRACT(EPOCH FROM (c.expires_at - c.created_at)))))`,
+			[silentSecs, ORPHAN_WAIT_SHARE],
 		);
 		return r.rowCount ?? 0;
 	}
@@ -494,13 +585,16 @@ export class CommandQueue {
 		return ok;
 	}
 
-	/** Отложить выдачу ещё не выданной команды на `seconds` вперёд (повтор монопольной операции ждёт подготовки). */
-	async defer(id: string, seconds: number): Promise<boolean> {
-		const r = await this.db.query(
-			`UPDATE commands SET available_at = now() + make_interval(secs => $2::int) WHERE id = $1 AND state = 'queued'`,
-			[id, Math.max(1, Math.round(seconds))],
+	/**
+	 * Последняя команда агента с этим requestId — итог шага подготовки монопольной операции, ответа на который
+	 * раннер не дождался (перезапуск сервиса, молчание агента): ставился ли запрет заданий, закрывался ли вход.
+	 */
+	async getByRequestId(agentId: string, requestId: string): Promise<CommandRow | null> {
+		const r = await this.db.query<CommandRow>(
+			`SELECT * FROM commands WHERE agent_id = $1 AND request_id = $2 ORDER BY created_at DESC LIMIT 1`,
+			[agentId, requestId],
 		);
-		return (r.rowCount ?? 0) > 0;
+		return r.rows[0] ?? null;
 	}
 
 	/** Дописать ключи в payload команды (состояние монопольной операции — exclusiveOps.ts): верхний уровень сливается. */
@@ -511,6 +605,7 @@ export class CommandQueue {
 	/**
 	 * Монопольные операции, у которых база ещё не возвращена в прежнее состояние (`payload.exclusive` без
 	 * `restored`) — для восстановления после перезапуска сервиса. Не старше двух суток: дальше вернуть уже нечего.
+	 * Переданная копии-повтору (`movedTo`, КР-12) — не в списке: её состояние живёт в копии.
 	 */
 	async listExclusivePending(types: readonly string[]): Promise<ExclusivePendingRow[]> {
 		const r = await this.db.query<ExclusivePendingRow>(
@@ -518,6 +613,7 @@ export class CommandQueue {
 			   FROM commands
 			  WHERE type = ANY($1::text[]) AND payload ? 'exclusive'
 			    AND COALESCE((payload->'exclusive'->>'restored')::boolean, false) = false
+			    AND NOT (payload->'exclusive' ? 'movedTo')
 			    AND created_at > now() - interval '2 days'
 			  ORDER BY created_at`,
 			[[...types]],
@@ -700,28 +796,37 @@ export class CommandQueue {
 			 )
 			 -- Запоминаем ПРОЦЕСС, который забрал команду: по нему при регистрации нового
 			 -- процесса видно, чей ответ уже не придёт (см. failLostByRestart).
-			 -- Срок выполнения — от ВЫДАЧИ (С2): ожидание очереди в него не входит.
-			 UPDATE commands SET state = 'dispatched', dispatched_at = now(), dispatched_instance = $3,
+			 -- Срок выполнения — от ВЫДАЧИ (С2): ожидание очереди в него не входит. Прежний срок ожидания
+			 -- (prev) возвращается рядом — команде, которую вернёт в очередь оборванный опрос (requeue, I8).
+			 -- state = 'queued' в самом UPDATE: отменённая между выборкой и записью не выдаётся (КР-12 п. 4).
+			 UPDATE commands u SET state = 'dispatched', dispatched_at = now(), dispatched_instance = $3,
 			        expires_at = CASE WHEN ttl_seconds IS NOT NULL
-			                          THEN now() + make_interval(secs => ttl_seconds) ELSE expires_at END
-			  WHERE id IN (
+			                          THEN now() + make_interval(secs => ttl_seconds) ELSE u.expires_at END
+			   FROM (SELECT id, expires_at AS queue_expires_at FROM commands WHERE id IN (
 			    -- Кластерные — все, они дешёвые и независимые.
 			    SELECT id FROM candidates WHERE rn = 1 AND NOT ib
 			    UNION ALL
 			    -- Внутрибазовые — только сколько осталось свободных мест у агента.
 			    SELECT id FROM ranked WHERE ib_rank <= $2
-			  )
-			  RETURNING *`,
+			  )) prev
+			  WHERE u.id = prev.id AND u.state = 'queued'
+			  RETURNING u.*, prev.queue_expires_at`,
 			[agentId, slots, instanceId, this.lateGraceSecs],
 		);
-		const wire = r.rows.map((c) => ({
-			id: c.id,
-			...(c.request_id ? { requestId: c.request_id } : {}),
-			...(c.base_key ? { baseKey: c.base_key } : {}),
-			type: c.type,
-			payload: c.payload ?? {},
-			...(c.expires_at ? { expiresAt: new Date(c.expires_at).toISOString() } : {}),
-		}));
+		const wire = (r.rows as (CommandRow & { queue_expires_at?: Date | null })[]).map((c) => {
+			// Состояние подготовки монопольной операции (КР-12) — дело сервиса, агенту оно ни к чему.
+			const { exclusive: _state, ...payload } = c.payload ?? {};
+			const w: WireCommand = {
+				id: c.id,
+				...(c.request_id ? { requestId: c.request_id } : {}),
+				...(c.base_key ? { baseKey: c.base_key } : {}),
+				type: c.type,
+				payload,
+				...(c.expires_at ? { expiresAt: new Date(c.expires_at).toISOString() } : {}),
+			};
+			if (c.queue_expires_at) this.queueDeadlines.set(w, new Date(c.queue_expires_at));
+			return w;
+		});
 
 		// Учётные данные баз подставляются после транзакции — см. dispatchQueued/withAuth.
 		return wire;
@@ -783,8 +888,13 @@ export class CommandQueue {
 	 * от конца паузы.
 	 *
 	 * Возвращает номер новой команды или `null`, если повторять нечего.
+	 *
+	 * `hold` — ПОВТОР МОНОПОЛЬНОЙ ОПЕРАЦИИ ЕЁ ЖЕ РАННЕРОМ (КР-12 п. 1 аудита 27.09): копия удержана до `release()`
+	 * (раннер снова снимет сеансы и выпустит её сам) и получает состояние подготовки (`exclusive`), а у исходной
+	 * отмечается `movedTo` — восстановление после перезапуска видит одну команду операции, а не две. Всё — одним
+	 * запросом: состояние не теряется между копией и отметкой.
 	 */
-	async retryBusy(id: string, queueWaitSeconds: number): Promise<string | null> {
+	async retryBusy(id: string, queueWaitSeconds: number, opts: { hold?: boolean } = {}): Promise<string | null> {
 		const next = "cmd_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
 		const r = await this.db.query<{ id: string; agent_id: string }>(
 			`WITH src AS (
@@ -797,18 +907,25 @@ export class CommandQueue {
 			    INSERT INTO commands (id, agent_id, organization_uuid, base_key, request_id, type, payload,
 			                          user_uuid, conversation_id, expires_at, priority, batch_id,
 			                          in_base, ttl_seconds, attempt, available_at)
-			    SELECT $2, agent_id, organization_uuid, base_key, NULL, type, payload - 'exclusive',
+			    SELECT $2, agent_id, organization_uuid, base_key, NULL, type,
+			           CASE WHEN $7::boolean THEN payload ELSE payload - 'exclusive' END,
 			           user_uuid, conversation_id,
 			           now() + make_interval(secs => $4::int + (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)]),
 			           priority, batch_id, in_base, ttl_seconds, attempt + 1,
-			           now() + make_interval(secs => (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)])
+			           CASE WHEN $7::boolean
+			                THEN now() + make_interval(secs => $4::int + (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)]) + ${HELD_AFTER_EXPIRY}
+			                ELSE now() + make_interval(secs => (ARRAY[$5::int, $6::int])[LEAST(attempt, 2)]) END
 			      FROM src
 			    RETURNING id, agent_id
 			 ), mark AS (
-			    UPDATE commands SET retried_by = $2 WHERE id IN (SELECT id FROM src) AND EXISTS (SELECT 1 FROM ins)
+			    UPDATE commands SET retried_by = $2,
+			           payload = CASE WHEN $7::boolean AND jsonb_typeof(payload->'exclusive') = 'object'
+			                          THEN jsonb_set(payload, '{exclusive,movedTo}', to_jsonb($2::text)) ELSE payload END
+			     WHERE id IN (SELECT id FROM src) AND EXISTS (SELECT 1 FROM ins)
 			 )
 			 SELECT id, agent_id FROM ins`,
-			[id, next, BUSY_MAX_ATTEMPTS, Math.max(30, queueWaitSeconds), BUSY_RETRY_DELAYS_SECS[0], BUSY_RETRY_DELAYS_SECS[1]],
+			[id, next, BUSY_MAX_ATTEMPTS, Math.max(30, queueWaitSeconds), BUSY_RETRY_DELAYS_SECS[0], BUSY_RETRY_DELAYS_SECS[1],
+				opts.hold === true],
 		);
 		const row = r.rows[0];
 		if (!row) return null;
@@ -890,11 +1007,24 @@ export class CommandQueue {
 	 * только в пределах ОДНОГО агента, а ночные проверки учёта идут через бизнес-агента: без этой выборки проверка
 	 * и выгрузка шли в одну базу одновременно — отказы проверок и IB_BUSY у выгрузки. Ключи — в нижнем регистре.
 	 */
+	/*
+	 * ТОЛЬКО ОБСЛУЖИВАНИЕ И ТОЛЬКО ТО, ЧТО ИДЁТ СЕЙЧАС (КР-12 п. 5 аудита 27.09). Раньше считалась любая незавершённая
+	 * команда агента кластера: отложенная на 12 ч монопольная операция и любое чтение (IB_LIST_*) выбрасывали базу из
+	 * ночных проверок на всю ночь. Теперь — типы обслуживания (MAINTENANCE_TYPES), уже доступные к выдаче, и база,
+	 * которую монопольная операция держит закрытой (вход закрыт, база ещё не возвращена).
+	 */
 	async basesUnderMaintenance(): Promise<Set<string>> {
 		const r = await this.db.query<{ key: string }>(
 			`SELECT DISTINCT lower(c.base_key) AS key
 			   FROM commands c JOIN agents a ON a.id = c.agent_id
-			  WHERE c.state IN ('queued', 'dispatched') AND c.base_key IS NOT NULL AND a.role = 'admin'`,
+			  WHERE c.base_key IS NOT NULL AND a.role = 'admin' AND (
+			        (c.state IN ('queued', 'dispatched') AND c.type = ANY($1::text[])
+			         AND (c.available_at IS NULL OR c.available_at <= now()))
+			     OR (c.payload->'exclusive'->>'locked' = 'true'
+			         AND COALESCE(c.payload->'exclusive'->>'restored', 'false') <> 'true'
+			         AND NOT (c.payload->'exclusive' ? 'movedTo')
+			         AND c.created_at > now() - interval '2 days'))`,
+			[[...MAINTENANCE_TYPES]],
 		);
 		return new Set(r.rows.map((x) => x.key));
 	}

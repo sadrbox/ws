@@ -156,6 +156,25 @@ export class EnrollmentStore {
 		return out;
 	}
 
+	/**
+	 * БОЛЕЕ НОВАЯ ОЖИДАЮЩАЯ ЗАЯВКА ТОЙ ЖЕ СЛУЖБЫ — её код (КР-20 аудита 27.09). Агент, повторяющий заявку без секрета
+	 * опроса (сборка 19.09), получает НОВУЮ заявку и опрашивает уже её. Одобрить прежнюю значило бы отклонить ту, что
+	 * ждёт агент («Одобрена другая заявка»), — токен не забрал бы никто. Панель и одобрение по этому коду отказывают.
+	 */
+	async newerPending(id: string): Promise<string | null> {
+		await this.expire();
+		const r = await this.db.query<{ code: string }>(
+			`SELECT n.code FROM agent_enrollments e
+			   JOIN agent_enrollments n
+			     ON lower(n.computer) = lower(e.computer) AND lower(n.service_name) = lower(e.service_name)
+			    AND n.id <> e.id AND n.state = 'PENDING' AND n.created_at > e.created_at
+			  WHERE e.id = $1
+			  ORDER BY n.created_at DESC LIMIT 1`,
+			[id],
+		);
+		return r.rows[0]?.code ?? null;
+	}
+
 	async approve(id: string, d: { organizationUuid: string; agentId: string; decidedBy: string; note?: string | null }): Promise<boolean> {
 		await this.expire();
 		const r = await this.db.query<{ computer: string; service_name: string; code: string }>(

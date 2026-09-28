@@ -22,7 +22,7 @@ import { isBusyFailure } from "../commands/queue.ts";
 import { humanizeAgentError, normalizeLockedBy, parseLockedBy } from "../onec/errorHints.ts";
 import { isDestructive } from "../onec/access.ts";
 import { SECTION_OF_TYPE, agentsAllow, deniedMessage, onecRequirement, sectionAllows } from "../onec/permissions.ts";
-import { BATCHABLE, BATCH_QUEUE_WAIT_SECS, isBatchError, startBatch } from "../onec/batchRunner.ts";
+import { BATCHABLE, enqueueBatchCommand, isBatchError, startBatch } from "../onec/batchRunner.ts";
 import { agentBuild, buildOutdated, missingFeatures } from "../agents/features.ts";
 import { mergeDurationStats } from "../agents/commandStats.ts";
 import { collectBusinessSlices, extensionBaseRows } from "../onec/extensionBases.ts";
@@ -2076,13 +2076,10 @@ export function onecRouter(deps: Deps) {
 			}
 			const refusal = payloadRefusal(agent, spec, cmd.payload as Record<string, unknown>);
 			if (refusal) { skipped.push({ baseKey: key, reason: refusal }); continue; }
-			const fresh = await queue.enqueue({
-				agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: cmd.base_key,
-				type: cmd.type, payload: cmd.payload, userUuid: u.uuid,
-				ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
-				queueWaitSeconds: BATCH_QUEUE_WAIT_SECS, inBase: runsInsideBase(spec), priority: 10,
-			});
-			await batches.attach(batchId, fresh.id);
+			// Тем же шагом, что и запуск задания (КР-12 аудита 27.09): монопольная операция — через подготовку базы
+			// в цепочке агента, а не копией в открытую базу.
+			await enqueueBatchCommand({ queue, batches, log }, batchId,
+				{ agent, spec, baseKey: cmd.base_key, payload: (cmd.payload ?? {}) as Record<string, unknown>, userUuid: u.uuid });
 			queued += 1;
 		}
 		await batches.noteSkipped(batchId, skipped.map((x) => ({ baseKey: x.baseKey, reason: x.reason })));
@@ -2353,7 +2350,22 @@ export function onecRouter(deps: Deps) {
 		const orgs = bins.length ? await erpOrganizations(bins).catch(() => []) : [];
 		const all = await bases.listAll();
 		const candidatesOf = (key: string) => all.filter((b) => b.key.toLowerCase() === key.toLowerCase()).map((b) => ({ baseId: b.id, key: b.key, server: b.serverName }));
-		res.json({ success: true, data: { items: rows.map((x) => registrationView(x, orgs, candidatesOf(x.baseName))), canDecide: !!req.erpUser!.isSuperAdmin } });
+		// Самая новая ожидающая заявка той же базы, если она новее этой (КР-20 аудита 27.09): база опрашивает её, и
+		// одобрять эту панель не даёт — как и само одобрение (newerPending).
+		const newest = new Map<string, RegistrationRow>();
+		for (const x of rows) {
+			if (x.state !== "PENDING") continue;
+			const cur = newest.get(x.onecBaseId);
+			if (!cur || new Date(x.createdAt).getTime() > new Date(cur.createdAt).getTime()) newest.set(x.onecBaseId, x);
+		}
+		const newerCode = (x: RegistrationRow): string | null => {
+			const top = x.state === "PENDING" ? newest.get(x.onecBaseId) : undefined;
+			return top && top.id !== x.id && new Date(top.createdAt).getTime() > new Date(x.createdAt).getTime() ? top.code : null;
+		};
+		res.json({ success: true, data: {
+			items: rows.map((x) => ({ ...registrationView(x, orgs, candidatesOf(x.baseName)), newerPendingCode: newerCode(x) })),
+			canDecide: !!req.erpUser!.isSuperAdmin,
+		} });
 	});
 
 	r.get("/erp-organizations", async (req, res) => {
@@ -2378,6 +2390,18 @@ export function onecRouter(deps: Deps) {
 		const reg = await registrations.get(String(req.params.id));
 		if (!reg) { send(res, fail(404, "NOT_FOUND", "Заявка не найдена")); return; }
 		if (reg.state !== "PENDING") { send(res, fail(409, "ALREADY_DECIDED", `Заявка уже ${reg.state === "EXPIRED" ? "просрочена" : "решена"}`)); return; }
+		/*
+		 * БОЛЕЕ НОВАЯ ЗАЯВКА ТОЙ ЖЕ БАЗЫ — ОДОБРЯТЬ ЭТУ НЕЛЬЗЯ (КР-20 аудита 27.09). Старое расширение повторяет заявку без
+		 * секрета опроса — новой заявкой, и база опрашивает уже её: одобрение прежней отклонило бы ту, что ждёт база, и
+		 * токен не забрал бы никто. Если же новую подала не эта база (в 1С — код этой заявки), её сначала отклоняют.
+		 */
+		const newer = await registrations.newerPending(reg.id);
+		if (newer) {
+			send(res, fail(409, "NEWER_REGISTRATION_PENDING",
+				`У этой базы есть более новая заявка (код ${newer}) — 1С ждёт решения по ней. Одобрите заявку с кодом, который `
+				+ `показывает 1С; если в 1С код ${reg.code}, сначала отклоните заявку ${newer}`));
+			return;
+		}
 		const org = (await erpOrganizations()).find((o) => o.uuid === organizationUuid);
 		if (!org) { send(res, fail(400, "VALIDATION_ERROR", "Организация ERP не найдена")); return; }
 
@@ -2638,11 +2662,22 @@ export function onecRouter(deps: Deps) {
 		const hostKey = (x: { computer: string; serviceName: string }) => `${x.computer.toLowerCase()}\u0000${x.serviceName.toLowerCase()}`;
 		const perHost = new Map<string, number>();
 		for (const x of pending) perHost.set(hostKey(x), (perHost.get(hostKey(x)) ?? 0) + 1);
-		const items = rows.map((x) => ({
-			...x,
-			previousAgentId: x.state === "PENDING" ? previous.get(x.id) ?? null : null,
-			pendingSiblings: x.state === "PENDING" ? (perHost.get(hostKey(x)) ?? 1) - 1 : 0,
-		}));
+		// Самая новая ожидающая заявка той же службы, если она новее этой (КР-20 аудита 27.09): агент опрашивает её, и
+		// одобрять эту панель не даёт — как и само одобрение (newerPending).
+		const newest = new Map<string, (typeof pending)[number]>();
+		for (const x of pending) {
+			const cur = newest.get(hostKey(x));
+			if (!cur || new Date(x.createdAt).getTime() > new Date(cur.createdAt).getTime()) newest.set(hostKey(x), x);
+		}
+		const items = rows.map((x) => {
+			const top = x.state === "PENDING" ? newest.get(hostKey(x)) : undefined;
+			return {
+				...x,
+				previousAgentId: x.state === "PENDING" ? previous.get(x.id) ?? null : null,
+				pendingSiblings: x.state === "PENDING" ? (perHost.get(hostKey(x)) ?? 1) - 1 : 0,
+				newerPendingCode: top && top.id !== x.id && new Date(top.createdAt).getTime() > new Date(x.createdAt).getTime() ? top.code : null,
+			};
+		});
 		res.json({ success: true, data: { items, canDecide: !!req.erpUser!.isSuperAdmin } });
 	});
 
@@ -2659,6 +2694,18 @@ export function onecRouter(deps: Deps) {
 		const e = await enrollments.get(String(req.params.id));
 		if (!e) { send(res, fail(404, "NOT_FOUND", "Заявка не найдена")); return; }
 		if (e.state !== "PENDING") { send(res, fail(409, "ALREADY_DECIDED", `Заявка уже ${e.state === "EXPIRED" ? "просрочена" : "решена"}`)); return; }
+		/*
+		 * БОЛЕЕ НОВАЯ ЗАЯВКА ТОЙ ЖЕ СЛУЖБЫ — ОДОБРЯТЬ ЭТУ НЕЛЬЗЯ (КР-20 аудита 27.09). Повтор без секрета опроса заводит
+		 * новую заявку, и агент опрашивает уже её: одобрение прежней отклонило бы ту, что ждёт агент, и токен не забрал
+		 * бы никто. Если же новую подал не агент (в окне агента — код этой заявки), её сначала отклоняют.
+		 */
+		const newer = await enrollments.newerPending(e.id);
+		if (newer) {
+			send(res, fail(409, "NEWER_ENROLLMENT_PENDING",
+				`У этой службы есть более новая заявка (код ${newer}) — агент ждёт решения по ней. Одобрите заявку с кодом из окна `
+				+ `агента; если в окне агента код ${e.code}, сначала отклоните заявку ${newer}`));
+			return;
+		}
 		/*
 		 * ОРГАНИЗАЦИЯ — ТОЛЬКО У БИЗНЕС-АГЕНТА. Он ходит в базы КОНКРЕТНОЙ организации ERP: по ней выбирается
 		 * исполнитель команд чата и считается лимит тарифа. Админ-агент обслуживает КЛАСТЕР целиком — все базы всех

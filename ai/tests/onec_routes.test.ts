@@ -52,6 +52,8 @@ async function harness(opts: {
 	/** Серверы, где есть каждая база реестра (C9–C11); нет — один сервер srv-1. */
 	servers?: { id: string; name: string; organizationUuid: string }[];
 	scope?: "all" | "organizations";
+	/** Заявки агентов для списка «Подключение агентов». */
+	enrollments?: Record<string, unknown>[];
 } = {}) {
 	const journal: string[] = [];
 	const enqueued: { type: string; payload: Record<string, unknown> }[] = [];
@@ -138,7 +140,12 @@ async function harness(opts: {
 		agents, bases, queue, audit,
 		batches: { ownerOf: async () => ({ organizationUuid: "org-1", userUuid: null }) },
 		registry: { userSummary: async (ids: unknown) => { journal.push(`userSummary:${JSON.stringify(ids)}`); return []; }, extensionSummary: async () => [] },
-		registrations: { list: async () => opts.registrations ?? [], get: async () => null },
+		registrations: {
+			list: async () => opts.registrations ?? [],
+			get: async (id: string) => (opts.registrations ?? []).find((x) => x.id === id) ?? null,
+			// Более новая ожидающая заявка той же базы (КР-20 аудита 27.09): у «reg-older» она есть.
+			newerPending: async (id: string) => (id === "reg-older" ? "NEW-777" : null),
+		},
 		baseTokens: { list: async () => opts.tokens ?? [] },
 		chatExchange: { list: async () => opts.chat ?? [] },
 		credentials: { usersByBaseKeys: async () => new Map() }, schedules: {}, agentBases,
@@ -151,8 +158,11 @@ async function harness(opts: {
 					? { id, code: "BIZ-002", state: "PENDING", role: "business", computer: "BUH-PC-2", serviceName: "BPAPIAgent", name: "Бухгалтерия, новое имя" }
 					: { id, code: "BIZ-001", state: "PENDING", role: "business", computer: "BUH-PC", serviceName: "BPAPIAgent", name: "Бухгалтерия" }),
 			previousAgent: async (computer: string) => (computer === "BUH-PC-2" ? "bizOld" : computer === "BUH-PC-3" ? "biz" : null),
+			// Более новая ожидающая заявка той же службы (КР-20 аудита 27.09): у «enr-older» она есть.
+			newerPending: async (id: string) => (id === "enr-older" ? "NEW-777" : null),
 			approve: async (id: string, d: { organizationUuid: string; agentId: string }) => { journal.push(`approveEnroll:${id}:${d.organizationUuid || "-"}:${d.agentId}`); return true; },
-			list: async () => [],
+			list: async () => opts.enrollments ?? [],
+			previousAgents: async () => new Map(),
 		},
 		activation: {
 			get: async (agentId: string, bin: string) => ({ agentId, bin, state: bin === "000000000009" ? "APPROVED" : "PENDING" }),
@@ -404,6 +414,82 @@ test("аудит 21.09: заявка не забирает токен у раб�
 	assert.equal((r.body.data as unknown as { created: boolean }).created, true);
 	assert.ok(h.journal.some((j) => j.startsWith("create:org-1:")), h.journal.join("\n"));
 	h.close();
+});
+
+test("КР-20: прежнюю заявку при более новой той же службы не одобрить — агент ждёт решения по новой", async () => {
+	const h = await harness();
+	try {
+		const r = await h.call("POST", "/enrollments/enr-older/approve", { organizationUuid: "org-1" });
+		assert.equal(r.status, 409);
+		const err = r.body.error as unknown as { code: string; message: string };
+		assert.equal(err.code, "NEWER_ENROLLMENT_PENDING");
+		assert.match(err.message, /NEW-777/);
+		assert.match(err.message, /сначала отклоните/);
+		assert.ok(!h.journal.some((j) => j.startsWith("approveEnroll:") || j.startsWith("create:")), "ни одобрения, ни нового агента");
+	} finally {
+		h.close();
+	}
+});
+
+test("КР-20: список заявок называет более новую ожидающую заявку той же службы — панель не даёт одобрить прежнюю", async () => {
+	const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+	const enr = (id: string, code: string, computer: string, createdAt: string, state = "PENDING") =>
+		({ id, code, computer, serviceName: "BPAPIAgent", name: "Бухгалтерия", role: "business", state, createdAt });
+	const h = await harness({ enrollments: [
+		enr("e-new", "NEW-002", "BUH-PC", at(1)),
+		enr("e-old", "OLD-001", "buh-pc", at(10)),
+		enr("e-other", "OTH-003", "OTHER-PC", at(5)),
+		enr("e-done", "DON-004", "BUH-PC", at(0), "REJECTED"),
+	] });
+	try {
+		const r = await h.call("GET", "/enrollments?state=");
+		assert.equal(r.status, 200);
+		const items = (r.body.data as unknown as { items: { id: string; newerPendingCode: string | null; pendingSiblings: number }[] }).items;
+		const by = new Map(items.map((x) => [x.id, x]));
+		assert.equal(by.get("e-old")!.newerPendingCode, "NEW-002", "компьютер без учёта регистра — та же служба");
+		assert.equal(by.get("e-new")!.newerPendingCode, null);
+		assert.equal(by.get("e-other")!.newerPendingCode, null);
+		assert.equal(by.get("e-done")!.newerPendingCode, null, "решённая заявка не мешает");
+		assert.equal(by.get("e-old")!.pendingSiblings, 1);
+	} finally {
+		h.close();
+	}
+});
+
+/** Заявка базы в форме хранилища (RegistrationRow). */
+const regRow = (id: string, code: string, onecBaseId: string, minAgo: number, state = "PENDING") => ({
+	id, code, onecBaseId, baseName: "buh_nord", state, note: null, ip: null, repeats: 0, decidedBy: null, decidedAt: null,
+	organizationUuid: null, baseId: null, baseKey: null, tokenId: null, tokenDeliveredAt: null,
+	createdAt: new Date(Date.now() - minAgo * 60_000), updatedAt: new Date(), expiresAt: new Date(Date.now() + 86_400_000),
+	body: { base: { id: onecBaseId, name: "Nord Beer" }, organizations: [] },
+});
+
+test("КР-20: заявки баз — список называет более новую ожидающую той же базы, прежнюю не одобрить (409)", async () => {
+	const h = await harness({ registrations: [
+		regRow("reg-new", "NEW-777", "ib-1", 1),
+		regRow("reg-older", "OLD-001", "ib-1", 10),
+		regRow("reg-other", "OTH-003", "ib-2", 5),
+		regRow("reg-done", "DON-004", "ib-1", 0, "REJECTED"),
+	] });
+	try {
+		const list = await h.call("GET", "/registrations");
+		assert.equal(list.status, 200);
+		const items = (list.body.data as unknown as { items: { id: string; newerPendingCode: string | null }[] }).items;
+		const by = new Map(items.map((x) => [x.id, x.newerPendingCode]));
+		assert.equal(by.get("reg-older"), "NEW-777");
+		assert.equal(by.get("reg-new"), null);
+		assert.equal(by.get("reg-other"), null);
+		assert.equal(by.get("reg-done"), null, "решённая заявка не мешает");
+
+		const r = await h.call("POST", "/registrations/reg-older/approve", { organizationUuid: "org-1", baseKey: "buh_nord" });
+		assert.equal(r.status, 409);
+		const err = r.body.error as unknown as { code: string; message: string };
+		assert.equal(err.code, "NEWER_REGISTRATION_PENDING");
+		assert.match(err.message, /NEW-777/);
+		assert.match(err.message, /сначала отклоните/);
+	} finally {
+		h.close();
+	}
 });
 
 test("аудит 21.09: хвостовая косая черта больше не обходит проверку прав", async () => {

@@ -20,7 +20,7 @@ import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
-import { EXCLUSIVE_TYPES, ExclusiveRunner } from "../onec/exclusiveOps.ts";
+import { retriedByRunner } from "../onec/exclusiveOps.ts";
 import { BUSY_RETRY_DELAYS_SECS, isBusyFailure, runningLeaseSecs } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
@@ -591,8 +591,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			const commands = await queue.take(req.agent!.agentId, wait, agentInstance(req),
 				role === "business" ? cfg.BUSINESS_IB_PARALLEL : undefined);
 			if (closed && commands.length) {
-				await db.query(`UPDATE commands SET state = 'queued', dispatched_at = NULL WHERE id = ANY($1) AND state = 'dispatched'`,
-					[commands.map((c) => c.id)]);
+				// Обратно в очередь — с прежним сроком ОЖИДАНИЯ (I8 аудита 27.09), а не «выдача + срок выполнения»:
+				// команда задания, ждущая очереди до 12 ч, иначе истекала бы в очереди через 15 мин.
+				await queue.requeue(commands);
 				return;
 			}
 			if (commands.length) log.info({ agentId: req.agent!.agentId, count: commands.length }, "команды выданы агенту");
@@ -928,21 +929,19 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		// База занята — команде задания даётся ещё попытка в конце очереди (С10): агент сам советует
 		// повторить такие базы, а ночное обслуживание иначе пропускало базу из-за одного входа.
 		// То же — «агент занят» и «служба останавливалась до начала» (С31, С25): команда не выполнялась.
-		if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id) {
+		/*
+		 * МОНОПОЛЬНУЮ ОПЕРАЦИЮ ПОВТОРЯЕТ ЕЁ РАННЕР (КР-12 п. 1 аудита 27.09), а не этот обработчик. Раньше здесь ставилась
+		 * копия и тем же тиком запускался второй раннер — пока первый возвращал базу: второй читал запрет первого как
+		 * «прежнее значение», операция шла с разрешёнными заданиями, запрет оставался навсегда, а вход первого мог
+		 * открыться посреди операции второго. Раннер держит базу закрытой, ставит копию сам и выпускает её после нового
+		 * снятия сеансов (exclusiveOps.ts). Раннера нет (перезапуск сервиса) — повтора нет: отказ остаётся в задании,
+		 * база возвращается восстановлением, «Повторить неуспешные» пойдёт через подготовку.
+		 */
+		if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id && retriedByRunner(row.payload)) {
+			log.info({ commandId: row.id, baseKey: row.base_key, code: wire.error?.code },
+				"база занята — повтор монопольной операции ведёт её раннер");
+		} else if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id) {
 			const again = await queue.retryBusy(row.id, BATCH_QUEUE_WAIT_SECS);
-			if (again && EXCLUSIVE_TYPES.has(row.type) && row.base_key) {
-				// Повтор монопольной операции — через ту же подготовку (exclusiveOps.ts): копия без неё уходила агенту
-				// с открытой базой и висела те же 6 минут (27.09, `_transition`). Пауза повтора сохраняется: подготовка
-				// начнётся сразу, а операция выпустится, когда база закрыта.
-				const spec = findAdminCommand(row.type);
-				const agent = await agents.get(row.agent_id);
-				if (spec && agent && await queue.defer(again, BATCH_QUEUE_WAIT_SECS)) {
-					void new ExclusiveRunner(queue, log).run(
-						{ agent, baseKey: row.base_key, commandId: again, userUuid: row.user_uuid, queueWaitSeconds: BATCH_QUEUE_WAIT_SECS },
-						spec,
-					).catch((e: unknown) => log.warn({ commandId: again, err: e instanceof Error ? e.message : String(e) }, "монопольная операция: сбой сервиса при повторе"));
-				}
-			}
 			if (again) {
 				const attempt = (row.attempt ?? 1) + 1;
 				log.info({

@@ -12,14 +12,14 @@
  * запуска по расписанию разные субъекты (человек с правом `full` против самого сервиса), и
  * решать это должен вызывающий.
  */
-import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, baseRefusal, buildAdminPayload, findAdminCommand, payloadRefusal, runsInsideBase } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, agentCanRun, baseRefusal, buildAdminPayload, findAdminCommand, payloadRefusal, runsInsideBase, type AdminCommandSpec } from "../commands/admin.ts";
 
 /**
  * Сколько команда группового задания может ждать очереди (С2). Сто баз при одном месте идут
  * часами, и задание, запущенное вечером, законно ждёт до утра — но не бесконечно.
  */
 export const BATCH_QUEUE_WAIT_SECS = 12 * 3600;
-import { EXCLUSIVE_TYPES, ExclusiveRunner, type ExclusiveLog } from "./exclusiveOps.ts";
+import { EXCLUSIVE_TYPES, superviseExclusive, type ExclusiveAgent, type ExclusiveLog } from "./exclusiveOps.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
 import type { BatchService } from "./batches.ts";
@@ -81,6 +81,44 @@ export type BatchDeps = {
 
 /** Почему запуск невозможен — текстом для человека (в HTTP уходит как VALIDATION_ERROR). */
 export type BatchStartError = { error: string };
+
+/**
+ * ПОСТАВИТЬ КОМАНДУ ЗАДАНИЯ — общий шаг запуска задания и «Повторить неуспешные».
+ *
+ * Монопольная (EXCLUSIVE_TYPES) встаёт в задание сразу, но удержанной и с пустым состоянием подготовки в payload
+ * (КР-12 аудита 27.09): агенту она уходит только после того, как её раннер закроет базу, а раннер ждёт своей очереди
+ * в цепочке агента (exclusiveOps.ts) — база закрывается непосредственно перед своей операцией, а не все сразу.
+ * Состояние прошлой подготовки из payload неуспешной команды не переносится: у повтора своя.
+ */
+export async function enqueueBatchCommand(
+	deps: Pick<BatchDeps, "queue" | "batches" | "log">, batchId: string,
+	c: { agent: ExclusiveAgent; spec: AdminCommandSpec; baseKey: string | null; payload: Record<string, unknown>; userUuid: string | null },
+): Promise<string> {
+	const { exclusive: _previous, ...payload } = c.payload;
+	const exclusive = !!c.baseKey && EXCLUSIVE_TYPES.has(c.spec.type) && typeof deps.queue.release === "function";
+	const cmd = await deps.queue.enqueue({
+		agentId: c.agent.id, organizationUuid: c.agent.organizationUuid, baseKey: c.baseKey,
+		type: c.spec.type, payload: exclusive ? { ...payload, exclusive: {} } : payload, userUuid: c.userUuid,
+		ttlSeconds: c.spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
+		queueWaitSeconds: BATCH_QUEUE_WAIT_SECS,
+		inBase: runsInsideBase(c.spec),
+		// Пачку по многим базам запускают и уходят: она не должна загораживать
+		// одиночный запрос человека, который ждёт ответа на экране.
+		priority: 10,
+		...(exclusive ? { hold: true } : {}),
+	});
+	await deps.batches.attach(batchId, cmd.id);
+	if (exclusive) {
+		// Подготовка идёт рядом, а не вместо ответа: задание запускают и уходят (ждать закрытия ста баз на экране
+		// некому); итог по каждой базе — в самой команде задания и в журнале.
+		void superviseExclusive(
+			{ queue: deps.queue, log: deps.log, parallel: deps.queue.ibParallel },
+			{ agent: c.agent, baseKey: c.baseKey!, commandId: cmd.id, userUuid: c.userUuid, queueWaitSeconds: BATCH_QUEUE_WAIT_SECS },
+			c.spec,
+		);
+	}
+	return cmd.id;
+}
 
 export const isBatchError = (r: BatchStartResult | BatchStartError): r is BatchStartError =>
 	"error" in r;
@@ -147,30 +185,10 @@ export async function startBatch(
 		// агенту, который ответит успехом и ничего не сделает.
 		const refusal = payloadRefusal(agent, spec, built.payload);
 		if (refusal) { skipped.push({ baseKey: key, reason: refusal }); continue; }
-		// Установка и удаление расширения идут под монопольным доступом (exclusiveOps.ts): команда встаёт в
-		// задание сразу, но выдаётся агенту только после того, как сервис закрыл базу и снял сеансы.
-		const exclusive = EXCLUSIVE_TYPES.has(spec.type) && typeof deps.queue.release === "function";
-		const cmd = await deps.queue.enqueue({
-			agentId: agent.id, organizationUuid: agent.organizationUuid, baseKey: key,
-			type: spec.type, payload: built.payload, userUuid: input.userUuid,
-			ttlSeconds: spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
-			queueWaitSeconds: BATCH_QUEUE_WAIT_SECS,
-			inBase: runsInsideBase(spec),
-			// Пачку по многим базам запускают и уходят: она не должна загораживать
-			// одиночный запрос человека, который ждёт ответа на экране.
-			priority: 10,
-			...(exclusive ? { availableAt: new Date(Date.now() + BATCH_QUEUE_WAIT_SECS * 1000) } : {}),
-		});
-		await deps.batches.attach(batchId, cmd.id);
+		// Монопольная операция (exclusiveOps.ts) встаёт в задание сразу, но выдаётся агенту только после того, как
+		// сервис закрыл базу и снял сеансы, — в свою очередь цепочки агента (КР-12).
+		await enqueueBatchCommand(deps, batchId, { agent, spec, baseKey: key, payload: built.payload, userUuid: input.userUuid });
 		queued += 1;
-		if (exclusive) {
-			// Подготовка идёт рядом, а не вместо ответа: задание запускают и уходят (ждать закрытия ста баз
-			// на экране некому); итог по каждой базе — в самой команде задания и в журнале.
-			void new ExclusiveRunner(deps.queue, deps.log).run(
-				{ agent, baseKey: key, commandId: cmd.id, userUuid: input.userUuid, queueWaitSeconds: BATCH_QUEUE_WAIT_SECS },
-				spec,
-			).catch((e: unknown) => deps.log?.warn({ baseKey: key, commandId: cmd.id, err: e instanceof Error ? e.message : String(e) }, "монопольная операция: сбой сервиса"));
-		}
 	}
 
 	// Отсеянные базы остаются В САМОМ ЗАДАНИИ: иначе оно показывает «в работе» там, где
