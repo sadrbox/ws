@@ -19,6 +19,8 @@ import styles from "./OrgSwitcher.module.scss";
 const ROLE_LABEL_KEYS: Record<string, string> = {
   admin: "roleAdmin",
   member: "roleMember",
+  // Сотрудник обслуживающей фирмы в организации клиента (КР-18 аудита 27.09).
+  service: "roleService",
 };
 
 const OrgSwitcher: FC = () => {

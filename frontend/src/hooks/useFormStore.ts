@@ -25,6 +25,7 @@ import {
 } from "src/services/persistencePipe";
 import { translateError, translate } from "src/i18";
 import { getCurrentUser } from "src/services/auth";
+import { registerReloadBlocker } from "src/services/appUpdate";
 import type { TDataItem } from "src/components/Table/types";
 import type { TPane } from "src/app/types";
 import useUID from "./useUID";
@@ -60,6 +61,16 @@ function isVersionConflict(data: unknown): boolean {
 	if (d.code === "VERSION_CONFLICT" || d.code === "STALE_UPDATE") return true;
 	const m = typeof d.message === "string" ? d.message.toLowerCase() : "";
 	return /измен[её]н[аоы]? другим|version conflict|modified by another/.test(m);
+}
+
+/**
+ * Сбой связи при записи строк таблиц (P3 аудита 27.09). commitPendingRows заворачивает ошибку в
+ * «<таблица>: <текст>» и кладёт исходную в `cause`; хвост текста axios — запасной признак.
+ */
+function isRowsNetworkFailure(e: unknown): boolean {
+	if (isNetworkError(e) || isNetworkError((e as { cause?: unknown } | null)?.cause)) return true;
+	const m = (e as { message?: unknown } | null)?.message;
+	return typeof m === "string" && /(?:^|:\s)(?:Network Error|timeout of \d+ms exceeded)$/.test(m);
 }
 
 /** Текущий userId или "anon" — для разделения черновиков между пользователями. */
@@ -416,6 +427,53 @@ function createFormStore<F extends object>(
 		_paneUniqId = id;
 	}
 
+	// ── Держатели store (КР-4 аудита 27.09) ──
+	// Одну запись могут держать две панели: новая форма после первой записи получает ключ с uuid —
+	// тот же, что у формы этой записи, открытой из списка или «На основании». Панели разные, store
+	// один. Раньше закрытие любой из них чистило черновик и выбрасывало store из кэша: другая
+	// получала пустую форму — вечный скелетон либо «новую», и «Записать» создавало второй документ.
+	// Теперь каждый экземпляр хука — держатель (id → панель), а чистим, когда держателей не осталось.
+	const holders = new Map<string, string | undefined>();
+	/** Взять store экземпляром хука; push-уведомления — в его панель. */
+	function acquire(holderId: string, paneId: string | undefined): void {
+		holders.set(holderId, paneId);
+		if (paneId) _paneUniqId = paneId;
+	}
+	/** Отпустить (закрытие панели или размонтирование). true — держателей не осталось. */
+	function detach(holderId: string): boolean {
+		const paneId = holders.get(holderId);
+		holders.delete(holderId);
+		// Уведомления шли в эту панель — передаём оставшейся (последней взявшей store).
+		if (paneId && _paneUniqId === paneId) {
+			_paneUniqId = [...holders.values()].filter(Boolean).pop();
+		}
+		return holders.size === 0;
+	}
+	/** Держит ли store ещё кто-то, кроме holderId. */
+	function hasOtherHolders(holderId: string): boolean {
+		for (const id of holders.keys()) if (id !== holderId) return true;
+		return false;
+	}
+	/** Открыт ли store хоть в одной панели. */
+	function isHeld(): boolean {
+		return holders.size > 0;
+	}
+
+	// Запись — одна на store: две панели одной записи не запускают PUT и коммит строк
+	// параллельно (строки ушли бы дважды). Флаг в хуке был у каждой панели свой.
+	let submitting = false;
+	function beginSubmit(): boolean {
+		if (submitting) return false;
+		submitting = true;
+		return true;
+	}
+	function endSubmit(): void {
+		submitting = false;
+	}
+	function isSubmitting(): boolean {
+		return submitting;
+	}
+
 	/** Установить ошибку: пушит уведомление в колокольчик панели */
 	function setError(
 		msg: string | null,
@@ -770,9 +828,16 @@ function createFormStore<F extends object>(
 	function destroy(): void {
 		if (persistTimer) clearTimeout(persistTimer);
 		clearSession(currentStorageKey);
-		for (const k of previousStorageKeys) storeCache.delete(k);
-		previousStorageKeys.length = 0;
+		dropPreviousKeys();
 		listeners.clear();
+	}
+
+	/** Убрать из кэша прежние ключи (после миграции new → uuid) — только если они ведут на этот store. */
+	function dropPreviousKeys(): void {
+		for (const k of previousStorageKeys) {
+			if (storeCache.get(k) === storeResult) storeCache.delete(k);
+		}
+		previousStorageKeys.length = 0;
 	}
 
 	/**
@@ -885,6 +950,15 @@ function createFormStore<F extends object>(
 		setPaneUniqId,
 		setPaneLabel,
 
+		// Держатели и запись (КР-4)
+		acquire,
+		detach,
+		hasOtherHolders,
+		isHeld,
+		beginSubmit,
+		endSubmit,
+		isSubmitting,
+
 		// API
 		load,
 		submitFields,
@@ -918,8 +992,7 @@ function createFormStore<F extends object>(
 			}
 			clearSession(currentStorageKey);
 			// Удаляем старые ключи из кэша (после миграции new → uuid)
-			for (const k of previousStorageKeys) storeCache.delete(k);
-			previousStorageKeys.length = 0;
+			dropPreviousKeys();
 		},
 	};
 
@@ -934,6 +1007,63 @@ export type FormStore<F extends object> = ReturnType<typeof createFormStore<F>>;
 // ═══════════════════════════════════════════════════════════════════════════
 
 const storeCache = new Map<string, FormStore<any>>();
+
+/**
+ * Отпустить store при закрытии панели (КР-4 аудита 27.09). Черновик и кэш чистим, только когда
+ * store больше никто не держит: та же запись может быть открыта ещё в одной панели.
+ */
+function releaseStore<F extends object>(store: FormStore<F>, holderId: string): void {
+	if (!store.detach(holderId)) return;
+	const key = store.getStorageKey();
+	store.clearStorage();
+	if (storeCache.get(key) === store) storeCache.delete(key);
+}
+
+/**
+ * Несохранённое в открытых формах — правки или запись в пути. Пока оно есть, новая версия
+ * приложения не перезагружает вкладку без спроса (КР-10 аудита 27.09, services/appUpdate).
+ */
+export function hasUnsavedForms(): boolean {
+	// Store записи, взятой после первой записи, лежит в кэше под двумя ключами — берём по разу.
+	for (const store of new Set<FormStore<object>>(storeCache.values())) {
+		if (store.isHeld() && (store.isDirty() || store.isSubmitting())) return true;
+	}
+	return false;
+}
+registerReloadBlocker(hasUnsavedForms);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// СТАРЫЕ ЧЕРНОВИКИ БЕЗ userId (P3 аудита 27.09)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * До исправления И12 (аудит 26.09) правки новой формы после первой записи сохранялись под ключом
+ * `formStore:<форма>:<uuid>` — без пользователя. В «Несохранённых» их не видно (там только ключи
+ * `formStore:<userId>:…`), а чьи они — неизвестно: перенести текущему пользователю нельзя (браузер
+ * бывает общим). Поэтому удаляем — разово за загрузку страницы, при первом открытии формы.
+ * Ключи `formStore:<userId>:…` и служебные не подходят под шаблон: форма всегда `…-form`.
+ */
+const LEGACY_DRAFT_KEY = /^formStore:[a-z0-9]+(?:-[a-z0-9]+)*-form:[^:]+$/;
+let legacyDraftsChecked = false;
+
+/** Удалить черновики старого формата. Возвращает число удалённых ключей. */
+export function purgeLegacyFormDrafts(): number {
+	let removed = 0;
+	try {
+		const keys: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const k = localStorage.key(i);
+			if (k && LEGACY_DRAFT_KEY.test(k)) keys.push(k);
+		}
+		for (const k of keys) {
+			localStorage.removeItem(k);
+			removed++;
+		}
+	} catch {
+		/* хранилище недоступно — чистить нечего */
+	}
+	return removed;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GLOBAL FORM API REGISTRY
@@ -1249,19 +1379,24 @@ export function useFormStore<F extends object>(
 		derivedFields ? new Set(derivedFields) : undefined,
 	);
 
-	// Привязываем uniqId панели к store — для push-уведомлений через setError.
-	// Вызов в useEffect (а не в теле render) обязателен: setPaneUniqId под
-	// капотом дёргает notifyStashListeners(), что приводит к setState в
-	// PaneTabItem и порождает React-warning «Cannot update a component while
-	// rendering a different component».
+	// Экземпляр хука — держатель store (КР-4 аудита 27.09), а его панель — адресат push-уведомлений
+	// через setError. Вызов в useEffect (а не в теле render): держателя видят другие панели этой
+	// записи, и рендер, который React отбросит, не должен оставлять «висящего» держателя.
 	useEffect(() => {
-		store.setPaneUniqId(uniqId);
+		store.acquire(formUid, uniqId);
 		return () => {
-			// При размонтировании панели — отвязать обработчики, чтобы
-			// не висели подписки на закрытую вкладку.
-			store.setPaneUniqId(undefined);
+			// Размонтирование — отпускаем без очистки: черновик и кэш чистит закрытие панели
+			// (releaseStore); уведомления переходят к другой панели той же записи, если она есть.
+			store.detach(formUid);
 		};
-	}, [store, uniqId]);
+	}, [store, formUid, uniqId]);
+
+	// Разовая чистка черновиков старого формата — при первом открытии формы (P3 аудита 27.09).
+	useEffect(() => {
+		if (legacyDraftsChecked) return;
+		legacyDraftsChecked = true;
+		purgeLegacyFormDrafts();
+	}, []);
 
 	// ── Открыто через "Несохранённые записи": применяем stash сразу при монтировании ──
 	useEffect(() => {
@@ -1385,10 +1520,19 @@ export function useFormStore<F extends object>(
 	useScopeObject(recordUuid && endpoint ? { endpoint, uuid: String(recordUuid), label: paneTitle } : undefined);
 
 	// ── Auto-load при монтировании ──
-	const loadTriggeredRef = useRef(false);
+	// Загрузка запускается на ЭКЗЕМПЛЯР store: сменился store (прежний выпал из кэша) — грузим
+	// заново. С флагом «уже грузили» новый пустой store оставался без данных: вечный скелетон и
+	// погашенная ⟳ (КР-4 аудита 27.09).
+	const loadedStoreRef = useRef<FormStore<F> | null>(null);
 	useEffect(() => {
-		if (uuid && !loadTriggeredRef.current) {
-			loadTriggeredRef.current = true;
+		if (uuid && loadedStoreRef.current !== store) {
+			loadedStoreRef.current = store;
+			// Та же запись уже открыта в другой панели (store общий и живой) — не перечитываем:
+			// загрузка заменила бы поля и сняла несохранённые правки той панели. Свежие данные — ⟳.
+			if (store.hasOtherHolders(formUid) && store.getSnapshot().meta.uuid === uuid) {
+				refreshPaneLabel();
+				return;
+			}
 			// Если данные восстановлены из sessionStorage — загружаем серверные данные
 			// только для snapshot (isDirty будет сравнивать с реальным серверным состоянием).
 			// Если sessionStorage пуст — полная загрузка (заменяет fields).
@@ -1401,7 +1545,7 @@ export function useFormStore<F extends object>(
 				store.hadStoredData || store.isDraftApplied(),
 			).then(refreshPaneLabel);
 		}
-	}, [uuid, store, refreshPaneLabel]);
+	}, [uuid, store, refreshPaneLabel, formUid]);
 
 	// ── Единый источник заголовка для НОВЫХ документов ──
 	// Заголовок панели генерируется ТОЛЬКО формой (buildPaneLabel). Метка, заданная
@@ -1423,26 +1567,30 @@ export function useFormStore<F extends object>(
 		if (!uniqId) return;
 
 		const unregister = registerBeforeClose(uniqId, async () => {
+			// Та же запись открыта ещё в одной панели (КР-4 аудита 27.09): store общий, правки
+			// остаются в ней — спрашивать «закрыть без сохранения?» не о чем, чистить нельзя.
+			if (store.hasOtherHolders(formUid)) {
+				releaseStore(store, formUid);
+				return true;
+			}
 			if (!store.isDirty()) {
 				// Чистая форма (ни поля, ни pending-строки SubTable не менялись) —
 				// на сервере ничего не изменилось, поэтому родительский список
 				// обновлять не нужно: onClose (refetch) НЕ вызываем, только чистим ресурсы.
-				store.clearStorage();
-				storeCache.delete(store.getStorageKey());
+				releaseStore(store, formUid);
 				return true;
 			}
 			const answer = await confirm(translate("confirmCloseUnsaved"));
 			if (!answer) return false;
 			// Очистка при подтверждённом закрытии
-			store.clearStorage();
-			storeCache.delete(store.getStorageKey());
+			releaseStore(store, formUid);
 			void onCloseRef.current?.();
 			return true;
 		});
 
 		return unregister;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [uniqId, store]);
+	}, [uniqId, store, formUid]);
 
 	// ── Гранулярный useField ──
 	// ⚠️ ИНВАРИАНТ (rules-of-hooks): useField/useTable — это ХУКИ (внутри зовут
@@ -1553,12 +1701,11 @@ export function useFormStore<F extends object>(
 
 	// ── Submit (fields + tables) ──
 	// Повторный вызов, пока идёт запись (Enter + щелчок, горячая клавиша), не запускает
-	// вторую цепочку PUT/коммита строк поверх первой.
-	const submitInFlightRef = useRef(false);
+	// вторую цепочку PUT/коммита строк поверх первой. Замок — в store: его видит и вторая
+	// панель той же записи (КР-4 аудита 27.09).
 	const submit = useCallback(
 		async (options?: { keepLoadingOnSuccess?: boolean }): Promise<boolean> => {
-			if (submitInFlightRef.current) return false;
-			submitInFlightRef.current = true;
+			if (!store.beginSubmit()) return false;
 			const keepLoading = Boolean(options?.keepLoadingOnSuccess);
 			// keepLoadingOnSuccess: true вне зависимости от опции — нужно,
 			// чтобы поля формы оставались disabled на протяжении ВСЕЙ цепочки
@@ -1655,7 +1802,20 @@ export function useFormStore<F extends object>(
 						.filter(([k, def]) => def.endpoint && !(store.getSnapshot().tables[k]?.pending.length))
 						.map(([, def]) => def.endpoint);
 					for (const ep of committed) void queryClient.invalidateQueries({ queryKey: [ep], refetchType: "active" });
-					store.setError((e as ApiError)?.message || "Не удалось сохранить вложенные данные");
+					if (isRowsNetworkFailure(e)) {
+						// Сбой связи — понятный текст вместо сырого «Строки: Network Error» (P3 аудита
+						// 27.09). Строки упавшей таблицы остались в pending: повторное «Записать» их отправит.
+						const failed = Object.entries(tableDefs).find(([k]) => store.getSnapshot().tables[k]?.pending.length)?.[1];
+						const where = failed?.label ? `«${failed.label}»: ` : "";
+						store.setError(
+							getIsOnline()
+								? `${where}не записано — сервер временно недоступен. Повторите «Записать».`
+								: `${where}не записано — нет связи с сервером. Повторите «Записать», когда связь восстановится.`,
+							"warning", "system", NETWORK_KEY,
+						);
+					} else {
+						store.setError((e as ApiError)?.message || "Не удалось сохранить вложенные данные");
+					}
 					if (!keepLoading) store.setMeta({ isLoading: false });
 					return false;
 				}
@@ -1756,7 +1916,7 @@ export function useFormStore<F extends object>(
 				store.setError(m ? translateError(m) : "Непредвиденная ошибка при сохранении");
 				return false;
 			} finally {
-				submitInFlightRef.current = false;
+				store.endSubmit();
 				// Гарантированный сброс блокировки. Исключение — успешное сохранение с
 				// keepLoadingOnSuccess (handleSaveAndClose): форма намеренно остаётся
 				// disabled до анмаунта панели, чтобы поля не «прыгали».
@@ -1798,13 +1958,13 @@ export function useFormStore<F extends object>(
 					item: lastSavedDataRef.current,
 				});
 			}
-			const currentKey = store.getStorageKey();
-			store.clearStorage();
-			storeCache.delete(currentKey);
+			// Записано — отпускаем store; черновик и кэш чистятся, только если эту запись не
+			// держит другая панель (КР-4 аудита 27.09).
+			releaseStore(store, formUid);
 			void onCloseRef.current?.();
 			if (uniqId) void requestClose(uniqId, { force: true });
 		}
-	}, [submit, store, uniqId, requestClose, data]);
+	}, [submit, store, uniqId, requestClose, data, formUid]);
 
 	const handleClose = useCallback(async () => {
 		if (uniqId) {
@@ -1812,19 +1972,19 @@ export function useFormStore<F extends object>(
 			// проверит isDirty и выполнит очистку при подтверждении
 			await requestClose(uniqId);
 		} else {
-			// Нет uniqId — прямое закрытие с проверкой
-			const wasDirty = store.isDirty();
+			// Нет uniqId — прямое закрытие с проверкой. Store держит и другая форма этой
+			// записи — правки остаются в ней, вопрос не нужен (КР-4 аудита 27.09).
+			const wasDirty = !store.hasOtherHolders(formUid) && store.isDirty();
 			if (wasDirty) {
 				const answer = await confirm(translate("confirmCloseUnsaved"));
 				if (!answer) return;
 			}
-			store.clearStorage();
-			storeCache.delete(store.getStorageKey());
+			releaseStore(store, formUid);
 			// Список обновляем только если были несохранённые изменения; при чистом
 			// закрытии refetch родительского списка не нужен.
 			if (wasDirty) void onCloseRef.current?.();
 		}
-	}, [store, uniqId, requestClose, confirm]);
+	}, [store, uniqId, requestClose, confirm, formUid]);
 
 	const handleReload = useCallback(async () => {
 		// Идёт запись или загрузка — ⟳ не выполняем: GET, обогнавший PUT, очистил бы pending
@@ -1895,9 +2055,8 @@ export function useFormStore<F extends object>(
 	);
 
 	const clearFormStorage = useCallback(() => {
-		store.clearStorage();
-		storeCache.delete(store.getStorageKey());
-	}, [store]);
+		releaseStore(store, formUid);
+	}, [store, formUid]);
 
 	// Поля с несохранёнными изменениями — только когда форма открыта через "Несохранённые записи".
 	// Реактивно пересчитывается при изменении snapshot (после загрузки серверного snapshot).

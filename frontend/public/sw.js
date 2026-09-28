@@ -43,13 +43,18 @@ const PRECACHE_URLS = [
 // INSTALL — precache основных ресурсов
 // ═══════════════════════════════════════════════════════════════════════════
 
+/*
+ * БЕЗ skipWaiting (КР-10 аудита 27.09). sw.js теперь новый на каждой сборке, и skipWaiting при
+ * установке включал новую версию сразу — все открытые вкладки перезагружались без спроса,
+ * теряя корзину терминала и ввод в окнах. Новая версия ждёт: её включает вкладка сообщением
+ * SKIP_WAITING (registerSW.ts — по кнопке «Обновить» или когда несохранённого нет), иначе она
+ * вступит сама, когда закроются все вкладки. Первая установка ждать некого — активируется сразу.
+ */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.info("[SW] Precaching static assets");
       return cache.addAll(PRECACHE_URLS);
-    }).then(() => {
-      return self.skipWaiting();
     }),
   );
 });

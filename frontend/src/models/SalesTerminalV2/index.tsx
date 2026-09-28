@@ -24,7 +24,6 @@ import TradeDocumentItemsTable from "src/components/DocumentItemsTable/TradeDocu
 import type { SubTableApi } from "src/components/SubTable";
 import type { TDataItem } from "src/components/Table/types";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
-import { resolveOrgChangeFields } from "src/utils/createFromBasis";
 import { useOrgAccountingSettings } from "src/hooks/useOrgAccountingSettings";
 import { useAppActions, useAppAuth } from "src/app/context";
 import { recalcSaleItemAmounts } from "src/models/Sales/saleItemDraft";
@@ -35,9 +34,9 @@ import { openFormByRef } from "src/utils/openFormByRef";
 import { useContractSync } from "src/hooks/useContractSync";
 import {
   performTerminalSale, discardTerminalDraft, isOfflineStub, TerminalOfflineError,
-  unpricedRowNames, terminalBlockedReason, useTerminalHotkeys, useSubmitLock, useTerminalRequisites, type TerminalRequisites,
+  unpricedRowNames, terminalBlockedReason, useTerminalHotkeys, useSubmitLock, useTerminalRequisites, useTerminalOrgBuyer, useTerminalReloadBlock,
+  type TerminalRequisites,
 } from "src/models/SalesTerminal/terminalSale";
-import { useLateResponseGuard } from "src/models/_shared/lateResponseGuard";
 import { isNetworkError } from "src/services/networkUtils";
 import Tabs from "src/components/Tabs";
 import type { TPane } from "src/app/types";
@@ -70,24 +69,15 @@ const SalesTerminalV2: FC<Partial<TPane>> = ({ uniqId }) => {
     warehouseUuid, warehouseName, cashboxUuid, cashboxName, priceTypeUuid, priceTypeName,
     setRequisites, getRequisites,
   } = useTerminalRequisites({ orgUuid: defOrgUuid || "", orgName: defOrgName || "" });
-  const guardRequisites = useLateResponseGuard<TerminalRequisites>(getRequisites, setRequisites);
   const [managerUuid, setManagerUuid] = useState((user as { employee?: { uuid?: string } })?.employee?.uuid ?? "");
   const [managerName, setManagerName] = useState((user as { employee?: { fullName?: string } })?.employee?.fullName ?? "");
   /*
    * Именной покупатель — со СВОИМ основным договором (И5). Раньше в продажу уходил договор
    * «Розничная продажа» розничного покупателя, и сервер отвечал 409 «договор другого
-   * контрагента» (а из-за проглоченных ошибок кассир этого не видел).
+   * контрагента» (а из-за проглоченных ошибок кассир этого не видел). Выбор покупателя и
+   * организации — useTerminalOrgBuyer ниже (после прайса).
    */
   const syncContract = useContractSync();
-  const selectBuyer = useCallback(async (u: string, d: string) => {
-    setRequisites({ buyerUuid: u, buyerName: d, contractUuid: "", contractName: "" });
-    if (!u) return;
-    // Пока грузился договор, кассир мог сменить покупателя или организацию — поздний ответ мимо (И13).
-    await guardRequisites(async (cur) => {
-      const p = await syncContract({ counterpartyUuid: u, organizationUuid: cur.orgUuid || null, currentContractUuid: "" });
-      return p?.contractUuid ? { contractUuid: p.contractUuid, contractName: p.contractName } : null;
-    }, ["buyerUuid", "orgUuid"]);
-  }, [guardRequisites, setRequisites, syncContract]);
 
   // Розничный покупатель + договор по умолчанию (для submit; имя не отображаем).
   const retailRef = useRef<RetailRef | null>(null);
@@ -132,6 +122,8 @@ const SalesTerminalV2: FC<Partial<TPane>> = ({ uniqId }) => {
 
   const [total, setTotal] = useState(0);
   const [cartCount, setCartCount] = useState(0);
+  // Новая версия приложения не перезагружает терминал, пока в корзине товары или идёт оплата (КР-10).
+  useTerminalReloadBlock(cartCount > 0 || submitting);
 
   // Возврат на основании конкретной продажи (связь basisDocumentUuid → sale).
   const [basisSale, setBasisSale] = useState<{ uuid: string; label: string } | null>(null);
@@ -169,10 +161,14 @@ const SalesTerminalV2: FC<Partial<TPane>> = ({ uniqId }) => {
   }, [orgUuid]);
   useEffect(() => { void loadRecent(); }, [loadRecent]);
 
+  // Переоценка корзины не теряется, если её запрос обогнал более поздний без неё (перечитывание
+  // при смене НДС-настроек организации): её выполнит тот ответ, который будет применён (КР-6).
+  const repricePendingRef = useRef(false);
   const loadPriceMap = useCallback(async (typeUuid: string, reprice: boolean) => {
     // Организация — из снимка, а не из замыкания: после смены организации обработчик держал
     // прежнюю, и прайс грузился по ней. Поздний ответ (успели сменить тип цен или организацию) — мимо (И13).
     const seq = ++priceLoadSeqRef.current;
+    if (reprice) repricePendingRef.current = true;
     try {
       const orgNow = getRequisites().orgUuid;
       const params: Record<string, string> = {};
@@ -187,7 +183,8 @@ const SalesTerminalV2: FC<Partial<TPane>> = ({ uniqId }) => {
       priceMapRef.current = map;
       setPriceListFailed(false);
       if (!typeUuid && resp?.priceTypeUuid) setRequisites({ priceTypeUuid: resp.priceTypeUuid, priceTypeName: resp.priceTypeName ?? "" });
-      if (reprice && cartApiRef.current) {
+      if (repricePendingRef.current && cartApiRef.current) {
+        repricePendingRef.current = false;
         for (const r of cartApiRef.current.getRows()) {
           const p = map.get(String(r.productUuid));
           if (p != null) {
@@ -207,19 +204,26 @@ const SalesTerminalV2: FC<Partial<TPane>> = ({ uniqId }) => {
 
   useEffect(() => { void loadPriceMap(priceTypeUuidRef.current, false); }, [loadPriceMap]);
 
-  const handleOrgChange = useCallback(async (u: string, d: string) => {
-    setRequisites({ orgUuid: u, orgName: d, buyerUuid: "", buyerName: "", contractUuid: "", contractName: "" });
+  /*
+   * Смена организации и покупателя (КР-6 аудита 27.09): у каждого обработчика свой guard (с общим
+   * выбор покупателя отбрасывал дефолты новой организации), реквизиты прежней организации
+   * чистятся сразу, прайс новой перечитывается всегда. Дефолты: поздний ответ по прежней
+   * организации — мимо; склад, касса или тип цен, выбранные вручную за время запроса, не
+   * перетираются (И13).
+   */
+  const onOrgReset = useCallback(() => {
     setManagerUuid(""); setManagerName("");
-    // Дефолты новой организации. Поздний ответ по прежней — мимо; склад, касса или тип цен,
-    // выбранные вручную за время запроса, не перетираются (И13).
-    const applied = await guardRequisites(() => resolveOrgChangeFields(u, userUuid, [
-      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-      { valueType: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
-      { valueType: "salePriceType", uuidKey: "priceTypeUuid", nameKey: "priceTypeName" },
-    ]), ["orgUuid"]);
-    // Прайс — по применённому типу цен; выбранный вручную за время запроса уже грузит свой.
-    if (applied && applied.priceTypeUuid !== undefined) void loadPriceMap(applied.priceTypeUuid, true);
-  }, [guardRequisites, setRequisites, userUuid, loadPriceMap]);
+    // Прайс прежней организации больше не действует: её ответ — мимо, а товар, добавленный до
+    // прайса новой, встанет без цены (оплата по 0 ₸ — с подтверждением, И6), но не по чужой.
+    priceLoadSeqRef.current++;
+    priceMapRef.current = new Map();
+  }, []);
+  const onOrgApplied = useCallback((req: TerminalRequisites) => {
+    void loadPriceMap(req.priceTypeUuid, true);
+  }, [loadPriceMap]);
+  const { handleOrgChange, selectBuyer } = useTerminalOrgBuyer({
+    getRequisites, setRequisites, userUuid, syncContract, onOrgReset, onOrgApplied,
+  });
 
   const addProduct = useCallback((uuid: string, name: string, item: Record<string, unknown>) => {
     if (!uuid) return;

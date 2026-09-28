@@ -173,13 +173,22 @@ function offlineParamsFromApi(apiParams?: Record<string, unknown>): OfflineListP
 }
 
 /**
+ * Поля области: сервер при `?organizationUuid=X` отдаёт записи X и ОБЩИЕ (поле пустое) —
+ * backend/utils/auth.js orgQueryFilter / directoryFilter. Офлайн-кэш обязан отвечать так же.
+ */
+const SHARED_SCOPE_FIELDS: ReadonlySet<string> = new Set(["organizationUuid"]);
+
+/**
  * Совпадает ли запись с фильтром. Поле, которого у записи нет, не отсекает её: это
  * параметр запроса, а не поле модели (например, ownerType у справочника без владельца).
+ * Общая запись (organizationUuid = null) подходит к любой организации: раньше офлайн-подсказки
+ * теряли «Розничного покупателя», общие товары и склады (КР-22 аудита 27.09).
  */
 function matchesFilter(r: SyncRecord, filter: Record<string, unknown>): boolean {
 	for (const [k, v] of Object.entries(filter)) {
 		if (!(k in r)) continue;
 		const rv = r[k];
+		if (rv == null && SHARED_SCOPE_FIELDS.has(k)) continue;
 		if (rv == null || typeof rv === "object" || String(rv as string | number | boolean) !== String(v)) return false;
 	}
 	return true;

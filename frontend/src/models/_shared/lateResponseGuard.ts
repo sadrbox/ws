@@ -12,6 +12,14 @@ import { useCallback, useRef } from "react";
  * сверяет, что этот запрос — последний и что поля, ради которых его делали, не изменились, и
  * применяет ответ без полей, которые за время запроса поменяли вручную. Тот же приём — в
  * createTradeDocForm (каркас); здесь он один на остальные формы документов и терминал.
+ *
+ * СЧЁТЧИК — НА ОБРАБОТЧИК (КР-6 аудита 27.09). Счётчик был один на форму, а обработчиков два:
+ * выбрали организацию B и, пока шёл запрос её дефолтов, выбрали контрагента — ответ по
+ * организации отбрасывался как «поздний», и склад, касса, договор, счёт, тип цен оставались от
+ * организации A и уходили в документ B. Теперь у каждого обработчика свой guard (формы и терминал
+ * заводят их отдельно), а внутри guard номер запроса ведётся по выбору, ради которого запрос
+ * (набор stillSame): даже общий guard не отбрасывает ответ соседнего обработчика. Поля прежней
+ * организации формы чистят сразу при её смене (orgResetPatch) — не дожидаясь ответа.
  */
 
 /** Ответ без полей, изменённых вручную, пока шёл запрос (значение сейчас не то, что при запросе). */
@@ -41,13 +49,16 @@ export function useLateResponseGuard<T extends object>(
   getSnapshot: () => T,
   apply: (patch: Partial<T>) => void,
 ): LateResponseGuard<T> {
-  const seqRef = useRef(0);
+  // Номер последнего запроса — по выбору (stillSame), см. «Счётчик — на обработчик».
+  const seqRef = useRef(new Map<string, number>());
   return useCallback<LateResponseGuard<T>>(async (load, stillSame) => {
-    const seq = ++seqRef.current;
+    const channel = stillSame.map(String).sort().join(",");
+    const seq = (seqRef.current.get(channel) ?? 0) + 1;
+    seqRef.current.set(channel, seq);
     const atRequest = getSnapshot();
     const patch = await load(atRequest);
     const now = getSnapshot();
-    if (seq !== seqRef.current) return null;
+    if (seq !== seqRef.current.get(channel)) return null;
     for (const key of stillSame) if (now[key] !== atRequest[key]) return null;
     const kept = patch ? keepManualEdits(patch, atRequest, now) : ({} as Partial<T>);
     if (Object.keys(kept).length > 0) apply(kept);
@@ -65,4 +76,20 @@ export function useFormLateResponseGuard<T extends object>(form: GuardedForm<T>)
   const { store, setFields } = form;
   const getSnapshot = useCallback(() => store.getSnapshot().fields, [store]);
   return useLateResponseGuard<T>(getSnapshot, setFields);
+}
+
+/**
+ * Патч «очистить поля прежней организации» (КР-6 аудита 27.09): склад, касса, договор, счёт, тип
+ * цен принадлежат организации. Применяется ВМЕСТЕ со сменой организации, до запроса дефолтов новой:
+ * ответ может прийти поздно или быть отброшен, а реквизиты прежней организации не должны уйти в
+ * документ новой. Дефолты новой подставит ответ (поля, выбранные за время запроса вручную, он не
+ * трогает — keepManualEdits).
+ */
+export function orgResetPatch(fields: ReadonlyArray<{ uuidKey: string; nameKey: string }>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of fields) {
+    out[f.uuidKey] = "";
+    out[f.nameKey] = "";
+  }
+  return out;
 }

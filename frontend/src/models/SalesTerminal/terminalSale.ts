@@ -10,6 +10,9 @@ import { api } from "src/services/api/client";
 import { translate } from "src/i18";
 import type { TDataItem } from "src/components/Table/types";
 import { usePersistentState } from "src/hooks/usePersistentState";
+import { useLateResponseGuard } from "src/models/_shared/lateResponseGuard";
+import { resolveOrgChangeFields } from "src/utils/createFromBasis";
+import { registerReloadBlocker } from "src/services/appUpdate";
 
 // ── Офлайн-заглушка api-клиента ─────────────────────────────────────────────
 
@@ -267,6 +270,86 @@ export function useTerminalRequisites(init: { orgUuid: string; orgName: string }
 		warehouseUuid, warehouseName, cashboxUuid, cashboxName, priceTypeUuid, priceTypeName,
 		setRequisites, getRequisites,
 	};
+}
+
+// ── Смена организации и покупателя ──────────────────────────────────────────
+
+/** Реквизиты, подставляемые по организации (дефолты пользователя). */
+const TERMINAL_ORG_FIELDS: Array<{ valueType: "warehouse" | "cashbox" | "salePriceType"; uuidKey: string; nameKey: string }> = [
+	{ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+	{ valueType: "cashbox", uuidKey: "cashboxUuid", nameKey: "cashboxName" },
+	{ valueType: "salePriceType", uuidKey: "priceTypeUuid", nameKey: "priceTypeName" },
+];
+
+/** Основной договор покупателя (useContractSync); null — договор не менять. */
+export type TerminalContractLookup = (opts: {
+	counterpartyUuid: string;
+	organizationUuid?: string | null;
+	currentContractUuid: string;
+}) => Promise<{ contractUuid: string; contractName: string } | null>;
+
+/**
+ * СМЕНА ОРГАНИЗАЦИИ И ПОКУПАТЕЛЯ (КР-6 аудита 27.09). У каждого обработчика — свой guard: с общим
+ * выбор покупателя, пока грузились дефолты новой организации, отбрасывал их как «поздние» — склад,
+ * касса и тип цен оставались от прежней организации, а прайс не перечитывался, и новые товары
+ * вставали по её ценам. Теперь реквизиты прежней организации чистятся сразу, а прайс новой
+ * перечитывается всегда, когда её дефолты подставлены (onOrgApplied): с типом цен из дефолтов,
+ * выбранным вручную за время запроса или пустым — тогда тип цен выберет сервер.
+ */
+export function useTerminalOrgBuyer(opts: {
+	getRequisites: () => TerminalRequisites;
+	setRequisites: (patch: Partial<TerminalRequisites>) => void;
+	userUuid: string;
+	syncContract: TerminalContractLookup;
+	/** Сразу после смены организации, до ответа: сбросить менеджера, забыть прайс прежней. */
+	onOrgReset: () => void;
+	/** Организация установлена, дефолты подставлены: перечитать прайс (реквизиты — снимок). */
+	onOrgApplied: (req: TerminalRequisites) => void;
+}) {
+	const { getRequisites, setRequisites, userUuid, syncContract, onOrgReset, onOrgApplied } = opts;
+	const guardOrg = useLateResponseGuard<TerminalRequisites>(getRequisites, setRequisites);
+	const guardBuyer = useLateResponseGuard<TerminalRequisites>(getRequisites, setRequisites);
+
+	const handleOrgChange = useCallback(async (u: string, d: string) => {
+		setRequisites({
+			orgUuid: u, orgName: d, buyerUuid: "", buyerName: "", contractUuid: "", contractName: "",
+			warehouseUuid: "", warehouseName: "", cashboxUuid: "", cashboxName: "", priceTypeUuid: "", priceTypeName: "",
+		});
+		onOrgReset();
+		// Склад, касса или тип цен, выбранные вручную за время запроса, ответ не перетирает (И13).
+		const applied = await guardOrg(() => resolveOrgChangeFields(u, userUuid, TERMINAL_ORG_FIELDS), ["orgUuid"]);
+		// null — организацию успели сменить ещё раз: прайс перечитает её обработчик.
+		if (applied === null) return;
+		onOrgApplied(getRequisites());
+	}, [guardOrg, setRequisites, getRequisites, userUuid, onOrgReset, onOrgApplied]);
+
+	/*
+	 * Именной покупатель — со СВОИМ основным договором (И5). Пока грузился договор, кассир мог
+	 * сменить покупателя или организацию — поздний ответ мимо (И13).
+	 */
+	const selectBuyer = useCallback(async (u: string, d: string) => {
+		setRequisites({ buyerUuid: u, buyerName: d, contractUuid: "", contractName: "" });
+		if (!u) return;
+		await guardBuyer(async (cur) => {
+			const p = await syncContract({ counterpartyUuid: u, organizationUuid: cur.orgUuid || null, currentContractUuid: "" });
+			return p?.contractUuid ? { contractUuid: p.contractUuid, contractName: p.contractName } : null;
+		}, ["buyerUuid", "orgUuid"]);
+	}, [guardBuyer, setRequisites, syncContract]);
+
+	return { handleOrgChange, selectBuyer };
+}
+
+// ── Новая версия приложения ─────────────────────────────────────────────────
+
+/**
+ * ТЕРМИНАЛ С ТОВАРАМИ НЕ ПЕРЕЗАГРУЖАЕТСЯ САМ (КР-10 аудита 27.09). Корзина нигде не хранится, а
+ * перезагрузка во время оплаты теряет её ответ. Пока в корзине товары или идёт оплата, новая
+ * версия приложения ждёт кнопки «Обновить» (services/appUpdate).
+ */
+export function useTerminalReloadBlock(blocking: boolean): void {
+	const blockingRef = useRef(blocking);
+	blockingRef.current = blocking;
+	useEffect(() => registerReloadBlocker(() => blockingRef.current), []);
 }
 
 // ── Замок оплаты ────────────────────────────────────────────────────────────

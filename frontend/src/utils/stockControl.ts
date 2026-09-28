@@ -8,6 +8,7 @@
  * (см. backend/services/productRegister.js).
  */
 import { api } from "src/services/api/client";
+import { getFormatDateOnly } from "src/utils/datetime";
 
 /** Тип расходного документа-регистратора. */
 export type ExpenseDocumentType = "sale" | "inventory_transfer" | "purchase_return" | "write_off";
@@ -21,6 +22,15 @@ export interface StockShortage {
 	requested: number;
 	available: number;
 	deficit: number;
+	/**
+	 * Нехватка под активный резерв (КР-8 аудита 27.09): физически товар есть, но зарезервирован —
+	 * available уже за вычетом резерва. Нет — нехватка физическая.
+	 */
+	reserved?: number;
+	/** out — не хватает на расход документа; inflow — ухудшение дал снятый или уменьшенный приход. */
+	kind?: "out" | "inflow";
+	/** Момент, в который остаток ушёл бы в минус (для inflow). */
+	date?: string | null;
 }
 
 export interface CheckStockPayload {
@@ -31,6 +41,12 @@ export interface CheckStockPayload {
 	warehouseUuid?: string | null;
 	/** Склад-источник расхода (inventory_transfer). */
 	fromWarehouseUuid?: string | null;
+	/**
+	 * Склад-получатель (inventory_transfer): приход перемещения на нём тоже проверяется — уменьшили
+	 * или перенесли на другой склад, а товар оттуда уже ушёл. Без него сервер берёт склад из
+	 * сохранённого документа, а у нового перемещения его нет (КР-8 аудита 27.09).
+	 */
+	toWarehouseUuid?: string | null;
 	/** Организация документа — от неё зависит настройка «Контроль остатков ТМЗ». */
 	organizationUuid?: string | null;
 	/** Дата документа (настройки историчны). */
@@ -123,7 +139,17 @@ export function formatStockShortages(shortages: StockShortage[]): string {
 		list.sort((a, b) => (a.productName || "").localeCompare(b.productName || "", "ru"));
 		if (multiWarehouse && wh) lines.push(`Склад «${wh}»:`);
 		for (const s of list) {
-			lines.push(`• ${s.productName || s.productUuid || "товар"} — нужно ${s.requested}, доступно ${s.available}, не хватает ${s.deficit}`);
+			const name = s.productName || s.productUuid || "товар";
+			// Те же формулировки, что у сервера (formatShortageMessage): приход и резерв — отдельно (КР-8).
+			if (s.kind === "inflow") {
+				const what = s.reserved
+					? `без этого прихода остатка не хватит под резерв ${s.reserved}`
+					: `без этого прихода остаток${s.date ? ` на ${getFormatDateOnly(s.date)}` : ""} станет отрицательным`;
+				lines.push(`• ${name} — ${what}, не хватит ${s.deficit}`);
+			} else {
+				const reserve = s.reserved ? ` с учётом резерва ${s.reserved}` : "";
+				lines.push(`• ${name} — нужно ${s.requested}, доступно ${s.available}${reserve}, не хватает ${s.deficit}`);
+			}
 		}
 	}
 	return `Недостаточно остатка для проведения:\n${lines.join("\n")}`;

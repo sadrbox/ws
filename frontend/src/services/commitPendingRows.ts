@@ -78,7 +78,9 @@ export async function commitPendingRows(
 			await apiClient.post(`/${options.batchEndpoint}`, { operations });
 		} catch (err: unknown) {
 			const serverMsg = translateError((err as RequestError).response?.data?.message ?? "") || translateError((err as RequestError).message ?? "");
-			throw new Error(serverMsg ? `${tableName}: ${serverMsg}` : `Ошибка сохранения (${tableName})`);
+			// Исходная ошибка — в cause: по ней форма узнаёт сбой связи (P3 аудита 27.09), а не по хвосту текста.
+			// Свойством, а не вторым аргументом: приложение собирается с lib ES2020, где ErrorOptions нет.
+			throw Object.assign(new Error(serverMsg ? `${tableName}: ${serverMsg}` : `Ошибка сохранения (${tableName})`), { cause: err });
 		}
 		return;
 	}
@@ -135,11 +137,11 @@ export async function commitPendingRows(
 			const serverMsg =
 				translateError((err as RequestError).response?.data?.message ?? "") ||
 				translateError((err as RequestError).message ?? "");
-			throw new Error(
+			throw Object.assign(new Error(
 				serverMsg
 					? `${tableName}: ${serverMsg}`
 					: `Заполните данные в добавленной строке (${tableName}) или удалите пустую строку`,
-			);
+			), { cause: err });
 		}
 	}
 }

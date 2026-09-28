@@ -33,6 +33,13 @@ import { getIsOnline } from "./networkStatus";
 import { offlineDb, type PendingChange } from "./offlineDb";
 import { OFFLINE_WRITE_TABLES } from "./offlineDataService";
 import { notify as notifyEvent } from "src/components/TechMessages/store";
+import { getTranslation, translate } from "src/i18";
+
+/** Подпись таблицы обмена для сообщений: перевод, если есть, иначе имя таблицы. */
+function tableLabel(table: string): string {
+  const t = getTranslation(table);
+  return t && t !== table ? t : table;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -280,13 +287,16 @@ async function markRefused(changes: PendingChange[], reason: (p: PendingChange) 
   }
   if (out.length) {
     const first = out[0];
+    // Документа на сервере нет — «откройте документ» советовать нечего: данные лежат только в
+    // очереди синхронизации, туда и отправляем (P3 аудита 27.09).
+    const where = translate("syncRefusedWhere").replace("{section}", translate("syncOfflineData"));
     notifyEvent({
       severity: "error",
       source: "Синхронизация",
       key: "sync-push-refused",
       text: out.length === 1
-        ? `Изменение, сделанное без связи, не отправлено (${first.table}): ${first.error}`
-        : `Изменения, сделанные без связи, не отправлены (${out.length}): ${first.error}`,
+        ? `Изменение, сделанное без связи, не отправлено (${tableLabel(first.table)}): ${first.error}. ${where}`
+        : `Изменения, сделанные без связи, не отправлены (${out.length}): ${first.error}. ${where}`,
     });
   }
   return out;
@@ -300,7 +310,7 @@ async function pushChanges(): Promise<PushResult> {
   const notPushable = waiting.filter((p) => !OFFLINE_WRITE_TABLES.has(p.table));
   const pending = waiting.filter((p) => OFFLINE_WRITE_TABLES.has(p.table));
   const localRefusals = await markRefused(notPushable, () =>
-    "без связи записываются только справочники — откройте документ и сохраните его при связи");
+    "без связи записываются только справочники");
   if (pending.length === 0) {
     return { applied: 0, conflicts: [], errors: localRefusals };
   }
@@ -384,6 +394,35 @@ interface PullResult {
   tablesUpdated: string[];
 }
 
+/*
+ * ТАБЛИЦЫ, ОТДАННЫЕ НЕ ЦЕЛИКОМ (КР-18 аудита 27.09). /sync/pull сообщает skipped — таблицы, которые
+ * сервер не отдал (нет права или не поддерживает), и limited — отданные урезанно (организации без
+ * права на справочник: только наименование и БИН). Раньше это проходило молча, и пустой офлайн-
+ * справочник выглядел сбоем. Сообщаем в журнал без тоста и только когда состав меняется — не на
+ * каждом обмене.
+ * Проверить потом: таблицам из skipped ниже всё равно ставится lastSyncAt (иначе каждый обмен был бы
+ * полным) — если право выдадут позже, инкрементальный pull не догрузит их старые записи; то же с
+ * урезанными организациями. Нужна полная догрузка таблицы при выходе её из skipped/limited.
+ */
+let lastPullScopeNote = "";
+function reportPullScope(skipped: unknown, limited: unknown): void {
+  const s = Array.isArray(skipped) ? skipped.map(String) : [];
+  const l = Array.isArray(limited) ? limited.map(String) : [];
+  const note = `${s.join(",")}|${l.join(",")}`;
+  if (note === lastPullScopeNote) return;
+  lastPullScopeNote = note;
+  const parts: string[] = [];
+  if (s.length) parts.push(translate("syncPullSkipped").replace("{tables}", s.map(tableLabel).join(", ")));
+  if (l.length) parts.push(translate("syncPullLimited").replace("{tables}", l.map(tableLabel).join(", ")));
+  if (!parts.length) return;
+  notifyEvent({ severity: "info", source: "Синхронизация", key: "sync-pull-scope", text: parts.join("\n"), toast: false });
+}
+
+/** Сброс — для тестов. */
+export function resetPullScopeNoteForTests(): void {
+  lastPullScopeNote = "";
+}
+
 async function pullChanges(tables: SyncableTable[]): Promise<PullResult> {
   // Собираем lastSyncAt для каждой таблицы, берём минимальный
   // (для простоты используем один pull-запрос на все таблицы)
@@ -401,7 +440,10 @@ async function pullChanges(tables: SyncableTable[]): Promise<PullResult> {
   }
 
   try {
-    const response = await apiClient.post<{ success?: boolean; message?: string; serverTime?: string; data?: Record<string, SyncRecord[]> }>("/sync/pull", {
+    const response = await apiClient.post<{
+      success?: boolean; message?: string; serverTime?: string; data?: Record<string, SyncRecord[]>;
+      skipped?: string[]; limited?: string[];
+    }>("/sync/pull", {
       lastSyncAt: oldestSync,
       tables,
     }, {
@@ -413,6 +455,7 @@ async function pullChanges(tables: SyncableTable[]): Promise<PullResult> {
     if (!body.success) {
       throw new Error(body.message || "Ошибка pull");
     }
+    reportPullScope(body.skipped, body.limited);
 
     const serverTime = body.serverTime as string;
     const data = body.data as Record<string, SyncRecord[]>;

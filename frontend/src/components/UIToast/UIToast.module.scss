@@ -231,6 +231,33 @@ $toastShadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(0, 0, 0, 
 	}
 }
 
+// Кнопка действия в постоянном уведомлении («Обновить» новой версии, КР-10 аудита 27.09).
+.ToastAction {
+	// Отдельной строкой под текстом уведомления.
+	display: flex;
+	width: fit-content;
+	align-items: center;
+	margin-top: 8px;
+	padding: 4px 12px;
+	border: 1px solid var(--toast-accent);
+	border-radius: 4px;
+	background: transparent;
+	color: $toastText;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.15s ease;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--toast-accent);
+		outline-offset: 1px;
+	}
+}
+
 // Прогресс-бар автозакрытия. Анимация управляется inline-стилем
 // (animation-duration + animation-play-state) из компонента.
 .Progress {

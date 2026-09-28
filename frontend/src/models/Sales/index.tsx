@@ -21,7 +21,7 @@ import styles from "src/styles/main.module.scss";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
-import { useFormLateResponseGuard } from "src/models/_shared/lateResponseGuard";
+import { useFormLateResponseGuard, orgResetPatch } from "src/models/_shared/lateResponseGuard";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
 import { useAutoFillPrimary } from "src/hooks/useAutoFillPrimary";
@@ -69,6 +69,11 @@ const LIST_NAME = "SalesList";
 const FORM_LABEL = "Реализация ТМЗ и услуг";
 // ПКО здесь нет: оплат по реализации может быть несколько — меню всегда создаёт новый (И21).
 const SALES_DEPENDENT_ENDPOINTS = ["outgoing-invoices", "sale-returns"];
+/** Поля реализации, подставляемые по организации (дефолты пользователя). */
+const SALE_ORG_FIELDS: Array<{ valueType: "warehouse" | "contract"; uuidKey: string; nameKey: string }> = [
+  { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
+  { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+];
 
 
 interface TFields {
@@ -515,29 +520,29 @@ const SalesForm: FC<Partial<TPane>> = (paneProps) => {
   // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
   // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
   // LookupField зовёт onSelect("", "", {}).
-  // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+  // Ответы по контрагенту и организации — через guard: поздний ответ по прежнему
   // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
-  const guardFields = useFormLateResponseGuard<TFields>(form);
+  // У каждого обработчика свой guard: с общим выбор контрагента во время запроса дефолтов
+  // организации отбрасывал их (КР-6 аудита 27.09).
+  const guardCounterparty = useFormLateResponseGuard<TFields>(form);
+  const guardOrganization = useFormLateResponseGuard<TFields>(form);
   const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
     form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
-    await guardFields((cur) => syncContract({
+    await guardCounterparty((cur) => syncContract({
       counterpartyUuid: uuid,
       organizationUuid: cur.organizationUuid,
       currentContractUuid: cur.contractUuid,
     }), ["counterpartyUuid", "organizationUuid"]);
-  }, [form.setFields, guardFields, syncContract]);
+  }, [form.setFields, guardCounterparty, syncContract]);
 
-  // Смена организации: зависимые поля (склад/договор) → дефолт пользователя для
-  // новой орг, иначе очистка (значение принадлежало прежней организации).
+  // Смена организации: зависимые поля (склад/договор) чистятся сразу (принадлежали прежней
+  // организации, КР-6), затем — дефолт пользователя для новой организации.
   const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
     const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
-    form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
-    await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
-      { valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" },
-      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-    ]), ["organizationUuid"]);
-  }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
+    form.setFields({ organizationUuid: uuid, organizationName: displayValue, ...orgResetPatch(SALE_ORG_FIELDS) } as Partial<TFields>);
+    await guardOrganization(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", SALE_ORG_FIELDS), ["organizationUuid"]);
+  }, [form.setFields, form.store, guardOrganization, currentUser?.uuid]);
 
   // ── Печать: накладная З-2 и акт выполненных работ ──────────────────
 

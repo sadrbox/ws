@@ -25,7 +25,7 @@ import { Group, GroupCol, GroupRow } from "src/components/UI";
 import styles from "src/styles/main.module.scss";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
-import { useFormLateResponseGuard } from "src/models/_shared/lateResponseGuard";
+import { useFormLateResponseGuard, orgResetPatch } from "src/models/_shared/lateResponseGuard";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { useAppActions, useAppAuth } from "src/app/context";
@@ -48,6 +48,11 @@ import { renderPostedCell } from "src/models/_shared/renderPostedCell";
 const ENDPOINT = "bank-statements";
 const LIST_NAME = "BankStatementsList";
 const DOC_TYPE = "bank_statement" as const;
+/** Поля выписки, подставляемые по организации (дефолты пользователя). */
+const BANK_ORG_FIELDS: Array<{ valueType: "contract" | "bankAccount"; uuidKey: string; nameKey: string }> = [
+  { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+  { valueType: "bankAccount", uuidKey: "bankAccountUuid", nameKey: "bankAccountName" },
+];
 
 interface TFields {
   id?: number; uuid?: string;
@@ -209,29 +214,29 @@ const BankStatementsForm: FC<Partial<TPane>> = (paneProps) => {
     // Смена контрагента: подставляем ОСНОВНОЙ договор нового контрагента, иначе
     // чистим чужой (см. useContractSync). Очистка контрагента приходит сюда же —
     // LookupField зовёт onSelect("", "", {}).
-    // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+    // Ответы по контрагенту и организации — через guard: поздний ответ по прежнему
     // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
-    const guardFields = useFormLateResponseGuard<TFields>(form);
+    // У каждого обработчика свой guard: с общим выбор контрагента во время запроса дефолтов
+    // организации отбрасывал их (КР-6 аудита 27.09).
+    const guardCounterparty = useFormLateResponseGuard<TFields>(form);
+    const guardOrganization = useFormLateResponseGuard<TFields>(form);
     const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string) => {
       form.setFields({ counterpartyUuid: uuid, counterpartyName: displayValue } as Partial<TFields>);
-      await guardFields((cur) => syncContract({
+      await guardCounterparty((cur) => syncContract({
         counterpartyUuid: uuid,
         organizationUuid: cur.organizationUuid,
         currentContractUuid: cur.contractUuid,
       }), ["counterpartyUuid", "organizationUuid"]);
-    }, [form.setFields, guardFields, syncContract]);
+    }, [form.setFields, guardCounterparty, syncContract]);
 
-  // Смена организации: зависимые поля (договор, банк-счёт) → дефолт пользователя
-  // для новой орг, иначе очистка.
+  // Смена организации: зависимые поля (договор, банк-счёт) чистятся сразу (принадлежали прежней
+  // организации, КР-6), затем — дефолт пользователя для новой организации.
   const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string) => {
     const cur = form.store.getSnapshot().fields;
     if (cur.organizationUuid === uuid) return;
-    form.setFields({ organizationUuid: uuid, organizationName: displayValue } as Partial<TFields>);
-    await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", [
-      { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-      { valueType: "bankAccount", uuidKey: "bankAccountUuid", nameKey: "bankAccountName" },
-    ]), ["organizationUuid"]);
-  }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
+    form.setFields({ organizationUuid: uuid, organizationName: displayValue, ...orgResetPatch(BANK_ORG_FIELDS) } as Partial<TFields>);
+    await guardOrganization(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", BANK_ORG_FIELDS), ["organizationUuid"]);
+  }, [form.setFields, form.store, guardOrganization, currentUser?.uuid]);
 
   const basisMismatch = useBasisMismatch({
     basisType: form.fields.basisDocumentType,

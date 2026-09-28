@@ -5,9 +5,15 @@
  * Работает через CustomEvent "ui_toast", но слать его руками не нужно:
  *   notify({ severity, text, source })   — событие: тост + след в журнале (TechMessages/store)
  *   showToast(message, type)             — только тост; отправляет событие сам
+ *
+ * Плюс постоянное уведомление «Доступна новая версия» с кнопкой (КР-10 аудита 27.09): состояние —
+ * в services/appUpdate, сюда оно приходит подпиской.
  */
-import { FC, useCallback, useEffect, useRef, useState } from "react";
+import { FC, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { translate } from "src/i18";
+import {
+  applyAppUpdate, dismissAppUpdate, getAppUpdateState, hasUnsavedWork, subscribeAppUpdate, type AppUpdateState,
+} from "src/services/appUpdate";
 import { ErrorIcon, InfoIcon, SuccessIcon, WarningIcon } from "./icons";
 import styles from "./UIToast.module.scss";
 
@@ -48,7 +54,40 @@ const ICONS: Record<UIToastType, FC> = {
 
 const MAX_VISIBLE = 5;
 
+/**
+ * «Доступна новая версия» — не исчезает сама: обновиться человек решает кнопкой. Есть
+ * несохранённое — первое нажатие только предупреждает, что пропадёт, второе обновляет.
+ */
+const AppUpdateNotice: FC<{ state: Exclude<AppUpdateState, "none"> }> = ({ state }) => {
+  const [confirming, setConfirming] = useState(false);
+  const onApply = () => {
+    if (!confirming && hasUnsavedWork()) {
+      setConfirming(true);
+      return;
+    }
+    applyAppUpdate();
+  };
+  return (
+    <div className={`${styles.Toast} ${styles.info}`} role="status" aria-live="polite" data-app-update="true">
+      <span className={styles.Icon}>
+        <InfoIcon />
+      </span>
+      <div className={styles.Body}>
+        <MessageLines text={translate(state === "ready" ? "appUpdateReady" : "appUpdateActivated")} />
+        {confirming && <MessageLines text={translate("appUpdateUnsaved")} />}
+        <button type="button" className={styles.ToastAction} onClick={onApply}>
+          {translate(confirming ? "appUpdateReloadAnyway" : "appUpdateReload")}
+        </button>
+      </div>
+      <button className={styles.Close} onClick={dismissAppUpdate} aria-label={translate("close")} type="button">
+        ×
+      </button>
+    </div>
+  );
+};
+
 const UIToast: FC = () => {
+  const appUpdate = useSyncExternalStore(subscribeAppUpdate, getAppUpdateState, getAppUpdateState);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
@@ -128,13 +167,15 @@ const UIToast: FC = () => {
     return () => t.forEach((timer) => clearTimeout(timer));
   }, []);
 
-  if (toasts.length === 0) return null;
+  if (toasts.length === 0 && appUpdate === "none") return null;
 
   // Тосты в state хранятся в порядке появления (новый — последний).
   // В DOM рендерим в обратном порядке: верх — старые, низ — новый,
   // т.к. .Container имеет flex-direction: column-reverse и стекает снизу.
+  // Уведомление о новой версии — первым узлом: оно внизу и не участвует в «стопке».
   return (
     <div className={styles.Container} aria-live="polite" aria-atomic="false">
+      {appUpdate !== "none" && <AppUpdateNotice state={appUpdate} />}
       {toasts.map((toast, idx) => {
         const Icon = ICONS[toast.type!];
         // offset: 0 у нового (последнего в state), 1 у предыдущего и т.д.

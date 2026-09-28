@@ -9,7 +9,9 @@ import apiClient from "src/services/api/client";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { translate } from "src/i18";
-import { useAppActions } from "src/app/context";
+import { useAppActions, useAppAuth } from "src/app/context";
+import Modal from "src/components/Modal";
+import { FieldSelect } from "src/components/Field";
 import { FileViewerPane } from "src/models/Files/FileViewerPane";
 import UploadProgress, { formatFileSize } from "./UploadProgress";
 
@@ -78,6 +80,24 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
   // Владелец для аплоада: в общем списке файлы складываются в «global».
   const upOwnerType = allFiles ? "global" : (ownerType ?? "");
   const upOwnerUuid = allFiles ? "global" : (ownerUuid ?? "");
+
+  /*
+   * ОРГАНИЗАЦИЯ ФАЙЛА ОБЩЕГО СПИСКА (КР-18 аудита 27.09). Файл «global» ложится в организацию; без
+   * активной сервер отвечал 400 «Не выбрана организация». Теперь он принимает её в теле: активная
+   * или единственная доступная — передаём сразу, а если организаций несколько и активной нет —
+   * спрашиваем, в какую загрузить.
+   */
+  const { user } = useAppAuth();
+  const orgOptions = useMemo(
+    () => (user?.accessRights ?? [])
+      .filter((r) => r.organizationUuid)
+      .map((r) => ({ value: String(r.organizationUuid), label: r.organization?.name || String(r.organizationUuid) })),
+    [user?.accessRights],
+  );
+  const fixedUploadOrg = allFiles ? (user?.organizationUuid || (orgOptions.length === 1 ? orgOptions[0].value : "")) : "";
+  const needOrgChoice = allFiles && !fixedUploadOrg && orgOptions.length > 1;
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pickedOrg, setPickedOrg] = useState("");
 
   const [columns, setColumns] = useState<TColumn[]>(() => {
     const base = getModelColumns(columnsJson, COMPONENT_NAME, "part");
@@ -152,10 +172,8 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
   }, [rows, searchValue, sortState]);
 
   // ── Загрузка файла ──────────────────────────────────────────────────────
-  const handleUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const uploadFile = useCallback(
+    async (file: File, organizationUuid: string) => {
       setIsUploading(true);
       setUploadInfo({ name: file.name, size: file.size, percent: 0 });
       try {
@@ -163,6 +181,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         fd.append("file", file);
         fd.append("ownerType", upOwnerType);
         fd.append("ownerUuid", upOwnerUuid);
+        if (organizationUuid) fd.append("organizationUuid", organizationUuid);
         await apiClient.post(`/${MODEL_ENDPOINT}`, fd, {
           onUploadProgress: (ev) => {
             const total = ev.total ?? file.size;
@@ -183,6 +202,25 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
     },
     [upOwnerType, upOwnerUuid, loadFiles, onFilesChange],
   );
+
+  const handleUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (needOrgChoice) {
+        setPickedOrg("");
+        setPendingFile(file);
+        return;
+      }
+      void uploadFile(file, fixedUploadOrg);
+    },
+    [needOrgChoice, uploadFile, fixedUploadOrg],
+  );
+
+  const cancelOrgChoice = useCallback(() => {
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
 
   // ── Удаление ────────────────────────────────────────────────────────────
   const handleDelete = useCallback(
@@ -299,6 +337,19 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
         <UploadProgress name={uploadInfo.name} size={uploadInfo.size} percent={uploadInfo.percent} />
       )}
       <Table {...(tableProps as unknown as TableProps)} />
+      {pendingFile && (
+        <Modal title={translate("fileOrganizationTitle")} onClose={cancelOrgChoice}
+          applyDisabled={!pickedOrg}
+          onApply={() => {
+            const file = pendingFile;
+            setPendingFile(null);
+            if (pickedOrg) void uploadFile(file, pickedOrg);
+          }}>
+          <FieldSelect name="files_upload_org" label={translate("organization")} value={pickedOrg}
+            options={[{ value: "", label: "—" }, ...orgOptions]} sortOptions
+            onChange={(e) => setPickedOrg(e.target.value)} />
+        </Modal>
+      )}
     </>
   );
 };

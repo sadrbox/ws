@@ -11,7 +11,10 @@ export function fillTemplate(template: string, vars: Record<string, string | num
 	return template.replace(/\{(\w+)\}/g, (m, key: string) => (key in vars ? String(vars[key]) : m));
 }
 
-/** Экранировать текст для окна подтверждения: оно показывает сообщение как HTML. */
+/**
+ * Экранировать текст для вставки в HTML. Окно подтверждения с 26.09 (Б7) выводит сообщение ТЕКСТОМ — для него
+ * экранировать не нужно (иначе «&» покажется как «&amp;», КР-22); функция осталась для мест, где строится HTML.
+ */
 export function escapeHtml(s: string): string {
 	return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

@@ -190,6 +190,8 @@ const InventoryTransfersForm: FC<Partial<TPane>> = (paneProps) => {
         documentType: "inventory_transfer",
         documentUuid: fd.uuid || undefined,
         fromWarehouseUuid: fd.fromWarehouseUuid || null,
+        // Склад-получатель — из формы: у нового перемещения сохранённого нет (КР-8 аудита 27.09).
+        toWarehouseUuid: fd.toWarehouseUuid || null,
         items: rows.map((r: TDataItem) => ({ productUuid: r.productUuid as string | null, quantity: r.quantity as number | string | null })),
       });
       return shortages.length ? formatStockShortages(shortages) : null;

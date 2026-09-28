@@ -38,7 +38,7 @@ import { closeBonusMonth, fetchBonus, reopenBonusMonth } from "src/services/qual
 import QualityChip from "src/models/_quality/QualityChip";
 import RecordLink from "src/models/_quality/RecordLink";
 import { currentMonth, monthLabel } from "src/models/_quality/month";
-import { escapeHtml, fillTemplate } from "src/models/_quality/text";
+import { fillTemplate } from "src/models/_quality/text";
 import { itemCaption } from "src/models/StandardViolations/violations";
 import MeasuresModal from "./MeasuresModal";
 import { bonusExportAoa, bonusExportFileName, bonusRows, isMonthOver, needsConfirmation, roleLabel, violationsSummary, type BonusTableRow } from "./bonus";
@@ -104,7 +104,8 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 
 	const closeMonth = useCallback(async () => {
 		if (!monthOver) return;
-		if (!(await confirm(escapeHtml(fillTemplate(translate("bonusCloseAsk"), { month: label }))))) return;
+		// Окно подтверждения выводит текст как есть — экранировать не нужно (КР-22 аудита 27.09).
+		if (!(await confirm(fillTemplate(translate("bonusCloseAsk"), { month: label })))) return;
 		setBusy(true);
 		setNotices([]);
 		try {
@@ -114,7 +115,7 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 				const pending = needsConfirmation(e);
 				if (pending == null) throw e;
 				// Нерешённые кандидаты и возражения: закрыть можно, но это осознанное решение.
-				if (!(await confirm(escapeHtml(fillTemplate(translate("bonusCloseForceAsk"), { n: pending }))))) return;
+				if (!(await confirm(fillTemplate(translate("bonusCloseForceAsk"), { n: pending })))) return;
 				await closeBonusMonth(month, true);
 			}
 			showToast(fillTemplate(translate("bonusClosedDone"), { month: label }), "success");
@@ -127,7 +128,7 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	}, [confirm, label, month, monthOver, afterChange]);
 
 	const reopenMonth = useCallback(async () => {
-		if (!(await confirm(escapeHtml(fillTemplate(translate("bonusReopenAsk"), { month: label }))))) return;
+		if (!(await confirm(fillTemplate(translate("bonusReopenAsk"), { month: label })))) return;
 		setBusy(true);
 		setNotices([]);
 		try {

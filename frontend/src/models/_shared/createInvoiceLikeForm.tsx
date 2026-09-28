@@ -19,7 +19,7 @@ import styles from "src/styles/main.module.scss";
 import { HelpBox } from "src/components/HelpBox";
 import { useFormStore } from "src/hooks/useFormStore";
 import { useContractSync } from "src/hooks/useContractSync";
-import { useFormLateResponseGuard } from "./lateResponseGuard";
+import { useFormLateResponseGuard, orgResetPatch } from "./lateResponseGuard";
 import { useDefaultOrganization } from "src/hooks/useDefaultOrganization";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import useOrgAccountingSettings from "src/hooks/useOrgAccountingSettings";
@@ -637,9 +637,12 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
     }, [form.setFields]);
 
     // Выбор контрагента: ЭСФ — грузополучатель = контрагент; категория получателя из карточки.
-    // Ответы по контрагенту и организации — через guardFields: поздний ответ по прежнему
+    // Ответы по контрагенту и организации — через guard: поздний ответ по прежнему
     // выбору отбрасывается, изменённое вручную за время запроса не перетирается (И13).
-    const guardFields = useFormLateResponseGuard<TFields>(form);
+    // У каждого обработчика свой guard: с общим выбор контрагента во время запроса дефолтов
+    // организации отбрасывал их (КР-6 аудита 27.09).
+    const guardCounterparty = useFormLateResponseGuard<TFields>(form);
+    const guardOrganization = useFormLateResponseGuard<TFields>(form);
     const handleCounterpartySelect = useCallback(async (uuid: string, displayValue: string, item?: LookupRow) => {
       const updates: Partial<TFields> = { counterpartyUuid: uuid, counterpartyName: displayValue };
       if (cfg.hasEsf) {
@@ -648,31 +651,31 @@ export function createInvoiceLikeForm(cfg: InvoiceLikeFormConfig): FC<Partial<TP
       }
       form.setFields(updates);
       // Договор: основной у нового контрагента → подставить, чужой → очистить.
-      await guardFields((cur) => syncContract({
+      await guardCounterparty((cur) => syncContract({
         counterpartyUuid: uuid,
         organizationUuid: cur.organizationUuid,
         currentContractUuid: cur.contractUuid,
       }), ["counterpartyUuid", "organizationUuid"]);
-    }, [form.setFields, guardFields, syncContract]);
+    }, [form.setFields, guardCounterparty, syncContract]);
 
-    // Смена организации: зависимые поля (договор, склад если есть) →
-    // дефолт пользователя для новой орг, иначе очистка.
+    // Смена организации: зависимые поля (договор, склад если есть) чистятся сразу (принадлежали
+    // прежней организации, КР-6), затем — дефолт пользователя для новой организации.
     const handleOrganizationSelect = useCallback(async (uuid: string, displayValue: string, item?: LookupRow) => {
       const cur = form.store.getSnapshot().fields;
       if (cur.organizationUuid === uuid) return;
-      const patch0: Partial<TFields> = { organizationUuid: uuid, organizationName: displayValue };
+      const orgFields: Array<{ valueType: "warehouse" | "contract"; uuidKey: string; nameKey: string }> = [
+        { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
+      ];
+      if (cfg.hasWarehouse) orgFields.push({ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" });
+      const patch0: Partial<TFields> = { organizationUuid: uuid, organizationName: displayValue, ...orgResetPatch(orgFields) };
       // ЭСФ: грузоотправитель = организация; категория поставщика — из карточки организации.
       if (cfg.hasEsf) {
         patch0.esfConsignorUuid = uuid; patch0.esfConsignorName = displayValue;
         if (item?.enterpriseCategory) patch0.esfSellerType = item.enterpriseCategory;
       }
       form.setFields(patch0);
-      const orgFields: Array<{ valueType: "warehouse" | "contract"; uuidKey: string; nameKey: string }> = [
-        { valueType: "contract", uuidKey: "contractUuid", nameKey: "contractName" },
-      ];
-      if (cfg.hasWarehouse) orgFields.push({ valueType: "warehouse", uuidKey: "warehouseUuid", nameKey: "warehouseName" });
-      await guardFields(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", orgFields), ["organizationUuid"]);
-    }, [form.setFields, form.store, guardFields, currentUser?.uuid]);
+      await guardOrganization(() => resolveOrgChangeFields(uuid, currentUser?.uuid ?? "", orgFields), ["organizationUuid"]);
+    }, [form.setFields, form.store, guardOrganization, currentUser?.uuid]);
 
     const contractScope = useMemo<Record<string, string> | null>(() => {
       if (!form.fields.organizationUuid) return null;

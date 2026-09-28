@@ -39,18 +39,25 @@ const todayKey = (now: number): string => localYmd(getAppUtcOffset() * 60, now);
 
 let markInFlight = false;
 let markFailedAt = 0;
+/**
+ * День отметки — ещё и в памяти (КР-22 аудита 27.09): в приватном режиме и при запрете хранилища
+ * localStorage недоступен, и отметка уходила на сервер на каждом круге опроса (раз в минуту) весь день.
+ */
+const markedDays = new Map<string, string>();
 
 /** Сбросить состояние отметки — при смене пользователя и в тестах. */
 export function resetLoginMarkState(): void {
 	markInFlight = false;
 	markFailedAt = 0;
+	markedDays.clear();
 }
 
 function remember(key: string, day: string): void {
+	markedDays.set(key, day);
 	try {
 		localStorage.setItem(key, day);
 	} catch {
-		// localStorage недоступен (приватный режим) — сервер всё равно не сдвинет поставленную отметку
+		// localStorage недоступен (приватный режим) — день запомнен в памяти вкладки
 	}
 }
 
@@ -60,10 +67,11 @@ export function markOnLoginOncePerDay(now: number = Date.now()): void {
 	if (!me?.uuid) return;
 	const key = `${LOGIN_MARK_KEY}:${me.uuid}`;
 	const day = todayKey(now);
+	if (markedDays.get(key) === day) return;
 	try {
 		if (localStorage.getItem(key) === day) return;
 	} catch {
-		// нет хранилища — опираемся на сервер: он не сдвигает уже поставленную отметку
+		// нет хранилища — день помнит markedDays
 	}
 	if (markInFlight || now - markFailedAt < MARK_RETRY_MS) return;
 	markInFlight = true;

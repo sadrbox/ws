@@ -45,6 +45,41 @@ const APPLY_LOCK_MS = 600;
 
 const focusableSelector = 'a[href], area[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable]';
 
+/**
+ * Можно ли прийти сюда по Tab (КР-21 аудита 27.09). Селектор отбирает кандидатов, а ловушка сама
+ * переводит фокус по списку — и в список попадали скрытые узлы (display:none: скрытый
+ * <input type=file> у FieldFile; visibility:hidden) и кнопки с tabIndex=-1 (действия полей:
+ * «Быстрый выбор», «Выбрать из списка» — браузер их обходит). focus() на скрытом — пустой вызов:
+ * Tab застревал, и в окне «Загрузить расширение» до имени и «Применить» было не добраться.
+ * `hidden` — кэш «узел скрыт display:none» на один обход (предки у полей общие).
+ */
+function isTabbable(el: HTMLElement, root: HTMLElement, hidden: Map<Element, boolean>): boolean {
+  const tabIndex = el.getAttribute('tabindex');
+  if (tabIndex !== null && Number(tabIndex) < 0) return false;
+  try {
+    if (el.matches(':disabled')) return false;
+  } catch { /* старый движок без :disabled */ }
+  const view = el.ownerDocument.defaultView;
+  if (!view) return true;
+  const own = view.getComputedStyle(el).visibility;
+  if (own === 'hidden' || own === 'collapse') return false;
+  for (let n: HTMLElement | null = el; n && n !== root; n = n.parentElement) {
+    let isHidden = hidden.get(n);
+    if (isHidden === undefined) {
+      isHidden = n.hidden || view.getComputedStyle(n).display === 'none';
+      hidden.set(n, isHidden);
+    }
+    if (isHidden) return false;
+  }
+  return true;
+}
+
+/** Узлы обхода Tab внутри контейнера — только те, куда фокус правда встанет. */
+function tabbableIn(container: HTMLElement | null, root: HTMLElement, hidden: Map<Element, boolean>): HTMLElement[] {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll<HTMLElement>(focusableSelector)).filter((el) => isTabbable(el, root, hidden));
+}
+
 const ModalContextInstance = createContext<{ values: Record<string, unknown>; setValues: (values: Record<string, unknown>) => void } | null>(null);
 
 const Modal: FC<ModalProps> = ({ method, onApply, applyDisabled = false, onClose, title, style, className, children, buttons }) => {
@@ -83,18 +118,18 @@ const Modal: FC<ModalProps> = ({ method, onApply, applyDisabled = false, onClose
     // «Да»/«Отмена»). Узлы собираем НА КАЖДОЕ нажатие: тело может появиться позже
     // (асинхронная загрузка), а раньше снимок при монтировании запирал Tab навсегда;
     // кнопки шапки раньше были недостижимы с клавиатуры вовсе (аудит 26.09, И14).
-    const collect = (): HTMLElement[] => {
-      const body = bodyOf();
-      const inBody = body ? Array.from(body.querySelectorAll<HTMLElement>(focusableSelector)) : [];
-      const headerEl = modalEl.querySelector<HTMLElement>('[data-modal-header="true"]');
-      const header = headerEl ? Array.from(headerEl.querySelectorAll<HTMLElement>(focusableSelector)) : [];
-      return [...inBody, ...header];
+    // Только видимые узлы без tabIndex=-1 (КР-21, isTabbable).
+    const collect = (): { inBody: HTMLElement[]; header: HTMLElement[] } => {
+      const hidden = new Map<Element, boolean>();
+      return {
+        inBody: tabbableIn(bodyOf(), modalEl, hidden),
+        header: tabbableIn(modalEl.querySelector<HTMLElement>('[data-modal-header="true"]'), modalEl, hidden),
+      };
     };
 
     // focus first focusable of the body or modal wrapper
     try {
-      const body = bodyOf();
-      const first = body?.querySelector<HTMLElement>(focusableSelector);
+      const first = collect().inBody[0];
       if (first) first.focus();
       else modalEl.focus();
     } catch { /* intentional */ }
@@ -102,13 +137,27 @@ const Modal: FC<ModalProps> = ({ method, onApply, applyDisabled = false, onClose
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
       e.preventDefault();
-      const nodes = collect();
+      const { inBody, header } = collect();
+      const nodes = [...inBody, ...header];
       if (nodes.length === 0) return;
       const active = document.activeElement as HTMLElement | null;
       const idx = active ? nodes.indexOf(active) : -1;
       let next: number;
-      if (idx === -1) next = e.shiftKey ? nodes.length - 1 : 0;
-      else next = (idx + (e.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
+      if (idx !== -1) {
+        next = (idx + (e.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
+      } else if (active && active !== modalEl && bodyOf()?.contains(active)) {
+        // Фокус на узле вне обхода (кнопка поля с tabIndex=-1 после щелчка) — продолжаем от его
+        // места в теле, а не с начала окна.
+        const after = inBody.findIndex((n) => (active.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+        if (e.shiftKey) {
+          const prev = (after === -1 ? inBody.length : after) - 1;
+          next = prev >= 0 ? prev : nodes.length - 1;
+        } else {
+          next = after !== -1 ? after : (inBody.length < nodes.length ? inBody.length : 0);
+        }
+      } else {
+        next = e.shiftKey ? nodes.length - 1 : 0;
+      }
       try { nodes[next].focus(); } catch { /* intentional */ }
     };
 
@@ -125,7 +174,7 @@ const Modal: FC<ModalProps> = ({ method, onApply, applyDisabled = false, onClose
           if (topModal) {
             const topModalBody = topModal.querySelector<HTMLElement>('[data-modal-body="true"]');
             const focusTargetRoot = topModalBody ?? topModal;
-            const remainingNodes = Array.from(focusTargetRoot.querySelectorAll<HTMLElement>(focusableSelector));
+            const remainingNodes = tabbableIn(focusTargetRoot, topModal, new Map());
             (remainingNodes[0] ?? topModal).focus();
             return;
           }

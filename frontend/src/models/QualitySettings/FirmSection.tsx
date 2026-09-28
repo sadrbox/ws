@@ -25,7 +25,7 @@ import { showToast } from "src/components/UIToast";
 import { routeError } from "src/services/errors/route";
 import { fetchFirmCandidates, saveQualitySettings, type FirmCandidate } from "src/services/quality/api";
 import QualityChip from "src/models/_quality/QualityChip";
-import { escapeHtml, fillTemplate } from "src/models/_quality/text";
+import { fillTemplate } from "src/models/_quality/text";
 import main from "src/styles/main.module.scss";
 import styles from "./QualitySettings.module.scss";
 
@@ -54,7 +54,9 @@ export const FirmSection: FC<Props> = ({ firmName, firmExplicit, isAdmin }) => {
 
 	const assign = useCallback(async (target: { uuid: string; name: string }) => {
 		if (!target.uuid) return;
-		if (!(await confirm(escapeHtml(fillTemplate(translate("qualityFirmAssignAsk"), { name: target.name }))))) return;
+		// Окно подтверждения выводит текст как есть — без экранирования: «&» в имени фирмы
+		// иначе показывалось бы как «&amp;» (КР-22 аудита 27.09).
+		if (!(await confirm(fillTemplate(translate("qualityFirmAssignAsk"), { name: target.name })))) return;
 		setBusy(true);
 		setNotices([]);
 		try {
