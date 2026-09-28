@@ -12,7 +12,9 @@
 // ЧТО ДОСТУП ОБЯЗАН УВАЖАТЬ: модули клиента (состав принадлежит организации, а не тому, кто в
 // неё вошёл), профиль прав, срок договора и след в аудите.
 import { prisma } from "../prisma/prisma-client.js";
-import { findProfile } from "./permissionProfiles.js";
+import { findProfile, expandProfile } from "./permissionProfiles.js";
+import { MODULE_ROUTES, moduleOfRoute } from "./moduleRoutes.js";
+import { ROUTE_TO_MODEL } from "../utils/routeModels.js";
 
 export const LINK_STATES = ["requested", "active", "suspended", "revoked"];
 export const STAFF_ROLES = ["lead", "assistant"];
@@ -58,6 +60,87 @@ export async function servicedOrgsFor(userUuid, { now = new Date(), db = prisma 
  * (пользователи, права): фирма ведёт учёт, но доступом клиента не распоряжается (К2).
  */
 export const SERVICE_PROFILES_FORBIDDEN = ["owner"];
+
+/*
+ * ПРАВА ПО ОБСЛУЖИВАНИЮ — ИЗ ПРОФИЛЯ СВЯЗИ, А НЕ КОПИЯМИ (КР-18 аудита 27.09).
+ *
+ * Профиль связи (`service_accountant` и т. п.) нигде не участвовал в проверке прав: сотрудник фирмы
+ * попадал в данные клиента только сводкой, а право бралось из строк прав САМОЙ ФИРМЫ — работало
+ * случайно и переносило в клиента власть, которой клиент не давал. Штатно выдать права в клиенте
+ * было нечем: назначение профиля требует членства, а членство противоречит К2.
+ *
+ * Выбрано вычисление, а не материализация строк access_permissions при подтверждении связи и
+ * назначении сотрудника: копии пришлось бы снимать при отзыве, приостановке, переподтверждении,
+ * снятии назначения и — без всякого события — по истечении срока договора; один пропуск — утечка
+ * чужого учёта (та же причина, по которой доступ идёт через назначение, а не копией членства).
+ * Здесь уровень считается на лету из связи, которую tenantMiddleware уже прочитал (serviceContext):
+ * погасла связь — погасли и права, у всех назначенных сразу.
+ *
+ * Модули: связь может открывать фирме не все модули клиента — модели закрытых модулей получают
+ * `none` (модуль модели — по карте маршрутов модулей; ядро учёта модулю не принадлежит).
+ */
+const LEVEL_RANK = { none: 0, readonly: 1, full: 2 };
+
+/** Наибольший из уровней доступа; неизвестное и пустое — как «нет доступа». */
+export function maxLevel(...levels) {
+	let best = "none";
+	for (const l of levels) if ((LEVEL_RANK[l] ?? 0) > LEVEL_RANK[best]) best = l;
+	return best;
+}
+
+let modelModules = null;
+/**
+ * Модуль, которому принадлежит модель прав (по маршрутам модулей); null — ядро. Пути карты модулей
+ * совпадают с сегментами маршрутов и карты прав — это держит __tests__/moduleRoutes.test.js.
+ */
+export function moduleOfModel(modelName) {
+	if (!modelModules) {
+		modelModules = new Map();
+		for (const [segment, mod] of Object.entries(MODULE_ROUTES)) {
+			const model = ROUTE_TO_MODEL[segment];
+			if (model && !modelModules.has(model)) modelModules.set(model, mod);
+		}
+	}
+	return modelModules.get(modelName) ?? null;
+}
+
+// Профили — часть поставки и в работе не меняются: разворот по моделям — один раз на профиль.
+const expandedProfiles = new Map();
+function levelsOf(profile) {
+	if (!expandedProfiles.has(profile)) {
+		// Запрещённый для обслуживания профиль (owner) в связи оказаться не должен; оказался — не даёт ничего.
+		const ok = !!profile && !SERVICE_PROFILES_FORBIDDEN.includes(profile) && !!findProfile(profile);
+		expandedProfiles.set(profile, ok ? expandProfile(profile) : null);
+	}
+	return expandedProfiles.get(profile);
+}
+
+/**
+ * Уровень доступа к модели по обслуживанию.
+ * @param {{profile:string, modules:string[]|null}|null} ctx — элемент req.user.serviceContext (servicedOrgsFor)
+ * @param {string} modelName
+ * @param {{segment?:string|null}} [opts] — сегмент маршрута, если известен (точнее модуль)
+ */
+export function serviceAccessLevel(ctx, modelName, { segment = null } = {}) {
+	if (!ctx || !modelName) return "none";
+	const levels = levelsOf(ctx.profile);
+	if (!levels) return "none";
+	const level = levels[modelName] ?? "none";
+	if (Array.isArray(ctx.modules)) {
+		const mod = (segment && moduleOfRoute(segment)) || moduleOfModel(modelName);
+		if (mod && !ctx.modules.includes(mod)) return "none";
+	}
+	return level;
+}
+
+/** Права по обслуживанию строками, как access_permissions, — для меню панели. */
+export function servicePermissionRows(ctx, organizationUuid = null) {
+	const levels = ctx ? levelsOf(ctx.profile) : null;
+	if (!levels) return [];
+	return Object.keys(levels).sort().map((modelName) => ({
+		modelName, accessLevel: serviceAccessLevel(ctx, modelName), organizationUuid, viaService: true,
+	}));
+}
 
 /**
  * Нужно ли новое согласие клиента после правки связи (Б2 аудита 26.09).
@@ -168,5 +251,6 @@ export async function providersOf(clientOrgUuid) {
 
 export default {
 	LINK_STATES, STAFF_ROLES, SERVICE_PROFILES_FORBIDDEN, linkIsLive, allowedModules, linkNeedsReconfirm, servicedOrgsFor,
+	maxLevel, moduleOfModel, serviceAccessLevel, servicePermissionRows,
 	upsertLink, confirmLink, setLinkState, assignStaff, unassignStaff, clientsOf, providersOf,
 };

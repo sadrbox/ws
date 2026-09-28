@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
 import {
 	MAX_LIST_LIMIT, clampLimit, BadRequestError, parseDateParam, buildFilterWhere, isClientInputError, sendError,
 } from "../utils/listQuery.js";
-import { dbPoolConfig, DB_POOL_DEFAULTS } from "../utils/dbPoolConfig.js";
+import { dbPoolConfig, DB_POOL_DEFAULTS, connectionBudget } from "../utils/dbPoolConfig.js";
 
 test("clampLimit: потолок 500 вместо 999999, мусор — умолчание, свой max — для законных случаев", () => {
 	assert.equal(MAX_LIST_LIMIT, 500);
@@ -111,7 +111,7 @@ test("dbPoolConfig (Н2): явные пределы по умолчанию и �
 	const warns = [];
 	const d = dbPoolConfig({ DATABASE_URL: "postgres://x" }, { warn: (m) => warns.push(m) });
 	assert.equal(d.max, DB_POOL_DEFAULTS.max);
-	assert.equal(d.max, 17, "совпадает с расчётом ecosystem.config.js: 4 × 17 = 68 < 100");
+	assert.equal(d.max, 12, "КР-17 аудита 27.09: 4 × (12 + 2) + ИИ 14 = 70, пик reload + запас — 96 ≤ 97");
 	assert.equal(d.connectionTimeoutMillis, 5000, "ожидание соединения не бесконечное");
 	assert.equal(d.statement_timeout, 30000, "запрос не бесконечный");
 	assert.equal(d.query_timeout, undefined, "клиентский таймаут не ставим — запрос остался бы в базе");
@@ -119,6 +119,17 @@ test("dbPoolConfig (Н2): явные пределы по умолчанию и �
 	const e = dbPoolConfig({ DB_POOL_MAX: "8", DB_POOL_CONNECTION_TIMEOUT_MS: "0", DB_STATEMENT_TIMEOUT_MS: "120000" });
 	assert.deepEqual([e.max, e.connectionTimeoutMillis, e.statement_timeout], [8, 0, 120000]);
 	const bad = dbPoolConfig({ DB_POOL_MAX: "0", DB_STATEMENT_TIMEOUT_MS: "полминуты" }, { warn: (m) => warns.push(m) });
-	assert.deepEqual([bad.max, bad.statement_timeout], [17, 30000], "мусор — умолчание, а не 0");
+	assert.deepEqual([bad.max, bad.statement_timeout], [DB_POOL_DEFAULTS.max, 30000], "мусор — умолчание, а не 0");
 	assert.equal(warns.length, 2);
+});
+
+test("КР-17: умолчание пула укладывается в max_connections вместе с сервисом ИИ, pm2 reload и запасом", () => {
+	const b = connectionBudget(DB_POOL_DEFAULTS.max);
+	assert.equal(b.available, 97, "100 минус резерв суперпользователя");
+	assert.equal(b.steady, 70);
+	assert.ok(b.peak <= b.available, `пик ${b.peak} > ${b.available}`);
+	// Прежнее умолчание 17 — 90 постоянно, в пике reload за пределом: «too many clients».
+	const old = connectionBudget(17);
+	assert.equal(old.steady, 90);
+	assert.ok(old.peak > old.available);
 });

@@ -86,14 +86,61 @@ test("pruneAuditLog: неположительный срок = чистка от
 	assert.deepEqual(await pruneAuditLog(-5, client), { deleted: 0, skipped: true });
 });
 
+/** Подставной журнал: findMany по actionDate < cutoff (самые старые, take), deleteMany по id. */
+function fakeJournal(dates) {
+	const rows = dates.map((d, i) => ({ id: i + 1, actionDate: d }));
+	const calls = { find: [], del: [] };
+	return {
+		rows,
+		calls,
+		client: {
+			activityHistory: {
+				findMany: async (args) => {
+					calls.find.push(args);
+					return rows.filter((r) => r.actionDate < args.where.actionDate.lt).sort((a, b) => a.actionDate - b.actionDate).slice(0, args.take).map((r) => ({ id: r.id }));
+				},
+				deleteMany: async (args) => {
+					calls.del.push(args);
+					const ids = new Set(args.where?.id?.in ?? []);
+					const before = rows.length;
+					for (let i = rows.length - 1; i >= 0; i--) if (ids.has(rows[i].id)) rows.splice(i, 1);
+					return { count: before - rows.length };
+				},
+			},
+		},
+	};
+}
+
 test("pruneAuditLog: удаляет записи старше cutoff", async () => {
-	let captured;
-	const client = { activityHistory: { deleteMany: (args) => { captured = args; return { count: 7 }; } } };
-	const res = await pruneAuditLog(30, client);
-	assert.equal(res.deleted, 7);
-	const cutoff = captured.where.actionDate.lt;
+	const day = 86400000;
+	const j = fakeJournal([new Date(Date.now() - 40 * day), new Date(Date.now() - 31 * day), new Date(Date.now() - 2 * day)]);
+	const res = await pruneAuditLog(30, j.client);
+	assert.equal(res.deleted, 2);
+	assert.deepEqual(j.rows.map((r) => r.id), [3], "свежая запись осталась");
+	const cutoff = j.calls.find[0].where.actionDate.lt;
 	const ageDays = (Date.now() - cutoff.getTime()) / 86400000;
 	assert.ok(Math.abs(ageDays - 30) < 0.01, `cutoff ≈ 30 дней назад, получено ${ageDays}`);
+});
+
+test("pruneAuditLog: КР-15 — хвост журнала удаляется пачками по id, а не одним DELETE", async () => {
+	const day = 86400000;
+	const old = Array.from({ length: 12 }, (_, i) => new Date(Date.now() - (400 + i) * day));
+	const j = fakeJournal([...old, new Date(Date.now() - day)]);
+	const res = await pruneAuditLog(365, j.client, { batch: 5 });
+	assert.equal(res.deleted, 12);
+	assert.equal(res.more, undefined, "хвост дочищен за проход");
+	assert.equal(j.calls.del.length, 3, "три пачки: 5 + 5 + 2");
+	for (const c of j.calls.del) {
+		assert.ok(Array.isArray(c.where?.id?.in) && c.where.id.in.length <= 5, "DELETE — по id пачки");
+		assert.equal(c.where.actionDate, undefined, "не DELETE по всему сроку разом");
+	}
+	assert.equal(j.rows.length, 1);
+	// Предохранитель: не больше maxBatches пачек за проход — остаток помечен.
+	const k = fakeJournal(old);
+	const part = await pruneAuditLog(365, k.client, { batch: 5, maxBatches: 2 });
+	assert.equal(part.deleted, 10);
+	assert.equal(part.more, true);
+	assert.equal(k.rows.length, 2);
 });
 
 test("shouldPrune: троттлинг раз в сутки", () => {

@@ -29,12 +29,55 @@ const asDate = (v) => (v && !Number.isNaN(new Date(v).getTime()) ? new Date(v) :
 /** Находок на страницу в фоновом правиле (обход всех, а не первых N). */
 const FINDINGS_PAGE = 500;
 
+/*
+ * ОЖИДАНИЕ БЛОКИРОВКИ ПРИЁМА — С ЯВНЫМ ПРЕДЕЛОМ (КР-15 аудита 27.09). Вторая посылка той же проверки
+ * того же клиента (другая база организации, повтор ai) ждёт первую под pg_advisory_xact_lock. Предела
+ * у ожидания не было, и его обрывал общий statement_timeout пула (30 с): 57014, откат, «Ошибка
+ * сервера». Теперь ждём не дольше INGEST_LOCK_WAIT_MS (SET LOCAL lock_timeout — только в этой
+ * транзакции; меньше statement_timeout, чтобы сработал именно он) и отвечаем понятным отказом
+ * CheckIngestBusyError: «приём этой проверки уже идёт — повторите позже». Ответ 503 — временный:
+ * ключ идемпотентности посылки освобождается, повтор примет итоги.
+ */
+export const INGEST_LOCK_WAIT_MS = 20_000;
+
+export class CheckIngestBusyError extends Error {
+	constructor(check) {
+		super(`Итоги проверки «${check}» по этой организации сейчас принимает другой запрос — повторите позже`);
+		this.name = "CheckIngestBusyError";
+		this.status = 503;
+		this.code = "CHECK_INGEST_BUSY";
+	}
+}
+
+/** Код SQLSTATE ошибки Postgres — в обёртке Prisma (P2010 + driverAdapterError) или как есть. */
+function pgCodeOf(e) {
+	const cause = e?.meta?.driverAdapterError?.cause;
+	return cause?.originalCode ?? cause?.code ?? e?.meta?.code ?? (typeof e?.code === "string" && /^[0-9A-Z]{5}$/.test(e.code) ? e.code : null);
+}
+
+/**
+ * Взять блокировку приёма (клиент, проверка) в транзакции tx, ожидая не дольше waitMs.
+ * Не дождались (lock_timeout 55P03, или statement_timeout 57014, если его задали короче) — CheckIngestBusyError.
+ */
+export async function lockCheckIngest(tx, organizationUuid, check, waitMs = INGEST_LOCK_WAIT_MS) {
+	// SET не принимает параметров — подставляем целое число сами.
+	await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = ${Math.max(1, Math.trunc(Number(waitMs) || INGEST_LOCK_WAIT_MS))}`);
+	try {
+		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`check-ingest:${organizationUuid}:${check}`}))`;
+	} catch (e) {
+		const code = pgCodeOf(e);
+		if (code === "55P03" || code === "57014") throw new CheckIngestBusyError(check);
+		throw e;
+	}
+}
+
 /**
  * Принять итоги прогона по одной организации.
  * @param {string} organizationUuid — клиент (по БИН из тела, резолвит роутер)
  * @param {object} body — { baseKey, runs:[{check, scope, request, ok, data|error}], snapshots:[…] }
+ * @param {{ lockWaitMs?: number }} [opts] — предел ожидания блокировки приёма проверки (тесты)
  */
-export async function ingestCheckResults(organizationUuid, body) {
+export async function ingestCheckResults(organizationUuid, body, { lockWaitMs = INGEST_LOCK_WAIT_MS } = {}) {
 	const firm = await getFirmOrgSetting();
 	const settings = await getQualitySettings(firm);
 	const counters = { runs: 0, findingsNew: 0, findingsSeen: 0, findingsResolved: 0, findingsReopened: 0, rejected: 0, snapshots: 0, tasksOpened: 0, tasksClosed: 0 };
@@ -68,7 +111,7 @@ export async function ingestCheckResults(organizationUuid, body) {
 		 * Уведомления и кандидаты — после фиксации: откат не должен оставлять разосланного.
 		 */
 		const result = await prisma.$transaction(async (tx) => {
-			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`check-ingest:${organizationUuid}:${check}`}))`;
+			await lockCheckIngest(tx, organizationUuid, check, lockWaitMs);
 			if (readAt && (await tx.checkRun.findFirst({ where: { organizationUuid, checkCode: check, readAt }, select: { id: true } }))) {
 				return { duplicate: true };
 			}
@@ -404,4 +447,4 @@ export async function clearFindingException(finding) {
 
 export { compareKn };
 
-export default { ingestCheckResults, syncSummaryTask, runFindingCandidates, setFindingException, clearFindingException, compareKn };
+export default { ingestCheckResults, lockCheckIngest, CheckIngestBusyError, INGEST_LOCK_WAIT_MS, syncSummaryTask, runFindingCandidates, setFindingException, clearFindingException, compareKn };

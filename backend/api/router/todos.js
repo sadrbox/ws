@@ -370,15 +370,20 @@ router.put("/todos/:id", async (req, res) => {
 			data.description = description?.trim() ?? null;
 		if (status !== undefined) data.status = status;
 		// Перенос в другую организацию — только в доступную: раньше свою задачу можно было
-		// «переложить» в чужую фирму.
+		// «переложить» в чужую фирму. Проверяем только ФАКТИЧЕСКУЮ смену (КР-22 аудита 27.09, как
+		// _documentHeaderFactory): форма шлёт organizationUuid всегда, и старая задача без
+		// организации (её видят куратор и исполнитель) иначе не сохранялась с отказом «не выбрана».
 		if (organizationUuid !== undefined) {
-			if (!organizationUuid && !req.user?.isSuperAdmin) {
-				return res.status(400).json({ success: false, message: "Не выбрана организация задачи" });
+			const nextOrg = organizationUuid || null;
+			if (nextOrg !== (existing.organizationUuid ?? null)) {
+				if (!nextOrg && !req.user?.isSuperAdmin) {
+					return res.status(400).json({ success: false, message: "Не выбрана организация задачи" });
+				}
+				if (nextOrg && !orgIsAccessible(req, nextOrg)) {
+					return res.status(403).json({ success: false, code: "ORG_NOT_ACCESSIBLE", message: "Организация недоступна" });
+				}
 			}
-			if (organizationUuid && !orgIsAccessible(req, organizationUuid)) {
-				return res.status(403).json({ success: false, code: "ORG_NOT_ACCESSIBLE", message: "Организация недоступна" });
-			}
-			data.organizationUuid = organizationUuid || null;
+			data.organizationUuid = nextOrg;
 		}
 		if (counterpartyUuid !== undefined)
 			data.counterpartyUuid = counterpartyUuid || null;

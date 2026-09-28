@@ -32,10 +32,11 @@ import { resolveContext, organizationByBin, ActorError } from "../../services/bp
 import { resolveUser } from "../../services/pipeActor.js";
 import { publish } from "../../services/chatBus.js";
 import { prepareCreate, prepareUpdate, afterCreate, afterUpdate, remindTodo, rateTodo } from "../../services/quality/todos.js";
-import { ingestCheckResults } from "../../services/quality/checks.js";
+import { ingestCheckResults, CheckIngestBusyError } from "../../services/quality/checks.js";
 import { isStaffUser } from "../../services/quality/access.js";
 import { getFirmOrgSetting } from "../../services/quality/settings.js";
 import { idempotent } from "../../services/idempotency.js";
+import { orgTimeZone, zonedMidnight } from "../../services/periodBounds.js";
 
 /** Автор из 1С — сотрудник фирмы? null — учёт качества не включён (фирма не назначена). */
 async function isStaffAuthor(userUuid) {
@@ -69,11 +70,38 @@ function limitOf(raw, fallback = 50) {
 	return Math.min(Math.trunc(n), MAX_LIMIT);
 }
 
-/** Срок: 1С шлёт ISO-дату. Пустое — «без срока», мусор — отказ, а не молчаливый null. */
-function deadlineOf(raw) {
+/** Дата-время без пояса: «ГГГГ-ММ-ДД[Tчч:мм[:сс[.доли]]]» (так 1С отдаёт дату через XMLString). */
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$/;
+
+/**
+ * Срок: 1С шлёт ISO-дату. Пустое — «без срока», мусор — отказ, а не молчаливый null.
+ *
+ * ДАТА БЕЗ ВРЕМЕНИ — «ВЕСЬ ДЕНЬ» (КР-22 аудита 27.09). «2026-09-30T00:00:00» без пояса (1С отдаёт
+ * дату через XMLString) разбиралось в поясе процесса — местной полуночью, то есть точным моментом, и
+ * просрочка с кандидатом по п. 20 появлялась на сутки раньше. Теперь полночь без пояса — та же дата
+ * без времени, что «2026-09-30»: полночь UTC, которую taskRules.deadlineDueAt читает как конец
+ * местного дня. Время ≠ 00:00 без пояса — местное время организации (orgTimeZone), строка с поясом —
+ * точный момент как есть. Пустая дата 1С («0001-01-01…») — «без срока», а не срок в первом веке.
+ */
+export function deadlineOf(raw) {
 	if (raw === undefined || raw === null || raw === "") return null;
-	const d = new Date(String(raw));
-	if (Number.isNaN(d.getTime())) throw new ActorError(400, "Некорректный срок задачи");
+	const s = String(raw).trim();
+	const m = LOCAL_DATE_TIME.exec(s);
+	if (m) {
+		const [y, mo, d, h = 0, mi = 0, sec = 0] = m.slice(1, 7).map((v) => Number(v ?? 0));
+		const fracMs = m[7] ? Math.floor(Number(`0.${m[7]}`) * 1000) : 0;
+		if (y <= 1) return null; // пустая дата 1С
+		const day = new Date(Date.UTC(y, mo - 1, d));
+		// «30.02» Date молча превратил бы в 02.03 — это мусор, а не срок.
+		if (day.getUTCFullYear() !== y || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d || h > 23 || mi > 59 || sec > 59) {
+			throw new ActorError(400, "Некорректный срок задачи");
+		}
+		if (h === 0 && mi === 0 && sec === 0 && fracMs === 0) return day;
+		const tz = orgTimeZone();
+		return new Date(zonedMidnight(y, mo, d, tz).getTime() + ((h * 60 + mi) * 60 + sec) * 1000 + fracMs);
+	}
+	const d = new Date(s);
+	if (!s || Number.isNaN(d.getTime())) throw new ActorError(400, "Некорректный срок задачи");
 	return d;
 }
 
@@ -238,6 +266,9 @@ router.post("/tasks", idempotent("POST /bpai/tasks"), async (req, res) => {
 			},
 			include: TASK_INCLUDE,
 		});
+		// Задача создана — побочный эффект зафиксирован: сбой дальше (история, уведомления) не должен
+		// освобождать ключ идемпотентности, иначе повтор хода создаст вторую задачу (КР-5 аудита 27.09).
+		res.locals.idempotencyCommitted = true;
 		await afterCreate(item, { actorUuid: author.uuid, actorName: author.name ?? null, channel: "1c-chat" });
 
 		// Исполнителю — тем же уведомлением, что и при назначении из панели.
@@ -341,8 +372,17 @@ router.post("/checks/results", idempotent("POST /bpai/checks/results"), async (r
 		const org = /^\d{12}$/.test(bin) ? await prisma.organization.findFirst({ where: { bin, deletedAt: null }, select: { uuid: true } }) : null;
 		if (!org) throw new ActorError(404, "Организация с таким БИН в ERP не найдена");
 		const data = await ingestCheckResults(org.uuid, req.body || {});
+		// Итоги приняты (КР-5 аудита 27.09): дальше 5xx запоминается, а не освобождает ключ. Сбой ДО
+		// этого места ключ освобождает — повтор безопасен: уже принятые проверки приём отсечёт по readAt.
+		res.locals.idempotencyCommitted = true;
 		return res.status(200).json({ success: true, data });
 	} catch (error) {
+		// Эту проверку клиента уже принимает другой запрос (КР-15 аудита 27.09): отказ временный —
+		// 503, ключ посылки свободен, повтор примет итоги (принятое до отказа отсечётся по readAt).
+		if (error instanceof CheckIngestBusyError) {
+			res.set("Retry-After", "60");
+			return res.status(503).json({ success: false, code: error.code, message: error.message });
+		}
 		return fail(res, error, "POST /checks/results");
 	}
 });

@@ -237,14 +237,36 @@ export function retentionDays() {
 }
 
 /**
- * Удалить записи журнала старше `days` суток.
- * @returns {Promise<{deleted:number, skipped?:boolean, cutoff?:Date}>}
+ * ЧИСТКА ПАЧКАМИ (КР-15 аудита 27.09). Один DELETE по всему хвосту журнала на больших объёмах
+ * упирался в statement_timeout пула (30 с): 57014, откат — и журнал переставал чиститься вовсе,
+ * с каждым днём хвост только рос. Теперь — пачки по PRUNE_BATCH строк (id самых старых по индексу
+ * actionDate, затем DELETE по id): каждый запрос короткий, прерванный проход оставляет удалённое
+ * удалённым. Проходов не больше PRUNE_MAX_BATCHES за раз — остаток дочистит следующий запуск.
  */
-export async function pruneAuditLog(days = retentionDays(), client = prisma) {
+export const PRUNE_BATCH = 5_000;
+export const PRUNE_MAX_BATCHES = 1_000;
+
+/**
+ * Удалить записи журнала старше `days` суток.
+ * @returns {Promise<{deleted:number, skipped?:boolean, cutoff?:Date, more?:boolean}>}
+ */
+export async function pruneAuditLog(days = retentionDays(), client = prisma, { batch = PRUNE_BATCH, maxBatches = PRUNE_MAX_BATCHES } = {}) {
 	if (!Number.isFinite(days) || days <= 0) return { deleted: 0, skipped: true };
 	const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-	const res = await client.activityHistory.deleteMany({ where: { actionDate: { lt: cutoff } } });
-	return { deleted: res.count, cutoff };
+	let deleted = 0;
+	for (let i = 0; i < maxBatches; i++) {
+		const rows = await client.activityHistory.findMany({
+			where: { actionDate: { lt: cutoff } },
+			select: { id: true },
+			orderBy: { actionDate: "asc" },
+			take: batch,
+		});
+		if (!rows.length) return { deleted, cutoff };
+		const res = await client.activityHistory.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+		deleted += res.count;
+		if (rows.length < batch) return { deleted, cutoff };
+	}
+	return { deleted, cutoff, more: true };
 }
 
 /** Троттлинг: возвращает true, если чистку пора запускать (и «занимает» окно). */

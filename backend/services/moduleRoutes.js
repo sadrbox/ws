@@ -9,6 +9,13 @@
 // ЗДЕСЬ карта «первый сегмент пути → ключ модуля» на ВСЕ методы. Сегмента нет в карте — путь к
 // модулям отношения не имеет (справочники, настройки, ядро учёта) и гардом не трогается.
 //
+// ПУТИ — ТОЧНО КАК У МАРШРУТОВ (аудит 27.09). Карта писала часть путей через дефис («sale-items»,
+// «import-declarations», «writeoff-items», «esf-inbound»…), а роутеры объявляют их слитно
+// («saleitems», «importdeclarations», «writeoffitems», «esf-inbounds»). Гард сверяет первый сегмент
+// точно — и строки документов, ГТД, входящие ЭСФ отключённого модуля оставались открыты на всех
+// методах. Теперь тест (__tests__/moduleRoutes.test.js) сверяет КАЖДЫЙ путь карты с сегментами,
+// которые реально объявлены роутерами, и требует, чтобы строки шли за своим документом.
+//
 // БЕЗ PRISMA: проверяется тестом в гейте и читается панелью установщика.
 
 /**
@@ -18,11 +25,16 @@
  * ЧЕГО ЗДЕСЬ НАМЕРЕННО НЕТ: справочники (товары, контрагенты, склады как справочник, валюты),
  * план счетов, проводки, закрытие периода, пользователи и права. Это ЯДРО: без него не работает
  * ни один модуль, и отключать его нечем.
+ *
+ * СЕРИИ И ПАРТИИ (serialnumbers, productbatches) — тоже ядро, а не «Склад» (аудит 27.09): их
+ * подбирают строки продаж и закупок (TradeDocumentItemsTable → serialnumbers/available,
+ * productbatches/available). Закрой их вместе со складом — у организации без складского модуля
+ * перестала бы проводиться реализация товара с серийным или партионным учётом.
  */
 export const MODULE_ROUTES = {
 	// ── Продажи ──────────────────────────────────────────────────────────────
 	sales: "sales",
-	"sale-items": "sales",
+	saleitems: "sales",
 	"sale-returns": "sales",
 	"sale-return-items": "sales",
 	"sales-orders": "sales",
@@ -32,12 +44,13 @@ export const MODULE_ROUTES = {
 	reservations: "sales",
 	"reservation-items": "sales",
 	"outgoing-invoices": "sales",
-	"outgoing-invoice-items": "sales",
+	outgoinginvoiceitems: "sales",
 	"fiscal-receipts": "sales",
 
 	// ── Закупки ──────────────────────────────────────────────────────────────
 	purchases: "purchase",
-	"purchase-items": "purchase",
+	purchaseitems: "purchase",
+	purchasefixedassetitems: "purchase",
 	"purchase-returns": "purchase",
 	"purchase-return-items": "purchase",
 	"purchase-orders": "purchase",
@@ -45,21 +58,19 @@ export const MODULE_ROUTES = {
 	"purchase-requisitions": "purchase",
 	"purchase-requisition-items": "purchase",
 	"incoming-invoices": "purchase",
-	"incoming-invoice-items": "purchase",
-	"import-declarations": "purchase",
-	"import-declaration-items": "purchase",
+	incominginvoiceitems: "purchase",
+	importdeclarations: "purchase",
+	importdeclarationitems: "purchase",
 
 	// ── Склад ────────────────────────────────────────────────────────────────
 	"inventory-transfers": "warehouse",
-	"inventory-transfer-items": "warehouse",
+	inventorytransferitems: "warehouse",
 	writeoffs: "warehouse",
-	"writeoff-items": "warehouse",
+	writeoffitems: "warehouse",
 	goodsreceipts: "warehouse",
-	"goodsreceipt-items": "warehouse",
+	goodsreceiptitems: "warehouse",
 	stockcounts: "warehouse",
-	"stockcount-items": "warehouse",
-	"serial-numbers": "warehouse",
-	"product-batches": "warehouse",
+	stockcountitems: "warehouse",
 
 	// ── Касса и банк ─────────────────────────────────────────────────────────
 	"cash-receipt-orders": "cash",
@@ -67,7 +78,7 @@ export const MODULE_ROUTES = {
 	cashboxes: "cash",
 	"bank-statements": "cash",
 	"payment-invoices": "cash",
-	"payment-invoice-items": "cash",
+	paymentinvoiceitems: "cash",
 
 	// ── Кадры и зарплата ─────────────────────────────────────────────────────
 	"payroll-calculations": "hr",
@@ -79,7 +90,7 @@ export const MODULE_ROUTES = {
 	awp: "govdocs",
 	snt: "govdocs",
 	esf: "govdocs",
-	"esf-inbound": "govdocs",
+	"esf-inbounds": "govdocs",
 
 	// ── ЭДО с контрагентами ──────────────────────────────────────────────────
 	edo: "edo",

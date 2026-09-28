@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { streamToFile, removePartials, filesOfKind, PARTIAL_SUFFIX } from "../services/backup.js";
+import { Transform } from "node:stream";
+import { streamToFile, removePartials, filesOfKind, PARTIAL_SUFFIX, backupTimeoutMs, BACKUP_TIMEOUT_DEFAULT_MS, pgDumpArgs, PG_DUMP_LOCK_WAIT_MS } from "../services/backup.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "backup-atomic-"));
 
@@ -48,4 +49,47 @@ test("пока копия пишется, её нет в списке; обре�
 	assert.equal(removePartials(dir), 1);
 	assert.deepEqual(fs.readdirSync(dir), ["backup_2026-09-26.sql.gz"]);
 	fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// ── КР-17 аудита 27.09: зависший процесс копии, ошибка сжатия, ожидание блокировок pg_dump ──
+
+test("КР-17: зависший процесс копии прерывается по таймауту — промис отклонён, ни копии, ни .partial", async () => {
+	const dir = tmp();
+	const file = path.join(dir, "backup_2026-09-27.sql.gz");
+	const t0 = Date.now();
+	// exec — чтобы SIGTERM получил сам «зависший» процесс, а не оболочка над ним.
+	await assert.rejects(
+		streamToFile("sh", ["-c", "echo начало; exec sleep 30"], file, { env: process.env, gzip: true, timeoutMs: 300 }),
+		/BACKUP_TIMEOUT_MS/,
+	);
+	assert.ok(Date.now() - t0 < 5000, "не ждали 30 с");
+	assert.ok(!fs.existsSync(file));
+	assert.ok(!fs.existsSync(file + PARTIAL_SUFFIX));
+	assert.deepEqual(filesOfKind(dir, "erp"), []);
+	fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("КР-17: ошибка сжатия — отказ копии, а не падение процесса сервера", async () => {
+	const dir = tmp();
+	const file = path.join(dir, "backup_2026-09-27.sql.gz");
+	const broken = () => new Transform({ transform(_chunk, _enc, cb) { cb(new Error("zlib: память кончилась")); } });
+	const t0 = Date.now();
+	await assert.rejects(
+		streamToFile("sh", ["-c", "echo 'SELECT 1;'; exec sleep 5"], file, { env: process.env, gzip: true, timeoutMs: 0, makeGzip: broken }),
+		/сжатие копии/,
+	);
+	assert.ok(Date.now() - t0 < 3000, "процесс копии остановлен, а не дожидается своего конца");
+	assert.ok(!fs.existsSync(file));
+	assert.ok(!fs.existsSync(file + PARTIAL_SUFFIX));
+	fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("КР-17: предел процесса из BACKUP_TIMEOUT_MS; pg_dump не ждёт блокировок таблиц вечно", () => {
+	assert.equal(backupTimeoutMs({}), BACKUP_TIMEOUT_DEFAULT_MS);
+	assert.equal(backupTimeoutMs({ BACKUP_TIMEOUT_MS: "900000" }), 900000);
+	assert.equal(backupTimeoutMs({ BACKUP_TIMEOUT_MS: "0" }), 0, "0 — без предела");
+	assert.equal(backupTimeoutMs({ BACKUP_TIMEOUT_MS: "час" }), BACKUP_TIMEOUT_DEFAULT_MS);
+	const args = pgDumpArgs({ host: "h", port: "5432", user: "u", database: "d" });
+	assert.ok(args.includes(`--lock-wait-timeout=${PG_DUMP_LOCK_WAIT_MS}`));
+	assert.ok(!args.some((a) => /password/i.test(a)), "пароль — не в командной строке");
 });

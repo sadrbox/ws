@@ -122,21 +122,67 @@ export function removePartials(dir) {
 	return n;
 }
 
-/** Процесс → поток в файл 600. `gzip` — сжать вывод (pg_dump пишет несжатый SQL). */
-export function streamToFile(cmd, args, filePath, { env, gzip }) {
+/*
+ * ЗАВИСШИЙ ПРОЦЕСС КОПИИ НЕ ДЕРЖИТ УСТАНОВКУ БЕЗ КОПИЙ (КР-17 аудита 27.09). pg_dump или tar, повисший
+ * на блокировке таблицы, сетевой папке или диске, держал промис копии вечно — а с ним кластерный лок
+ * «backup» и флаг running планировщика: ручной запуск получал 409, плановый пропускался, до перезапуска.
+ * Теперь у процесса предел BACKUP_TIMEOUT_MS (умолчание — час; 0 — без предела): по истечении SIGTERM,
+ * через KILL_GRACE_MS — SIGKILL, `.partial` удаляется, промис отклоняется — лок и флаг снимаются в их
+ * finally. pg_dump к тому же не ждёт блокировок таблиц дольше PG_DUMP_LOCK_WAIT_MS (--lock-wait-timeout:
+ * миграция или VACUUM FULL в ту же минуту — понятная ошибка, а не зависание). Ошибка сжатия (zlib)
+ * раньше роняла процесс сервера — у gzip-потока не было обработчика `error`.
+ */
+export const BACKUP_TIMEOUT_DEFAULT_MS = 60 * 60_000;
+export const PG_DUMP_LOCK_WAIT_MS = 60_000;
+const KILL_GRACE_MS = 5_000;
+
+/** Предел одного процесса копии, мс: BACKUP_TIMEOUT_MS; пусто или мусор — умолчание, 0 — без предела. */
+export function backupTimeoutMs(env = process.env) {
+	const raw = env.BACKUP_TIMEOUT_MS;
+	if (raw === undefined || String(raw).trim() === "") return BACKUP_TIMEOUT_DEFAULT_MS;
+	const n = Number(raw);
+	if (!Number.isFinite(n) || n < 0) {
+		log.warn(`BACKUP_TIMEOUT_MS=${raw} — не число не меньше 0, беру умолчание ${BACKUP_TIMEOUT_DEFAULT_MS}`);
+		return BACKUP_TIMEOUT_DEFAULT_MS;
+	}
+	return n;
+}
+
+/**
+ * Процесс → поток в файл 600. `gzip` — сжать вывод (pg_dump пишет несжатый SQL); `timeoutMs` — предел
+ * процесса (умолчание — BACKUP_TIMEOUT_MS); `makeGzip` — поток сжатия (подменяют тесты).
+ */
+export function streamToFile(cmd, args, filePath, { env, gzip, timeoutMs = backupTimeoutMs(), makeGzip = () => zlib.createGzip() }) {
 	return new Promise((resolve, reject) => {
 		const proc = spawn(cmd, args, { env });
 		const partial = filePath + PARTIAL_SUFFIX;
 		const out = fs.createWriteStream(partial, { mode: 0o600 });
 		let errText = "";
 		let failed = false;
+		let closed = false;
+		let timer = null;
+		let killTimer = null;
+		// Процесс ещё жив, а копия уже не нужна (таймаут, ошибка записи или сжатия) — остановить: иначе он
+		// висит, упёршись в полный канал вывода, которого никто не читает.
+		const stop = () => {
+			if (closed) return;
+			try { proc.kill("SIGTERM"); } catch { /* уже нет */ }
+			killTimer = setTimeout(() => { if (!closed) try { proc.kill("SIGKILL"); } catch { /* уже нет */ } }, KILL_GRACE_MS);
+			killTimer.unref?.();
+		};
 		const fail = (e) => {
 			if (failed) return;
 			failed = true;
+			clearTimeout(timer);
+			stop();
 			out.destroy();
 			try { fs.unlinkSync(partial); } catch { /* ignore */ }
 			reject(e);
 		};
+		if (timeoutMs > 0) {
+			timer = setTimeout(() => fail(new Error(`${cmd} не завершился за ${Math.max(1, Math.round(timeoutMs / 60_000))} мин — прерван (BACKUP_TIMEOUT_MS)`)), timeoutMs);
+			timer.unref?.();
+		}
 		proc.stderr.on("data", (d) => { errText += d.toString(); });
 		proc.on("error", (e) => fail(new Error(`${cmd} не запущен: ${e.message} (нужен бинарь ${cmd} на сервере)`)));
 		out.on("error", fail);
@@ -144,6 +190,7 @@ export function streamToFile(cmd, args, filePath, { env, gzip }) {
 		let flushed = false;
 		const done = () => {
 			if (failed || exited !== 0 || !flushed) return;
+			clearTimeout(timer);
 			try {
 				fs.renameSync(partial, filePath);
 			} catch (e) {
@@ -153,23 +200,31 @@ export function streamToFile(cmd, args, filePath, { env, gzip }) {
 		};
 		// `close`, а не `finish`: к нему дескриптор закрыт и данные отданы системе.
 		out.on("close", () => { flushed = true; done(); });
-		proc.on("close", (code) => {
+		proc.on("close", (code, signal) => {
+			closed = true;
+			clearTimeout(killTimer);
 			exited = code;
-			if (code !== 0) fail(new Error(`${cmd} завершился с кодом ${code}: ${errText.trim()}`));
+			if (code !== 0) fail(new Error(`${cmd} завершился ${code === null ? `по сигналу ${signal}` : `с кодом ${code}`}: ${errText.trim()}`));
 			else done();
 		});
-		(gzip ? proc.stdout.pipe(zlib.createGzip()) : proc.stdout).pipe(out);
+		if (gzip) {
+			const gz = makeGzip();
+			gz.on("error", (e) => fail(new Error(`сжатие копии (${cmd}): ${e.message}`)));
+			proc.stdout.pipe(gz).pipe(out);
+		} else {
+			proc.stdout.pipe(out);
+		}
 	});
 }
 
+/** Аргументы pg_dump (пароль — через PGPASSWORD, не в командной строке). */
+export function pgDumpArgs({ host, port, user, database }) {
+	return ["-h", host, "-p", String(port), "-U", user, "-d", database, "--no-owner", "--no-privileges", `--lock-wait-timeout=${PG_DUMP_LOCK_WAIT_MS}`];
+}
+
 function dumpDatabase(url, filePath) {
-	const { host, port, user, password, database } = parseDbUrl(url);
-	return streamToFile(
-		"pg_dump",
-		["-h", host, "-p", String(port), "-U", user, "-d", database, "--no-owner", "--no-privileges"],
-		filePath,
-		{ env: { ...process.env, PGPASSWORD: password }, gzip: true },
-	);
+	const conn = parseDbUrl(url);
+	return streamToFile("pg_dump", pgDumpArgs(conn), filePath, { env: { ...process.env, PGPASSWORD: conn.password }, gzip: true });
 }
 
 function archiveDir(dir, filePath) {

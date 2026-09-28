@@ -8,6 +8,7 @@ import { getInstallation } from "../../services/installation.js";
 import { isValidBin } from "../../utils/bin.js";
 import { generateSecret, verifyTotp, otpauthUrl } from "../../services/twoFactor.js";
 import { recordAuthEvent, AUTH_ACTIONS } from "../../services/auditLog.js";
+import { servicedOrgsFor, servicePermissionRows, maxLevel } from "../../services/serviceLinks.js";
 
 const router = express.Router();
 
@@ -26,6 +27,57 @@ async function loadAccessPermissions(userUuid, organizationUuid) {
 	} catch (_) {
 		return [];
 	}
+}
+
+/*
+ * ОРГАНИЗАЦИИ ПО ОБСЛУЖИВАНИЮ В ОТВЕТАХ ВХОДА (КР-18 аудита 27.09).
+ *
+ * Сотрудник обслуживающей фирмы ведёт клиентов по назначению на живую связь (services/serviceLinks.js)
+ * — tenantMiddleware их уже пускает, а переключиться в клиента было нельзя: switch-org знал только
+ * членства, и в учёт клиента человек попадал лишь сводкой, с правами самой фирмы. Теперь клиенты
+ * по обслуживанию — в списке `accessRights` (по нему панель строит переключатель организаций) с ролью
+ * `service`: она не даёт прав администратора — доступом клиента фирма не распоряжается (К2), — и
+ * в `allowedOrgUuids`, как на сервере.
+ */
+async function servicedAccess(user) {
+	const serviced = await servicedOrgsFor(user.uuid);
+	const own = new Set((user.accessRights || []).map((r) => r.organizationUuid));
+	const extra = serviced.filter((sv) => !own.has(sv.organizationUuid));
+	const orgs = extra.length
+		? await prisma.organization.findMany({
+			where: { uuid: { in: extra.map((sv) => sv.organizationUuid) } },
+			select: { uuid: true, name: true, legalName: true, bin: true },
+		})
+		: [];
+	const byUuid = new Map(orgs.map((o) => [o.uuid, o]));
+	const entries = extra
+		.filter((sv) => byUuid.has(sv.organizationUuid))
+		.map((sv) => ({
+			organizationUuid: sv.organizationUuid,
+			role: "service",
+			organization: byUuid.get(sv.organizationUuid),
+			service: { linkUuid: sv.linkUuid, profile: sv.profile, modules: sv.modules },
+		}));
+	return { serviced, entries };
+}
+
+/**
+ * Права для меню панели по активной организации. Клиент по обслуживанию — как на сервере
+ * (utils/auth.js, servicedActiveLevel): профиль связи с модулями клиента плюс свои права в самом
+ * клиенте, если человек ещё и его участник; права фирмы и глобальные строки — нет. Иначе меню
+ * показывало бы разделы, в которых API откажет, или прятало открытые.
+ */
+async function menuPermissions(userUuid, organizationUuid, serviced) {
+	const rows = await loadAccessPermissions(userUuid, organizationUuid);
+	const ctx = organizationUuid ? serviced.find((sv) => sv.organizationUuid === organizationUuid) : null;
+	if (!ctx) return rows;
+	const byModel = new Map(servicePermissionRows(ctx, organizationUuid).map((r) => [r.modelName, r]));
+	for (const r of rows) {
+		if (r.organizationUuid !== organizationUuid) continue;
+		const cur = byModel.get(r.modelName);
+		byModel.set(r.modelName, { ...cur, ...r, accessLevel: maxLevel(cur?.accessLevel, r.accessLevel) });
+	}
+	return [...byModel.values()].sort((a, b) => a.modelName.localeCompare(b.modelName));
 }
 
 // ── Полный список моделей для назначения прав ───────────────────────────
@@ -104,8 +156,10 @@ router.post("/auth/login", async (req, res) => {
 
 		// Поиск пользователя через Prisma — выбираем явные поля, чтобы
 		// не пытаться читать несуществующие колонки из БД при рассинхронизации схемы
+		// Удалённый пользователь не входит (P3 аудита 27.09): токен он получал, а отказ — уже на первом
+		// запросе (tenantMiddleware, 401). Для входа его нет вовсе — как неизвестного имени.
 		const user = await prisma.user.findFirst({
-			where: { username: { equals: trimmedUsername, mode: "insensitive" } },
+			where: { username: { equals: trimmedUsername, mode: "insensitive" }, deletedAt: null },
 			select: {
 				uuid: true,
 				username: true,
@@ -160,9 +214,6 @@ router.post("/auth/login", async (req, res) => {
 				message: INVALID_CREDENTIALS,
 			});
 		}
-
-		// Подгружаем accessPermissions (только для активной орг + глобальные)
-		const accessPermissions = await loadAccessPermissions(user.uuid, user.organizationUuid);
 
 		// Есть ли у пользователя установленный пароль?
 		const hasPassword = user.password && user.password.trim() !== "";
@@ -255,6 +306,11 @@ router.post("/auth/login", async (req, res) => {
 		const token = generateToken(user);
 		void recordAuthEvent({ actionType: AUTH_ACTIONS.LOGIN, user, req });
 
+		// Права для меню (активная организация + глобальные; клиент по обслуживанию — профиль связи)
+		// и клиенты по обслуживанию в списке организаций (КР-18 аудита 27.09).
+		const { serviced, entries: servicedEntries } = await servicedAccess(user);
+		const accessPermissions = await menuPermissions(user.uuid, user.organizationUuid, serviced);
+
 		// Определяем Разрешения пользователей
 		// Полный набор прав — суперадмину; «admin» получает его только при явно включённом
 		// DEV_UNRESTRICTED_ADMIN в разработке (П3), иначе правила те же, что у всех.
@@ -263,9 +319,8 @@ router.post("/auth/login", async (req, res) => {
 			? generateFullAccessPermissions()
 			: accessPermissions;
 
-		const allowedOrgUuids = (user.accessRights || []).map(
-			(uo) => uo.organizationUuid,
-		);
+		const accessRights = [...(user.accessRights || []), ...servicedEntries];
+		const allowedOrgUuids = accessRights.map((uo) => uo.organizationUuid);
 
 		let employeeData = user.employee || null;
 		if (employeeData) {
@@ -281,7 +336,7 @@ router.post("/auth/login", async (req, res) => {
 				organizationUuid: user.organizationUuid,
 				isSuperAdmin: user.isSuperAdmin,
 				allowedOrgUuids,
-				accessRights: user.accessRights || [],
+				accessRights,
 				employee: employeeData,
 				accessPermissions: rights,
 			},
@@ -308,7 +363,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				.json({ success: false, message: "Не авторизован" });
 		}
 
-		const user = await prisma.user.findUnique({
+		const found = await prisma.user.findUnique({
 			where: { uuid: req.user.uuid },
 			select: {
 				uuid: true,
@@ -316,6 +371,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 				employeeUuid: true,
 				organizationUuid: true,
 				isSuperAdmin: true,
+				deletedAt: true,
 				accessRights: {
 					select: {
 						organizationUuid: true,
@@ -336,14 +392,20 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			},
 		});
 
-		if (!user) {
+		if (!found) {
 			return res
 				.status(404)
 				.json({ success: false, message: "Пользователь не найден" });
 		}
+		// Удалённый пользователь с живым токеном — не сеанс (как tenantMiddleware, P3 аудита 27.09).
+		const { deletedAt, ...user } = found;
+		if (deletedAt) {
+			return res.status(401).json({ success: false, message: "Учётная запись недоступна — войдите заново" });
+		}
 
-		// Подгружаем accessPermissions (только для активной орг + глобальные)
-		const accessPermissions = await loadAccessPermissions(user.uuid, user.organizationUuid);
+		// Права для меню и клиенты по обслуживанию — как при входе (КР-18 аудита 27.09).
+		const { serviced, entries: servicedEntries } = await servicedAccess(user);
+		const accessPermissions = await menuPermissions(user.uuid, user.organizationUuid, serviced);
 
 		// Определяем Разрешения пользователей
 		// Всевластие по имени admin — только при явном DEV_UNRESTRICTED_ADMIN=1 и не в production,
@@ -353,9 +415,8 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			? generateFullAccessPermissions()
 			: accessPermissions;
 
-		const allowedOrgUuids = (user.accessRights || []).map(
-			(uo) => uo.organizationUuid,
-		);
+		const accessRights = [...(user.accessRights || []), ...servicedEntries];
+		const allowedOrgUuids = accessRights.map((uo) => uo.organizationUuid);
 
 		let employeeData = user.employee || null;
 		if (employeeData) {
@@ -366,6 +427,7 @@ router.get("/auth/me", authMiddleware, async (req, res) => {
 			success: true,
 			user: {
 				...user,
+				accessRights,
 				employee: employeeData,
 				accessPermissions: rights,
 				allowedOrgUuids,
@@ -834,6 +896,7 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 				username: true,
 				isSuperAdmin: true,
 				organizationUuid: true,
+				deletedAt: true,
 				accessRights: {
 					select: {
 						organizationUuid: true,
@@ -859,11 +922,20 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 				.status(404)
 				.json({ success: false, message: "Пользователь не найден" });
 		}
+		// Удалённый пользователь нового токена не получает (P3 аудита 27.09): иначе переключение
+		// организации продлевало бы сеанс удалённой учётной записи бесконечно.
+		if (user.deletedAt) {
+			return res.status(401).json({ success: false, message: "Учётная запись недоступна — войдите заново" });
+		}
+
+		// Клиенты по обслуживанию (КР-18 аудита 27.09): переключиться можно и в них — по назначению
+		// на живую связь, как их пускает tenantMiddleware.
+		const { serviced, entries: servicedEntries } = await servicedAccess(user);
 
 		// Суперадмин может переключаться в любую орг
-		// Обычный — только в разрешённые
+		// Обычный — только в разрешённые: по членству или по обслуживанию
 		if (!user.isSuperAdmin) {
-			const allowed = user.accessRights.map((uo) => uo.organizationUuid);
+			const allowed = [...user.accessRights.map((uo) => uo.organizationUuid), ...serviced.map((sv) => sv.organizationUuid)];
 			if (organizationUuid !== null && !allowed.includes(organizationUuid)) {
 				console.warn(
 					`[Security] User ${user.username} (${user.uuid}) attempted to switch to unauthorized org ${organizationUuid}`,
@@ -880,8 +952,9 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 			data: { organizationUuid: organizationUuid ?? null },
 		});
 
-		// Подгружаем права для новой орг (только для активной орг + глобальные)
-		const accessPermissions = await loadAccessPermissions(user.uuid, organizationUuid ?? null);
+		// Подгружаем права для новой орг (только для активной орг + глобальные; клиент по
+		// обслуживанию — профиль связи)
+		const accessPermissions = await menuPermissions(user.uuid, organizationUuid ?? null, serviced);
 
 		// Всевластие по имени admin — только при явном DEV_UNRESTRICTED_ADMIN=1 и не в production,
 		// как у сервера (utils/auth.js): иначе меню показывало бы разделы, в которых API откажет.
@@ -890,9 +963,8 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 			? generateFullAccessPermissions()
 			: accessPermissions;
 
-		const allowedOrgUuids = user.accessRights.map(
-			(uo) => uo.organizationUuid,
-		);
+		const accessRights = [...user.accessRights, ...servicedEntries];
+		const allowedOrgUuids = accessRights.map((uo) => uo.organizationUuid);
 
 		// Формируем обновлённый объект пользователя
 		const updatedUser = {
@@ -901,7 +973,7 @@ router.patch("/auth/switch-org", authMiddleware, async (req, res) => {
 			organizationUuid: organizationUuid ?? null,
 			isSuperAdmin: user.isSuperAdmin,
 			allowedOrgUuids,
-			accessRights: user.accessRights,
+			accessRights,
 			employee: user.employee,
 			accessPermissions: rights,
 		};

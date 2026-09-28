@@ -19,14 +19,24 @@
 #      без выгоды. Отбираются только строки RENAME.
 #
 # Запуск: sh scripts/check-schema-drift.sh   (или npm run check:drift)
+# Выход: 0 — дрейфа нет; 1 — непредвиденный дрейф; 2 — проверка не выполнилась (база недоступна,
+# ошибка prisma) — с текстом ошибки. Раньше stderr уходил в /dev/null, и недоступная база давала
+# молчаливый exit 1, неотличимый от дрейфа (P3 аудита 27.09).
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 cd "$(dirname "$0")/.."
 
-DIFF=$(npx prisma migrate diff \
+ERR_LOG=$(mktemp)
+trap 'rm -f "$ERR_LOG"' EXIT
+
+if ! DIFF=$(npx prisma migrate diff \
   --from-config-datasource prisma.config.js \
   --to-schema prisma/schema.prisma \
-  --script 2>/dev/null)
+  --script 2>"$ERR_LOG"); then
+  echo "❌ Проверка дрейфа не выполнена: prisma migrate diff завершился с ошибкой (дрейф не проверен):" >&2
+  cat "$ERR_LOG" >&2
+  exit 2
+fi
 
 # Индексы, которые Prisma не выражает: их «снос» в выводе — ожидаемый шум, а не дрейф.
 EXPECTED_INDEXES='chart_of_accounts_global_code_key|classifiers_code_trgm|classifiers_name_trgm|products_barcode_active_uq|product_barcodes_barcode_active_uq|month_closes_posted_period_uq'

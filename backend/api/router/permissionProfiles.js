@@ -9,6 +9,7 @@ import { applyProfile, grantMembership, normalizeRole } from "../../services/org
 import { isAdminOfOrg } from "../../utils/auth.js";
 import { recordAudit } from "../../services/auditLog.js";
 import { prisma } from "../../prisma/prisma-client.js";
+import { servicedOrgsFor } from "../../services/serviceLinks.js";
 
 const router = express.Router();
 
@@ -73,7 +74,20 @@ router.post("/permission-profiles/apply", async (req, res) => {
 				where: { userUuid_organizationUuid: { userUuid, organizationUuid } },
 				select: { role: true },
 			});
-			if (!member) return res.status(404).json({ success: false, message: "Пользователь не состоит в этой организации" });
+			if (!member) {
+				// Сотрудник обслуживающей фирмы работает у клиента по профилю СВЯЗИ (КР-18 аудита 27.09):
+				// его права меняются профилем связи — с согласия клиента, — а не назначением профиля, и
+				// участником клиента он от этого не становится (К2).
+				const serviced = await servicedOrgsFor(userUuid);
+				if (serviced.some((sv) => sv.organizationUuid === organizationUuid)) {
+					return res.status(409).json({
+						success: false,
+						code: "SERVICE_LINK_PROFILE",
+						message: "Сотрудник обслуживающей фирмы работает здесь по профилю связи обслуживания — права меняются в связи (с подтверждением клиента)",
+					});
+				}
+				return res.status(404).json({ success: false, message: "Пользователь не состоит в этой организации" });
+			}
 		}
 
 		// Роль передали — значит меняется и членство: тогда одно действие, а не два запроса,

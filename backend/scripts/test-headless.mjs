@@ -23,6 +23,10 @@ const FILES = [
 	"asyncErrors", "backupAtomic", "cacheBus", "listQuery", "qualityJobsPure",
 	"securityAccess", "securityRouters", "securityExtra", "fiscalReceiptsAccess",
 	"periodBounds", "accountingFixes", "stockControl", "cashBalanceFix", "basisReturns", "documentItemsFactory", "documentCommit", "idempotency",
+	// Аудит критических ошибок 27.09 (КР): платформа и права.
+	"bpaiTodosFixes", "checkIngestLock", "grantMonthClose", "serviceAccess", "filesGlobalOrg",
+	// Аудит критических ошибок 27.09 (КР): учёт.
+	"stockPrecheck", "costingRecompute27", "postingLocks27", "cashAndHeaders27", "p3Accounting27", "cashDeleteAndLocks27",
 ].map((n) => path.join("__tests__", `${n}.test.js`));
 
 const r = spawnSync("node", ["--test", ...FILES], { cwd: root, stdio: "inherit" });

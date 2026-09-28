@@ -122,6 +122,29 @@ export async function ownerOrganization(ownerType, ownerUuid) {
 	return kind.orgs ? kind.orgs(row)[0] ?? null : row.organizationUuid ?? null;
 }
 
+/**
+ * Организация файла общего списка «Файлы» (владелец `global`) — P3 аудита 27.09.
+ *
+ * Раньше — только активная, а без неё (активная не выбрана) — 400 «Не выбрана организация», хотя
+ * организация однозначна или названа. Теперь: названная в теле `organizationUuid` (только доступная —
+ * иначе 403), иначе активная, иначе единственная доступная. Оператору установки без организации —
+ * по-прежнему «всеобщий» файл (null). Неоднозначно — 400 с просьбой выбрать.
+ * @returns {{ org: string|null } | { status: number, code?: string, message: string }}
+ */
+export function globalUploadOrg(req, requested) {
+	const named = typeof requested === "string" && requested.trim() ? requested.trim() : null;
+	if (named) {
+		if (!orgIsAccessible(req, named)) return { status: 403, code: "ORG_NOT_ACCESSIBLE", message: "Организация недоступна" };
+		return { org: named };
+	}
+	const active = req.user?.organizationUuid ?? null;
+	if (active) return { org: active };
+	if (operatorSees(req)) return { org: null };
+	const allowed = [...new Set(req.user?.allowedOrgUuids ?? [])];
+	if (allowed.length === 1) return { org: allowed[0] };
+	return { status: 400, message: "Не выбрана организация файла — выберите организацию" };
+}
+
 /** Файл по uuid, если его владелец доступен; иначе null (ответ 404, существование не раскрываем). */
 async function findAccessibleFile(req, uuid, mode = "read") {
 	const file = await prisma.attachedFile.findUnique({ where: { uuid: String(uuid) }, ...(await fileOpts()) });
@@ -252,12 +275,12 @@ router.post("/files", uploadFields, async (req, res) => {
 		// Общий список «Файлы» кладёт файл в организацию загрузившего, а не во «всеобщие».
 		let effOwnerUuid = String(ownerUuid);
 		if (ownerType === "global") {
-			const org = req.user?.organizationUuid ?? null;
-			if (!org && !operatorSees(req)) {
+			const r = globalUploadOrg(req, req.body?.organizationUuid);
+			if (r.status) {
 				dropUploaded(req);
-				return res.status(400).json({ success: false, message: "Не выбрана организация" });
+				return res.status(r.status).json({ success: false, ...(r.code ? { code: r.code } : {}), message: r.message });
 			}
-			effOwnerUuid = org ?? LEGACY_GLOBAL;
+			effOwnerUuid = r.org ?? LEGACY_GLOBAL;
 		}
 		// Прикрепить можно только к доступной записи (раньше — к любой, в т.ч. чужой).
 		if (!(await ownerAccessible(req, ownerType, effOwnerUuid, "write"))) {
@@ -277,7 +300,8 @@ router.post("/files", uploadFields, async (req, res) => {
 		 * сложить объём по организации, пришлось бы обойти все виды владельцев. Пока предел
 		 * один — на файл; суммарный появится вместе с полем организации у вложения.
 		 */
-		const quotaOrg = req.user?.organizationUuid ?? null;
+		// Квота — организации файла общего списка, если она выбрана не активной (P3 аудита 27.09).
+		const quotaOrg = (ownerType === "global" && effOwnerUuid !== LEGACY_GLOBAL ? effOwnerUuid : null) ?? req.user?.organizationUuid ?? null;
 		if (quotaOrg) {
 			const { fileMb } = await getQuotas(quotaOrg);
 			if (fileMb && req.file.size > fileMb * 1024 * 1024) {

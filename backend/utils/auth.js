@@ -5,7 +5,7 @@ import { subjectOf } from "./routeSubjects.js";
 import { listIncludesShared } from "../services/recordScope.js";
 import { getInstallation } from "../services/installation.js";
 import { operatorAccessMode, operatorSeesData, getSupportMode } from "../services/supportMode.js";
-import { servicedOrgsFor } from "../services/serviceLinks.js";
+import { servicedOrgsFor, serviceAccessLevel, maxLevel } from "../services/serviceLinks.js";
 
 // JWT_SECRET загружается из .env через dotenv (в server.js)
 // Если переменная не задана — сервер не запустится (проверка в server.js)
@@ -533,6 +533,10 @@ export async function canAccessModel(req, modelName, { write = false } = {}) {
 	if (!modelName) return false;
 	if (hasUnconditionalAccess(req)) return true;
 
+	// Активная — организация клиента по обслуживанию: уровень из профиля связи (КР-18 аудита 27.09).
+	const serviced = await servicedActiveLevel(req, modelName);
+	if (serviced !== null) return write ? serviced === "full" : serviced === "readonly" || serviced === "full";
+
 	const orgUuid = req.user?.organizationUuid || null;
 	const allowedOrgUuids = req.user?.allowedOrgUuids || [];
 	const orgsToCheck = orgUuid
@@ -554,6 +558,37 @@ export async function canAccessModel(req, modelName, { write = false } = {}) {
 
 	const level = orgRight?.accessLevel ?? globalRight?.accessLevel ?? "none";
 	return write ? level === "full" : level === "readonly" || level === "full";
+}
+
+/**
+ * ПРАВА В ОРГАНИЗАЦИИ КЛИЕНТА ПО ОБСЛУЖИВАНИЮ (КР-18 аудита 27.09).
+ *
+ * Активная организация — клиент, в которой пользователь работает по назначению на живую связь
+ * обслуживания (req.user.serviceContext, tenantMiddleware): уровень — из профиля связи с учётом
+ * открытых клиентом модулей (services/serviceLinks.js, serviceAccessLevel), а если человек ещё и
+ * участник клиента по членству — наибольший из этого и своих прав в клиенте. Права фирмы и
+ * глобальные строки сюда НЕ переносятся: раньше именно ими (запасным путём «право в любой доступной
+ * организации») сотрудник фирмы и работал в клиенте — случайно и с властью, которой клиент не давал.
+ *
+ * Только для выбранной активной организации и не в сводном виде: там данные нескольких организаций
+ * сразу, и уровень одной из них решать за все не может — сводка идёт прежним путём.
+ *
+ * Проверить потом: в сводке (активная не выбрана или X-Org-Scope: group) по-прежнему действует
+ * запасной путь «право в любой доступной организации» — права фирмы открывают и данные её клиентов
+ * по обслуживанию. Закрыть можно только проверкой права по организации КАЖДОЙ строки (или сужением
+ * tenantFilter до организаций, где право есть), а не одним уровнем на запрос.
+ *
+ * @returns {Promise<string|null>} уровень ("none"|"readonly"|"full"); null — активная не обслуживаемая.
+ */
+async function servicedActiveLevel(req, modelName, segment = null) {
+	const orgUuid = req.user?.organizationUuid || null;
+	const ctx = orgUuid ? req.user?.serviceContext?.get?.(orgUuid) : null;
+	if (!ctx || groupScopeRequested(req)) return null;
+	const own = await prisma.accessPermission.findFirst({
+		where: { userUuid: req.user.uuid, modelName, organizationUuid: orgUuid },
+		select: { accessLevel: true },
+	});
+	return maxLevel(own?.accessLevel, serviceAccessLevel(ctx, modelName, { segment }));
 }
 
 /**
@@ -670,6 +705,15 @@ export async function accessPermissionMiddleware(req, res, next) {
 		// Приоритет: org-specific право для активной орг > право для любой allowedOrg > глобальное (organizationUuid = null)
 		const orgUuid = req.user?.organizationUuid || null;
 		const allowedOrgUuids = req.user?.allowedOrgUuids || [];
+
+		// Активная — клиент по обслуживанию (КР-18 аудита 27.09): уровень из профиля связи, без
+		// запасного пути через права фирмы (см. servicedActiveLevel).
+		const serviced = await servicedActiveLevel(req, modelName, routeSegment);
+		if (serviced !== null) {
+			if (req.method === "GET" ? serviced === "readonly" || serviced === "full" : serviced === "full") return next();
+			console.warn(`[AccessDenied] user=${req.user?.username} org=${orgUuid} (обслуживание) model=${modelName} method=${req.method} level=${serviced} ip=${req.ip}`);
+			return res.status(403).json({ success: false, message: `Нет доступа к ${modelName}` });
+		}
 
 		// Все организации для поиска прав: активная + все разрешённые
 		const orgsToCheck = orgUuid

@@ -121,6 +121,26 @@ async function canPull(req, def) {
 	return canAccessModel(req, def.perm);
 }
 
+/*
+ * СВОИ ОРГАНИЗАЦИИ — И БЕЗ ПРАВА НА СПРАВОЧНИК (КР-18 аудита 27.09). Таблица `organizations` без права
+ * Organization молча уходила в skipped: у кассира, кладовщика, сотрудника обслуживающей фирмы в
+ * клиенте (профиль связи Organization не открывает — доступом клиента фирма не распоряжается) офлайн-
+ * справочник организаций пуст, и офлайн-формы остаются без организации. Список СВОИХ организаций
+ * (членство и обслуживание; изоляция — та же, tenantFilter) — не чужие данные: имя и БИН тех же
+ * организаций человек получает при входе. Отдаём его и без права, но только эти поля — без реквизитов
+ * и кода приглашения; в ответе таблица помечена в `limited`.
+ */
+export const ORG_DIRECTORY_SELECT = Object.freeze({
+	id: true, uuid: true, name: true, legalName: true, bin: true, kind: true, createdAt: true, updatedAt: true, deletedAt: true,
+});
+
+/** Как отдавать таблицу: { select } — по праву целиком (select=null) или ограниченно; null — никак. */
+export async function pullAccess(req, tableName, def) {
+	if (await canPull(req, def)) return { select: null, limited: false };
+	if (tableName === "organizations") return { select: ORG_DIRECTORY_SELECT, limited: true };
+	return null;
+}
+
 /** Строка наружу: без секретов и без чужого кода приглашения. */
 function sanitizeRow(req, table, row) {
 	if (table === "organizations" && row && !isAdminOfOrg(req, row.uuid)) {
@@ -152,11 +172,14 @@ router.post("/sync/pull", async (req, res) => {
 		const results = {};
 		let serverTime = new Date();
 		const skipped = [];
+		const limited = [];
 
 		for (const tableName of new Set(tables)) {
 			const def = PULL_TABLES[tableName];
 			if (!def || !prisma[def.model]) { skipped.push(tableName); continue; }
-			if (!(await canPull(req, def))) { skipped.push(tableName); continue; }
+			const access = await pullAccess(req, tableName, def);
+			if (!access) { skipped.push(tableName); continue; }
+			if (access.limited) limited.push(tableName);
 			const scope = await pullScopeWhere(req, def);
 			if (scope === null) { skipped.push(tableName); continue; }
 
@@ -164,7 +187,7 @@ router.post("/sync/pull", async (req, res) => {
 				const where = { AND: [{ updatedAt: { gt: since } }, def.where ?? {}, scope] };
 				const items = await prisma[def.model].findMany({
 					where,
-					...(def.model === "user" ? { select: SAFE_USER_SELECT } : def.include ? { include: def.include } : {}),
+					...(def.model === "user" ? { select: SAFE_USER_SELECT } : access.select ? { select: access.select } : def.include ? { include: def.include } : {}),
 					orderBy: { updatedAt: "asc" },
 					take: PULL_TAKE,
 				});
@@ -188,6 +211,7 @@ router.post("/sync/pull", async (req, res) => {
 			serverTime: serverTime.toISOString(),
 			data: results,
 			...(skipped.length ? { skipped } : {}),
+			...(limited.length ? { limited } : {}),
 		});
 	} catch (err) {
 		console.error("[Sync/pull] Ошибка:", err);
@@ -453,7 +477,7 @@ router.get("/sync/meta", async (req, res) => {
 
 		for (const [endpoint, def] of Object.entries(PULL_TABLES)) {
 			if (!prisma[def.model]) continue;
-			if (!(await canPull(req, def))) continue;
+			if (!(await pullAccess(req, endpoint, def))) continue;
 			const scope = await pullScopeWhere(req, def);
 			if (scope === null) continue;
 
