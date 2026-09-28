@@ -66,8 +66,8 @@ test("Б11: повтор заявки агента без секрета — н�
 	assert.ok(await s.bySecret(a.row.id, c.secret));
 	// Одобрение одной закрывает соседнюю заявку той же службы.
 	const agentId = randomUUID();
-	await db.query(`INSERT INTO agents (id, organization_uuid, token_hash) VALUES ($1, 'org', 'x')`, [agentId]);
-	assert.equal(await s.approve(a.row.id, { organizationUuid: "org", agentId, decidedBy: "admin" }), true);
+	await db.query(`INSERT INTO agents (id, token_hash) VALUES ($1, 'x')`, [agentId]);
+	assert.equal(await s.approve(a.row.id, { agentId, decidedBy: "admin" }), true);
 	const sibling = await s.get(b.row.id);
 	assert.equal(sibling!.state, "REJECTED");
 	assert.match(sibling!.note ?? "", new RegExp(a.row.code));

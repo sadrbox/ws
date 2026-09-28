@@ -157,7 +157,7 @@ export const WorkCalendarView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	));
 
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columnsJson as TColumn[], "WorkCalendarDays"));
-	const view = useStaticTableView(useMemo(() => toCalendarRows(entries), [entries]), { wcDate: "asc" });
+	const view = useStaticTableView(useMemo(() => toCalendarRows(entries), [entries]), { wcDate: "asc" }, "WorkCalendarDays");
 	const renderCell = useCallback((row: TDataItem, col: TColumn) => {
 		if (col.identifier !== "wcLaw") return undefined;
 		const e = row.source as CalendarEntry | undefined;

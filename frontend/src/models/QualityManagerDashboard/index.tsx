@@ -47,7 +47,7 @@ export const QualityManagerDashboard: FC<Partial<TPane>> = ({ uniqId }) => {
 	const orderedGroups = useMemo(() => [...groups].sort((a, b) => (b.totals?.noMeasure ?? 0) - (a.totals?.noMeasure ?? 0)), [groups]);
 
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(staffColumnsJson as TColumn[], STAFF));
-	const staff = useStaticTableView(useMemo(() => toStaffRows(groups), [groups]), { mgrAttention: "desc" });
+	const staff = useStaticTableView(useMemo(() => toStaffRows(groups), [groups]), { mgrAttention: "desc" }, STAFF);
 
 	const renderCell = (row: TDataItem, col: TColumn) => {
 		const src = (row as StaffTableRow).source;

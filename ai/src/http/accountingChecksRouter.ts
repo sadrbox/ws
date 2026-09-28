@@ -9,8 +9,7 @@
 //
 // ДОСТУП. Смотреть журнал — право «Администрирование 1С»; запускать — только с полным доступом: прогон по всем
 // базам клиентов занимает их сеансы и лицензии, как ночная выгрузка (её расписание тоже требует полного доступа,
-// onec/access.ts). В многоклиентской установке (ONEC_SERVER_SCOPE=organizations) прогон идёт по базам ВСЕХ
-// клиентов, и сводка называет их базы и БИНы — поэтому оба маршрута открыты только администратору BuhProf.
+// onec/access.ts). Панель внутренняя (В5 28.09): режима видимости по организациям больше нет.
 
 import { Router, type RequestHandler } from "express";
 import type { Db } from "../db/pool.ts";
@@ -22,7 +21,7 @@ import type { AccountingCheckRunStore, AccountingChecksRunner } from "../onec/ac
 
 export function accountingChecksRouter(deps: {
 	erp: Db;
-	cfg: Pick<Config, "JWT_SECRET" | "ONEC_SERVER_SCOPE">;
+	cfg: Pick<Config, "JWT_SECRET">;
 	runner: Pick<AccountingChecksRunner, "start" | "running">;
 	store: Pick<AccountingCheckRunStore, "list">;
 	audit?: Pick<Audit, "write"> | null;
@@ -45,10 +44,6 @@ export function accountingChecksRouter(deps: {
 		const u = req.erpUser!;
 		if (!u.isSuperAdmin && !u.canOnecAdmin) {
 			res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Нужно право «Администрирование 1С»" } });
-			return;
-		}
-		if (cfg.ONEC_SERVER_SCOPE === "organizations" && !u.isSuperAdmin) {
-			res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Проверки учёта идут по базам всех клиентов — этот раздел открыт администратору BuhProf" } });
 			return;
 		}
 		next();

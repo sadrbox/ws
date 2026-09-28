@@ -26,7 +26,7 @@ export function parseLimitInput(text: string): number | null | undefined {
 export const limitInput = (v: number | null): string => (v === null ? "" : String(v));
 
 /** Одинаковы ли два лимита — чтобы не предлагать сохранить то, что уже сохранено. */
-export const sameLimits = (a: AgentLimits, b: AgentLimits): boolean => a.maxBases === b.maxBases && a.maxBins === b.maxBins;
+export const sameLimits = (a: AgentLimits, b: AgentLimits): boolean => a.maxBases === b.maxBases;
 
 export type BaseState = "overLimit" | "online" | "offline" | "unknown";
 

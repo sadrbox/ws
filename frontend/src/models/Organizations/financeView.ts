@@ -10,6 +10,8 @@
  * НИЧЕГО НЕ КЭШИРУЕМ. Числа читаются из базы по кнопке и живут ровно до следующего открытия карточки:
  * кэш здесь означал бы третью версию правды рядом с 1С и панелью (решение владельца, 22.09).
  */
+import type { TDataItem } from "src/components/Table/types";
+import { withStableIds } from "src/utils/stableRowId";
 
 export type DebtRow = {
 	name: string;
@@ -50,7 +52,8 @@ export function rowsOf(data: unknown): Record<string, unknown>[] {
 export function money(v: unknown): number | null {
 	if (typeof v === "number") return Number.isFinite(v) ? v : null;
 	if (typeof v !== "string") return null;
-	const cleaned = v.replace(/\s| /g, "").replace(",", ".");
+	// `\s` в JS покрывает и неразрывные пробелы (U+00A0, U+202F), которыми 1С и ru-RU разделяют разряды.
+	const cleaned = v.replace(/\s/g, "").replace(",", ".");
 	if (!cleaned || !/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
 	const n = Number(cleaned);
 	return Number.isFinite(n) ? n : null;
@@ -91,15 +94,22 @@ export function balanceRows(data: unknown): BalanceRow[] {
  * Итоги считаем САМИ по показанным строкам — но только если 1С не прислала свои: складывать сотню строк,
  * из которых показаны 50, значит показать сумму, не сходящуюся ни с чем.
  */
-export function debtTotals(data: unknown, rows: readonly DebtRow[]): { receivable: number | null; payable: number | null; overdue: number | null } {
+export type DebtTotals = { receivable: number | null; payable: number | null; overdue: number | null };
+
+/** Итоги, присланные самой 1С (по всем строкам, а не по показанным), — или null, если она их не прислала. */
+export function sourceDebtTotals(data: unknown): DebtTotals | null {
 	const totals = asRecord(asRecord(data)?.totals);
-	if (totals) {
-		return {
-			receivable: money(totals.receivable ?? totals.debit),
-			payable: money(totals.payable ?? totals.credit),
-			overdue: money(totals.overdue),
-		};
-	}
+	if (!totals) return null;
+	return {
+		receivable: money(totals.receivable ?? totals.debit),
+		payable: money(totals.payable ?? totals.credit),
+		overdue: money(totals.overdue),
+	};
+}
+
+export function debtTotals(data: unknown, rows: readonly DebtRow[]): DebtTotals {
+	const own = sourceDebtTotals(data);
+	if (own) return own;
 	const sum = (pick: (r: DebtRow) => number | null): number | null => {
 		const values = rows.map(pick).filter((n): n is number => n !== null);
 		return values.length ? values.reduce((a, b) => a + b, 0) : null;
@@ -117,3 +127,58 @@ export function totalOf(data: unknown): number | null {
 /** Деньги для показа: без копеек, если их нет, и с разрядами — иначе «12500000» не прочитать. */
 export const showMoney = (n: number | null): string =>
 	n === null ? "—" : n.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+
+/*
+ * СТРОКИ ДЛЯ ОБЩЕГО Table (28.09). Имена полей — идентификаторы колонок, они же ключи перевода заголовков
+ * (getTranslateColumn). Суммы остаются числами: сортировка сравнивает их как числа, а итог в подвале складывает;
+ * вид «12 500» накладывает renderCell (showMoney). Пустые имя и БИН — «—», как было в карточке.
+ */
+
+export type DebtTableRow = TDataItem & {
+	counterparty: string;
+	binIin: string;
+	onecOrgDebtReceivable: number | null;
+	onecOrgDebtPayable: number | null;
+	onecOrgDebtOverdue: number | null;
+};
+
+export function debtTableRows(rows: readonly DebtRow[]): DebtTableRow[] {
+	return withStableIds(rows, (d) => `${d.bin}/${d.name}`).map((d) => ({
+		id: d.id,
+		uuid: String(d.id),
+		counterparty: d.name || "—",
+		binIin: d.bin || "—",
+		onecOrgDebtReceivable: d.receivable,
+		onecOrgDebtPayable: d.payable,
+		onecOrgDebtOverdue: d.overdue,
+	}));
+}
+
+export type BalanceTableRow = TDataItem & { account: string; name: string; onecOrgBalance: number | null };
+
+export function balanceTableRows(rows: readonly BalanceRow[]): BalanceTableRow[] {
+	return withStableIds(rows, (b) => `${b.account}/${b.name}`).map((b) => ({
+		id: b.id,
+		uuid: String(b.id),
+		account: b.account || "—",
+		name: b.name || "—",
+		onecOrgBalance: b.balance,
+	}));
+}
+
+/**
+ * Подвал таблицы долгов: подпись «Итого» и — если 1С прислала свои итоги — они. Без итогов 1С суммы считает сам
+ * Table (`footer: "sum"`) по показанным строкам, и тогда быстрый поиск сужает итог вместе со списком. Итоги 1С
+ * поиск не меняет: это сумма по ВСЕМ контрагентам базы, включая не попавших в список.
+ */
+export function debtFooterValues(data: unknown, totalLabel: string): Record<string, string | null> {
+	const own = sourceDebtTotals(data);
+	return own
+		? {
+			counterparty: totalLabel,
+			onecOrgDebtReceivable: showMoney(own.receivable),
+			onecOrgDebtPayable: showMoney(own.payable),
+			onecOrgDebtOverdue: showMoney(own.overdue),
+		}
+		: { counterparty: totalLabel };
+}

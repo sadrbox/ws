@@ -116,7 +116,7 @@ export const ExtensionsTab: FC = () => {
 			version: x.version, basesCount: x.bases,
 		}));
 	}, [primary, summary.data, baseExts.data]);
-	const extView = useStaticTableView(extRows, { name: "asc" });
+	const extView = useStaticTableView(extRows, { name: "asc" }, "OneCAdmin_extSummary", { rememberFilters: false });
 
 	// ── Строки: базы ────────────────────────────────────────────────────────
 	// ВСЕ применимые базы в обоих режимах: где расширение стоит, а где нет — говорит
@@ -132,7 +132,7 @@ export const ExtensionsTab: FC = () => {
 			extensionsCount: b.extensionsCount == null
 				? translate("onecExtNotChecked") : String(b.extensionsCount),
 		})), [bases.data, activeExt]);
-	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });
+	const baseView = useStaticTableView(baseRows, { baseKey: "asc" }, "OneCAdmin_extBases", { rememberFilters: false });
 
 	/** Сколько баз из показанных держат активное расширение — для полосы состояния. */
 	const installed = useMemo(() => (!activeExt ? 0 : (bases.data?.items ?? [])

@@ -6,8 +6,9 @@
  * сеансов, и вопрос «какие вообще службы у нас работают» решался поиском нужной вкладки.
  *
  * У агентов две роли, и это видно списком: админ-агент отвечает за СВОЙ кластер (сервер 1С целиком — все базы
- * всех клиентов), бизнес-агент — за базы одной организации ERP. Здесь же заявки на подключение агентов,
- * активация БИНов и процессы, которые агенты запустили на своих компьютерах. Заявки БАЗ с 22.09 — в разделе
+ * всех клиентов), бизнес-агент — за базы, которые в нём подключены: организации у агента нет, кого он обслуживает,
+ * говорят его базы (28.09). Здесь же заявки на подключение агентов и процессы, которые агенты запустили на своих
+ * компьютерах. Заявки БАЗ с 22.09 — в разделе
  * «Расширение БухПроф-AI»: их шлёт не агент, а расширение внутри базы.
  */
 import { FC, useState } from "react";
@@ -16,10 +17,9 @@ import { PaneActiveProvider, usePanePollInterval } from "src/hooks/usePaneActive
 import Tabs from "src/components/Tabs";
 import AgentsTab from "./AgentsTab";
 import ProcessesTab from "./ProcessesTab";
-import ActivationRequestsTab from "./ActivationRequestsTab";
 import EnrollmentsTab from "./EnrollmentsTab";
 import { useQuery } from "@tanstack/react-query";
-import { fetchActivationRequests, fetchEnrollments } from "src/services/onec/api";
+import { fetchEnrollments } from "src/services/onec/api";
 import { useAgents, useOnecPermissions } from "./shared";
 import { ReadonlyNotice } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
@@ -28,40 +28,14 @@ import main from "src/styles/main.module.scss";
 type AgentsPaneTab = "agents" | "requests" | "processes";
 
 /**
- * Заявки, ждущие решения: подключение АГЕНТА и активация БИН.
- *
- * ЗАЯВКИ БАЗ ЗДЕСЬ БОЛЬШЕ НЕТ (22.09): они приходят не от агента, а из формы 1С «БухПроф AI → Подключение к
- * BuhProf AI», и живут в разделе «Расширение БухПроф-AI» вместе с остальным про расширение. Соседство по слову
- * «заявка» удобно только тому, кто уже знает, чем они отличаются; остальные искали заявку базы среди агентских.
- *
- * Активация БИН осталась: её просят ИЗ ОКНА АГЕНТА, решение меняет список активных БИН агента и упирается в его
- * тариф — это про агента, а не про расширение.
- */
-const RequestsSection: FC = () => {
-	const [inner, setInner] = useState<"enrollments" | "activation">("enrollments");
-	return (
-		<Tabs
-			activeTab={inner}
-			onTabChange={(id) => setInner(id as typeof inner)}
-			tabs={[
-				// Подключение агента — первым: с него начинается работа, а БИНы приходят уже через агента.
-				{ id: "enrollments", label: translate("onecEnrollments"), component: inner === "enrollments" ? <EnrollmentsTab /> : null },
-				{ id: "activation", label: translate("onecReqActivation"), component: inner === "activation" ? <ActivationRequestsTab /> : null },
-			]}
-		/>
-	);
-};
-
-/**
- * Сколько заявок ждёт решения — числом у вкладки: заявку ждут у телефона, открывать наугад не придётся.
- * Считаются только СВОИ заявки раздела: агентские и активация БИН. Заявки баз считает раздел расширения.
+ * Сколько заявок на подключение агентов ждёт решения — числом у вкладки: заявку ждут у телефона, открывать наугад
+ * не придётся. Заявки баз считает раздел расширения; активации БИН больше нет (В8, 28.09).
  */
 function usePendingRequests(): number {
 	// Опрос — только пока панель на экране (О4 аудита 26.09).
 	const pollInterval = usePanePollInterval(60_000);
 	const enr = useQuery({ queryKey: ["onec", "enrollments", "PENDING", ""], queryFn: () => fetchEnrollments({ state: "PENDING" }), refetchInterval: pollInterval, retry: false });
-	const act = useQuery({ queryKey: ["onec", "activation-requests", "PENDING", ""], queryFn: () => fetchActivationRequests({ state: "PENDING" }), refetchInterval: pollInterval, retry: false });
-	return (enr.data?.items.length ?? 0) + (act.data?.items.length ?? 0);
+	return enr.data?.items.length ?? 0;
 }
 
 const AgentsPaneBody: FC = () => {
@@ -95,7 +69,7 @@ const AgentsPaneBody: FC = () => {
 					{
 						id: "requests",
 						label: pending ? `${translate("onecTabRequests")} (${pending})` : translate("onecTabRequests"),
-						component: tab === "requests" ? <RequestsSection /> : null,
+						component: tab === "requests" ? <EnrollmentsTab /> : null,
 					},
 					{
 						// Что агенты запустили на своих компьютерах: rac, ibcmd, конфигуратор, мост.

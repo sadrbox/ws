@@ -15,6 +15,14 @@ describe("что ждём в «Фоновых запросах»", () => {
 		expect(queryLabel(["onec-bases"])).toBe(translate("onecTabBases"));
 	});
 
+	it("пользователи баз 1С не сливаются с пользователями ERP: вкладка в 1С короткая, здесь — уточнённое имя (28.09)", () => {
+		const onecUsers = [queryLabel(["onec", "base-users-cached"]), queryLabel(["onec", "user-summary"]), queryLabel(["onec", "user-where"])];
+		const erpUsers = queryLabel(["users"]);
+		expect(erpUsers).toBe(translate("onecTabUsersList"));
+		for (const label of onecUsers) expect(label).not.toBe(erpUsers);
+		expect(waitingSummary([q(["users"]), q(["onec", "user-summary"])]).names).toHaveLength(2);
+	});
+
 	it("неизвестный ключ — сам ключ, не пустота", () => {
 		expect(queryLabel(["что-то-своё"])).toBe("что-то-своё");
 		expect(queryLabel([{ x: 1 }])).toBe("");

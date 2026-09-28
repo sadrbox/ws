@@ -22,7 +22,7 @@ describe("R3: сборка агента и её отставание", () => {
 
 	it("недостающее — только у админ-агента и по способностям", () => {
 		const old = { role: "admin", capabilities: ["cluster.admin", "ib.admin", "CLUSTER_LIST_INFOBASES"], commandStats: null };
-		assert.deepEqual(missingFeatures(old), ["abort", "roles", "commandStats", "health", "log", "selftest", "info"]);
+		assert.deepEqual(missingFeatures(old), ["abort", "roles", "commandStats", "health", "log", "selftest", "info", "organizations", "extensionExport"]);
 		const fresh = {
 			role: "admin",
 			capabilities: ["agent.cancel", "ib.roles", "AGENT_HEALTH", "AGENT_LOG_TAIL", "IB_SELFTEST", "IB_INFO"],
@@ -33,6 +33,20 @@ describe("R3: сборка агента и её отставание", () => {
 		// Без ib.admin самопроверки нет не из-за сборки, а из-за незаданного служебного администратора (С25).
 		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("selftest"), false);
 		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("info"), false);
+		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("organizations"), false);
+		// Сборка с чтением организаций (28.09) — вкладка «Организации» карточки базы работает.
+		assert.equal(missingFeatures({ ...old, capabilities: [...old.capabilities, "IB_LIST_ORGANIZATIONS"] }).includes("organizations"), false);
+		// Выгрузка расширения (С5 задачи агента 28.09): тем же условием — нет типа при ib.admin.
+		assert.equal(missingFeatures({ ...old, capabilities: ["cluster.admin"] }).includes("extensionExport"), false);
+		assert.equal(missingFeatures({ ...old, capabilities: [...old.capabilities, "IB_EXPORT_EXTENSION"] }).includes("extensionExport"), false);
+	});
+
+	it("28.09: организации базы — чтение внутрь базы с обычным сроком, база обязательна", () => {
+		const spec = findAdminCommand("IB_LIST_ORGANIZATIONS")!;
+		assert.equal(spec.operation, "READ");
+		assert.equal(spec.capability, "ib.admin");
+		assert.equal(spec.requiresBase, true);
+		assert.equal(spec.ttlSeconds, undefined);
 	});
 
 	it("С35: сведения о базе — чтение внутрь базы с обычным сроком, доступно просмотру", () => {

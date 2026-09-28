@@ -110,7 +110,8 @@ export const GROUP_OPS: Record<GroupOp, OpSpec> = {
 	backup: { type: "IB_BACKUP", title: "onecBackup", warning: "onecBackupWarning", needs: "ib", needsDir: true, kind: "update" },
 	// Из обслуживания в группу вынесена ТОЛЬКО проверка: загрузка и обновление по сотне
 	// баз одной кнопкой не нужны никому, а ошибиться там нечем — данные затираются целиком.
-	checkBase: { type: "IB_CHECK", title: "onecMaintCheck", warning: "onecMaintCheckPlan", needs: "ib", kind: "read" },
+	// Задание идёт без `repair` — только тестирование, и название говорит это прямо (28.09).
+	checkBase: { type: "IB_CHECK", title: "onecMaintCheckTestOnly", warning: "onecMaintCheckPlan", needs: "ib", kind: "read" },
 };
 
 const baseColumns = (): TColumn[] => ([
@@ -182,7 +183,7 @@ const GroupCommandWizardBody: FC<Partial<TPane>> = (paneProps) => {
 			|| (spec?.needs === "drop" && !b.ibUnreachableAt ? translate("onecDropAgentWillVerify") : translate("onecFitOk")),
 		__fit: fitOf(b) === "",
 	})), [items, fitOf]);
-	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });
+	const baseView = useStaticTableView(baseRows, { baseKey: "asc" }, "OneCAdmin_gcwBases", { rememberFilters: false });
 	const presetIds = useMemo(
 		() => new Set(baseRows.filter((r) => picked.has(r.baseKey.toLowerCase())).map((r) => r.id)),
 		[baseRows, picked],
@@ -225,7 +226,7 @@ const GroupCommandWizardBody: FC<Partial<TPane>> = (paneProps) => {
 		() => (rolesQuery.data?.items ?? []).map((r, i) => ({ id: i + 1, uuid: r.name, role: r.name })),
 		[rolesQuery.data],
 	);
-	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
+	const rightsView = useStaticTableView(rightsRows, { role: "asc" }, "OneCAdmin_gcwRights", { rememberFilters: false });
 	const rightsPreset = useMemo(
 		() => new Set(rightsRows.filter((r) => roles.has(r.role)).map((r) => r.id)),
 		[rightsRows, roles],

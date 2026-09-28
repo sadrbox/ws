@@ -27,13 +27,14 @@ import { translate } from "src/i18";
 import { notify } from "src/components/TechMessages/store";
 import { getFormatDate } from "src/utils/datetime";
 import {
-	abandonOp, cancelOp, clearFinished, finishOp, getOps, opDuration, opKindLabel, opPercent,
+	abandonOp, cancelOp, clearFinished, finishOp as coreFinishOp, getOps, opDuration, opKindLabel, opPercent,
 	opStateLabel, opSucceeded, progressOp, setOpCanceler, settleOp, startOp as startCoreOp,
-	updateOp, useOps, withOp as withCoreOp, type Op, type OpInit, type OpKind, type OpState,
+	updateOp, useOps, type Op, type OpFinish, type OpInit, type OpKind, type OpState,
 } from "src/components/TechMessages/operations";
+import { errorCode, viaText, withCodeHint } from "src/services/onec/commandFacts";
 
 export {
-	abandonOp, cancelOp, clearFinished, finishOp, getOps, opDuration, opKindLabel, opPercent,
+	abandonOp, cancelOp, clearFinished, getOps, opDuration, opKindLabel, opPercent,
 	opStateLabel, opSucceeded, progressOp,
 };
 export type { Op, OpKind, OpState };
@@ -182,12 +183,43 @@ export function startOp(init: OpInit): string {
 	return id;
 }
 
-/** Обернуть одиночную операцию панели записью реестра (с перечитыванием кэша 1С). */
-export function withOp<T>(
+/**
+ * ЧТО ПАНЕЛЬ 1С ЗНАЕТ ОБ ИТОГЕ САМА (28.09): к отказу команды — подсказку по коду (С2) в примечание, к ответу — путь
+ * исполнения (С1) подробностью итога. Чистая функция: её же проверяет тест.
+ *
+ * Путь берётся из ответа (`via`) или из отказа (`details.via`); явно переданная подробность главнее.
+ */
+export function onecFinish(r: OpFinish, result?: unknown): OpFinish {
+	const detail = r.detail || viaText(r.error, result);
+	const note = r.error && r.note !== undefined ? withCodeHint(r.note, errorCode(r.error)) : r.note;
+	return { ...r, ...(note !== undefined ? { note } : {}), ...(detail ? { detail } : {}) };
+}
+
+/**
+ * Закрыть операцию панели — с подсказкой по коду отказа и путём исполнения (см. onecFinish). `result` — ответ
+ * команды, если он есть: путь успеха лежит в нём.
+ */
+export function finishOp(id: string, r: OpFinish = {}, result?: unknown): void {
+	coreFinishOp(id, onecFinish(r, result));
+}
+
+/**
+ * Обернуть одиночную операцию панели записью реестра (с перечитыванием кэша 1С). Своя обёртка, а не общая `withOp`:
+ * общая закрывает запись общим `finishOp`, и путь исполнения из ответа (28.09) до итога бы не дошёл.
+ */
+export async function withOp<T>(
 	init: Omit<OpInit, "total"> & { total?: number },
 	run: () => Promise<T>,
 ): Promise<T> {
-	return withCoreOp({ ...init, ref: onecOpRef(init), onFinish: refreshAfterWork }, run);
+	const id = startOp({ ...init, total: init.total ?? 1 });
+	try {
+		const r = await run();
+		finishOp(id, {}, r);
+		return r;
+	} catch (e) {
+		finishOp(id, { failed: 1, note: e instanceof Error ? e.message : "", error: e });
+		throw e;
+	}
 }
 
 /**
@@ -265,6 +297,11 @@ export function mergeBatch(p: BatchProgress): void {
 	const warning = warned.length > 3 ? `${warned.slice(0, 3).join("; ")}; …` : warned.join("; ");
 	// Одиночное задание кончилось — куда ушло время, по этапам (П28).
 	const stagesNote = !running && p.total === 1 ? stagesText(p.items[0]?.stages) : "";
+	/*
+	 * ПУТЬ ИСПОЛНЕНИЯ (С1, 28.09): у успеха — `via` строки, у отказа — `error.details.via`. Баз много и пути разные —
+	 * названы оба. Путь успеха в строке задания сервис пока не отдаёт — тогда его нет и здесь.
+	 */
+	const via = viaText(...p.items.flatMap((i) => [i, i.error]));
 	updateOp(target.id, (o) => ({
 		...o,
 		total: p.total,
@@ -279,10 +316,12 @@ export function mergeBatch(p: BatchProgress): void {
 		 * значение — и успешное задание показывало «Выполнено» рядом с отжившим обещанием повтора (16.09).
 		 */
 		note: p.failed > 0 && failedItem?.error
-			? `${failedItem.baseKey ?? ""}: ${failedItem.error.message}`.trim()
+			// Подсказка по коду отказа (С2): «вход закрыт блокировкой начала сеансов» — что делать, а не только что вышло.
+			? `${failedItem.baseKey ?? ""}: ${withCodeHint(failedItem.error.message, failedItem.error.code)}`.trim()
 				+ (lateWaiting.length ? ` · ${translate("onecLateWaiting")}` : "")
 			: (retryNote || warning || stagesNote || (running ? o.note : "")),
 		...(warning ? { warning } : {}),
+		...(via ? { detail: via } : {}),
 	}));
 	// Итог командной операции — тем же событием, что и у считаемой на клиенте: два пути к
 	// одному концу не должны оставлять разный след.
@@ -495,7 +534,7 @@ async function doRestoreRunningWork(): Promise<void> {
 		});
 		// Слежение без предела по времени — как у долгой операции «Обслуживания»; «Скрыть» у операции его снимает.
 		void followCommand<unknown>(cmd.commandId, () => getOps().some((o) => o.id === id && o.state === "running"))
-			.then(() => finishOp(id))
+			.then((res) => finishOp(id, {}, res))
 			.catch((e: unknown) => finishOp(id, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e }));
 	}
 }

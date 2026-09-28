@@ -46,6 +46,7 @@ describe("права панели 1С", () => {
 			["PUT", "/bases/akacapital/credentials"],
 			["DELETE", "/bases/akacapital/credentials"],
 			["POST", "/bases/akacapital/hidden"],
+			["PUT", "/bases/akacapital/name"],
 			["POST", "/bases/akacapital/lock"],
 			["POST", "/bases/akacapital/restore"],
 			["POST", "/bases/akacapital/apply-update"],

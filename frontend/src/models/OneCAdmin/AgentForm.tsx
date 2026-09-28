@@ -21,9 +21,9 @@ import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import Notice from "src/components/Notice";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
-import { durationRows, failureRows } from "./agentStats";
 import { agentBuildLabel, featureLabels } from "./agentHealth";
 import AgentHealthTab from "./AgentHealthTab";
+import AgentStatsTab from "./AgentStatsTab";
 import AgentLogTab from "./AgentLogTab";
 import AgentBasesTab from "./AgentBasesTab";
 import { AgentAuditTab, AgentCommandsTab, BusinessHealthTab } from "./AgentActivityTabs";
@@ -129,15 +129,27 @@ const AgentFormBody: FC<Partial<TPane>> = (paneProps) => {
 		onSuccess: () => { setName(null); showToast(translate("saved"), "success"); void refresh(); },
 		onError: fail,
 	});
+	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
+	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
+	const { requestClose } = useAppActions().windows;
+	const closeCard = useCallback(() => {
+		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
+	}, [requestClose, paneProps.uniqId]);
 	const remove = useMutation({
 		mutationFn: () => withOp({ kind: "delete", title: translate("onecAgentDelete"), target: agentName, ref: agentRef },
 			() => deleteAgent(agentId)),
 		onSuccess: () => {
 			setConfirm(null);
 			showToast(translate("saved"), "success");
+			/*
+			 * УДАЛЁННОГО ПОКАЗЫВАТЬ НЕЧЕГО — КАРТОЧКА ЗАКРЫВАЕТСЯ (28.09). Раньше здесь вызывался `paneProps.onClose`, но
+			 * карточку открывают без него (useOpenAgent → addPane), и вызов был пустым: форма оставалась открытой с
+			 * пустыми полями удалённого агента. Закрываем панель по её идентификатору, принудительно: сохранять у
+			 * удалённого нечего, и проверки перед закрытием (несохранённое имя) задали бы бессмысленный вопрос.
+			 * Закрываем до обновления списка — иначе карточка успела бы перерисоваться пустой.
+			 */
+			if (paneProps.uniqId) void requestClose(paneProps.uniqId, { force: true });
 			void refresh();
-			// Удалённого показывать нечего: закрываем пейн.
-			void paneProps.onClose?.();
 		},
 		onError: fail,
 	});
@@ -171,13 +183,6 @@ const AgentFormBody: FC<Partial<TPane>> = (paneProps) => {
 	// владельцем молчащий процесс. Список из десяти похожих строк, где девять мертвы,
 	// читается как «запущено десять экземпляров» — ровно то, чего мы избегаем.
 	const instances = showHistory ? all : (live.length ? live : all.slice(0, 1));
-
-	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
-	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
-	const { requestClose } = useAppActions().windows;
-	const closeCard = useCallback(() => {
-		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
-	}, [requestClose, paneProps.uniqId]);
 
 	return (
 		<>
@@ -426,63 +431,11 @@ const AgentFormBody: FC<Partial<TPane>> = (paneProps) => {
 					},
 					{
 						/*
-						 * ВРЕМЯ И ОТКАЗЫ КОМАНД (S5) — числами вместо «агент тормозит».
-						 *
-						 * Агент считает их сам и шлёт в каждом heartbeat: «IB_BUSY: 87», «IB_LIST_USERS
-						 * в среднем 28 с». Без этой вкладки каждое «медленно» мерили вручную, а
-						 * настройке параллельности агента не на что было опереться.
+						 * ВРЕМЯ И ОТКАЗЫ КОМАНД (S5) — числами вместо «агент тормозит». Две таблицы Table, делящие высоту
+						 * вкладки (28.09), — отдельным компонентом: у каждой свои колонки, сортировка и поиск.
 						 */
 						id: "stats", label: translate("onecAgentStats"),
-						component: (
-							<div className={styles.Instances}>
-								<div className={styles.Hint}>{translate("onecAgentStatsHint")}</div>
-								{!agent?.commandStats
-									? <div className={styles.Hint}>{translate("onecAgentStatsNone")}</div>
-									: (() => {
-										const durations = durationRows(agent.commandStats.durationsByType);
-										const failures = failureRows(agent.commandStats.failuresByCode);
-										return (
-											<>
-												<div className={styles.StatsTitle}>{translate("onecStatDurations")}</div>
-												{durations.length ? (
-													<table className={styles.StatsTable}>
-														<thead>
-															<tr>
-																<th>{translate("onecStatType")}</th>
-																<th>{translate("onecStatCount")}</th>
-																<th>{translate("onecStatAvg")}</th>
-																<th>{translate("onecStatP95")}</th>
-																<th>{translate("onecStatMax")}</th>
-															</tr>
-														</thead>
-														<tbody>
-															{durations.map((r) => (
-																<tr key={r.type}>
-																	<td>{r.type}</td><td>{r.count}</td><td>{r.avg}</td><td>{r.p95}</td><td>{r.max}</td>
-																</tr>
-															))}
-														</tbody>
-													</table>
-												) : <div className={styles.Hint}>{translate("onecStatNoDurations")}</div>}
-
-												<div className={styles.StatsTitle}>{translate("onecStatFailures")}</div>
-												{failures.length ? (
-													<table className={styles.StatsTable}>
-														<thead>
-															<tr><th>{translate("onecStatCode")}</th><th>{translate("onecStatCount")}</th></tr>
-														</thead>
-														<tbody>
-															{failures.map((r) => (
-																<tr key={r.code}><td>{r.code}</td><td>{r.count}</td></tr>
-															))}
-														</tbody>
-													</table>
-												) : <div className={styles.Hint}>{translate("onecStatNoFailures")}</div>}
-											</>
-										);
-									})()}
-							</div>
-						),
+						component: <AgentStatsTab stats={agent?.commandStats} agentId={agentId} />,
 					},
 					// Базы и лимит тарифа — у бизнес-агента: одна служба обслуживает много баз своего компьютера (ПН, 19.09).
 					...(agent?.role === "business" ? [{

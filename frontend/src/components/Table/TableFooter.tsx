@@ -11,14 +11,17 @@ import { computeFooterValue } from './services';
 import styles from './Table.module.scss';
 
 export const TableFooter = memo(() => {
-  const { variant, selectable, columns, rows } = useTableContext();
+  const { variant, selectable, columns, rows, footerValues } = useTableContext();
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
   // Ячейка под чекбокс — только если колонка отметок есть (как в шапке и colgroup):
   // иначе итоги съезжали на колонку вправо («Сальдо КН» под «Сальдо 1С»).
   const showCheckbox = variant !== 'select' && selectable;
 
+  // Готовое значение источника (footerValues) важнее подсчёта по строкам — см. context.footerValues.
+  const valueOf = (col: typeof columns[number]) =>
+    footerValues && col.identifier in footerValues ? footerValues[col.identifier] : computeFooterValue(col, rows);
   // Проверяем есть ли хоть одна колонка с footer-итогом
-  const hasFooter = visibleColumns.some(c => c.footer && c.footer !== 'none');
+  const hasFooter = visibleColumns.some(c => (c.footer && c.footer !== 'none') || footerValues?.[c.identifier] != null);
   if (!hasFooter) return null;
 
   return (
@@ -27,11 +30,12 @@ export const TableFooter = memo(() => {
         {/* Колонка чекбокса */}
         {showCheckbox && <td />}
         {visibleColumns.map(col => {
-          const value = computeFooterValue(col, rows);
+          const value = valueOf(col);
           return (
             <td key={col.identifier}>
-              <div className={styles.TableFooterCell}>
-                {value !== null && <span>{value}</span>}
+              {/* Итоги — числа, их место справа; подпись («Итого») в текстовой колонке — слева, как текст над ней. */}
+              <div className={styles.TableFooterCell} style={col.type === 'number' ? undefined : { justifyContent: 'flex-start' }}>
+                {value != null && <span>{value}</span>}
               </div>
             </td>
           );

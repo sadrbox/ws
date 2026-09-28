@@ -41,13 +41,13 @@ const DESTRUCTIVE: RegExp[] = [
 	// ротация токена — доступ к серверу 1С как таковой.
 	/^\/agents$/,
 	/^\/agents\/[^/]+$/,
-	/^\/agents\/[^/]+\/(owner|release-instance|rotate-token|limits|active-bins|config|restart|update)$/,
+	/^\/agents\/[^/]+\/(owner|release-instance|rotate-token|limits|config|restart|update)$/,
 	/^\/agent-processes\/[^/]+\/kill$/,
 	// Служебный администратор базы: пара «имя + пароль», которой агент входит в базу.
 	/^\/bases\/[^/]+\/credentials$/,
-	// Сама база: скрыть, заблокировать сеансы, загрузить поверх, обновить конфигурацию,
+	// Сама база: скрыть, переименовать в панели, заблокировать сеансы, загрузить поверх, обновить конфигурацию,
 	// удалить регистрацию; самопроверка агента создаёт и удаляет временного пользователя (R4).
-	/^\/bases\/[^/]+\/(hidden|lock|restore|apply-update|drop-registration|selftest)$/,
+	/^\/bases\/[^/]+\/(hidden|name|lock|restore|apply-update|drop-registration|selftest)$/,
 	// Запрет регламентных и фоновых заданий базы (аудит 21.09): пакетно он требует полного доступа
 	// (batchRunner BATCHABLE), а поодиночке путь в списке отсутствовал — «только просмотр» выключал задания.
 	/^\/bases\/[^/]+\/scheduled-jobs$/,
@@ -60,9 +60,6 @@ const DESTRUCTIVE: RegExp[] = [
 	/^\/registrations\/[^/]+\/(approve|reject)$/,
 	/^\/base-tokens\/[^/]+\/revoke$/,
 	/^\/base-tokens\/[^/]+\/rotate$/,
-	// Активация БИНов (СВ4, часть 2): одобрение меняет, какие организации обслуживает агент.
-	/^\/activation-requests\/[^/]+\/[^/]+\/(approve|reject)$/,
-	/^\/active-bins\/fix-all$/,
 	// Подключение агента по коду (СВ5): одобрение выдаёт службе токен доступа.
 	/^\/enrollments\/[^/]+\/(approve|reject)$/,
 ];

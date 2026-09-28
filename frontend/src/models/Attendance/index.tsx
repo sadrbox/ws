@@ -116,7 +116,7 @@ export const AttendanceMyDay: FC<Partial<TPane>> = ({ uniqId }) => {
 	}, [active, confirm, refresh]);
 
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(myRequestsColumnsJson as TColumn[], "AttendanceMyRequests"));
-	const view = useStaticTableView(useMemo(() => toRequestRows(d?.requests ?? []), [d?.requests]), { attSubmittedAt: "desc" });
+	const view = useStaticTableView(useMemo(() => toRequestRows(d?.requests ?? []), [d?.requests]), { attSubmittedAt: "desc" }, "AttendanceMyRequests");
 
 	const paneToolbar = usePaneToolbar(uniqId, (
 		<Toolbar className={main.PaneToolbarFill}>
@@ -259,9 +259,9 @@ export const AttendanceJournal: FC<Partial<TPane>> = ({ uniqId }) => {
 	const [jCols, setJCols] = useState<TColumn[]>(() => getModelColumns(journalColumnsJson as TColumn[], "AttendanceJournalDay"));
 	const [rCols, setRCols] = useState<TColumn[]>(() => getModelColumns(requestsColumnsJson as TColumn[], "AttendanceRequests"));
 	const [sCols, setSCols] = useState<TColumn[]>(() => getModelColumns(schedulesColumnsJson as TColumn[], "AttendanceSchedules"));
-	const jView = useStaticTableView(useMemo(() => toJournalRows(journal.data?.items ?? []), [journal.data]), { attEmployee: "asc" });
-	const rView = useStaticTableView(useMemo(() => toRequestRows(requests.data ?? []), [requests.data]), { attSubmittedAt: "desc" });
-	const sView = useStaticTableView(useMemo(() => toScheduleRows(schedules.data ?? []), [schedules.data]), { attEmployee: "asc" });
+	const jView = useStaticTableView(useMemo(() => toJournalRows(journal.data?.items ?? []), [journal.data]), { attEmployee: "asc" }, "AttendanceJournalDay");
+	const rView = useStaticTableView(useMemo(() => toRequestRows(requests.data ?? []), [requests.data]), { attSubmittedAt: "desc" }, "AttendanceRequests");
+	const sView = useStaticTableView(useMemo(() => toScheduleRows(schedules.data ?? []), [schedules.data]), { attEmployee: "asc" }, "AttendanceSchedules");
 
 	const renderJournalCell = useCallback((row: TDataItem, col: TColumn) => {
 		if (col.identifier !== "attVerdict") return undefined;

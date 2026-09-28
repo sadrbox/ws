@@ -370,7 +370,7 @@ test("сквозной: задача из списка закрывается с
 	const forbidden = () => { throw new Error("задачи не идут в 1С"); };
 	const workflow = new ChatWorkflow({
 		db: mem.db, log: silent, llm,
-		agents: { pickOnline: forbidden, listByOrganization: forbidden } as never,
+		agents: { resolveBusiness: forbidden } as never,
 		queue: { enqueue: forbidden, waitResult: forbidden } as never,
 		audit: new Audit(mem.db, silent), confirmWrite: true, commandTimeoutMs: 1000, maxToolRounds: 8,
 		files: { save: forbidden } as never, serverTools: h.r,

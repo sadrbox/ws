@@ -173,8 +173,8 @@ type TargetOrg = { bin: string; uuid: string; name: string | null; served: boole
 /** База, которую проверяем: у кого спрашивать, какие её организации известны ERP. */
 export type CheckTarget = {
 	agentId: string;
-	/** Организация агента — в строку очереди, как у всех бизнес-команд. */
-	agentOrganizationUuid: string;
+	/** Организация команды (В4) — первая проверяемая организация базы: чьи данные затронуты. */
+	organizationUuid: string;
 	baseKey: string;
 	orgs: TargetOrg[];
 	/** Знает ли сборка агента снимки: старая может уметь проверки, но не снимки. */
@@ -226,7 +226,6 @@ export type SkipReport = {
 	/** В базе идёт обслуживание агентом кластера (выгрузка, проверка, обновление): проверять её сейчас нельзя (аудит 26.09). */
 	basesUnderMaintenance: string[];
 	basesWithoutOrganizations: string[];
-	binsOverLimit: string[];
 	binsInOtherBase: string[];
 	binsNotInErp: string[];
 	/** БИН известен ERP, но фирма эту организацию не обслуживает (действует правило `served`). */
@@ -418,7 +417,7 @@ export class AccountingChecksRunner {
 	async collectTargets(baseKey: string | null = null): Promise<{ targets: CheckTarget[]; skipped: SkipReport; scope: CheckScope | null }> {
 		const skipped: SkipReport = {
 			agentsWithoutCapability: [], basesOverLimit: [], basesOffline: [], basesUnderMaintenance: [], basesWithoutOrganizations: [],
-			binsOverLimit: [], binsInOtherBase: [], binsNotInErp: [], binsNotServed: [],
+			binsInOtherBase: [], binsNotInErp: [], binsNotServed: [],
 		};
 		/*
 		 * БАЗЫ ПОД ОБСЛУЖИВАНИЕМ ПРОПУСКАЕМ (P2 отчёта очереди, аудит 26.09). Ночные IB_BACKUP/IB_CHECK админ-агента
@@ -473,7 +472,6 @@ export class AccountingChecksRunner {
 				for (const o of b.organizations) {
 					const bin = o.bin?.trim() ?? "";
 					if (!BIN_RE.test(bin) || bins.some((x) => x.bin === bin)) continue;
-					if (v.overBins.includes(bin)) { skipped.binsOverLimit.push(bin); continue; }
 					/*
 					 * БИН В НЕСКОЛЬКИХ БАЗАХ — проверяется в первой базе в пределах тарифа по порядку среза, как агент и
 					 * адресует его команды. Вторая база с тем же БИН — чаще всего копия или старая база, и её находки
@@ -524,7 +522,7 @@ export class AccountingChecksRunner {
 			}
 			if (orgs.length) {
 				targets.push({
-					agentId: c.agent.id, agentOrganizationUuid: c.agent.organizationUuid, baseKey: c.baseKey, orgs,
+					agentId: c.agent.id, organizationUuid: orgs[0]!.uuid, baseKey: c.baseKey, orgs,
 					snapshots: agentKnowsType(c.agent, GET_SNAPSHOT), blocked: c.blocked,
 				});
 			}
@@ -688,7 +686,7 @@ export class AccountingChecksRunner {
 		let id: string;
 		try {
 			const cmd = await this.d.queue.enqueue({
-				agentId: t.agentId, organizationUuid: t.agentOrganizationUuid, baseKey: t.baseKey,
+				agentId: t.agentId, organizationUuid: t.organizationUuid, baseKey: t.baseKey,
 				type, payload, userUuid: null, ttlSeconds: ttl, priority: 10,
 			});
 			id = cmd.id;

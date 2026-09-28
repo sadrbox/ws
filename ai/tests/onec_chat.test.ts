@@ -124,7 +124,7 @@ async function harness(steps: Step[], opts: { bank?: boolean; chatPerMin?: numbe
 	};
 	const workflow = new ChatWorkflow({
 		db: mem.db, log: silent, llm,
-		agents: { pickOnline: forbidden, listByOrganization: forbidden } as never,
+		agents: { resolveBusiness: forbidden } as never,
 		queue: { enqueue: forbidden, waitResult: forbidden } as never,
 		audit: new Audit(mem.db, silent), confirmWrite: true, commandTimeoutMs: 1000, maxToolRounds: 8,
 		bank: opts.bank ? {
@@ -478,10 +478,10 @@ test("ERP-чат: чтение через агента, карточка, «да
 		},
 	]);
 	const enqueued: { type: string; payload: Record<string, unknown>; requestId: string | null }[] = [];
-	const agent = { id: "ag-1", onec: { reachable: true } };
+	const agent = { id: "ag-1", online: true, onec: { reachable: true }, capabilities: [] };
 	const workflow = new ChatWorkflow({
 		db: mem.db, log: silent, llm,
-		agents: { pickOnline: async () => agent, listByOrganization: async () => [agent], basesOf: async () => [] } as never,
+		agents: { resolveBusiness: async () => ({ kind: "agent", agent, baseKey: "Бух", alsoIn: [], baseStatus: "ONLINE", baseOrgs: null }) } as never,
 		queue: {
 			enqueue: async (i: { type: string; payload: Record<string, unknown>; requestId: string | null }) => { enqueued.push(i); return { id: `cmd-${enqueued.length}` }; },
 			waitResult: async (id: string) => {
@@ -490,6 +490,7 @@ test("ERP-чат: чтение через агента, карточка, «да
 			},
 		} as never,
 		audit: new Audit(mem.db, silent), confirmWrite: true, commandTimeoutMs: 1000, maxToolRounds: 8, bank: null, files: { save: async () => { throw new Error("нет файлов"); } } as never,
+		orgBin: async () => "111111111111",
 	});
 	const user = { uuid: "erp-user", organizationUuid: ORG };
 	const r1 = await workflow.handle(user, null, "создай реализацию физули");

@@ -13,6 +13,11 @@
 
 import { EventEmitter } from "node:events";
 import type { Db } from "../db/pool.ts";
+import type { Logger } from "../logger.ts";
+import {
+	CONTENT_SCRUB_BATCH, EXPORT_CONTENT_KEEP_SECS, EXPORT_EXTENSION_TYPE, INSTALL_CONTENT_KEEP_FAILED_SECS, INSTALL_EXTENSION_TYPE,
+	contentDigest, digestsById,
+} from "./contentDigest.ts";
 
 // `canceled` пишет queue.cancel — тип обязан его знать: иначе проверка «команда отменена»
 // (S2) выглядит для компилятора невозможной.
@@ -20,7 +25,12 @@ export type CommandState = "queued" | "dispatched" | "done" | "failed" | "expire
 
 export type EnqueueInput = {
 	agentId: string;
-	organizationUuid: string;
+	/**
+	 * ЧЬИ ДАННЫЕ ЗАТРОНУТЫ (В4, модель без владельца 28.09): у бизнес-команды — организация запроса, у пакетной и
+	 * монопольной внутри базы — организация базы, у команды кластера и о самой службе — null. Не организация агента:
+	 * её нет. По ней решается, кто видит результат (`commandVisible`).
+	 */
+	organizationUuid: string | null;
 	/** Имя базы в кластере; null — агент протокола v1, у которого база одна (DEFAULT_BASE_KEY). */
 	baseKey?: string | null;
 	type: string;
@@ -85,14 +95,15 @@ export type ExclusiveStateRow = {
 
 /** Строка для восстановления монопольной операции (listExclusivePending). */
 export type ExclusivePendingRow = {
-	id: string; agent_id: string; organization_uuid: string; base_key: string | null; state: CommandState; ttl_seconds: number | null;
+	id: string; agent_id: string; organization_uuid: string | null; base_key: string | null; state: CommandState; ttl_seconds: number | null;
 	exclusive: ExclusiveStateRow | null;
 };
 
 export type CommandRow = {
 	id: string;
 	agent_id: string;
-	organization_uuid: string;
+	/** Чьи данные затронуты (В4); null — команда кластера или о самой службе. */
+	organization_uuid: string | null;
 	base_key: string | null;
 	request_id: string | null;
 	type: string;
@@ -240,7 +251,12 @@ export const RETRY_LATER_CODES = new Set(["IB_BUSY", "AGENT_BUSY", "AGENT_STOPPI
  * Задание объявило «Не выполнено» и не повторило, хотя это ровно тот случай, ради которого повтор и сделан:
  * база освободится сама. Агент научится отвечать `IB_BUSY` (А39); до его обновления узнаём случай по тексту.
  */
-const BUSY_TEXT = /разделен\w* доступ|разделённ\w* доступ|база данных заблокирована|монопольн|exclusive (?:access|mode)/i;
+// «Ошибка исключительной блокировки информационной базы. Активны сеансы: …» (С9 задачи агента 28.09): так платформа
+// отказывает, если установка или удаление расширения меняет структуру данных, а в базе есть чужой сеанс. С агента
+// 2026-09-28 13:57 это `IB_BUSY` с держателями, у агентов старше — `IB_ERROR` с этим текстом.
+// Окончания — `[а-яё]*`, а не `\w*`: в JS `\w` кириллицу не ловит, и «разделен\w* доступ» молчал на «разделенного
+// доступа» (случай 16.09 спасало только «база данных заблокирована» рядом).
+const BUSY_TEXT = /разделен[а-яё]* доступ|разделённ[а-яё]* доступ|база данных заблокирована|монопольн|исключительн[а-яё]* блокировк|exclusive (?:access|mode)/i;
 
 /**
  * КОНФЛИКТ БЛОКИРОВОК — тоже «база занята», только не целиком, а по данным.
@@ -255,9 +271,19 @@ const BUSY_TEXT = /разделен\w* доступ|разделённ\w* дос
  */
 const LOCK_CONFLICT_TEXT = /конфликт блокировок|время ожидания предоставления блокировки|взаимоблокировк|lock conflict|lock request time\s*-?out|deadlocked/i;
 
+/**
+ * ВХОД ЗАКРЫТ БЛОКИРОВКОЙ НАЧАЛА СЕАНСОВ, И КОД РАЗРЕШЕНИЯ НЕ ПОМОГ (С2 задачи агента 28.09, агент с 2026-09-27 22:42).
+ * Обычно агент входит в закрытую базу сам — с кодом блокировки из кластера или своим на время операции; этот код
+ * приходит, только когда блокировку поставили изнутри 1С (её кода кластер не знает), у служебного администратора нет
+ * прав на `rac infobase update` или код не подошёл. Повтор с той же блокировкой даст тот же отказ, а подготовка
+ * (закрыть вход, снять сеансы) её только усилит, — поэтому это НЕ «база занята», даже если в тексте найдётся похожее.
+ */
+export const SESSIONS_DENIED_CODE = "IB_SESSIONS_DENIED";
+
 /** Отказ означает «база занята» — команду задания стоит повторить. */
 export const isBusyFailure = (code: string | undefined | null, message: string | undefined | null): boolean =>
-	RETRY_LATER_CODES.has(code ?? "") || BUSY_TEXT.test(message ?? "") || LOCK_CONFLICT_TEXT.test(message ?? "");
+	code !== SESSIONS_DENIED_CODE
+	&& (RETRY_LATER_CODES.has(code ?? "") || BUSY_TEXT.test(message ?? "") || LOCK_CONFLICT_TEXT.test(message ?? ""));
 
 export type WireResult = {
 	commandId: string;
@@ -319,6 +345,16 @@ export class CommandQueue {
 	 */
 	setAuthResolver(resolver: AuthResolver | null): void {
 		this.authResolver = resolver;
+	}
+
+	/**
+	 * Журнал для сбоев, которые очередь переживает сама (28.09): очистка файла выполненной установки не удалась —
+	 * команда всё равно закрыта, а файл уберёт ежечасный проход. Без журнала — молча, как в тестах.
+	 */
+	private log: Pick<Logger, "warn"> | null = null;
+
+	setLog(log: Pick<Logger, "warn"> | null): void {
+		this.log = log;
 	}
 
 	/**
@@ -873,8 +909,115 @@ export class CommandQueue {
 			// База освободилась — будим опрос агента, чтобы следующая команда по ней ушла
 			// сразу, а не через цикл long-poll: последовательность не должна стоить времени.
 			if (row.base_key) this.bell.emit(agentId);
+			// Файл выполненной установки больше не нужен никому (С3, 28.09): повторяют только неуспешные.
+			if (row.state === "done" && row.type === INSTALL_EXTENSION_TYPE) return this.scrubInstalled(row);
 		}
 		return row;
+	}
+
+	/**
+	 * ФАЙЛ ВЫПОЛНЕННОЙ УСТАНОВКИ — СРАЗУ В СВОДКУ (С3, 28.09). Отдельным запросом ПОСЛЕ закрытия: результат агента уже
+	 * принят, и сбой очистки его не отменяет — пишем в журнал, файл уберёт ежечасный проход (scrubStoredContent).
+	 * Меняются только два ключа (`payload - … || …`), а не payload целиком: раннер монопольной операции в это же время
+	 * дописывает своё состояние (`patchPayload`), и запись целиком затёрла бы его.
+	 */
+	private async scrubInstalled(row: CommandRow): Promise<CommandRow> {
+		const content = row.payload?.contentBase64;
+		if (typeof content !== "string") return row;
+		try {
+			const digest = contentDigest(content);
+			await this.db.query(
+				`UPDATE commands SET payload = (payload - 'contentBase64') || jsonb_build_object('contentDigest', $2::jsonb)
+				  WHERE id = $1 AND payload ? 'contentBase64'`,
+				[row.id, JSON.stringify(digest)],
+			);
+			const { contentBase64: _file, ...rest } = row.payload;
+			return { ...row, payload: { ...rest, contentDigest: digest } };
+		} catch (e) {
+			this.log?.warn({ commandId: row.id, err: e instanceof Error ? e.message : String(e) },
+				"установка расширения: файл в журнале команд не заменён сводкой — уберёт ежечасная очистка");
+			return row;
+		}
+	}
+
+	/**
+	 * ФАЙЛЫ .cfe, КОТОРЫЕ БОЛЬШЕ НЕ НУЖНЫ, — В СВОДКУ `{size, sha256}` (С3, 28.09). Ежечасно (server.ts):
+	 *  - установка, закрытая неуспехом (failed, canceled, expired), — через сутки после закрытия: до того файл берут
+	 *    «Повторить неуспешные» и повтор «база занята» (retryBusy) — из самой команды, в задании его нет;
+	 *  - выполненная установка, чей файл не убрал `complete` (сбой очистки, строки до 28.09), — сразу;
+	 *  - выгрузка (done) — через час: панель забирает файл по /commands/:id, как только команда выполнена.
+	 * Порциями по `batch` строк, каждая — свой запрос: файл весит полмегабайта, и проход не держит весь журнал в
+	 * одном ответе базы и одной транзакции. Идемпотентно: берутся только строки, где файл ещё лежит.
+	 */
+	async scrubStoredContent(opts: { batch?: number; maxPasses?: number } = {}): Promise<{ installs: number; exports: number }> {
+		const batch = Math.max(1, Math.floor(opts.batch ?? CONTENT_SCRUB_BATCH));
+		// Первый проход после выкладки разбирает накопленное за полгода; предел — чтобы и он кончался за разумное время.
+		const maxPasses = Math.max(1, Math.floor(opts.maxPasses ?? 100));
+		const total = { installs: 0, exports: 0 };
+		for (let pass = 0; pass < maxPasses; pass++) {
+			const inst = await this.scrubInstallPass(batch);
+			const exp = await this.scrubExportPass(batch);
+			total.installs += inst.scrubbed;
+			total.exports += exp.scrubbed;
+			// Обе порции неполные — старше срока больше нечего. Строки нашлись, а не очищена ни одна (их успели
+			// изменить между выборкой и записью) — следующий проход дал бы тот же ответ: до следующего часа.
+			if ((inst.found < batch && exp.found < batch) || inst.scrubbed + exp.scrubbed === 0) break;
+		}
+		return total;
+	}
+
+	private async scrubInstallPass(batch: number): Promise<{ found: number; scrubbed: number }> {
+		const r = await this.db.query<{ id: string; content: string | null }>(
+			`SELECT id, payload->>'contentBase64' AS content FROM commands
+			  WHERE type = $1 AND payload ? 'contentBase64'
+			    AND (state = 'done'
+			         OR (state IN ('failed', 'canceled', 'expired')
+			             AND COALESCE(finished_at, created_at) < now() - make_interval(secs => $2::int)))
+			  ORDER BY created_at LIMIT $3`,
+			[INSTALL_EXTENSION_TYPE, INSTALL_CONTENT_KEEP_FAILED_SECS, batch],
+		);
+		if (!r.rows.length) return { found: 0, scrubbed: 0 };
+		const u = await this.db.query(
+			`UPDATE commands c
+			    SET payload = (c.payload - 'contentBase64') || jsonb_build_object('contentDigest', x.digest)
+			   FROM jsonb_each($1::jsonb) AS x(id, digest)
+			  WHERE c.id = x.id AND c.payload ? 'contentBase64'`,
+			[JSON.stringify(digestsById(r.rows))],
+		);
+		return { found: r.rows.length, scrubbed: u.rowCount ?? 0 };
+	}
+
+	/**
+	 * Файл выгрузки лежит в корне результата (`{ok, name, fileName, size, contentBase64, via}`); сборка, положившая
+	 * конверт шлюза целиком, держит его в `data` (unwrapData, accountingChecks.ts) — чистим там, где лежит. `size`
+	 * агента остаётся как есть, сводка — рядом.
+	 */
+	private async scrubExportPass(batch: number): Promise<{ found: number; scrubbed: number }> {
+		const holds = (a: string) => `jsonb_typeof(${a}.result) = 'object'
+			AND (${a}.result ? 'contentBase64' OR (jsonb_typeof(${a}.result->'data') = 'object' AND ${a}.result->'data' ? 'contentBase64'))`;
+		const r = await this.db.query<{ id: string; content: string | null }>(
+			`SELECT c.id, CASE WHEN c.result ? 'contentBase64' THEN c.result->>'contentBase64'
+			                   ELSE c.result->'data'->>'contentBase64' END AS content
+			   FROM commands c
+			  WHERE c.type = $1 AND c.state = 'done' AND ${holds("c")}
+			    AND COALESCE(c.finished_at, c.created_at) < now() - make_interval(secs => $2::int)
+			  ORDER BY c.created_at LIMIT $3`,
+			[EXPORT_EXTENSION_TYPE, EXPORT_CONTENT_KEEP_SECS, batch],
+		);
+		if (!r.rows.length) return { found: 0, scrubbed: 0 };
+		// Скобки вокруг `result->'data'` обязательны: `-` в Postgres связывает сильнее `->`, и без них выходит
+		// `result -> ('data' - 'contentBase64')` — «operator is not unique: unknown - unknown».
+		const u = await this.db.query(
+			`UPDATE commands c
+			    SET result = CASE WHEN c.result ? 'contentBase64'
+			                      THEN (c.result - 'contentBase64') || jsonb_build_object('contentDigest', x.digest)
+			                      ELSE jsonb_set(c.result, '{data}',
+			                                     ((c.result->'data') - 'contentBase64') || jsonb_build_object('contentDigest', x.digest)) END
+			   FROM jsonb_each($1::jsonb) AS x(id, digest)
+			  WHERE c.id = x.id AND ${holds("c")}`,
+			[JSON.stringify(digestsById(r.rows))],
+		);
+		return { found: r.rows.length, scrubbed: u.rowCount ?? 0 };
 	}
 
 	/**
@@ -1088,12 +1231,15 @@ export class CommandQueue {
 	async runningCommands(limit = 50): Promise<{
 		commandId: string; type: string; baseKey: string | null; agentId: string; ageSecs: number;
 		payload: Record<string, unknown>; canCancel: boolean; canCancelCheck: boolean;
+		/** Чьи данные (В4): по ней панель решает, показывать ли команду. */
+		organizationUuid: string | null;
 	}[]> {
 		const r = await this.db.query<{
 			id: string; type: string; base_key: string | null; agent_id: string; age_secs: string | null;
 			payload: Record<string, unknown> | null; can_cancel: boolean | null; can_cancel_check: boolean | null;
+			organization_uuid: string | null;
 		}>(
-			`SELECT c.id, c.type, c.base_key, c.agent_id, c.payload,
+			`SELECT c.id, c.type, c.base_key, c.agent_id, c.payload, c.organization_uuid,
 			        round(extract(epoch FROM (now() - c.dispatched_at)))::text AS age_secs,
 			        COALESCE(a.capabilities ? 'agent.cancel', false) AS can_cancel,
 			        COALESCE(a.capabilities ? 'agent.cancel.check', false) AS can_cancel_check
@@ -1106,6 +1252,7 @@ export class CommandQueue {
 		return r.rows.map((x) => ({
 			commandId: x.id, type: x.type, baseKey: x.base_key, agentId: x.agent_id, ageSecs: Number(x.age_secs) || 0,
 			payload: x.payload ?? {}, canCancel: x.can_cancel === true, canCancelCheck: x.can_cancel_check === true,
+			organizationUuid: x.organization_uuid,
 		}));
 	}
 

@@ -82,7 +82,7 @@ export const NotesList: FC = () => {
 		};
 	}), (r) => r.uuid), [q.data]);
 
-	const view = useStaticTableView(rows, { createdAt: "desc" });
+	const view = useStaticTableView(rows, { createdAt: "desc" }, COMPONENT);
 
 	/**
 	 * Открыть запись, к которой привязана заметка.

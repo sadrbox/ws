@@ -11,7 +11,12 @@
  * идентификатор конфигуратора; по умолчанию берётся из имени файла без «.cfe».
  *
  * ВЫГРУЗКА — команда чтения `IB_EXPORT_EXTENSION`: агент входит в базу и отдаёт файл в ответе; панель
- * скачивает его как `<имя>.cfe`. Сборка агента без этой команды — отказ сразу, до постановки.
+ * скачивает его как `<имя>.cfe`. Сборка агента без этой команды — кнопка недоступна заранее (признак
+ * `extensionExport` в `missingFeatures` агента базы, С5 28.09), а не отказ сервиса после нажатия.
+ *
+ * ПУТЬ ИСПОЛНЕНИЯ (С1, 28.09): агент отвечает, как исполнил команду, — соединением с базой (COM) или напрямую
+ * через СУБД (ibcmd). Путь выгрузки уходит в итог операции и в сообщение об успехе; у загрузки его показывает
+ * слежение за заданием («Прогресс», «Задания»).
  */
 import { FC, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -24,8 +29,11 @@ import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton"
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { exportExtension, runBatch, type BatchStart, type IbExtension } from "src/services/onec/api";
+import { viaText } from "src/services/onec/commandFacts";
 import { attachBatch, finishOp, startOp } from "./progress";
 import { reportBatchStart, useOnecErrorActions, useOnecPermissions } from "./shared";
+import { FEATURE_EXTENSION_EXPORT, useBaseAgentLacks } from "./baseAgent";
+import { readExportAnswer } from "./extensionExport";
 import { nothingQueued } from "./batchStart";
 import { sectionAllows } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
@@ -63,6 +71,8 @@ export const BaseExtensionCommands: FC<{
 }> = ({ baseKey, activeExt, extensions, onDone }) => {
 	const perms = useOnecPermissions();
 	const canInstall = sectionAllows(perms, "extensions", "create", 1);
+	// Выгрузки нет в сборке агента этой базы (С5): кнопка гаснет с подсказкой, а не отказывает после нажатия.
+	const exportMissing = useBaseAgentLacks(baseKey, FEATURE_EXTENSION_EXPORT);
 	const [dialog, setDialog] = useState<null | "upload" | "export">(null);
 	const [file, setFile] = useState<File | null>(null);
 	const [name, setName] = useState("");
@@ -101,16 +111,22 @@ export const BaseExtensionCommands: FC<{
 			const op = startOp({ kind: "read", title: translate("onecExtDownload"), target: `${target} — ${baseKey}`, total: 1 });
 			try {
 				const r = await exportExtension(baseKey, target);
-				if (!r?.contentBase64) throw new Error(translate("onecExtNoneToExport"));
-				downloadBase64(r.contentBase64, r.fileName || `${r.name || target}.cfe`);
-				finishOp(op, {});
-				return target;
+				const file = readExportAnswer(r);
+				// Файл был, но сервис уже убрал его из журнала (хранит час, С3 28.09): не «нечего выгружать», а «заново».
+				if (file.kind === "expired") throw new Error(translate("onecExtExportExpired"));
+				if (file.kind === "empty") throw new Error(translate("onecExtNoneToExport"));
+				downloadBase64(file.base64, file.fileName || `${file.name || target}.cfe`);
+				finishOp(op, {}, r);
+				return { target, via: viaText(r) };
 			} catch (e) {
 				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
 				throw e;
 			}
 		},
-		onSuccess: (target) => { showToast(`${translate("onecExtExported")}: ${target}`, "success"); close(); },
+		onSuccess: ({ target, via }) => {
+			showToast(`${translate("onecExtExported")}: ${target}${via ? `. ${via}` : ""}`, "success");
+			close();
+		},
 		onError: (e): void => reportError(e, { source: translate("onecExtension"), actions: actionsFor(e, { baseKey, retry: () => { download.mutate(); } }) }),
 	});
 
@@ -118,7 +134,9 @@ export const BaseExtensionCommands: FC<{
 	const options = [
 		...(canInstall ? [{ id: "upload", label: translate("onecExtUpload"), icon: "plus" as const }] : []),
 		{ id: "export", label: translate("onecExtDownload"), icon: "download" as const,
-			disabled: !extensions.length, hint: extensions.length ? undefined : translate("onecExtNoneToExport") },
+			disabled: exportMissing || !extensions.length,
+			hint: exportMissing ? translate("onecExtExportNoBuild")
+				: extensions.length ? undefined : translate("onecExtNoneToExport") },
 	];
 
 	return (

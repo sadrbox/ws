@@ -30,11 +30,6 @@ export type MaintenanceTickResult = { started: number; failed: number };
 export async function runDueSchedules(
 	deps: BatchDeps & {
 		schedules: Pick<ScheduleStore, "enabled" | "claimRun" | "markRun">; audit: Pick<Audit, "write">; log: Pick<Logger, "info" | "warn">;
-		/**
-		 * Серверы, на которые вправе идти расписание организации (C11, режим ONEC_SERVER_SCOPE=organizations); null —
-		 * все. Без него ночной запуск шёл без `allowedServers` и мог уйти на сервер чужого клиента (аудит 26.09).
-		 */
-		serversOf?: ((organizationUuid: string) => Promise<ReadonlySet<string> | null>) | null;
 	},
 	now = new Date(),
 ): Promise<MaintenanceTickResult> {
@@ -49,23 +44,17 @@ export async function runDueSchedules(
 
 		let r: Awaited<ReturnType<typeof startBatch>>;
 		try {
-			const allowedServers = deps.serversOf ? await deps.serversOf(s.organizationUuid) : null;
-			if (allowedServers && s.serverId && !allowedServers.has(s.serverId)) {
-				r = { error: "сервер расписания не принадлежит организации расписания" };
-			} else {
-				r = await startBatch(deps, {
-					type: s.type,
-					baseKeys: s.baseKeys,
-					payload: s.payload,
-					organizationUuid: s.organizationUuid,
-					// Сервер расписания (C10): при нескольких серверах имя базы само по себе адреса не даёт.
-					serverId: s.serverId,
-					allowedServers,
-					// Работа сервиса, а не человека: подставлять здесь автора расписания значило бы
-					// приписывать ему ночные действия, которых он не делал.
-					userUuid: null,
-				});
-			}
+			r = await startBatch(deps, {
+				type: s.type,
+				baseKeys: s.baseKeys,
+				payload: s.payload,
+				organizationUuid: s.organizationUuid,
+				// Сервер расписания (C10): при нескольких серверах имя базы само по себе адреса не даёт.
+				serverId: s.serverId,
+				// Работа сервиса, а не человека: подставлять здесь автора расписания значило бы
+				// приписывать ему ночные действия, которых он не делал.
+				userUuid: null,
+			});
 		} catch (e) {
 			r = { error: `сбой постановки: ${e instanceof Error ? e.message : String(e)}` };
 		}

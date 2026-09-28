@@ -13,10 +13,8 @@
 import BaseChatTokens from "./BaseChatTokens";
 import BaseChatCalls from "./BaseChatCalls";
 import { useRunningCommand } from "src/components/TechMessages/operations";
-import { finishOp } from "src/models/OneCAdmin/progress";
-import { startOp } from "src/models/OneCAdmin/progress";
 import { useOnecWrite } from "src/models/OneCAdmin/shared";
-import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { FC, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppActions } from "src/app/context";
 import ModelList from "src/components/ModelList";
@@ -28,7 +26,6 @@ import main from "src/styles/main.module.scss";
 import dense from "./OneCBases.module.scss";
 import { translate } from "src/i18";
 import { PaneActiveProvider } from "src/hooks/usePaneActive";
-import { showToast } from "src/components/UIToast";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { getModelColumns } from "src/components/Table/services";
@@ -38,7 +35,7 @@ import type { TTableVariant } from "src/components/Table";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import {
-	awaitPublicationsCheck, checkBasesDb, setSessionsLock, fetchBaseExtensionsCached, fetchBaseInfo, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBasesAndPublications, type IbExtension, type IbUser, type OnecBase, setScheduledJobs
+	awaitPublicationsCheck, fetchBaseExtensionsCached, fetchBaseUsersCached, fetchBases, fetchSessions, refreshBasesAndPublications, renameBase, type IbExtension, type IbUser, type OnecBase
 } from "src/services/onec/api";
 import { publishLabel, unreachableReason, unreachableShort, useAgents, useBaseContentCheck } from "src/models/OneCAdmin/shared";
 import { EchoDelayNotice, QueryError, ReadonlyNotice } from "src/models/OneCAdmin/sharedUi";
@@ -48,17 +45,16 @@ import BaseGroupCommands from "src/models/OneCAdmin/BaseGroupCommands";
 import BaseUserCommands from "src/models/OneCAdmin/BaseUserCommands";
 import BaseExtensionCommands from "src/models/OneCAdmin/BaseExtensionCommands";
 import BaseCredentialsTab from "./BaseCredentials";
-import BaseAvailability from "./BaseAvailability";
-import BasePublication from "./BasePublication";
 import { withOp } from "src/models/OneCAdmin/progress";
 import { dbCheckProblem, publicationsProblem, rejectedReportText } from "src/models/OneCAdmin/publicationsOutcome";
 import { noteNotice } from "src/components/TechMessages/store";
 import { useNoticeScope, useScopeObject } from "src/components/TechMessages/store";
 import { reportError } from "src/services/errors/route";
-import { lockOutcome, sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
-import { checkDbOutcome } from "src/models/OneCAdmin/checkBasesDb";
+import { sessionsLockView } from "src/models/OneCAdmin/sessionsLock";
+import { setPaneDirty } from "src/hooks/paneFormState";
 import BaseMaintenance from "./BaseMaintenance";
-import { onBaseTabRequest, requestBaseTab, takeBaseTab, type BaseOpenAt } from "./openAt";
+import IbOrganizationsTab from "./IbOrganizations";
+import { onBaseTabRequest, takeBaseTab, type BaseOpenAt } from "./openAt";
 import columnsJson from "./columns.json";
 
 const ENDPOINT = "onec-bases";
@@ -103,31 +99,30 @@ const BaseField: FC<{ label: string; value: string; mono?: boolean }> = ({ label
 );
 
 /**
- * СТРОКА СОСТОЯНИЯ во вкладке «Основное»: о чём речь — как сейчас — что можно сделать.
+ * СТРОКА СОСТОЯНИЯ во вкладке «Основное»: о чём речь — как сейчас — когда прочитано.
  *
- * Три колонки одной сетки, а не карточка на каждый предмет: у карточки базы предметов шесть, и каждому нужна
- * ровно одна строка. Цвет поддерживает слово, а не заменяет его: «Отключены» читается и без цвета.
+ * Тем же полем-рамкой, что и реквизит, и в той же сетке (28.09): подписи и значения «Реквизитов», «Состояния» и
+ * «Служебного входа» стоят по двум общим вертикалям — сквозное выравнивание. Раньше у состояния была своя сетка
+ * с колонкой кнопок, и значения начинались левее рамок соседней группы. Действий в строке больше нет: команды над
+ * базой — в «Операциях». Цвет поддерживает слово, а не заменяет его: «запрещены» читается и без цвета.
  */
 const OverviewRow: FC<{
 	label: string;
 	value: ReactNode;
 	/** Подробность: когда прочитано, сколько сеансов, адрес публикации. */
 	note?: string;
-	/** Действие этой строки — рядом с её состоянием, а не общим рядом внизу формы. */
-	action?: ReactNode;
 	tone?: "ok" | "warn" | "bad";
 	title?: string;
-}> = ({ label, value, note, action, tone, title }) => (
-	<>
-		<div className={dense.StateLabel} title={title}>{label}</div>
-		<div className={dense.StateValue} title={title}>
+}> = ({ label, value, note, tone, title }) => (
+	<div className={dense.Field} title={title}>
+		<span className={dense.FieldLabel}>{label}</span>
+		<span className={dense.FieldBox}>
 			<span className={tone === "ok" ? dense.Ok : tone === "warn" ? dense.Warn : tone === "bad" ? dense.Bad : undefined}>
 				{value}
 			</span>
 			{note ? <span className={dense.StateNote}>· {note}</span> : null}
-		</div>
-		<div className={dense.StateAction}>{action}</div>
-	</>
+		</span>
+	</div>
 );
 
 /**
@@ -261,7 +256,7 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 		safeMode: x.safeMode == null ? "—" : x.safeMode ? translate("yes") : translate("no"),
 		seenAtLabel: seenLabel(x),
 	}));
-	const extView = useStaticTableView(extRows, { name: "asc" });
+	const extView = useStaticTableView(extRows, { name: "asc" }, "OneCBases_ext", { scope: baseKey });
 	/** Расширение, выбранное в таблице, — цель «Выгрузить расширение в .cfe» (27.09). */
 	const [activeExt, setActiveExt] = useState("");
 
@@ -281,7 +276,7 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 		rolesLabel: (x.roles ?? []).join(", ") || "—",
 		seenAtLabel: seenLabel(x),
 	}));
-	const userView = useStaticTableView(userRows, { name: "asc" });
+	const userView = useStaticTableView(userRows, { name: "asc" }, "OneCBases_users", { scope: baseKey });
 	const usersEmptyText = !users.isLoading && !users.error && !userRows.length
 		? translate("onecUsersNeverRead") : undefined;
 
@@ -303,7 +298,7 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 	 */
 	const wantedSession = openAt?.session ? String(openAt.session) : "";
 	const heldRow = wantedSession ? sesRows.find((r) => asText(r.sessionId) === wantedSession) : undefined;
-	const sesView = useStaticTableView(sesRows, { sessionId: "asc" });
+	const sesView = useStaticTableView(sesRows, { sessionId: "asc" }, "OneCBases_sessions", { scope: baseKey });
 
 	return [
 		{
@@ -338,9 +333,10 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 			),
 		},
 		{
-			id: "users", label: translate("onecTabUsers"),
+			id: "users", label: translate("onecTabUsersList"),
 			component: (
 				<>
+					{/* Источник — уточнённое имя: сообщение уходит в общую доску, где «Пользователи» — это ERP. */}
 					<QueryError error={users.error} noticeKey="base-users" source={translate("onecTabUsers")} />
 					{/* Создание, правка и удаление идут отсюда: если агент не умеет приносить
 					    состояние ответом, таблица обновится с задержкой — и об этом лучше знать. */}
@@ -369,6 +365,12 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 					})} />
 				</>
 			),
+		},
+		{
+			// Организации самой базы (28.09): реквизиты, «Основная» и связь со справочником «Организации» ERP. Читает их
+			// агент у 1С по «Обновить» — рядом с пользователями и расширениями, которые читаются так же.
+			id: "orgs", label: translate("onecTabOrganizations"),
+			component: <IbOrganizationsTab baseKey={baseKey} />,
 		},
 		{
 			// Обслуживание — операции над самой базой: проверка, выгрузка, загрузка,
@@ -418,7 +420,9 @@ const useBaseTabs = (row: TDataItem, openAt?: BaseOpenAt | null) => {
 
 /** Запись реестра → строка карточки. Один код на открытие и на обновление после команд. */
 const baseToRow = (b: OnecBase): TDataItem => ({
-	baseKey: b.key, name: b.name, status: b.status, clusterStatus: b.clusterStatus ?? b.status, serverName: b.serverName,
+	// Наименование — показанное (заданное в панели или из кластера); имя из кластера — отдельно: пустое поле
+	// «Наименование» возвращает именно его. Сервис старее миграции 046 отдаёт только `name`.
+	baseKey: b.key, name: b.name, clusterName: b.clusterName ?? b.name, nameCustom: b.nameCustom === true, status: b.status, clusterStatus: b.clusterStatus ?? b.status, serverName: b.serverName,
 	onecVersion: b.onecVersion, extensionsCount: b.extensionsCount,
 	published: b.published, publishUrl: b.publishUrl,
 	publishUrlPublic: b.publishUrlPublic, publishSeenAt: b.publishSeenAt,
@@ -453,7 +457,7 @@ const configLabel = (row: TDataItem): string => {
 };
 
 /**
- * Форма элемента: шапка полями + вложенные таблицы во вкладках. Только чтение.
+ * Форма элемента: шапка полями + вложенные таблицы во вкладках. Правится только наименование (в панели).
  *
  * Пейн передаёт компоненту СЕБЯ (`<Component {...pane} />`), поэтому строка лежит в
  * `data`, а не в корне пропсов: читать props как строку — значит получить пустые поля
@@ -493,7 +497,7 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 	const tabs = useBaseTabs(row, openAt);
 	// «Закрыть» в командной панели формы НИЧЕГО не делала: обработчик был пустой
 	// заглушкой. Кнопка, которая рисуется и не работает, хуже отсутствующей.
-	const { requestClose } = useAppActions().windows;
+	const { requestClose, registerBeforeClose } = useAppActions().windows;
 	const { confirm } = useAppActions().actions;
 	const close = useCallback(() => {
 		if (paneProps.uniqId) void requestClose(paneProps.uniqId);
@@ -510,6 +514,8 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 	/** Код причины и полное объяснение — нужны и метке, и строке состояния. */
 	const reasonCode = row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null;
 	const state = baseState(row);
+	/** Регистрации в кластере нет (С44) — подсказка статуса объясняет это раньше скрытия, как и baseState. */
+	const clusterMissing = asText(row.clusterStatus || row.status) === "MISSING";
 	const unreachableTitle = row.ibUnreachableAt
 		? unreachableReason({
 			status: asText(row.status), disabled: row.disabled === true,
@@ -522,144 +528,73 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 		|| (agents.data?.items ?? []).find((a) => a.role === "admin" && a.platform)?.platform
 		|| translate("onecPlatformUnknown");
 
-	/*
-	 * СВЕДЕНИЯ О БАЗЕ (С35). Версию конфигурации агент сам не читает — только по кнопке: один вход в базу за
-	 * конфигурацией, расширениями и блокировкой. Это чтение — кнопка есть и у просмотра. Сборка агента без
-	 * `IB_INFO` — кнопка недоступна и говорит почему (на связи агент или нет, объявленное он не забывает).
-	 */
 	const scope = useNoticeScope();
-	const infoKnown = agents.isLoading || (agents.data?.items ?? [])
-		.some((a) => a.role === "admin" && !a.disabled && a.capabilities.includes("IB_INFO"));
-	/*
-	 * ЗАПРЕТ РЕГЛАМЕНТНЫХ ЗАДАНИЙ (С39, П26). Фоновое задание базы держит её разделённым доступом: установка
-	 * расширения, выгрузка и проверка отказывают «Ошибка разделенного доступа», а блокировка входа фоновые задания
-	 * не останавливает. Кнопка здесь же, где видно состояние базы, — чтобы не искать её по вкладкам во время работ.
-	 */
 	const cardQc = useQueryClient();
 	const canWrite = useOnecWrite();
 	const jobsDenied = (row.scheduledJobsDenied ?? null) as boolean | null;
-	/*
-	 * Команду знает агент со сборки `2026-09-16 12:13`. Старый агент её не выполнит, и активная кнопка обещала бы
-	 * то, чего не будет: так же, как «Обновить сведения», гасим её и говорим почему.
-	 */
-	const jobsKnown = agents.isLoading || (agents.data?.items ?? [])
-		.some((a) => a.role === "admin" && !a.disabled && a.capabilities.includes("CLUSTER_SET_SCHEDULED_JOBS"));
-	/*
-	 * «ВЕРНУТЬ КАК БЫЛО» (П27). Ответ несёт `was` — состояние до команды. Переключатель его не знает: после работ человек
-	 * не помнит, были ли задания запрещены до него. Запоминаем `was` у базы (в браузере — переживёт перезагрузку) и
-	 * предлагаем вернуть именно его, пока текущее состояние от него отличается.
-	 */
-	const wasKey = `onec_jobs_was_${key}`;
-	const [jobsWas, setJobsWas] = useState<boolean | null>(() => {
-		try { const v = localStorage.getItem(wasKey); return v === "true" ? true : v === "false" ? false : null; } catch { return null; }
-	});
-	const rememberWas = (v: boolean | null) => {
-		setJobsWas(v);
-		try { if (v === null) localStorage.removeItem(wasKey); else localStorage.setItem(wasKey, String(v)); } catch { /* хранилище недоступно */ }
-	};
-	// Запрет заданий и чтение сведений могли начаться до перезагрузки страницы — кнопки заняты до итога.
-	const jobsRunning = useRunningCommand(["CLUSTER_SET_SCHEDULED_JOBS"], key);
-	const infoRunning = useRunningCommand(["IB_INFO"], key);
-	const setJobs = useMutation({
-		mutationFn: async (p: { denied: boolean; restore?: boolean }) => {
-			const op = startOp({
-				kind: "update", title: translate(p.denied ? "onecScheduledJobsDeny" : "onecScheduledJobsAllow"),
-				target: key, total: 1, scope: { bases: [key] },
-			});
-			try {
-				const r = await setScheduledJobs(key, p.denied);
-				/*
-				 * ИТОГ ПО ФАКТУ, А НЕ ПО НАЖАТИЮ. `denied` — прочитано после записи; расходится с запросом — задания
-				 * остались, как были; нет вовсе — кластер не отдал состояние. Оговорки сервиса (С41) — туда же.
-				 */
-				const warning = [
-					r?.caveat,
-					typeof r?.denied === "boolean" && r.denied !== p.denied ? translate("onecScheduledJobsNotApplied") : "",
-					!r?.caveat && r?.unverified?.includes("denied") ? translate("onecScheduledJobsUnverified") : "",
-				].filter(Boolean).join(". ");
-				finishOp(op, warning ? { warning } : {});
-				return r;
-			} catch (e) {
-				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
-				throw e;
-			}
-		},
-		onSuccess: (r, p) => {
-			if (p.restore) rememberWas(null);
-			// Запоминаем исходное только у первой команды серии работ: второй запрет подряд не должен затереть «как было».
-			else if (typeof r?.was === "boolean" && jobsWas === null && r.was !== p.denied) rememberWas(r.was);
-			void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] });
-		},
-		onError: (e: unknown) => reportError(e, { source: translate("onecScheduledJobs"), scope }),
-	});
 
 	/*
-	 * ПРОВЕРИТЬ БАЗУ ДАННЫХ ИМЕННО ЭТОЙ БАЗЫ (18.09). В списке команда групповая и идёт по всем базам десятки
-	 * секунд; в карточке цель одна — и ответ приходит за доли секунды. Отметку «проверено» и причину «нет в СУБД»
-	 * ставит сам сервис при приёме ответа, карточке остаётся перечитать реестр и сказать итог словами.
+	 * КОМАНДЫ НАД БАЗОЙ — ТОЛЬКО В «ОПЕРАЦИЯХ» (28.09). Карточка дублировала меню: «Обновить сведения» панелью над
+	 * формой, «Проверить» у статуса, публикацию, регламентные задания и вход в базу — в строках «Состояния», скрытие и
+	 * снятие регистрации — группой «Доступность базы». Две кнопки одного действия спорили, какая «настоящая», а
+	 * переходы «Сеансы», «Пользователи баз», «Расширения» повторяли вкладки формы. Теперь «Состояние» только
+	 * показывает, а действует меню «Операции» в тулбаре пейна — с любой вкладки.
 	 */
-	const dbCheckRunning = useRunningCommand(["CLUSTER_CHECK_BASES"], key);
-	const checkDb = useMutation({
+
+	/*
+	 * НАИМЕНОВАНИЕ БАЗЫ ПРАВИТСЯ ЗДЕСЬ (28.09). Это имя в панели: срез кластера его не перезаписывает, а пустое поле
+	 * возвращает имя из кластера (сервис, миграция 046). В самом кластере 1С описание базы не меняется — команды
+	 * переименования у агента нет.
+	 *
+	 * `nameDraft === null` — поле не трогали и показывает реестр: после записи и перечитывания карточка видит уже
+	 * новое имя, а не старый снимок.
+	 */
+	const savedName = asText(row.name);
+	const clusterName = asText(row.clusterName) || savedName;
+	const [nameDraft, setNameDraft] = useState<string | null>(null);
+	const nameTrimmed = (nameDraft ?? "").trim();
+	/** Что будет показано после записи: пустое поле — имя из кластера. */
+	const nextName = nameDraft === null ? savedName : nameTrimmed || clusterName;
+	const nameDirty = nextName !== savedName;
+	/*
+	 * Зеркало признака правки: «Записать и закрыть» закрывает сразу после записи, раньше, чем форма перерисуется, и
+	 * страж закрытия по состоянию спросил бы «закрыть без сохранения?» про уже записанное.
+	 */
+	const nameDirtyRef = useRef(nameDirty);
+	nameDirtyRef.current = nameDirty;
+	const rename = useMutation({
+		// Имя, совпавшее с кластерным, — это «как в кластере»: снимаем правку, и дальше имя снова идёт из кластера.
 		mutationFn: () => withOp(
-			{ kind: "read", title: translate("onecBasesDbCheck"), target: key, total: 0, reportsOwnOutcome: true },
-			() => checkBasesDb([key]),
+			{ kind: "update", title: translate("onecBaseRename"), target: key, total: 1 },
+			() => renameBase(key, nameTrimmed === clusterName ? "" : nameTrimmed),
 		),
-		onSuccess: (d) => {
-			void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] });
-			void cardQc.invalidateQueries({ queryKey: ["onec-bases"] });
-			const o = checkDbOutcome(d);
-			noteNotice(translate("onecBase"), { type: o.severity === "success" ? "info" : "warning", text: o.text });
+		onSuccess: async () => {
+			nameDirtyRef.current = false;
+			// Черновик снимаем после перечитывания реестра: иначе поле на миг показало бы прежнее имя.
+			await Promise.all([
+				cardQc.invalidateQueries({ queryKey: ["onec", "bases"] }),
+				cardQc.invalidateQueries({ queryKey: ["onec-bases"] }),
+			]);
+			setNameDraft(null);
 		},
-		onError: (e) => reportError(e, { source: translate("onecBase"), scope }),
+		onError: (e: unknown) => reportError(e, { source: translate("onecBaseRename"), scope }),
 	});
-
-	/*
-	 * ЗАКРЫТЬ И ОТКРЫТЬ ВХОД В БАЗУ прямо в строке состояния (18.09). Раньше это жило только во вкладке «Сеансы», а
-	 * решают это, глядя на состояние базы: перед работами вход закрывают, после — открывают. Подтверждение обязательно:
-	 * закрытый вход останавливает работу людей в базе.
-	 */
-	const lockRunning = useRunningCommand(["CLUSTER_SET_SESSIONS_LOCK"], key);
-	const setLock = useMutation({
-		mutationFn: async (enabled: boolean) => {
-			const op = startOp({
-				kind: "update", title: translate(enabled ? "onecSessionsLockCloseShort" : "onecSessionsLockOpenShort"),
-				target: key, total: 1, scope: { bases: [key] },
-			});
-			try {
-				const r = await setSessionsLock(key, enabled);
-				/*
-				 * «ВЫПОЛНЕНО» — ТОЛЬКО ЕСЛИ ВХОД ДЕЙСТВИТЕЛЬНО ЗАКРЫТ/ОТКРЫТ (И26 аудита 26.09). Карточка писала
-				 * «Выполнено» на любой ответ: и когда кластер не подтвердил запись, и когда осталось окно прошлой
-				 * блокировки. Разбор ответа — общий со вкладкой «Сеансы».
-				 */
-				const out = lockOutcome(r, enabled);
-				finishOp(op, out.tone === "warning" ? { warning: out.text } : undefined);
-				showToast(out.text, out.tone);
-				return r;
-			} catch (e) {
-				finishOp(op, { failed: 1, note: e instanceof Error ? e.message : String(e), error: e });
-				throw e;
-			}
-		},
-		onSuccess: () => {
-			void cardQc.invalidateQueries({ queryKey: ["onec", "bases"] });
-			void cardQc.invalidateQueries({ queryKey: ["onec-bases"] });
-		},
-		onError: (e) => reportError(e, { source: translate("onecSessionsLockState"), scope }),
-	});
-	const toggleLock = async (enabled: boolean) => {
-		if (!(await confirm(translate(enabled ? "onecSessionsLockConfirm" : "onecSessionsUnlockConfirm")))) return;
-		setLock.mutate(enabled);
+	const saveName = async (): Promise<boolean> => {
+		if (!nameDirtyRef.current) return true;
+		try { await rename.mutateAsync(); return true; } catch { return false; }
 	};
 
-	const readInfo = useMutation({
-		mutationFn: () => withOp(
-			{ kind: "read", title: translate("onecBaseInfoRefresh"), target: key, scope: { bases: [key] } },
-			() => fetchBaseInfo(key),
-		),
-		// Итог операции об отказе уже сказал — маршрутизатор покажет только тост.
-		onError: (e: unknown) => reportError(e, { source: translate("onecBaseInfoRefresh"), scope }),
-	});
+	// Несохранённое наименование — как у всех форм: точка на вкладке и вопрос при закрытии.
+	const uniqId = paneProps.uniqId;
+	useEffect(() => {
+		if (!uniqId) return;
+		setPaneDirty(uniqId, nameDirty);
+	}, [uniqId, nameDirty]);
+	useEffect(() => () => { if (uniqId) setPaneDirty(uniqId, false); }, [uniqId]);
+	useEffect(() => {
+		if (!uniqId) return;
+		return registerBeforeClose(uniqId, async () => !nameDirtyRef.current || confirm(translate("confirmCloseUnsaved")));
+	}, [uniqId, registerBeforeClose, confirm]);
 
 	return (
 		<ModelForm
@@ -668,16 +603,24 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 			// Вкладка управляется: карточку открывают и на «Сеансах» (П25), дальше человек ходит сам.
 			activeTab={openAt?.tab}
 			onTabChange={(id) => setOpenAt((prev) => (prev ? { ...prev, tab: id } : { tab: id }))}
-			readonly
-			isLoading={false}
-			// Реестр наполняется кластером и агентом — править и сохранять нечего.
-			onSave={() => {}} onSaveAndClose={() => {}} onClose={close}
+			// Реквизиты наполняют кластер и агент; записывается только наименование — и только полным доступом (F5).
+			readonly={!canWrite}
+			isLoading={rename.isPending}
+			saveDisabled={!nameDirty}
+			saveTitle={nameDirty ? undefined : translate("nothingToSave")}
+			onSave={() => void saveName()}
+			onSaveAndClose={() => void saveName().then((ok) => { if (ok) close(); })}
+			onClose={close}
 			/*
 			 * «ОПЕРАЦИИ» — В ТУЛБАРЕ ПЕЙНА, рядом с «Закрыть» (18.09). Это команды над ВСЕЙ базой, а не над вкладкой:
 			 * из «Расширений» или «Сеансов» за ними приходилось возвращаться на «Основное». В тулбаре пейна они
-			 * доступны с любой вкладки, как «Обновить» и «Закрыть».
+			 * доступны с любой вкладки, как «Обновить» и «Закрыть». Убранная из панели база больше не существует
+			 * для неё — её карточке нечего показывать.
 			 */
-			afterCloseButtons={<BaseGroupCommands selected={[row]} />}
+			afterCloseButtons={(
+				<BaseGroupCommands selected={[row]} card
+					onRecordsRemoved={(keys) => { if (keys.some((k) => k.toLowerCase() === key.toLowerCase())) close(); }} />
+			)}
 			tabs={[
 				{
 					id: "main", label: translate("general"),
@@ -693,41 +636,33 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 							<div className={main.FormWrapper}>
 								<GroupCol className={dense.Page}>
 									{/*
-									  * ПАНЕЛЬ КОМАНД — НАД ФОРМОЙ (18.09), как в конфигураторе. Раньше команды карточки лежали
-									  * внутри группы «Реквизиты», под десятком строк «подпись — значение»: там их не искали, а
-									  * группа обещала реквизиты, а не действия.
-									  */}
-									<div className={dense.Toolbar}>
-										<Button size="sm" icon="reload" variant="secondary" disabled={!key || !infoKnown || readInfo.isPending || infoRunning}
-											title={infoKnown
-												? translate("onecBaseInfoHint")
-												: `${translate("onecAgentMissing")}: ${translate("onecFeatureInfo")}. ${translate("onecAgentUpdateHint")}`}
-											onClick={() => readInfo.mutate()}>
-											{translate("onecBaseInfoRefresh")}
-										</Button>
-										<div className={dense.ToolbarGap} />
-										{/* Переходы к содержимому базы: вкладки карточки списком (requestBaseTab — см. openAt.ts). */}
-										<Button size="sm" variant="secondary" onClick={() => requestBaseTab(key, { tab: "sessions" })}>
-											{translate("onecTabSessions")}
-										</Button>
-										<Button size="sm" variant="secondary" onClick={() => requestBaseTab(key, { tab: "users" })}>
-											{translate("onecTabUsers")}
-										</Button>
-										<Button size="sm" variant="secondary" onClick={() => requestBaseTab(key, { tab: "ext" })}>
-											{translate("onecTabExtensions")}
-										</Button>
-									</div>
-
-									{/*
-									  * ЗДЕСЬ НЕЧЕГО ПРАВИТЬ — и показано это списком «подпись — значение», а не выключенными
-									  * полями ввода: поле с рамкой обещает правку, которой нет. Плотный вид (`dense`): шаг
-									  * строки задаёт текст, а не высота поля, — десяток реквизитов перестал занимать всю вкладку.
+									  * РЕКВИЗИТЫ — списком «подпись — значение», а не выключенными полями ввода: поле с рамкой
+									  * обещает правку, которой нет. Поле ввода — только у наименования: его правят здесь.
+									  * Плотный вид (`dense`): шаг строки задаёт текст, а не высота поля.
 									  */}
 									<FormArea title={translate("onecBaseGroupInfo")}>
 										<div className={dense.Fields}>
 											<BaseField label={translate("baseKey")} value={asText(row.baseKey)} mono />
 											<BaseField label={translate("onecServer")} value={asText(row.serverName)} />
-											<BaseField label={translate("name")} value={asText(row.name)} />
+											{canWrite ? (
+												<label className={dense.Field}>
+													<span className={dense.FieldLabel}>{translate("name")}</span>
+													<input className={[dense.FieldInput, nameDirty ? dense.FieldInputDirty : null].filter(Boolean).join(" ")}
+														name={`onecBaseName_${key}`} autoComplete="off" maxLength={200}
+														value={nameDraft ?? savedName}
+														// Пустое поле показывает, что будет: имя из кластера.
+														placeholder={clusterName}
+														title={translate("onecBaseNameHint").replace("{name}", clusterName || "—")}
+														disabled={!key || rename.isPending}
+														onChange={(e) => setNameDraft(e.target.value)}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") { e.preventDefault(); void saveName(); }
+															if (e.key === "Escape" && nameDraft !== null) { e.stopPropagation(); setNameDraft(null); }
+														}} />
+												</label>
+											) : (
+												<BaseField label={translate("name")} value={savedName} />
+											)}
 											<BaseField label={translate("onecBaseId")} value={row.infobaseId ? asText(row.infobaseId) : ""} mono />
 											<BaseField label={translate("onecVersion")} value={platform} mono />
 											{/* Конфигурация — из эха загрузки, обновления, установки расширения и из «Обновить
@@ -737,26 +672,25 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 									</FormArea>
 
 									{/*
-									  * СОСТОЯНИЕ — СТРОКАМИ «что · как · что сделать» (18.09). Метки-чипы отвечали «как», но не
-									  * говорили, что с этим делать: кнопки лежали отдельным рядом под реквизитами, и к чему
-									  * относится каждая, приходилось догадываться.
+									  * СОСТОЯНИЕ — теми же полями «подпись | значение», что и реквизиты, в той же сетке (28.09):
+									  * сквозное выравнивание по всей вкладке. Команды над базой — в «Операциях» тулбара пейна.
 									  */}
-									<div className={dense.Cols}>
-									<FormArea className={dense.ColMain} title={translate("state")}>
-										<div className={dense.StateGrid}>
-											<OverviewRow label={translate("status")} title={unreachableTitle}
+									<FormArea title={translate("state")}>
+										<div className={dense.Fields}>
+											{/*
+											  * Почему база в таком состоянии — в подсказке статуса. Раньше это объясняла группа
+											  * «Доступность базы» под формой; её команды теперь в «Операциях», а объяснение — здесь,
+											  * в том же порядке, что и сама подпись (baseState).
+											  */}
+											<OverviewRow label={translate("status")}
+												title={clusterMissing ? translate("onecBaseMissingHint")
+													: row.disabled === true ? translate("onecBaseHiddenHint")
+														: unreachableTitle}
 												tone={state.tone === "ok" ? "ok" : state.tone === "bad" ? "bad" : undefined}
 												value={state.label}
 												note={row.dbCheckedAt
 													? `${translate("onecBaseDbCheckedAt")}: ${getFormatDate(asText(row.dbCheckedAt))}`
-													: translate("onecBaseDbNotChecked")}
-												action={(
-													<Button size="sm" icon="search" variant="secondary" disabled={!key || checkDb.isPending || dbCheckRunning}
-														title={translate("onecBasesDbCheckHint")}
-														onClick={() => checkDb.mutate()}>
-														{translate("onecBaseDbCheckOne")}
-													</Button>
-												)} />
+													: translate("onecBaseDbNotChecked")} />
 
 											<OverviewRow label={translate("onecPublication")}
 												title={row.publishUrlPublic && row.publishUrl && row.publishUrlPublic !== row.publishUrl
@@ -767,15 +701,7 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 												note={[
 													row.publishUrlPublic || row.publishUrl ? asText(row.publishUrlPublic || row.publishUrl) : "",
 													row.publishSeenAt ? getFormatDate(asText(row.publishSeenAt)) : "",
-												].filter(Boolean).join(" · ")}
-												action={(
-													<BasePublication compact baseKey={asText(row.baseKey)}
-														serverName={row.serverName ? asText(row.serverName) : null}
-														published={row.published as boolean | null}
-														publishUrl={row.publishUrl ? asText(row.publishUrl) : null}
-														publishUrlPublic={row.publishUrlPublic ? asText(row.publishUrlPublic) : null}
-														seenAt={row.publishSeenAt ? asText(row.publishSeenAt) : null} />
-												)} />
+												].filter(Boolean).join(" · ")} />
 
 											<OverviewRow label={translate("onecScheduledJobs")}
 												tone={jobsDenied === true ? "warn" : jobsDenied === false ? "ok" : undefined}
@@ -785,45 +711,17 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 												// Время — только у прочитанного у кластера; записанное по команде так и называем (С40).
 												note={row.scheduledJobsSource === "command"
 													? translate("onecScheduledJobsByCommand")
-													: row.scheduledJobsSeenAt ? getFormatDate(asText(row.scheduledJobsSeenAt)) : ""}
-												action={canWrite ? (
-													<>
-														<Button size="sm" variant={jobsDenied ? "primary" : "secondary"}
-															disabled={!key || !jobsKnown || setJobs.isPending || jobsRunning}
-															title={jobsKnown
-																? translate("onecScheduledJobsHint")
-																: `${translate("onecAgentMissing")}: ${translate("onecScheduledJobs")}. ${translate("onecAgentUpdateHint")}`}
-															onClick={() => setJobs.mutate({ denied: !jobsDenied })}>
-															{translate(jobsDenied ? "onecScheduledJobsAllowShort" : "onecScheduledJobsDenyShort")}
-														</Button>
-														{jobsWas !== null && jobsWas !== jobsDenied && (
-															<Button size="sm" variant="primary"
-																disabled={!key || !jobsKnown || setJobs.isPending || jobsRunning}
-																title={translate(jobsWas ? "onecScheduledJobsDeniedLabel" : "onecScheduledJobsAllowedLabel")}
-																onClick={() => setJobs.mutate({ denied: jobsWas, restore: true })}>
-																{translate("onecScheduledJobsRestore")}
-															</Button>
-														)}
-													</>
-												) : undefined} />
+													: row.scheduledJobsSeenAt ? getFormatDate(asText(row.scheduledJobsSeenAt)) : ""} />
 
 											{(() => {
+												// Закрыть и открыть вход — «Операции» → «Блокировка сеансов» (28.09); здесь — состояние.
 												const lock = sessionsLockView(row as never);
-												const closed = row.sessionsDenied === true;
 												return (
 													<OverviewRow label={translate("onecSessionsLockState")}
 														title={lock.details || undefined}
 														tone={lock.tone === "ok" ? "ok" : lock.tone === "bad" ? "bad" : undefined}
 														value={lock.label}
-														note={row.sessionsCount != null ? `${translate("onecSessions")}: ${asText(row.sessionsCount)}` : ""}
-														action={canWrite ? (
-															<Button size="sm" variant={closed ? "primary" : "secondary"}
-																disabled={!key || setLock.isPending || lockRunning}
-																title={translate(closed ? "onecSessionsUnlockConfirm" : "onecSessionsLockConfirm")}
-																onClick={() => void toggleLock(!closed)}>
-																{translate(closed ? "onecSessionsLockOpenShort" : "onecSessionsLockCloseShort")}
-															</Button>
-														) : undefined} />
+														note={row.sessionsCount != null ? `${translate("onecSessions")}: ${asText(row.sessionsCount)}` : ""} />
 												);
 											})()}
 
@@ -831,12 +729,7 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 												value={row.extensionsCount == null
 													? translate("onecExtNotChecked")
 													: asText(row.extensionsCount)}
-												note={row.extensionsSeenAt ? getFormatDate(asText(row.extensionsSeenAt)) : ""}
-												action={(
-													<Button size="sm" variant="secondary" onClick={() => requestBaseTab(key, { tab: "ext" })}>
-														{translate("onecOpenTabShort")}
-													</Button>
-												)} />
+												note={row.extensionsSeenAt ? getFormatDate(asText(row.extensionsSeenAt)) : ""} />
 
 											<OverviewRow label={translate("lastSeenAt")}
 												value={row.lastSeenAt ? getFormatDate(asText(row.lastSeenAt)) : "—"} />
@@ -844,12 +737,12 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 									</FormArea>
 
 									{/*
-									  * СЛУЖЕБНЫЙ ВХОД — здесь же, рядом с состоянием (18.09): им агент входит в базу, и когда
-									  * команда отвечает «проверьте служебного администратора», ответ должен быть на том же экране,
-									  * а не во второй вкладке. Своей вкладки у него больше нет — правят его тут.
+									  * СЛУЖЕБНЫЙ ВХОД — здесь же, под состоянием (18.09): им агент входит в базу, и когда команда
+									  * отвечает «проверьте служебного администратора», ответ должен быть на том же экране, а не во
+									  * второй вкладке. Своей вкладки у него больше нет — правят его тут. Не сбоку, а ниже (28.09):
+									  * сбоку его подписи вставали на свою вертикаль, и сквозного выравнивания не получалось.
 									  */}
-									<BaseCredentialsTab className={dense.ColSide} embedded baseKey={key} />
-									</div>
+									<BaseCredentialsTab embedded baseKey={key} />
 
 									{/*
 									  * КТО ОТВЕЧАЕТ ЗА БАЗУ — строкой внизу формы, как строка состояния в конфигураторе. Все
@@ -873,23 +766,6 @@ const OneCBasesFormBody: FC<Partial<TPane>> = (paneProps) => {
 										<span className={dense.FooterSpacer} />
 										<span title={translate("onecBaseCardReadonly")}>{translate("onecBaseCardReadonlyShort")}</span>
 									</div>
-
-									{/* Доступность: почему в базу не войти и что панель может с этим
-									    сделать. Молчит, пока всё в порядке. */}
-									<BaseAvailability baseKey={asText(row.baseKey)}
-										status={asText(row.status)}
-										clusterStatus={asText(row.clusterStatus || row.status)}
-										hidden={row.disabled === true}
-										// Убранная из реестра база больше не существует для панели — её карточке нечего показывать.
-										onRemoved={close}
-										ibUnreachableAt={row.ibUnreachableAt ? asText(row.ibUnreachableAt) : null}
-										ibUnreachableReason={row.ibUnreachableReason ? asText(row.ibUnreachableReason) : null} />
-
-					{/*
-					  * Публикация своей группой больше не стоит (18.09): её состояние и адрес — строка в «Состоянии»,
-					  * команды — в панели сверху (BasePublication в сжатом виде). Расхождение адреса агента и публичного
-					  * имени сервера видно в подсказке той же строки.
-					  */}
 								</GroupCol>
 
 								<GroupCol className={main.FormNotice}>

@@ -43,7 +43,8 @@ export type ErpUser = {
 	onec: OnecPermissions;
 };
 
-export type AgentIdentity = { agentId: string; organizationUuid: string };
+/** Агент — установка BuhProf: организации у него нет (модель без владельца, 28.09). */
+export type AgentIdentity = { agentId: string };
 
 /**
  * Пользователь 1С (канал «чат внутри 1С»). Имени здесь нет: заголовки — только ASCII, а имя пользователя
@@ -118,8 +119,8 @@ export function requireAgent(db: Db) {
 			deny(res, 401, "NOT_AUTHORIZED", "Некорректный X-Agent-Id");
 			return;
 		}
-		const row = await db.query<{ token_hash: string; organization_uuid: string; disabled_at: Date | null }>(
-			"SELECT token_hash, organization_uuid, disabled_at FROM agents WHERE id = $1",
+		const row = await db.query<{ token_hash: string; disabled_at: Date | null }>(
+			"SELECT token_hash, disabled_at FROM agents WHERE id = $1",
 			[agentId],
 		);
 		const agent = row.rows[0];
@@ -135,7 +136,7 @@ export function requireAgent(db: Db) {
 			deny(res, 403, "FORBIDDEN", "Агент отключён");
 			return;
 		}
-		req.agent = { agentId: agentId.toLowerCase(), organizationUuid: agent.organization_uuid };
+		req.agent = { agentId: agentId.toLowerCase() };
 		next();
 	};
 }

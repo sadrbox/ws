@@ -2,6 +2,8 @@ import { getFormatDateOnly } from "src/utils/datetime";
 import { asText } from "src/utils/asText";
 import { getFormatDate } from "src/utils/datetime";
 import { TColumn, TDataItem, TypeTableTypes } from "./types";
+import { readTableState, writeTableState } from "./tableState";
+import { createElement, type ReactNode } from "react";
 import { getTranslateColumn } from "src/i18";
 
 /** Значение по точечному пути (user.employee.fullName). Возвращает unknown —
@@ -209,8 +211,6 @@ export function getModelColumns(
 	modelName: string,
 	type?: TypeTableTypes,
 ): TColumn[] {
-	const storageKey = `table_columns_${modelName}`;
-
 	// Для подчинённых таблиц ownerName скрыт по умолчанию
 	let defaults = initColumns;
 	if (type === "part") {
@@ -220,84 +220,41 @@ export function getModelColumns(
 	}
 
 	let columns = defaults;
-	const storageColumns = localStorage.getItem(storageKey);
-	if (storageColumns !== null) {
-		try {
-			const parsed = JSON.parse(storageColumns) as TColumn[];
-			// Служебные колонки (identifier начинается с "__", напр. "__rowActions")
-			// инжектируются в рантайме и НЕ участвуют в кэше/сигнатуре — иначе
-			// сигнатура не совпадёт с defaults и настройки колонок будут сбрасываться.
-			const cached = parsed.filter((c) => !c.identifier.startsWith("__"));
-			// Проверяем актуальность кэша: набор identifier + type должен совпадать
-			const initSig = defaults
-				.map((c) => `${c.identifier}:${c.type}`)
-				.sort()
-				.join(",");
-			const cachedSig = cached
-				.map((c) => `${c.identifier}:${c.type}`)
-				.sort()
-				.join(",");
-			if (initSig === cachedSig) {
-				// Из кэша — ТОЛЬКО то, что настраивает пользователь: порядок, ширина, видимость.
-				// Всё остальное (footer, decimals, hint, sortable, подпись…) — из JSON-определения:
-				// раньше закэшированная колонка перекрывала JSON целиком, и у пользователя, хоть раз
-				// менявшего ширину, новые свойства колонок не применялись (аудит 26.09, И17).
-				const byId = new Map(defaults.map((d) => [d.identifier, d] as const));
-				columns = cached.map((c) => {
-					const def = byId.get(c.identifier);
-					if (!def) return c;
-					return {
-						...def,
-						...(c.width !== undefined ? { width: c.width } : {}),
-						...(c.visible !== undefined ? { visible: c.visible } : {}),
-					};
-				});
-			} else {
-				// Столбцы изменились — сбрасываем устаревший кэш
-				localStorage.removeItem(storageKey);
-			}
-		} catch {
-			localStorage.removeItem(storageKey);
+	// Настройки колонок — часть общего состояния таблицы (tableState.ts). Служебные колонки ("__rowActions" и т. п.)
+	// вставляются в рантайме и в хранилище не попадают — иначе сигнатура не совпала бы с defaults.
+	const cached = readTableState(modelName).columns;
+	if (cached) {
+		// Проверяем актуальность кэша: набор identifier + type должен совпадать
+		const initSig = defaults
+			.map((c) => `${c.identifier}:${c.type}`)
+			.sort()
+			.join(",");
+		const cachedSig = cached
+			.map((c) => `${c.identifier}:${c.type}`)
+			.sort()
+			.join(",");
+		if (initSig === cachedSig) {
+			// Из кэша — ТОЛЬКО то, что настраивает пользователь: порядок, ширина, видимость.
+			// Всё остальное (footer, decimals, hint, sortable, подпись…) — из JSON-определения:
+			// раньше закэшированная колонка перекрывала JSON целиком, и у пользователя, хоть раз
+			// менявшего ширину, новые свойства колонок не применялись (аудит 26.09, И17).
+			const byId = new Map(defaults.map((d) => [d.identifier, d] as const));
+			columns = cached.map((c) => {
+				const def = byId.get(c.identifier);
+				if (!def) return c as TColumn;
+				return {
+					...def,
+					...(c.width !== undefined ? { width: c.width } : {}),
+					...(c.visible !== undefined ? { visible: c.visible } : {}),
+				};
+			});
+		} else {
+			// Столбцы изменились — сбрасываем устаревшие настройки колонок (остальное состояние таблицы остаётся).
+			writeTableState(modelName, { columns: undefined });
 		}
 	}
 
 	return columns;
-}
-
-// ── Персистентность вида таблицы: сортировка + период (dateRange) ────────────
-// Колонки хранятся отдельно (table_columns_*, см. getModelColumns). Здесь —
-// параметры сортировки и выбранный период, по тому же componentName.
-const TABLE_VIEW_PREFIX = "table_view_";
-
-export interface TableViewState {
-	sort?: Record<string, "asc" | "desc">;
-	dateRange?: { startDate?: string; endDate?: string };
-}
-
-export function loadTableView(componentName: string): TableViewState | null {
-	try {
-		const raw = localStorage.getItem(TABLE_VIEW_PREFIX + componentName);
-		if (!raw) return null;
-		const parsed = JSON.parse(raw) as unknown;
-		return parsed && typeof parsed === "object" ? (parsed as TableViewState) : null;
-	} catch {
-		return null;
-	}
-}
-
-export function saveTableView(componentName: string, view: TableViewState): void {
-	try {
-		const hasSort = view.sort && Object.keys(view.sort).length > 0;
-		const hasRange = !!(view.dateRange && (view.dateRange.startDate || view.dateRange.endDate));
-		// Пустое состояние — убираем ключ, чтобы не копить мусор в localStorage.
-		if (!hasSort && !hasRange) {
-			localStorage.removeItem(TABLE_VIEW_PREFIX + componentName);
-			return;
-		}
-		localStorage.setItem(TABLE_VIEW_PREFIX + componentName, JSON.stringify(view));
-	} catch {
-		/* localStorage недоступен (приватный режим/квота) — не критично */
-	}
 }
 
 export function getFormatColumnValue(
@@ -782,4 +739,15 @@ export function toggleAllSelection(
 	return state.allMode || state.selected.size > 0
 		? { selected: new Set(), allMode: false, excluded: new Set() }
 		: { selected: new Set(), allMode: true, excluded: new Set() };
+}
+
+/**
+ * Содержимое ячейки из renderCell — в общем виде ячейки: текст и число оборачиваются в <span> (28.09).
+ *
+ * На `.TableBodyCell > span` держатся отступ от рамки, многоточие при нехватке ширины и сжатие рядом с шевроном
+ * группы. Своё значение Table всегда кладёт в span, а результат renderCell раньше вставлялся как есть — строка из
+ * renderCell прилипала к рамке и не обрезалась. Узлы (span, кнопки, поля) и undefined/null — как есть.
+ */
+export function wrapCellText(node: ReactNode): ReactNode {
+	return typeof node === "string" || typeof node === "number" ? createElement("span", null, node) : node;
 }

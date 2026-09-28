@@ -55,7 +55,7 @@ export const TodoHistory: FC<{
 		() => withStableIds(historyRows(q.data?.events ?? [], statusName), (r) => r.uuid),
 		[q.data, statusName],
 	);
-	const view = useStaticTableView(rowsRaw, { todoEventAt: "desc" });
+	const view = useStaticTableView(rowsRaw, { todoEventAt: "desc" }, COMPONENT_NAME, { scope: uuid });
 	const watchers = useMemo(() => watcherViews(q.data?.watchers ?? []), [q.data]);
 
 	return (

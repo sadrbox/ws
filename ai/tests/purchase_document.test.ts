@@ -174,7 +174,7 @@ function setup(steps: Step[], opts: { confirmWrite?: boolean } = {}) {
 	const forbidden = () => { throw new Error("канал 1С не должен обращаться к агенту"); };
 	const workflow = new ChatWorkflow({
 		db: mem.db, log: silent, llm,
-		agents: { pickOnline: forbidden, listByOrganization: forbidden } as never,
+		agents: { resolveBusiness: forbidden } as never,
 		queue: { enqueue: forbidden, waitResult: forbidden } as never,
 		audit: new Audit(mem.db, silent), confirmWrite: opts.confirmWrite ?? true, commandTimeoutMs: 1000, maxToolRounds: 10,
 		bank: {

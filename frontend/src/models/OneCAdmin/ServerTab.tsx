@@ -53,8 +53,8 @@ export const ServerTab: FC = () => {
 	const [procCols, setProcCols] = useState<TColumn[]>(() => getModelColumns(processColumns(), "OneCAdmin_processes"));
 	const [licCols, setLicCols] = useState<TColumn[]>(() => getModelColumns(licenseColumns(), "OneCAdmin_licenses"));
 
-	const procView = useStaticTableView(toRows(processes.data?.items ?? []), { host: "asc" });
-	const licView = useStaticTableView(toRows(licenses.data?.items ?? []), { userName: "asc" });
+	const procView = useStaticTableView(toRows(processes.data?.items ?? []), { host: "asc" }, "OneCAdmin_processes");
+	const licView = useStaticTableView(toRows(licenses.data?.items ?? []), { userName: "asc" }, "OneCAdmin_licenses");
 
 	return (
 		<SplitView

@@ -142,7 +142,7 @@ export const ElementForm: FC<Partial<TPane>> = (paneProps) => {
 			presence: present.has(b.key.toLowerCase()) ? translate("onecPresent") : translate("onecAbsent"),
 			published: publishLabel(b.published),
 		})), [bases.data, showAll, present]);
-	const view = useStaticTableView(rowsRaw, { presence: "asc", baseKey: "asc" });
+	const view = useStaticTableView(rowsRaw, { presence: "asc", baseKey: "asc" }, `OneCAdmin_elem_${kind}`, { rememberFilters: false });
 	const hidden = (bases.data?.items ?? []).length - rowsRaw.length;
 
 	const batch = useMutation({

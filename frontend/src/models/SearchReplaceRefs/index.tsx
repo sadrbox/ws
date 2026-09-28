@@ -6,7 +6,9 @@ import { Button } from "src/components/Button";
 import { getFormatDate } from "src/utils/datetime";
 import { translate } from "src/i18";
 import Table from "src/components/Table";
+import SubTableSheets from "src/components/SubTableSheets";
 import type { TColumn, TDataItem } from "src/components/Table/types";
+import { withStableIds } from "src/utils/stableRowId";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
@@ -115,14 +117,36 @@ const RefsTable: FC<{ refs: RefEntry[] }> = ({ refs }) => {
 };
 
 // ── Protocol block ────────────────────────────────────────────────────────────
+// Строки протокола — SubTableSheets с заголовками (28.09), вместо сырой таблицы без шапки: общий вид ячеек,
+// сортировка по заголовку. Колонка «Таблица.поле» — тот же ключ, что у таблицы найденных ссылок выше.
+
+const PROTOCOL_COLUMNS: TColumn[] = [
+  { identifier: "where",              type: "string", width: "240px", minWidth: "120px", visible: true, inlist: true },
+  { identifier: "tableCol",           type: "string", width: "220px", minWidth: "120px", visible: true, inlist: true },
+  { identifier: "refReplaceAffected", type: "number", width: "110px", minWidth: "90px",  visible: true, inlist: true },
+];
+
+/** «+N» — сколько строк обновлено; число остаётся числом, чтобы по нему сортировать. */
+const renderProtocolCell = (row: TDataItem, col: TColumn) =>
+  col.identifier === "refReplaceAffected"
+    ? <span style={{ color: "var(--success)", fontWeight: 600 }}>{`+${asText(row.refReplaceAffected)}`}</span>
+    : undefined;
 
 const ProtocolBlock: FC<{ summary: ExecuteSummary; entries: ProtocolEntry[] }> = ({ summary, entries }) => {
   function fmtDate(iso: string) {
     return getFormatDate(iso) || iso;
   }
+  const rows = useMemo<TDataItem[]>(() =>
+    withStableIds(entries.filter(e => e.affected > 0), (e) => `${e.table}.${e.column}`).map((e) => ({
+      id: e.id,
+      uuid: `${e.table}.${e.column}`,
+      where: e.label,
+      tableCol: `${e.table}.${e.column}`,
+      refReplaceAffected: e.affected,
+    })), [entries]);
   return (
-    <div style={{ border: "1px solid #c8e6c9", borderRadius: 3, overflow: "hidden", fontSize: 12 }}>
-      <div style={{ background: "var(--success-bg)", padding: "5px 10px", borderBottom: entries.length > 0 ? "1px solid #c8e6c9" : undefined, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+    <div style={{ border: "1px solid #c8e6c9", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ background: "var(--success-bg)", padding: "5px 10px", borderBottom: rows.length > 0 ? "1px solid #c8e6c9" : undefined, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
         <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{fmtDate(summary.executedAt)}</span>
         <strong>{summary.modelLabel}</strong>
         <span style={{ color: "var(--text-muted)" }}>—</span>
@@ -130,22 +154,10 @@ const ProtocolBlock: FC<{ summary: ExecuteSummary; entries: ProtocolEntry[] }> =
         <span>→</span>
         <span style={{ color: "var(--color-link)", fontWeight: 500 }}>«{summary.targetLabel}»</span>
         <span style={{ marginLeft: "auto", color: summary.totalAffected > 0 ? "var(--success-fg)" : "var(--text-muted)", fontWeight: 500 }}>
-          Обновлено: {summary.totalAffected}
+          {translate("refReplaceAffected")}: {summary.totalAffected}
         </span>
       </div>
-      {entries.filter(e => e.affected > 0).length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {entries.filter(e => e.affected > 0).map((e, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                <td style={{ padding: "3px 10px", fontSize: 12 }}>{e.label}</td>
-                <td style={{ padding: "3px 10px", color: "var(--text-faint)", fontFamily: "monospace", fontSize: 10 }}>{e.table}.{e.column}</td>
-                <td style={{ padding: "3px 10px", textAlign: "right", fontWeight: 600, color: "var(--success)", fontSize: 12 }}>+{e.affected}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {rows.length > 0 && <SubTableSheets columns={PROTOCOL_COLUMNS} rows={rows} renderCell={renderProtocolCell} />}
     </div>
   );
 };
@@ -392,5 +404,6 @@ const SearchReplaceRefsForm: FC<Partial<TPane>> = () => {
   );
 };
 
+ProtocolBlock.displayName = "ProtocolBlock";
 SearchReplaceRefsForm.displayName = "SearchReplaceRefsForm";
-export { SearchReplaceRefsForm };
+export { SearchReplaceRefsForm, ProtocolBlock };

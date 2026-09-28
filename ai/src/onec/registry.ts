@@ -1,5 +1,5 @@
 /**
- * Кэш содержимого баз: пользователи ИБ и расширения (E15/A3-P1).
+ * Кэш содержимого баз: пользователи ИБ и расширения (E15/A3-P1), организации (28.09).
  *
  * ЗАЧЕМ КЭШ. Вопрос «в каких базах есть пользователь Иванов» без него означает сто
  * подключений к 1С на каждый показ — минуты ожидания и сто занятых сеансов. Поэтому
@@ -9,6 +9,11 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/pool.ts";
+import type { OrgDetails } from "../bases/orgDetails.ts";
+import {
+	EMPTY_IB_ORGANIZATIONS_META, ibOrganizationsMeta, mergeOrgDetails, normalizeIbOrganizations, unreadDetailFields,
+	type IbOrganizationsMainSource, type IbOrganizationsMeta, type IbOrganizationsNote,
+} from "./ibOrganizations.ts";
 
 export type IbUser = {
 	name: string; fullName?: string; disabled?: boolean; roles?: string[];
@@ -140,7 +145,7 @@ export class OnecRegistry {
 			key: string; base_name: string; server_name: string;
 			full_name: string; disabled: boolean; roles: string[]; seen_at: Date;
 		}>(
-			`SELECT b.key, b.name AS base_name, s.name AS server_name,
+			`SELECT b.key, COALESCE(NULLIF(b.display_name, ''), b.name) AS base_name, s.name AS server_name,
 			        u.full_name, u.disabled, u.roles, u.seen_at
 			   FROM base_users u
 			   JOIN bases b ON b.id = u.base_id
@@ -308,4 +313,77 @@ export class OnecRegistry {
 			safeMode: x.safe_mode, seenAt: x.seen_at.toISOString(),
 		}));
 	}
+
+	/**
+	 * Организации базы (`IB_LIST_ORGANIZATIONS`, 28.09): срез заменяет кэш целиком — организацию, которой в базе больше
+	 * нет, карточка показывать не должна. Неразобранный срез не стирает кэш (normalizeIbOrganizations бросает).
+	 *
+	 * Реквизиты, которых агент на этот раз не прислал, остаются прежними: сбой чтения реквизитов не повод стирать
+	 * прочитанные раньше. Организация без `details` сохраняет прежние целиком; а если агент сказал, что не дочитал блок
+	 * (`meta.notes`, ответ агента 28.09: сбой блока снимает его у всех организаций), незаполненные поля ЭТОГО блока
+	 * берутся из кэша (mergeOrgDetails). Записка `main` реквизитов не касается. Источник отметки «Основная» и записки —
+	 * свойство среза, пишутся в каждую строку.
+	 */
+	async syncOrganizations(baseId: string, items: readonly unknown[], meta: IbOrganizationsMeta = EMPTY_IB_ORGANIZATIONS_META): Promise<void> {
+		const orgs = normalizeIbOrganizations(items);
+		const unread = unreadDetailFields(meta);
+		const prev = new Map<string, OrgDetails | null>();
+		if (unread && orgs.length) {
+			const r = await this.db.query<{ org_key: string; details: OrgDetails | null }>(
+				`SELECT org_key, details FROM base_ib_organizations WHERE base_id = $1`, [baseId],
+			);
+			for (const x of r.rows) prev.set(x.org_key, x.details);
+		}
+		const notes = meta.notes.length ? JSON.stringify(meta.notes) : null;
+		for (const o of orgs) {
+			const details = unread ? mergeOrgDetails(prev.get(o.key) ?? null, o.details, unread) : o.details;
+			await this.db.query(
+				`INSERT INTO base_ib_organizations (id, base_id, org_key, onec_id, name, bin, is_main, details, main_source, read_notes, seen_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, now())
+				 ON CONFLICT (base_id, org_key) DO UPDATE
+				    SET onec_id = EXCLUDED.onec_id, name = EXCLUDED.name, bin = EXCLUDED.bin, is_main = EXCLUDED.is_main,
+				        details = COALESCE(EXCLUDED.details, base_ib_organizations.details),
+				        main_source = EXCLUDED.main_source, read_notes = EXCLUDED.read_notes, seen_at = now()`,
+				[randomUUID(), baseId, o.key, o.id, o.name, o.bin, o.main, details ? JSON.stringify(details) : null, meta.mainSource, notes],
+			);
+		}
+		await this.db.query(
+			`DELETE FROM base_ib_organizations WHERE base_id = $1 AND NOT (org_key = ANY($2::text[]))`,
+			[baseId, orgs.map((o) => o.key)],
+		);
+	}
+
+	/**
+	 * Организации базы из кэша: основная первой, плюс свойства среза — откуда отметка «Основная» и что агент не дочитал
+	 * (одинаковы во всех строках, берём из первой). Связь с ERP проставляет маршрут — она меняется без чтения базы.
+	 */
+	async organizationsOfBase(baseId: string): Promise<IbOrganizationsCache> {
+		const r = await this.db.query<{
+			onec_id: string | null; name: string; bin: string | null; is_main: boolean; details: OrgDetails | null; seen_at: Date;
+			main_source: string | null; read_notes: unknown;
+		}>(
+			`SELECT onec_id, name, bin, is_main, details, seen_at, main_source, read_notes FROM base_ib_organizations
+			  WHERE base_id = $1 ORDER BY is_main DESC, lower(name)`,
+			[baseId],
+		);
+		// Тем же разбором, что ответ агента: в кэше лежит то, что он прислал, а незнакомое не должно дойти до панели.
+		const meta = r.rows[0] ? ibOrganizationsMeta({ mainSource: r.rows[0].main_source, notes: r.rows[0].read_notes }) : EMPTY_IB_ORGANIZATIONS_META;
+		return {
+			items: r.rows.map((x) => ({
+				id: x.onec_id, name: x.name, bin: x.bin, main: x.is_main, details: x.details, seenAt: x.seen_at.toISOString(),
+			})),
+			mainSource: meta.mainSource,
+			notes: meta.notes,
+		};
+	}
 }
+
+/** Организация базы, как её отдаёт кэш (вкладка «Организации» карточки базы). */
+export type IbOrganizationRow = {
+	id: string | null; name: string; bin: string | null; main: boolean; details: OrgDetails | null; seenAt: string;
+};
+
+/** Кэш организаций базы: строки и свойства среза (источник отметки «Основная», недочитанные блоки реквизитов). */
+export type IbOrganizationsCache = {
+	items: IbOrganizationRow[]; mainSource: IbOrganizationsMainSource | null; notes: IbOrganizationsNote[];
+};

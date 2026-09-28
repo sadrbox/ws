@@ -84,7 +84,7 @@ export const QualityBonusView: FC<{ uniqId?: string }> = ({ uniqId }) => {
 	const data = q.data;
 	const rows = useMemo(() => bonusRows(data?.items), [data]);
 	// Порядок — серверный (без бонуса первыми, затем по числу нарушений): своей сортировки по умолчанию нет.
-	const view = useStaticTableView(rows as unknown as TDataItem[]);
+	const view = useStaticTableView(rows as unknown as TDataItem[], {}, COMPONENT);
 	const closed = data?.closed ?? null;
 	const label = monthLabel(month, getLanguage());
 	// Закрывается только прошедший месяц: в текущий ещё идут выявления (И23).

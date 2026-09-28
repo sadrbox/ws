@@ -12,8 +12,14 @@
  * Ищем по СЫРЫМ значениям строки, до форматирования: вызывающий сортирует и фильтрует
  * исходные данные, а формат накладывает после (иначе «04.09.2026» сравнивалось бы
  * посимвольно). Служебные поля id/uuid из поиска исключены — по ним не ищут.
+ *
+ * С ПАМЯТЬЮ (28.09): с именем таблицы (`componentName` — то же, что уходит в buildStaticTableProps) сортировка и
+ * быстрый поиск хранятся в общем состоянии таблицы и остаются, пока пользователь их не изменит (useTableViewState) —
+ * как у списков справочников. Без имени — только на время жизни экрана. Таблица, где отмеченные строки уходят в
+ * групповую операцию, передаёт `{ rememberFilters: false }`: сортировка запоминается, поиск — нет (useTableViewState).
  */
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo } from "react";
+import { useTableViewState, type TableViewMemory } from "src/hooks/useTableViewState";
 import { sortTableRows } from "src/components/Table/services";
 import type { TDataItem } from "src/components/Table/types";
 
@@ -32,9 +38,10 @@ function matches(row: TDataItem, needle: string): boolean {
 	return false;
 }
 
-export function useStaticTableView<T extends TDataItem>(rows: T[], initialSort: TableSort = {}) {
-	const [sort, setSort] = useState<TableSort>(initialSort);
-	const [query, setQuery] = useState("");
+export function useStaticTableView<T extends TDataItem>(
+	rows: T[], initialSort: TableSort = {}, componentName?: string, memory?: TableViewMemory,
+) {
+	const { sort, setSort, search: query, setSearch: setQuery } = useTableViewState(componentName, { sort: initialSort }, memory);
 	// Ввод не должен дёргать перерисовку сотен строк на каждый символ.
 	const deferred = useDeferredValue(query);
 
@@ -44,8 +51,8 @@ export function useStaticTableView<T extends TDataItem>(rows: T[], initialSort: 
 	}, [rows, deferred]);
 
 	const sorted = useMemo(() => sortTableRows(filtered, sort), [filtered, sort]);
-	const sorting = useMemo(() => ({ sort, onSortChange: setSort }), [sort]);
-	const search = useMemo(() => ({ value: query, onChange: setQuery }), [query]);
+	const sorting = useMemo(() => ({ sort, onSortChange: setSort }), [sort, setSort]);
+	const search = useMemo(() => ({ value: query, onChange: setQuery }), [query, setQuery]);
 
 	return { rows: sorted, sorting, search };
 }

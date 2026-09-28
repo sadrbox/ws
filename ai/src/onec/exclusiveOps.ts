@@ -45,6 +45,7 @@ import {
 	type CommandQueue, type CommandRow, type ExclusivePendingRow, type ExclusiveStateRow,
 } from "../commands/queue.ts";
 import type { AgentRole } from "../agents/service.ts";
+import { agentBuild } from "../agents/features.ts";
 import { unwrapData } from "./accountingChecks.ts";
 
 /**
@@ -62,10 +63,42 @@ export const EXCLUSIVE_TYPES: ReadonlySet<string> = new Set<string>();
  */
 export const EXCLUSIVE_STATE_TYPES: ReadonlySet<string> = new Set(["IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION"]);
 
+/**
+ * ПОДГОТОВКА ПО ТРЕБОВАНИЮ (С4 задачи агента 28.09) — установка и удаление расширения.
+ *
+ * Живая проверка агента (платформа 8.3.25, чужой сеанс открыт): обновление расширения без смены структуры данных
+ * проходит при пользователях в базе; отказывает («Ошибка исключительной блокировки информационной базы. Активны
+ * сеансы: …», с агента 2026-09-28 13:57 — `IB_BUSY` с держателями) только то, что меняет структуру данных: первая
+ * установка расширения со своими объектами данных, обновление, убирающее объект, удаление расширения с данными.
+ * Поэтому первая попытка идёт БЕЗ подготовки — прошла, никого не выгнали; «база занята» — повтор через подготовку
+ * (escalateBusyToExclusive): закрыть вход, снять сеансы, операция, вернуть как было.
+ *
+ * Агент предлагал первую установку и удаление готовить сразу. Не делаем: сервис не знает наверняка, есть ли у
+ * расширения объекты данных, неудачная попытка отказывает сразу (платформа не ждёт), а без подготовки есть шанс
+ * никого не выгнать. Цена — одна быстрая лишняя попытка там, где подготовка всё-таки нужна. Агент подтвердил (сборка
+ * 2026-09-28 16:01, 12 проверок из 12): неудачная попытка при чужом сеансе не оставляет в базе ни расширения, ни
+ * заготовок «Расширение…», ни процессов — путь COM идёт в процессе моста, а `ibcmd` на «занято» не берётся.
+ */
+export const EXCLUSIVE_ON_BUSY_TYPES: ReadonlySet<string> = new Set(["IB_INSTALL_EXTENSION", "IB_DELETE_EXTENSION"]);
+
+/**
+ * С этой сборки агент входит в закрытую базу сам — с кодом блокировки из кластера или своим на время операции, и
+ * блокировку, поставленную по нашей команде, ставит сразу с кодом (С2 задачи агента 28.09). Старше — закрытый нами
+ * вход отказывает и его собственному соединению (КР-1: «Начало сеанса с информационной базой запрещено»), поэтому
+ * таким агентам подготовки нет, повтор «база занята» обычный.
+ */
+export const ENTERS_CLOSED_BASE_BUILD = "2026-09-27 22:42";
+
+/** Повтор «база занята» этой команды идёт через подготовку базы (С4): тип, сборка и кластерные команды агента. */
+export function escalatesOnBusy(type: string, agent: ExclusiveAgent & { version?: string | null }): boolean {
+	const build = agentBuild(agent.version);
+	return EXCLUSIVE_ON_BUSY_TYPES.has(type) && !!build && build >= ENTERS_CLOSED_BASE_BUILD && ExclusiveRunner.canPrepare(agent);
+}
+
 /** Кластерные команды подготовки; агент без любой из них подготовки не получает. */
 const PREP_TYPES = ["CLUSTER_SET_SCHEDULED_JOBS", "CLUSTER_SET_SESSIONS_LOCK", "CLUSTER_LIST_SESSIONS", "CLUSTER_TERMINATE_SESSION"] as const;
 
-const LOCK_MESSAGE = "Идёт установка расширения BuhProf AI — вход временно закрыт";
+const LOCK_MESSAGE = "Идёт установка или удаление расширения конфигурации — вход временно закрыт на несколько минут";
 
 /** Операция больше не ждёт выдачи: задание остановлено, срок ожидания вышел или команда уже завершена. */
 const NOT_WAITING = "команда операции уже не ждёт выдачи (задание остановлено или срок ожидания истёк) — подготовка прервана";
@@ -90,7 +123,7 @@ export type ExclusiveQueue = Pick<CommandQueue,
  */
 export type ExclusiveState = ExclusiveStateRow;
 
-export type ExclusiveAgent = { id: string; organizationUuid: string; role: AgentRole; capabilities: string[] };
+export type ExclusiveAgent = { id: string; role: AgentRole; capabilities: string[] };
 
 export type ExclusiveLog = { info: (o: object, msg: string) => void; warn: (o: object, msg: string) => void };
 
@@ -252,8 +285,9 @@ export class ExclusiveRunner {
 		const ttl = spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS;
 		let id: string;
 		try {
+			// Подготовка — команды кластера (вход, сеансы): ничьих данных не касаются, организации нет (В4).
 			const cmd = await this.queue.enqueue({
-				agentId: input.agent.id, organizationUuid: input.agent.organizationUuid, baseKey: input.baseKey,
+				agentId: input.agent.id, organizationUuid: null, baseKey: input.baseKey,
 				type, payload: { ...payload, baseKey: input.baseKey }, userUuid: input.userUuid,
 				ttlSeconds: ttl, queueWaitSeconds: input.queueWaitSeconds, inBase: runsInsideBase(spec), priority: 10,
 				...(requestId ? { requestId } : {}),
@@ -498,7 +532,7 @@ export async function recoverExclusive(
 	const runner = new ExclusiveRunner(queue, log);
 	for (const row of rows) {
 		const input: ExclusiveInput = {
-			agent: { id: row.agent_id, organizationUuid: row.organization_uuid, role: "admin", capabilities: [] },
+			agent: { id: row.agent_id, role: "admin", capabilities: [] },
 			baseKey: row.base_key!, commandId: row.id, userUuid: null, queueWaitSeconds: 3600,
 		};
 		void lanes.run(row.agent_id, row.base_key!, queue.ibParallel ?? 1, async () => {
@@ -514,4 +548,28 @@ export async function recoverExclusive(
 		}).catch((e: unknown) => log?.warn({ commandId: row.id, err: e instanceof Error ? e.message : String(e) }, "монопольная операция: восстановление не удалось"));
 	}
 	return rows.length;
+}
+
+/**
+ * «БАЗА ЗАНЯТА» ПОСЛЕ ПОПЫТКИ БЕЗ ПОДГОТОВКИ (С4) — повтор уже через неё. Копия ставится удержанной (сама агенту не
+ * уйдёт) и получает пустое состояние подготовки — дальше её ведёт раннер, как операцию, поставленную под подготовкой
+ * сразу: закрыть вход, снять сеансы, выпустить, при новом «занято» повторить, вернуть базу один раз (КР-12). Раннер
+ * идёт в цепочке агента, поэтому пакет на сто баз не закрывает их все разом.
+ *
+ * `null` — повтора не будет (попытки кончились, задание остановлено, команды нет) — отказ остаётся в задании. Окно
+ * между постановкой копии и записью её состояния — один запрос: перезапуск ровно в нём оставит удержанную копию без
+ * состояния, и она истечёт по сроку, а не уйдёт в открытую базу.
+ */
+export async function escalateBusyToExclusive(
+	deps: { queue: ExclusiveQueue; log?: ExclusiveLog; parallel?: number; lanes?: ExclusiveLanes },
+	row: { id: string; type: string; base_key: string | null; user_uuid: string | null },
+	agent: ExclusiveAgent, queueWaitSeconds: number,
+): Promise<string | null> {
+	const spec = findAdminCommand(row.type);
+	if (!spec || !row.base_key) return null;
+	const next = await deps.queue.retryBusy(row.id, queueWaitSeconds, { hold: true });
+	if (!next) return null;
+	await deps.queue.patchPayload(next, { exclusive: {} });
+	void superviseExclusive(deps, { agent, baseKey: row.base_key, commandId: next, userUuid: row.user_uuid, queueWaitSeconds }, spec);
+	return next;
 }

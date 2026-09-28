@@ -225,3 +225,13 @@ test("СП6: отказ по недоверенному узлу обновле�
 	const byText = humanizeAgentError({ code: "COMMAND_FAILED", message: "адрес не в списке доверенных узлов" });
 	assert.match(byText!.message, /update_hosts/);
 });
+
+test("С2, С9 (задача агента 28.09): «исключительная блокировка» — занято; IB_SESSIONS_DENIED — не занято, с подсказкой", () => {
+	// Агент старше 13:57 отдаёт этот отказ общим кодом — узнаём по тексту.
+	assert.equal(isBusyFailure("IB_ERROR", "Ошибка исключительной блокировки информационной базы. Активны сеансы: Иванов"), true);
+	// Вход закрыт, код разрешения не помог: повтор с той же блокировкой бессмыслен — даже если текст похож на «занято».
+	assert.equal(isBusyFailure("IB_SESSIONS_DENIED", "Начало сеанса запрещено: база данных заблокирована"), false);
+	const e = humanizeAgentError({ code: "IB_SESSIONS_DENIED", message: "через COM: начало сеанса с информационной базой запрещено" });
+	assert.match(e?.message ?? "", /Снимите блокировку в карточке базы/);
+	assert.match(e?.message ?? "", /сам не повторяет/);
+});

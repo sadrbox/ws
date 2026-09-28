@@ -9,6 +9,7 @@ import { memo, useCallback, useMemo, useRef, useEffect, type MouseEvent as React
 import { getTranslateColumn, translate } from 'src/i18';
 import { useTableContext, useTableVolatile } from './context';
 import { normalizeLastColumnWidth, isNarrowedView, selectionIndicator, toggleAllSelection } from './services';
+import { saveTableColumns } from './tableState';
 import { autoFitWidth, spreadResize, type ResizeColumn } from './columnResize';
 import styles from './Table.module.scss';
 
@@ -193,9 +194,8 @@ export const TableHeader = memo(() => {
       // Последняя колонка: сохраняем явную ширину, не сбрасываем в auto
       const updatedColumns = r.isLastCol ? mapped : normalizeLastColumnWidth(mapped);
       actions.setColumns(updatedColumns);
-      // Служебные колонки (__*) не сохраняем в localStorage (иначе сигнатура колонок
-      // не совпадёт с defaults и настройки будут сбрасываться).
-      localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(updatedColumns.filter(c => !c.identifier.startsWith("__"))));
+      // В общее состояние таблицы (tableState.ts); служебные колонки (__*) туда не попадают.
+      saveTableColumns(componentName, updatedColumns);
       resizingRef.current = null;
       setTimeout(() => { isResizingRef.current = false; }, 0);
     };
@@ -308,10 +308,7 @@ export const TableHeader = memo(() => {
     const isLastCol = colIndex === visibleColumns.length - 1;
     const updatedColumns = isLastCol ? mapped : normalizeLastColumnWidth(mapped);
     actions.setColumns(updatedColumns);
-    localStorage.setItem(
-      `table_columns_${componentName}`,
-      JSON.stringify(updatedColumns.filter((c) => !c.identifier.startsWith('__'))),
-    );
+    saveTableColumns(componentName, updatedColumns);
   }, [visibleColumns, columns, actions, componentName, showCheckbox]);
 
   return (

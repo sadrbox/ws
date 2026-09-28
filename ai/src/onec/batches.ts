@@ -68,6 +68,8 @@ export type BatchProgress = {
 		lateWait?: boolean;
 		/** Агент перестал ждать (TIMEOUT), но процесс команды ещё работает (С18). */
 		stillRunning?: boolean;
+		/** Путь исполнения выполненной команды (С1, агент 21:54): соединение с базой (COM) или напрямую через СУБД (ibcmd). */
+		via?: "com" | "ibcmd";
 	}[];
 	/** Сколько команд задания ещё можно отменить: их никто не начинал. */
 	cancelable: number;
@@ -214,6 +216,8 @@ export class BatchService {
 			             THEN jsonb_build_object('unverified', c.result->'unverified', 'skipped', c.result->'skipped',
 			                                     'warning', c.result->'warning', 'requestedName', c.result->'requestedName',
 			                                     'name', c.result->'name', 'stages', c.result->'stages',
+			                                     -- Путь исполнения (С1 задачи агента 28.09): COM или ibcmd; у отказа — в error.details.via.
+			                                     'via', c.result->'via',
 			                                     -- Справочник «Пользователи» после команды (П31): числа и причина чтения,
 			                                     -- сами ссылки в отчёт не тащим.
 			                                     'catalog', c.result->'catalog')
@@ -297,6 +301,7 @@ export class BatchService {
 					...(r.late ? { late: true } : {}),
 					...(r.late_wait ? { lateWait: true } : {}),
 					...(r.still_running ? { stillRunning: true } : {}),
+					...(r.caveat_result?.via === "com" || r.caveat_result?.via === "ibcmd" ? { via: r.caveat_result.via } : {}),
 				};
 				});
 
@@ -372,11 +377,11 @@ export class BatchService {
 	 */
 	async failedCommands(
 		batchId: string, baseKeys?: string[],
-	): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown>; server_id: string | null }[]> {
+	): Promise<{ base_key: string | null; type: string; payload: Record<string, unknown>; server_id: string | null; organization_uuid: string | null }[]> {
 		const narrow = baseKeys?.length ? baseKeys : null;
 		// Сервер исходной команды (C10): повтор уходит туда же, а не в одноимённую базу другого сервера.
-		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown>; server_id: string | null }>(
-			`SELECT base_key, type, payload, (SELECT a.server_id FROM agents a WHERE a.id = commands.agent_id) AS server_id FROM commands
+		const r = await this.db.query<{ base_key: string | null; type: string; payload: Record<string, unknown>; server_id: string | null; organization_uuid: string | null }>(
+			`SELECT base_key, type, payload, organization_uuid, (SELECT a.server_id FROM agents a WHERE a.id = commands.agent_id) AS server_id FROM commands
 			  WHERE batch_id = $1 AND state IN ('failed', 'expired') AND retried_by IS NULL
 			    AND ($2::text[] IS NULL OR base_key = ANY($2::text[]))
 			    -- Истёкшая, но, возможно, ещё работающая у агента — не повторять поверх неё (С21).

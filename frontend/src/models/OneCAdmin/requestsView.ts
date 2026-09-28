@@ -1,5 +1,5 @@
 /**
- * Заявки на подключение баз и запросы активации БИНов (СВ4) — правила отображения без JSX.
+ * Заявки на подключение баз и агентов — правила отображения без JSX. Активации БИНов больше нет (В8, 28.09).
  *
  * Отдельно от компонентов — ради тестов и Fast Refresh.
  */
@@ -7,7 +7,7 @@ import { translate } from "src/i18";
 import { getFormatDateOnly } from "src/utils/datetime";
 import type { SegmentOption } from "src/components/SegmentedControl";
 import type {
-	ActivationState, BaseRegistration, ErpOrganization, OnecOrgDetails, RegistrationOrganization, RegistrationState,
+	BaseRegistration, ErpOrganization, OnecOrgDetails, RegistrationOrganization, RegistrationState,
 } from "src/services/onec/api";
 
 export const registrationStateLabel = (s: RegistrationState): string => ({
@@ -17,14 +17,8 @@ export const registrationStateLabel = (s: RegistrationState): string => ({
 	EXPIRED: translate("onecReqExpired"),
 }[s]);
 
-export const activationStateLabel = (s: ActivationState): string => ({
-	PENDING: translate("onecReqPending"),
-	APPROVED: translate("onecReqApproved"),
-	REJECTED: translate("onecReqRejected"),
-}[s]);
-
 /** Тон состояния — цвет поддерживает слово, а не заменяет его. */
-export const stateTone = (s: RegistrationState | ActivationState): "wait" | "ok" | "bad" | "off" =>
+export const stateTone = (s: RegistrationState): "wait" | "ok" | "bad" | "off" =>
 	s === "PENDING" ? "wait" : s === "APPROVED" ? "ok" : s === "REJECTED" ? "bad" : "off";
 
 const FILTER_LABEL_KEY: Record<RegistrationState, string> = {
@@ -36,11 +30,11 @@ const FILTER_LABEL_KEY: Record<RegistrationState, string> = {
 
 /**
  * Варианты отбора заявок по состоянию — плашками (SegmentedControl, группа радиокнопок); одни и те же у «Подключения
- * баз», «Подключения агентов» и «Активации БИНов». Нерешённые — первыми (ради них вкладку и открывают), «Все» (`""`)
+ * баз» и «Подключения агентов». Нерешённые — первыми (ради них вкладку и открывают), «Все» (`""`)
  * — последним. Точка — тоном состояния, каким оно подкрашено в таблице; у «Ждут решения» — сколько их.
- * `states` — состояния, которые у этих заявок бывают: у запроса активации нет срока, нет и «Просроченных».
+ * `states` — состояния, которые у этих заявок бывают.
  */
-export function stateFilterOptions<S extends RegistrationState | ActivationState>(
+export function stateFilterOptions<S extends RegistrationState>(
 	states: readonly S[], pendingCount: number,
 ): SegmentOption<S | "">[] {
 	return [

@@ -40,6 +40,7 @@ import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { asText } from "src/utils/asText";
 import { abortCommand, cancelCommands, fetchBatches, retryBatch } from "src/services/onec/api";
+import { viaText, withCodeHint } from "src/services/onec/commandFacts";
 import { usePaneOnScreen } from "src/hooks/usePaneActive";
 import { BATCHES_KEY, isBatchWatchActive } from "./progress";
 import { useAppActions } from "src/app/context";
@@ -144,16 +145,20 @@ export function timingNote(it: { queuedSecs?: number | null; runSecs?: number | 
 }
 
 export function itemOutcome(batchType: string, it: {
-	state: string; abortable?: boolean; outcome: string | null; error: { code: string; message: string } | null;
+	state: string; abortable?: boolean; outcome: string | null;
+	error: { code: string; message: string; details?: unknown } | null; via?: string | null;
 	warning?: string | null; attempt?: number; retryAt?: string | null; late?: boolean; lateWait?: boolean; stillRunning?: boolean;
 	queuedSecs?: number | null; runSecs?: number | null; stages?: { name: string; ms: number }[] | null;
 }): string {
 	const main = it.error
-		? `${it.error.code}: ${it.error.message}`
+		// Подсказка по коду (С2, 28.09): у «вход закрыт блокировкой начала сеансов» — что делать.
+		? `${it.error.code}: ${withCodeHint(it.error.message, it.error.code)}`
 		: (abortHint(batchType, it) ?? [it.outcome, it.warning].filter(Boolean).join(" · "));
 	return [
 		main,
 		it.error && it.warning ? it.warning : "",
+		// Путь исполнения (С1, 28.09): у COM и ibcmd разные отказы и разные лекарства.
+		viaText(it, it.error),
 		(it.attempt ?? 1) > 1 ? `${translate("onecBatchAttempt")} ${it.attempt}` : "",
 		// Куда ушло время (С40): ожидание очереди по базе и собственно работа — раздельно.
 		timingNote(it),
@@ -317,7 +322,7 @@ export const BatchesTab: FC = () => {
 		 */
 		__inert: !b.items.some((it) => it.commandId),
 	})), [items]);
-	const view = useStaticTableView(rowsRaw, { createdAt: "desc" });
+	const view = useStaticTableView(rowsRaw, { createdAt: "desc" }, "OneCAdmin_batches", { rememberFilters: false });
 
 	/**
 	 * Вложенные строки — базы задания. Рисуются тем же TableBodyRow и в тех же колонках,

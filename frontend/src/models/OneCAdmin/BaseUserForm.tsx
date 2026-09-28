@@ -315,7 +315,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		inBase: isOn(baseKey, role) ? translate("yes") : translate("no"),
 		changedLabel: draft.has(draftKey(baseKey, role)) ? translate("onecChanged") : "",
 	})), [allRoles, baseKey, isOn, draft]);
-	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
+	const rightsView = useStaticTableView(rightsRows, { role: "asc" }, "OneCAdmin_bufRights", { rememberFilters: false });
 
 	/** Отмеченные строки = роли, выданные в этой базе (с учётом черновика). */
 	const rightsSelected = useMemo(
@@ -335,7 +335,7 @@ export const BaseUserForm: FC<Partial<TPane>> = (paneProps) => {
 		id: i + 1, uuid: o.baseKey, baseKey: o.baseKey, baseName: o.baseName || "—",
 		rolesCount: (o.roles ?? []).length, seenAt: o.seenAt,
 	})), [occ]);
-	const basesView = useStaticTableView(basesRows, { baseKey: "asc" });
+	const basesView = useStaticTableView(basesRows, { baseKey: "asc" }, "OneCAdmin_bufBases", { scope: asText(row.userName) || asText(row.name) || null });
 
 	// ── Запись: только изменённое, по каждой затронутой базе ────────────────
 	const changedByBase = useMemo(() => {

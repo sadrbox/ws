@@ -180,9 +180,10 @@ function agentHarness(waits: Record<string, (n: number) => Wait>, steps: ((req: 
 	};
 	const wf = new ChatWorkflow({
 		db: mem.db, log: silent, llm,
-		agents: { pickOnline: async () => agent, listByOrganization: async () => [agent], basesOf: async () => ["Бух"] } as never,
+		agents: { resolveBusiness: async () => ({ kind: "agent", agent, baseKey: "Бух", alsoIn: [], baseStatus: "ONLINE", baseOrgs: null }) } as never,
 		queue: queue as never, audit: new Audit(mem.db, silent), confirmWrite: opts.confirmWrite ?? false, commandTimeoutMs: 50, maxToolRounds: 8,
 		files: { save: async () => { throw new Error("файлов нет"); } } as never,
+		orgBin: async () => "111111111111",
 	});
 	return { mem, seen, enqueued, canceled, wf };
 }
@@ -317,7 +318,7 @@ function workflow(mem: ReturnType<typeof memDb>, llm: { name: string; chat: (r: 
 	const forbidden = () => { throw new Error("агент не нужен"); };
 	return new ChatWorkflow({
 		db: mem.db, log: silent, llm,
-		agents: { pickOnline: forbidden, listByOrganization: forbidden } as never,
+		agents: { resolveBusiness: forbidden } as never,
 		queue: { enqueue: forbidden, waitResult: forbidden } as never,
 		audit: new Audit(mem.db, silent), confirmWrite: true, commandTimeoutMs: 1000, maxToolRounds: 8,
 		files: { save: forbidden } as never,

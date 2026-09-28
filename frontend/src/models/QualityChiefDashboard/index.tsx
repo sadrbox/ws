@@ -68,7 +68,7 @@ export const QualityChiefDashboard: FC<Partial<TPane>> = ({ uniqId }) => {
 	const [matrixCols, setMatrixCols] = useState<TColumn[]>(() => getModelColumns(matrixColumnsJson as TColumn[], MATRIX));
 	// Порядок по умолчанию — как у сервера: группа, затем клиент. Щелчок по заголовку участка
 	// сортирует «сначала проблемные» (значение колонки — ключ тяжести, areaSortValue).
-	const matrix = useStaticTableView(useMemo(() => toChiefTableRows(clients), [clients]));
+	const matrix = useStaticTableView(useMemo(() => toChiefTableRows(clients), [clients]), {}, MATRIX);
 
 	const orgNames = useMemo(() => new Map(clients.map((c) => [c.organizationUuid, c.name])), [clients]);
 	const [consultCols, setConsultCols] = useState<TColumn[]>(() => getModelColumns(consultationsColumnsJson as TColumn[], CONSULTATIONS));
@@ -81,7 +81,7 @@ export const QualityChiefDashboard: FC<Partial<TPane>> = ({ uniqId }) => {
 		consultRating: c.clientRating,
 		consultReasons: (c.reasons ?? []).join("; "),
 	})), (r) => r.uuid), [q.data, orgNames]);
-	const consult = useStaticTableView(consultRows, { consultCompletedAt: "desc" });
+	const consult = useStaticTableView(consultRows, { consultCompletedAt: "desc" }, CONSULTATIONS);
 
 	const openArea = useCallback((row: ChiefClientRow, area: QualityArea) => {
 		openFindingsPane(addPane, { organizationUuid: row.organizationUuid, organizationName: row.name, area, state: "open" });

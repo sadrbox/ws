@@ -9,7 +9,6 @@
 import { Router, type Request, type RequestHandler } from "express";
 import { safeRouter } from "./safeRouter.ts";
 import { z } from "zod";
-import type { Db } from "../db/pool.ts";
 import type { Logger } from "../logger.ts";
 import type { Audit } from "../audit/index.ts";
 import type { AgentService } from "../agents/service.ts";
@@ -38,13 +37,12 @@ const POLL_AFTER_SECS = 5;
 export function agentEnrollRouter(deps: {
 	enrollments: EnrollmentStore;
 	agents: Pick<AgentService, "rotateToken">;
-	erp: Db;
 	audit: Pick<Audit, "write">;
 	log: Logger;
 	/** Заявок в час с одного адреса (контракт: 5). */
 	perHour?: number;
 }) {
-	const { enrollments, agents, erp, audit, log } = deps;
+	const { enrollments, agents, audit, log } = deps;
 	const r = Router();
 	// Отказ промиса в любом обработчике, включая `r.use`, — ответ 500, а не повисший запрос (Н1 аудита 26.09).
 	safeRouter(r, log, "подключение агента");
@@ -88,7 +86,6 @@ export function agentEnrollRouter(deps: {
 		if (!row) { notFound(); return; }
 		const data: Record<string, unknown> = { state: row.state, code: row.code, note: row.note ?? null };
 		if (row.state === "APPROVED") {
-			data.organization = { uuid: row.organizationUuid, name: await orgName(erp, log, row.organizationUuid) };
 			const token = await deliver(row);
 			if (token) { data.agentId = row.agentId; data.token = token; }
 		}
@@ -105,7 +102,7 @@ export function agentEnrollRouter(deps: {
 		try {
 			const token = await agents.rotateToken(row.agentId);
 			if (!token) throw new Error("агент заявки не найден");
-			await audit.write({ event: "agent.enrollment.token_delivered", agentId: row.agentId, organizationUuid: row.organizationUuid,
+			await audit.write({ event: "agent.enrollment.token_delivered", agentId: row.agentId,
 				details: { enrollmentId: row.id, code: row.code } });
 			return token;
 		} catch (e) {
@@ -115,15 +112,4 @@ export function agentEnrollRouter(deps: {
 	}
 
 	return r;
-}
-
-async function orgName(erp: Db, log: Logger, uuid: string | null): Promise<string | null> {
-	if (!uuid) return null;
-	try {
-		const o = await erp.query<{ name: string | null; legal_name: string | null }>(`SELECT name, "legalName" AS legal_name FROM organizations WHERE uuid = $1`, [uuid]);
-		return o.rows[0]?.name ?? o.rows[0]?.legal_name ?? null;
-	} catch (e) {
-		log.warn({ err: e instanceof Error ? e.message : String(e) }, "подключение агента: не прочитана организация ERP");
-		return null;
-	}
 }

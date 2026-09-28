@@ -6,8 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-	ExclusiveLanes, ExclusiveRunner, EXCLUSIVE_STATE_TYPES, EXCLUSIVE_TYPES, exclusiveLanes, recoverExclusive, retriedByRunner,
-	superviseExclusive, type ExclusiveQueue, type ExclusiveState,
+	ExclusiveLanes, ExclusiveRunner, EXCLUSIVE_STATE_TYPES, EXCLUSIVE_TYPES, escalateBusyToExclusive, escalatesOnBusy, exclusiveLanes,
+	recoverExclusive, retriedByRunner, superviseExclusive, type ExclusiveQueue, type ExclusiveState,
 } from "../src/onec/exclusiveOps.ts";
 import { BATCHABLE, startBatch, type BatchDeps } from "../src/onec/batchRunner.ts";
 import { buildAdminPayload, findAdminCommand } from "../src/commands/admin.ts";
@@ -591,4 +591,42 @@ test("имя расширения — идентификатор конфигу�
 	assert.equal(buildAdminPayload(spec, { baseKey: "buh", name: "Расширение_1", contentBase64: "AAAA" }).ok, true);
 	assert.equal(buildAdminPayload(spec, { baseKey: "buh", name: "_x", contentBase64: "AAAA" }).ok, false, "начинается с буквы");
 	assert.equal(buildAdminPayload(findAdminCommand("IB_DELETE_EXTENSION")!, { baseKey: "buh", name: "a.b" }).ok, false);
+});
+
+test("С4 (задача агента 28.09): повтор «занято» установки и удаления расширения — через подготовку, только у агента, входящего в закрытую базу", () => {
+	const fresh = { ...agent, version: "0.1.0+2026-09-28 13:57 (+05)" };
+	assert.equal(escalatesOnBusy("IB_INSTALL_EXTENSION", fresh), true);
+	assert.equal(escalatesOnBusy("IB_DELETE_EXTENSION", fresh), true);
+	assert.equal(escalatesOnBusy("IB_BACKUP", fresh), false, "другие типы — обычный повтор");
+	// Сборка старше входа с кодом разрешения: закрытый нами вход отказал бы и самому агенту (КР-1).
+	assert.equal(escalatesOnBusy("IB_INSTALL_EXTENSION", { ...agent, version: "0.1.0+2026-09-27 21:54 (+05)" }), false);
+	assert.equal(escalatesOnBusy("IB_INSTALL_EXTENSION", { ...agent, version: null }), false, "сборку не разобрали — не рискуем");
+	assert.equal(escalatesOnBusy("IB_INSTALL_EXTENSION", { ...fresh, capabilities: ["ib.admin", "IB_INSTALL_EXTENSION"] }), false, "нечем готовить");
+});
+
+test("С4: «занято» после попытки без подготовки — удержанная копия с состоянием подготовки, раннер закрывает базу и выпускает её", async () => {
+	const f = fakeQueue({ [LIST]: sessions(S1) });
+	const src = f.op("inst", { type: "IB_INSTALL_EXTENSION", payload: { baseKey: "buh", name: "buhprof_api" } });
+	src.state = "failed";
+	src.error = BUSY.error!;
+	const copy = await escalateBusyToExclusive({ queue: f.q, lanes: new ExclusiveLanes() },
+		{ id: "inst", type: "IB_INSTALL_EXTENSION", base_key: "buh", user_uuid: "u1" }, agent, 60);
+	assert.equal(copy, "inst-r2");
+	assert.deepEqual(f.retries, [{ id: "inst", hold: true }], "копия удержана: в открытую базу она не уходит");
+	assert.deepEqual(f.patches[0], { id: "inst-r2", patch: { exclusive: {} } });
+	for (let i = 0; i < 50 && !f.released.includes("inst-r2"); i += 1) await tick();
+	assert.deepEqual(f.released, ["inst-r2"]);
+	// Подготовка шла до выпуска: запрет заданий, закрытие входа, список и снятие сеанса.
+	assert.deepEqual(typesOf(f).slice(0, 4), [JOBS, LOCK, LIST, TERM]);
+});
+
+test("С4: попытки кончились — повтора через подготовку нет, отказ остаётся в задании", async () => {
+	const f = fakeQueue();
+	const src = f.op("inst", { type: "IB_INSTALL_EXTENSION", attempt: 3, payload: { baseKey: "buh" } });
+	src.state = "failed";
+	const copy = await escalateBusyToExclusive({ queue: f.q, lanes: new ExclusiveLanes() },
+		{ id: "inst", type: "IB_INSTALL_EXTENSION", base_key: "buh", user_uuid: "u1" }, agent, 60);
+	assert.equal(copy, null);
+	assert.deepEqual(f.patches, []);
+	assert.deepEqual(f.enqueued, []);
 });

@@ -27,6 +27,7 @@ import { translate } from "src/i18";
 import { humanErrorText } from "src/utils/errorText";
 import type { NoticeItem } from "src/components/Notice";
 import { isSettledError } from "src/components/TechMessages/operations";
+import { errorCode, withCodeHint } from "src/services/onec/commandFacts";
 
 /** Разбор любой ошибки до двух фактов: статус и текст для человека. */
 export function errorStatus(e: unknown): number | undefined {
@@ -76,7 +77,8 @@ export function errorText(e: unknown, fallback = translate("unknownError")): str
 		if (typeof server === "string" && server.trim()) return humanErrorText(server);
 		if (typeof o.message === "string" && o.message.trim() && !AXIOS_GENERIC.test(o.message.trim())) {
 			const held = heldByText(e);
-			return [humanErrorText(o.message), held].filter(Boolean).join("\n\n");
+			// Подсказка по коду отказа 1С (С2, 28.09) — там, где сервис сам её не дописал: что делать, а не только что вышло.
+			return [withCodeHint(humanErrorText(o.message), errorCode(e)), held].filter(Boolean).join("\n\n");
 		}
 	}
 	return fallback;

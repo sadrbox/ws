@@ -5,14 +5,16 @@
  * мягко удалённую (deletedAt IS NOT NULL) запись справочника.
  * По каждой найденной записи можно открыть форму редактирования.
  */
-import { FC, useState, useCallback } from "react";
+import { FC, useState, useCallback, useMemo } from "react";
 import { Button } from "src/components/Button";
 import { GroupCol } from "src/components/UI";
+import SubTableSheets from "src/components/SubTableSheets";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import { useAppActions } from "src/app/context";
+import { translate } from "src/i18";
 import apiClient from "src/services/api/client";
 import mainStyles from "src/styles/main.module.scss";
 import type { TPane } from "src/app/types";
-import { getFormatDateOnly } from "src/utils/datetime";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,11 +72,29 @@ const TABLE_FORM_MAP: Record<string, FormLoader> = {
   contacts:             lazyForm(() => import("src/models/Contacts"),            "ContactsForm"),
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Таблица записей группы ────────────────────────────────────────────────────
+// SubTableSheets вместо сырой таблицы (28.09): общий вид ячеек и сортировка по заголовку. identifier колонки —
+// ключ перевода заголовка, поэтому заголовки статичные: чья это запись и откуда удалено значение, сказано
+// в полосе группы над таблицей. Дата удаления — колонка `date` с ISO-строкой (общее форматирование дат).
 
-function fmtDate(iso: string): string {
-  return getFormatDateOnly(iso) || iso;
-}
+const ORPHAN_COLUMNS: TColumn[] = [
+  { identifier: "orphanRecord", type: "string", width: "340px", minWidth: "160px", visible: true, inlist: true },
+  { identifier: "orphanDeletedValue", type: "string", width: "300px", minWidth: "140px", visible: true, inlist: true },
+  { identifier: "deleted", type: "date", width: "110px", minWidth: "90px", visible: true, inlist: true },
+  { identifier: "__open", type: "string", width: "100px", minWidth: "90px", alignment: "center", visible: true, inlist: true, sortable: false },
+];
+
+type OrphanRow = TDataItem & { __record: OrphanRecord };
+
+const orphanRows = (records: OrphanRecord[]): OrphanRow[] =>
+  records.map((rec) => ({
+    id: rec.id,
+    uuid: rec.uuid,
+    orphanRecord: rec.label || rec.uuid,
+    orphanDeletedValue: rec.refLabel || rec.refUuid,
+    deleted: rec.refDeletedAt || null,
+    __record: rec,
+  }));
 
 // ── OrphanGroup component ─────────────────────────────────────────────────────
 
@@ -84,6 +104,40 @@ const OrphanGroupBlock: FC<{
   opening: string | null;
 }> = ({ group, onOpen, opening }) => {
   const canOpen = !!TABLE_FORM_MAP[group.table];
+  const rows = useMemo(() => orphanRows(group.records), [group.records]);
+
+  // Текст ячейки — в одном <span> (на нём держатся отступ и многоточие), кнопка — как есть.
+  const renderCell = (row: TDataItem, col: TColumn) => {
+    const rec = (row as OrphanRow).__record;
+    switch (col.identifier) {
+      case "orphanRecord":
+        return (
+          <span>
+            {rec.label || rec.uuid}
+            <small style={{ color: "var(--text-faint)", marginLeft: 6, fontFamily: "monospace" }}>#{rec.id}</small>
+          </span>
+        );
+      case "orphanDeletedValue":
+        return <span style={{ color: "var(--danger)", textDecoration: "line-through" }}>{rec.refLabel || rec.refUuid}</span>;
+      case "deleted":
+        return rec.refDeletedAt ? undefined : "—";
+      case "__open":
+        return canOpen ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={opening === rec.uuid}
+            onClick={() => onOpen(group.table, rec.uuid, rec.label)}
+          >
+            {opening === rec.uuid ? "…" : translate("open")}
+          </Button>
+        ) : (
+          <span style={{ color: "var(--text-faint)" }}>н/д</span>
+        );
+      default:
+        return undefined;
+    }
+  };
   return (
     <div style={{ border: "1px solid #f0c0c0", borderRadius: 4, overflow: "hidden" }}>
       {/* Group header */}
@@ -104,57 +158,7 @@ const OrphanGroupBlock: FC<{
         </span>
       </div>
 
-      {/* Records table */}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: "#fdf0f0", borderBottom: "1px solid #f0e0e0" }}>
-            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 500, color: "var(--text-secondary)" }}>
-              Запись ({group.tableLabel})
-            </th>
-            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 500, color: "var(--text-secondary)" }}>
-              Удалённое значение ({group.refTableLabel})
-            </th>
-            <th style={{ textAlign: "left", padding: "3px 12px", fontWeight: 400, color: "var(--text-muted)", fontSize: 10 }}>
-              Удалено
-            </th>
-            <th style={{ width: 70 }} />
-          </tr>
-        </thead>
-        <tbody>
-          {group.records.map((rec, i) => (
-            <tr key={i} style={{ borderBottom: "1px solid #f8f0f0" }}>
-              <td style={{ padding: "4px 12px" }}>
-                <span style={{ fontWeight: 500 }}>{rec.label || rec.uuid}</span>
-                <span style={{ color: "var(--text-faint)", fontSize: 10, marginLeft: 6, fontFamily: "monospace" }}>
-                  #{rec.id}
-                </span>
-              </td>
-              <td style={{ padding: "4px 12px" }}>
-                <span style={{ color: "var(--danger)", textDecoration: "line-through" }}>
-                  {rec.refLabel || rec.refUuid}
-                </span>
-              </td>
-              <td style={{ padding: "4px 12px", color: "var(--text-muted)", fontSize: 10, whiteSpace: "nowrap" }}>
-                {rec.refDeletedAt ? fmtDate(rec.refDeletedAt) : "—"}
-              </td>
-              <td style={{ padding: "4px 8px", textAlign: "right" }}>
-                {canOpen ? (
-                  <Button
-                    variant="secondary"
-                    disabled={opening === rec.uuid}
-                    onClick={() => onOpen(group.table, rec.uuid, rec.label)}
-                    style={{ fontSize: 11, padding: "1px 8px" }}
-                  >
-                    {opening === rec.uuid ? "…" : "Открыть"}
-                  </Button>
-                ) : (
-                  <span style={{ fontSize: 10, color: "var(--text-faint)" }}>н/д</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <SubTableSheets columns={ORPHAN_COLUMNS} rows={rows} renderCell={renderCell} />
 
       {group.hasMore && (
         <div style={{ background: "#fdf8f8", padding: "4px 12px", fontSize: 11, color: "var(--text-muted)", borderTop: "1px solid #f0e0e0" }}>
@@ -310,5 +314,6 @@ const OrphanRefsForm: FC<Partial<TPane>> = () => {
   );
 };
 
+OrphanGroupBlock.displayName = "OrphanGroupBlock";
 OrphanRefsForm.displayName = "OrphanRefsForm";
-export { OrphanRefsForm };
+export { OrphanRefsForm, OrphanGroupBlock };

@@ -230,7 +230,7 @@ export const SessionsTab: FC = () => {
 	})), (s) => s.uuid), [sessionSource, baseByUuid]);
 
 	// Сортировка — на клиенте: данные целиком в памяти.
-	const sorted = useStaticTableView(sessionRows, { startedAt: "desc" });
+	const sorted = useStaticTableView(sessionRows, { startedAt: "desc" }, "OneCAdmin_sessions", { rememberFilters: false });
 
 	const rowsView = useMemo(() => sorted.rows.map((r) => ({
 		...r,

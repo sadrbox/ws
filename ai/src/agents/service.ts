@@ -1,8 +1,9 @@
 // Реестр агентов.
 //
-// Агент создаётся администратором для организации ERP; ему выдаётся токен, который
-// показывается ОДИН раз и хранится только хэшем. Дальше агент сам регистрируется
-// (register) и шлёт heartbeat — по ним сервис знает состояние и доступность 1С.
+// Агент — установка BuhProf: его заводит (одобряет заявку) администратор BuhProf, и это одобрение — единственное,
+// что даёт ему доверие. Организации у агента нет (docs/TASK_SERVICE_AGENT_OWNER_MODEL_2026-09-28.md, Р1): кого он
+// обслуживает, говорят его базы. Токен показывается ОДИН раз и хранится только хэшем. Дальше агент сам
+// регистрируется (register) и шлёт heartbeat — по ним сервис знает состояние и доступность 1С.
 
 import { randomUUID } from "node:crypto";
 
@@ -10,7 +11,9 @@ import type { Db } from "../db/pool.ts";
 import { newToken, sha256 } from "../auth/index.ts";
 import { DEFAULT_BASE_KEY } from "../bases/service.ts";
 import type { CommandStats, DurationStat } from "./commandStats.ts";
-import { AgentBasesStore, resolveTarget, type AgentLimits, type TargetDecision } from "./agentBases.ts";
+import {
+	AgentBasesStore, ownedBasesOf, resolveBusinessTarget, type AgentBase, type AgentLimits, type TargetDecision,
+} from "./agentBases.ts";
 
 /**
  * Сколько ждать новый long-poll после закрытия прежнего, прежде чем считать агента
@@ -36,7 +39,6 @@ const asRecord = (v: unknown): Record<string, unknown> =>
 
 export type AgentRow = {
 	id: string;
-	organization_uuid: string;
 	server_id: string | null;
 	role: AgentRole;
 	bases_synced_at: Date | null;
@@ -60,8 +62,6 @@ export type AgentRow = {
 	command_stats_seen_at: Date | null;
 	/** Лимит тарифа бизнес-агента (СВ3, миграция 034); NULL — без ограничения. */
 	max_bases?: number | null;
-	max_bins?: number | null;
-	active_bins?: string[] | null;
 	commands_done?: number | null;
 	update_state?: Record<string, unknown> | null;
 	commands_failed?: number | null;
@@ -80,10 +80,9 @@ export type AgentProcess = {
 };
 
 export type AgentView = {
-	/** Лимит тарифа (СВ3): сколько баз и разных БИНов агент обслуживает; null в поле — без ограничения. */
+	/** Лимит тарифа (СВ3): сколько баз агент обслуживает; null — без ограничения. */
 	limits: AgentLimits;
 	id: string;
-	organizationUuid: string;
 	serverId: string | null;
 	role: AgentRole;
 	basesSyncedAt: Date | null;
@@ -124,9 +123,9 @@ export type AgentView = {
 	update: { state?: string; build?: string; error?: string | null; at?: string } | null;
 };
 
-const COLS = `id, organization_uuid, server_id, role, bases_synced_at, name, version, os, capabilities,
+const COLS = `id, server_id, role, bases_synced_at, name, version, os, capabilities,
 	status, onec_reachable, onec_version, last_seen_at, registered_at, disabled_at, created_at,
-	processes, processes_seen_at, failures_by_code, durations_by_type, command_stats_seen_at, max_bases, max_bins, active_bins, commands_done, commands_failed, update_state`;
+	processes, processes_seen_at, failures_by_code, durations_by_type, command_stats_seen_at, max_bases, commands_done, commands_failed, update_state`;
 
 export class AgentService {
 	private readonly db: Db;
@@ -144,21 +143,19 @@ export class AgentService {
 	 */
 	private readonly polls = new Map<string, { open: number; closedAt: number; busyUntil?: number }>();
 
-	private readonly orgBinding: "strict" | "any";
-	constructor(db: Db, offlineAfterSecs: number, orgBinding: "strict" | "any" = "strict") {
-		this.orgBinding = orgBinding;
+	constructor(db: Db, offlineAfterSecs: number) {
 		this.db = db;
 		this.offlineAfterSecs = offlineAfterSecs;
 	}
 
 	/** Создаёт агента и возвращает токен — единственный раз, когда он виден. */
 	/** `role` — роль, о которой договорились при заведении (заявка по коду её называет); дальше её задаёт не агент. */
-	async create(organizationUuid: string, name: string, role: AgentRole = "business"): Promise<{ agent: AgentView; token: string }> {
+	async create(name: string, role: AgentRole = "business"): Promise<{ agent: AgentView; token: string }> {
 		const id = randomUUID();
 		const token = newToken();
 		await this.db.query(
-			`INSERT INTO agents (id, organization_uuid, name, role, token_hash) VALUES ($1, $2, $3, $4, $5)`,
-			[id, organizationUuid, name, role, sha256(token)],
+			`INSERT INTO agents (id, name, role, token_hash) VALUES ($1, $2, $3, $4)`,
+			[id, name, role, sha256(token)],
 		);
 		const agent = await this.get(id);
 		if (!agent) throw new Error("агент не создан");
@@ -215,31 +212,8 @@ export class AgentService {
 	 * Лимит тарифа бизнес-агента (СВ3). Смена действует со следующего heartbeat: лимиты уходят агенту в его ответе,
 	 * а сервис применяет новые сразу — к ближайшей команде.
 	 */
-	async setLimits(id: string, limits: { maxBases: number | null; maxBins: number | null }): Promise<boolean> {
-		const r = await this.db.query(
-			`UPDATE agents SET max_bases = $2, max_bins = $3 WHERE id = $1`,
-			[id, limits.maxBases, limits.maxBins],
-		);
-		return (r.rowCount ?? 0) > 0;
-	}
-
-	/**
-	 * Список активных БИНов (СВ4): null — списка нет, действует «первые `maxBins` по порядку». Дубли и пустые
-	 * отбрасываются, порядок сохраняется. Как и лимит, агенту уходит со следующим heartbeat.
-	 */
-	async setActiveBins(id: string, bins: string[] | null): Promise<boolean> {
-		const list = bins === null ? null : [...new Set(bins.map((b) => b.trim()).filter(Boolean))];
-		const r = await this.db.query(`UPDATE agents SET active_bins = $2 WHERE id = $1`, [id, list]);
-		return (r.rowCount ?? 0) > 0;
-	}
-
-	/**
-	 * Организация ERP агента. Меняется при повторном подключении по коду: та же служба может быть одобрена для
-	 * другой организации, и без этого агент остался бы в прежней — команды чата новой организации его не нашли бы.
-	 * Пусто — «не привязан» (агент кластера).
-	 */
-	async setOrganization(id: string, organizationUuid: string): Promise<boolean> {
-		const r = await this.db.query(`UPDATE agents SET organization_uuid = $2 WHERE id = $1`, [id, organizationUuid]);
+	async setLimits(id: string, limits: AgentLimits): Promise<boolean> {
+		const r = await this.db.query(`UPDATE agents SET max_bases = $2 WHERE id = $1`, [id, limits.maxBases]);
 		return (r.rowCount ?? 0) > 0;
 	}
 
@@ -256,14 +230,6 @@ export class AgentService {
 		return r.rows[0] ? this.view(r.rows[0]) : null;
 	}
 
-	async listByOrganization(organizationUuid: string): Promise<AgentView[]> {
-		const r = await this.db.query<AgentRow>(
-			`SELECT ${COLS} FROM agents WHERE organization_uuid = $1 ORDER BY created_at`,
-			[organizationUuid],
-		);
-		return r.rows.map((row) => this.view(row));
-	}
-
 	/** Агент по id — нужен, чтобы узнать, за каким сервером он уже закреплён. */
 	async findById(id: string): Promise<AgentView | null> {
 		const r = await this.db.query<AgentRow>(`SELECT ${COLS} FROM agents WHERE id = $1`, [id]);
@@ -275,94 +241,135 @@ export class AgentService {
 		return r.rows.map((row) => this.view(row));
 	}
 
-	/** Агент организации, которому можно отдать команду: не отключён и недавно был на связи. */
-	async pickOnline(organizationUuid: string): Promise<AgentView | null> {
-		return this.pickAgentFor(organizationUuid, null, "business");
+	/** Включённые бизнес-агенты и их срезы — кандидаты любой бизнес-команды (В2): у агента нет организации. */
+	private async businessSlices(): Promise<{ agents: AgentView[]; bases: Map<string, AgentBase[]> }> {
+		const agents = (await this.listAll()).filter((a) => !a.disabled && a.role === "business");
+		const bases = await new AgentBasesStore(this.db).listMany(agents.map((a) => a.id), { cached: true });
+		return { agents, bases };
 	}
 
 	/**
-	 * Исполнитель команды: база даёт сервер, сервер плюс роль дают агента (E15/A1).
+	 * ИСПОЛНИТЕЛЬ БИЗНЕС-КОМАНДЫ ОРГАНИЗАЦИИ — ЕДИНСТВЕННЫЙ ПУТЬ (В2, 28.09). Чат, карточка организации, «Долги и
+	 * остатки» и самопроверка базы идут сюда; «свой агент организации» больше не существует (Р1).
 	 *
-	 * Раньше выбор был «любой онлайн-агент этой организации» — при одной базе на организацию
-	 * это работало. Со ста базами на одном сервере так нельзя: команда ушла бы в чужую базу,
-	 * а админ-команда — бизнес-агенту, у которого нет ни rac, ни прав администратора кластера.
-	 *
-	 * Если подходящего агента нет, команда НЕ ставится вообще. Отдать её «хоть кому-то» —
-	 * значит выполнить операцию не там, где просили; лучше честная ошибка «нет агента».
-	 *
-	 * baseKey = null или 'default' — обращение без указания базы: агент протокола v1, у которого
-	 * база одна. Тогда сервер не проверяется, и выбор сводится к прежнему поведению.
+	 * `orgBin` — БИН организации из ERP: по нему ищутся базы во срезах ВСЕХ бизнес-агентов. Своих баз организации
+	 * (одобренная заявка базы, действующий токен чата) — правило выбора, когда БИН нашёлся в нескольких базах.
 	 */
-	async pickAgentFor(organizationUuid: string, baseKey: string | null, role: AgentRole = "business"): Promise<AgentView | null> {
-		const candidates = (await this.listByOrganization(organizationUuid))
-			.filter((a) => !a.disabled && a.online && a.role === role);
-
-		const key = baseKey && baseKey !== DEFAULT_BASE_KEY ? baseKey : null;
-		if (!key) {
-			if (candidates.length) return candidates[0];
-			if (this.orgBinding === "strict") return null;
-			// Режим разработки: один стенд 1С на все организации ERP.
-			return (await this.listAll()).find((a) => !a.disabled && a.online && a.role === role) ?? null;
-		}
-
-		// Бизнес-агент сам сообщает свои базы (срез, СВ3): у многобазового агента на одном сервере их много, и
-		// исполнитель — тот, у кого база есть в срезе. Реестр серверов — запасной путь для агентов старых сборок.
-		if (role === "business" && candidates.length) {
-			const hit = await this.db.query<{ agent_id: string }>(
-				`SELECT agent_id FROM agent_bases WHERE agent_id = ANY($1::uuid[]) AND lower(key) = lower($2)`,
-				[candidates.map((a) => a.id), key],
-			);
-			const found = candidates.find((a) => hit.rows.some((r) => r.agent_id === a.id));
-			if (found) return found;
-		}
-
-		const server = await this.db.query<{ server_id: string }>(
-			`SELECT b.server_id FROM bases b JOIN servers s ON s.id = b.server_id
-			  WHERE s.organization_uuid = $1 AND b.key = $2 AND b.disabled_at IS NULL`,
-			[organizationUuid, key],
-		);
-		const serverId = server.rows[0]?.server_id ?? null;
-		if (!serverId) return null;
-		return candidates.find((a) => a.serverId === serverId) ?? null;
-	}
-
-	/**
-	 * ИСПОЛНИТЕЛЬ БИЗНЕС-КОМАНДЫ ПО СРЕЗУ БАЗ (СВ3). У многобазового бизнес-агента база выбирается по `baseKey` или
-	 * по БИН организации ERP — тем же правилом, что у агента, и с тем же лимитом тарифа: команда сверх лимита
-	 * отвергается здесь, не доходя до очереди. `none` — срез ничего не говорит (старая сборка без организаций,
-	 * нет базы с этим БИН): выбор остаётся прежним (pickOnline), а базу решит агент.
-	 */
-	async resolveBusiness(organizationUuid: string, want: { baseKey?: string | null; bin?: string | null; preferAgentId?: string | null }): Promise<
-		| { kind: "agent"; agent: AgentView; baseKey: string; alsoIn: string[]; baseStatus: string | null; baseBins: string[] }
+	async resolveBusiness(organizationUuid: string, orgBin: string | null, want: { baseKey?: string | null; preferAgentId?: string | null } = {}): Promise<
+		| { kind: "agent"; agent: AgentView; baseKey: string; alsoIn: string[]; baseStatus: string | null; baseOrgs: AgentBase["organizations"] }
 		| Extract<TargetDecision, { kind: "refused" }>
+		| { kind: "ambiguous"; code: "BASE_AMBIGUOUS"; message: string; details: Record<string, unknown> }
 		| { kind: "none" }
 	> {
-		if (!want.baseKey && !want.bin) return { kind: "none" };
-		let candidates = (await this.listByOrganization(organizationUuid)).filter((a) => !a.disabled && a.role === "business");
-		if (!candidates.length && this.orgBinding !== "strict") {
-			candidates = (await this.listAll()).filter((a) => !a.disabled && a.role === "business");
-		}
-		if (!candidates.length) return { kind: "none" };
-		const bases = await new AgentBasesStore(this.db).listMany(candidates.map((a) => a.id), { cached: true });
-		const decision = resolveTarget(
-			candidates.map((a) => ({ agentId: a.id, online: a.online, bases: bases.get(a.id) ?? [], limits: a.limits })),
-			want,
+		if (!orgBin?.trim()) return { kind: "none" };
+		const { agents, bases } = await this.businessSlices();
+		const owned = ownedBasesOf(await this.ownedBaseRows(organizationUuid, orgBin));
+		const d = resolveBusinessTarget(
+			agents.map((a) => ({ agentId: a.id, online: a.online, bases: bases.get(a.id) ?? [], limits: a.limits })),
+			{ bin: orgBin, ...want },
+			owned,
 		);
-		if (decision.kind !== "base") return decision;
-		const agent = candidates.find((a) => a.id === decision.agentId);
-		/*
-		 * БИНы ОРГАНИЗАЦИЙ ВЫБРАННОЙ БАЗЫ — из среза агента. Нужны вызывающему, чтобы понять, ЕСТЬ ЛИ в этой базе
-		 * организация, о которой он собирается говорить: подставлять в команду БИН, которого в базе нет, — верный
-		 * отказ 1С. Пустой список означает «агент про организации не сообщал», а не «их нет».
-		 */
-		const baseBins = (bases.get(decision.agentId) ?? [])
-			.find((b) => b.key === decision.baseKey)?.organizations?.map((o) => o.bin).filter((b): b is string => !!b) ?? [];
-		return agent ? { kind: "agent", agent, baseKey: decision.baseKey, alsoIn: decision.alsoIn, baseStatus: decision.status, baseBins } : { kind: "none" };
+		if (d.kind === "base") {
+			const agent = agents.find((a) => a.id === d.agentId);
+			if (!agent) return { kind: "none" };
+			const baseOrgs = (bases.get(d.agentId) ?? []).find((b) => b.key === d.baseKey)?.organizations ?? null;
+			return { kind: "agent", agent, baseKey: d.baseKey, alsoIn: d.alsoIn, baseStatus: d.status, baseOrgs };
+		}
+		if (d.kind === "ambiguous") {
+			const where = d.hits.map((h) => `«${h.baseKey}» (агент «${agents.find((a) => a.id === h.agentId)?.name || h.agentId.slice(0, 8)}»)`);
+			return {
+				kind: "ambiguous", code: d.code,
+				message: `Организация с БИН ${orgBin} есть в нескольких базах 1С: ${where.join(", ")}, и какая из них её, не известно. `
+					+ "Подключите нужную базу к BuhProf AI из самой 1С (раздел BuhProf AI — подключение базы) — дальше команды пойдут в неё.",
+				details: { bin: orgBin, bases: d.hits.map((h) => ({ baseKey: h.baseKey, agentId: h.agentId, online: h.online })) },
+			};
+		}
+		return d;
 	}
 
-	/** Ключи баз бизнес-агента в порядке его среза (C2): больше одной — команда без адреса не должна уходить. */
-	async basesOf(agentId: string): Promise<string[]> {
-		return (await new AgentBasesStore(this.db).list(agentId)).map((b) => b.key);
+	/**
+	 * Базы, которые организация назвала своей (В2, п. 2): одобренные за её БИН в заявке базы и базы с её действующим
+	 * токеном чата. Ключ и сервер — из реестра баз.
+	 */
+	private async ownedBaseRows(organizationUuid: string, bin: string): Promise<{ key: string; serverId: string | null }[]> {
+		// base_organizations.base_id — text (миграция 040), bases.id — uuid: без приведения сравнения не будет.
+		const r = await this.db.query<{ key: string; server_id: string | null }>(
+			`SELECT b.key, b.server_id FROM base_organizations o JOIN bases b ON b.id::text = o.base_id
+			  WHERE o.bin = $2 AND o.approved_at IS NOT NULL AND b.disabled_at IS NULL
+			 UNION
+			 SELECT b.key, b.server_id FROM base_tokens t JOIN bases b ON b.id = t.base_id
+			  WHERE t.organization_uuid = $1 AND t.revoked_at IS NULL AND b.disabled_at IS NULL`,
+			[organizationUuid, bin.trim()],
+		);
+		return r.rows.map((x) => ({ key: x.key, serverId: x.server_id }));
+	}
+
+	/**
+	 * БИЗНЕС-АГЕНТ ДЛЯ БАЗЫ РЕЕСТРА (самопроверка базы из панели). У такой команды нет организации пользователя — есть
+	 * база, поэтому БИН берётся из её одобренных организаций, а выбор — тем же правилом (В2), с базой, названной явно:
+	 * агент должен видеть в базе с этим ключом организацию одобренного БИН. Ни одного одобренного БИН — `none`.
+	 */
+	async resolveForBase(baseId: string, baseKey: string): Promise<
+		| { kind: "agent"; agent: AgentView } | Extract<TargetDecision, { kind: "refused" }> | { kind: "ambiguous" } | { kind: "none" }
+	> {
+		const bins = await this.db.query<{ bin: string }>(
+			`SELECT bin FROM base_organizations WHERE base_id = $1 AND approved_at IS NOT NULL ORDER BY bin`, [baseId],
+		);
+		if (!bins.rows.length) return { kind: "none" };
+		const { agents, bases } = await this.businessSlices();
+		const slices = agents.map((a) => ({ agentId: a.id, online: a.online, bases: bases.get(a.id) ?? [], limits: a.limits }));
+		// Сама база — «своя» (уровень 2): одноимённые базы разных агентов с тем же БИН различит только связь.
+		const owned = ownedBasesOf([{ key: baseKey, serverId: null }]);
+		let last: Awaited<ReturnType<AgentService["resolveForBase"]>> = { kind: "none" };
+		for (const { bin } of bins.rows) {
+			const d = resolveBusinessTarget(slices, { bin, baseKey }, owned);
+			if (d.kind === "base") {
+				const agent = agents.find((a) => a.id === d.agentId);
+				if (agent) return { kind: "agent", agent };
+			}
+			if (d.kind === "refused" || (d.kind === "ambiguous" && last.kind === "none")) last = d.kind === "refused" ? d : { kind: "ambiguous" };
+		}
+		return last;
+	}
+
+	/**
+	 * Агенты, у которых организация с этим БИН есть в срезе — «кто её обслуживает» для статуса чата и списка агентов
+	 * пользователя. С базами, где этот БИН есть, и только с ними: остальные базы агента — чужие.
+	 */
+	async servingBin(bin: string | null): Promise<{ agent: AgentView; bases: AgentBase[] }[]> {
+		const b = bin?.trim();
+		if (!b) return [];
+		const { agents, bases } = await this.businessSlices();
+		return agents
+			.map((agent) => ({ agent, bases: (bases.get(agent.id) ?? []).filter((x) => x.organizations?.some((o) => o.bin === b)) }))
+			.filter((x) => x.bases.length > 0);
+	}
+
+	/**
+	 * ПОЧЕМУ БАЗУ ОРГАНИЗАЦИИ НЕКОМУ СПРОСИТЬ — для отказа, когда resolveBusiness никого не нашёл (В2). Кандидаты — все
+	 * бизнес-агенты, поэтому причины три: базы с этим БИН нет ни у одного агента (есть, но выключена или агент отключён —
+	 * тоже сюда), агент базы не на связи, БИН в нескольких базах (это resolveBusiness говорит сам — `ambiguous`).
+	 */
+	async explainUnresolved(bin: string, orgLabel: string): Promise<{ code: string; message: string }> {
+		const all = (await this.listAll()).filter((a) => a.role === "business");
+		const bases = await new AgentBasesStore(this.db).listMany(all.map((a) => a.id), { cached: true });
+		const holders = all.filter((a) => (bases.get(a.id) ?? []).some((x) => x.organizations?.some((o) => o.bin === bin)));
+		const disabled = holders.find((a) => a.disabled);
+		if (!holders.length) {
+			return {
+				code: "BASE_NOT_SERVED",
+				message: `Организации «${orgLabel}» (БИН ${bin}) нет ни в одной базе агентов BuhProf: добавьте её базу в окне `
+					+ "бизнес-агента на компьютере с 1С («Базы 1С») или проверьте БИН организации в самой 1С",
+			};
+		}
+		if (disabled && holders.every((a) => a.disabled)) {
+			return { code: "AGENT_DISABLED", message: `Базы организации «${orgLabel}» обслуживает агент «${disabled.name}», но он отключён в панели` };
+		}
+		return {
+			code: "AGENT_OFFLINE",
+			message: `Базы организации «${orgLabel}» обслуживает агент «${holders[0]!.name}», но он сейчас не на связи `
+				+ "(служба на компьютере с 1С не запущена или нет сети)",
+		};
 	}
 
 	/**
@@ -376,11 +383,10 @@ export class AgentService {
 	 *
 	 * Ограничение доступа даёт право OneCAdmin (проверяется в onecRouter), а не org.
 	 */
-	async pickAdminAgent(baseKey: string | null, opts: { serverId?: string | null; allowedServers?: ReadonlySet<string> | null } = {}): Promise<AgentView | null> {
-		// Сервер (C9) — выбранный в панели; видимые пользователю серверы (C11) — ограничение сверху.
+	async pickAdminAgent(baseKey: string | null, opts: { serverId?: string | null } = {}): Promise<AgentView | null> {
+		// Сервер (C9) — выбранный в панели. Видимость по организациям (C11) отменена (В5): панель внутренняя.
 		const candidates = (await this.listAll()).filter((a) => !a.disabled && a.online && a.role === "admin"
-			&& (!opts.serverId || a.serverId === opts.serverId)
-			&& (!opts.allowedServers || (!!a.serverId && opts.allowedServers.has(a.serverId))));
+			&& (!opts.serverId || a.serverId === opts.serverId));
 		const key = baseKey && baseKey !== DEFAULT_BASE_KEY ? baseKey : null;
 		if (!key) return candidates[0] ?? null;
 
@@ -395,13 +401,6 @@ export class AgentService {
 		);
 		const ids = new Set(rows.rows.map((r) => r.server_id));
 		return candidates.find((a) => a.serverId && ids.has(a.serverId)) ?? null;
-	}
-
-	/** Агенты, которые организация видит в интерфейсе: свои, а в режиме any — все, если своих нет. */
-	async visibleTo(organizationUuid: string): Promise<AgentView[]> {
-		const own = await this.listByOrganization(organizationUuid);
-		if (own.length || this.orgBinding === "strict") return own;
-		return this.listAll();
 	}
 
 	/**
@@ -767,9 +766,8 @@ export class AgentService {
 		const byPoll = this.pollAlive(r.id);
 		const online = (byPoll ?? byHeartbeat) && !r.disabled_at;
 		return {
-			limits: { maxBases: r.max_bases ?? null, maxBins: r.max_bins ?? null, activeBins: r.active_bins ?? null },
+			limits: { maxBases: r.max_bases ?? null },
 			id: r.id,
-			organizationUuid: r.organization_uuid,
 			serverId: r.server_id,
 			role: r.role === "admin" ? "admin" : "business",
 			basesSyncedAt: r.bases_synced_at,

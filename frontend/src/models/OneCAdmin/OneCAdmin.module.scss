@@ -598,26 +598,6 @@
 	background: $color33;
 }
 
-.BasesTable {
-	td {
-		vertical-align: top;
-	}
-
-	// Организации — списком с переносами; остальные колонки короткие.
-	td:nth-child(5) {
-		text-align: left;
-		white-space: normal;
-	}
-
-	th:nth-child(-n + 5) {
-		text-align: left;
-	}
-
-	td:nth-child(-n + 4) {
-		text-align: left;
-	}
-}
-
 .BaseOrg {
 	display: flex;
 	flex-wrap: wrap;
@@ -632,10 +612,6 @@
 .OverLimit {
 	color: $attentionText;
 	font-weight: 500;
-}
-
-.OverLimitRow {
-	opacity: 0.85;
 }
 
 // Ключ базы и БИН читают посимвольно и сверяют — моноширинным.

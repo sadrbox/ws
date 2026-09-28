@@ -54,14 +54,15 @@ export class BaseTokenStore {
 	}
 
 	/**
-	 * Выпустить токен базе. Организация ERP по умолчанию — организация сервера базы. Возвращает токен в
-	 * открытом виде — единственный раз; в журнал его не писать.
+	 * Выпустить токен базе. Организация ERP — ТОЛЬКО явная (В7, 28.09): умолчание «организация сервера» у сервера
+	 * агента дало бы `agent:<id>` вместо организации. Возвращает токен в открытом виде — единственный раз; в журнал
+	 * его не писать.
 	 */
-	async issue(input: { baseId: string; organizationUuid?: string | null; createdBy: string }): Promise<{ id: string; token: string; organizationUuid: string }> {
-		const b = await this.db.query<{ organization_uuid: string }>(
-			`SELECT s.organization_uuid FROM bases b JOIN servers s ON s.id = b.server_id WHERE b.id = $1`, [input.baseId]);
+	async issue(input: { baseId: string; organizationUuid: string; createdBy: string }): Promise<{ id: string; token: string; organizationUuid: string }> {
+		const organizationUuid = input.organizationUuid.trim();
+		if (!organizationUuid) throw new Error("токен базы выпускается только для названной организации ERP");
+		const b = await this.db.query(`SELECT 1 FROM bases WHERE id = $1`, [input.baseId]);
 		if (!b.rows[0]) throw new Error("база не найдена");
-		const organizationUuid = input.organizationUuid || b.rows[0].organization_uuid;
 		const id = randomUUID();
 		const token = newBaseToken();
 		await this.db.query(

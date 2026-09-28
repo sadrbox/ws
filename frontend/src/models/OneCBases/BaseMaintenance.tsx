@@ -14,7 +14,7 @@
  * подтверждения на осмотр — приучать подтверждать не глядя. Спрашиваем именно про
  * исправление.
  */
-import { FC, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { usePanePollInterval } from "src/hooks/usePaneActive";
@@ -40,7 +40,9 @@ import {
 	startApplyUpdate, startCheckBase, startRestoreBase, startSelftest, startSelfCheck,
 	type IbApplyUpdateResult, type IbCheckPayload, type IbCheckResult, type IbRestoreResult, type SelfCheckResult, type SelftestResult, type Started,
 } from "src/services/onec/api";
-import { selfCheckLines, selfCheckSummary } from "./selfCheckView";
+import { selfCheckSummary } from "./selfCheckView";
+import { SELF_CHECK_COLUMNS, SELFTEST_COLUMNS, selfCheckRows, selftestRows } from "./stepResultsView";
+import { StepResultsSheet } from "./StepResultsSheet";
 import main from "src/styles/main.module.scss";
 import styles from "src/models/OneCAdmin/OneCAdmin.module.scss";
 
@@ -75,6 +77,8 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 	const [selftest, setSelftest] = useState<SelftestResult | null>(null);
 	// Самопроверка BuhProf (ПН6) — про расширение в базе, а не про агента: своё состояние и своя таблица.
 	const [selfCheck, setSelfCheck] = useState<SelfCheckResult | null>(null);
+	const selfCheckData = useMemo(() => selfCheckRows(selfCheck), [selfCheck]);
+	const selftestData = useMemo(() => selftestRows(selftest), [selftest]);
 
 	/*
 	 * ОТКАЗ «БАЗА ЗАНЯТА» ДАЁТ КНОПКИ (П25): повторить ту же операцию и посмотреть, кто держит базу.
@@ -442,26 +446,9 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 								)}
 							</GroupRow>
 							{selfCheck && (<>
-								<table className={styles.StatsTable}>
-									<thead>
-										<tr>
-											<th>{translate("onecSelfCheckStep")}</th>
-											<th>{translate("onecSelftestResult")}</th>
-											<th>{translate("onecSelfCheckDetail")}</th>
-										</tr>
-									</thead>
-									<tbody>
-										{selfCheckLines(selfCheck).map((l, i) => (
-											<tr key={`${i}-${l.title}`}>
-												<td>{l.title}</td>
-												{/* «Не сказали» — не отказ: красить незнание в поломку значит гонять чинить целое. */}
-												<td>{l.ok === null ? "—" : l.ok ? translate("onecSelftestOk") : translate("onecSelftestFail")}</td>
-												<td>{[l.detail, l.hint].filter(Boolean).join(" · ")}</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-								{!selfCheckLines(selfCheck).length && (
+								{/* Итоги по шагам — SubTableSheets (28.09). «Не сказали» — «—», а не отказ (stepResultsView). */}
+								{selfCheckData.length > 0 && <StepResultsSheet columns={SELF_CHECK_COLUMNS} rows={selfCheckData} />}
+								{!selfCheckData.length && (
 									<Notice inline items={[{ type: "info", text: translate("onecSelfCheckEmpty") }]} />
 								)}
 								{selfCheckSummary(selfCheck).organizationsWithoutBin.length > 0 && (
@@ -535,26 +522,7 @@ export const BaseMaintenance: FC<{ baseKey: string }> = ({ baseKey }) => {
 										{translate("onecSelftest")}
 									</Button>
 								</GroupRow>
-								{selftest && (
-									<table className={styles.StatsTable}>
-										<thead>
-											<tr>
-												<th>{translate("onecSelftestStep")}</th>
-												<th>{translate("onecSelftestResult")}</th>
-												<th>{translate("onecSelftestNote")}</th>
-											</tr>
-										</thead>
-										<tbody>
-											{(selftest.steps ?? []).map((s, i) => (
-												<tr key={`${i}-${s.name}`}>
-													<td>{s.name}</td>
-													<td>{s.ok ? translate("onecSelftestOk") : translate("onecSelftestFail")}</td>
-													<td>{s.note ?? ""}</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								)}
+								{selftest && <StepResultsSheet columns={SELFTEST_COLUMNS} rows={selftestData} />}
 							</GroupCol>
 						</FormArea>
 					</>)}

@@ -51,12 +51,11 @@ async function harness(opts: {
 	businessDisabled?: boolean;
 	/** Серверы, где есть каждая база реестра (C9–C11); нет — один сервер srv-1. */
 	servers?: { id: string; name: string; organizationUuid: string }[];
-	scope?: "all" | "organizations";
 	/** Заявки агентов для списка «Подключение агентов». */
 	enrollments?: Record<string, unknown>[];
 } = {}) {
 	const journal: string[] = [];
-	const enqueued: { type: string; payload: Record<string, unknown> }[] = [];
+	const enqueued: { type: string; payload: Record<string, unknown>; organizationUuid?: string }[] = [];
 	const known = opts.bases ?? [{ key: "_transition", clusterStatus: "ONLINE" }];
 	const results = opts.results ?? {};
 	const servers = opts.servers ?? [{ id: "srv-1", name: "SERVER", organizationUuid: "org-1" }];
@@ -74,10 +73,13 @@ async function harness(opts: {
 		serversWithKey: async (key: string) => (known.some((b) => b.key === key) ? servers : []),
 		listServers: async () => servers,
 		removeMissing: async () => { journal.push("removeMissing"); return opts.removed ?? true; },
+		setDisplayName: async (id: string, name: string | null) => { journal.push(`setDisplayName:${id}:${name ?? "-"}`); return true; },
+		// Организация базы (В4): за ней числятся команды в базу — из заявки базы или её токена чата.
+		organizationOf: async () => "org-base",
 	};
 	const queue = {
-		enqueue: async (i: { type: string; payload: Record<string, unknown> }) => {
-			enqueued.push({ type: i.type, payload: i.payload });
+		enqueue: async (i: { type: string; payload: Record<string, unknown>; organizationUuid?: string }) => {
+			enqueued.push({ type: i.type, payload: i.payload, organizationUuid: i.organizationUuid });
 			journal.push(`enqueue:${i.type}`);
 			return { id: `cmd-${enqueued.length}`, type: i.type };
 		},
@@ -92,30 +94,31 @@ async function harness(opts: {
 		capabilities: ["cluster.admin", "ib.admin", "agent.procs"], version: "2026-09-17",
 	};
 	const business = {
-		id: "biz", organizationUuid: "org-1", role: "business", disabled: !!opts.businessDisabled, online: true, serverId: null,
+		id: "biz", role: "business", disabled: !!opts.businessDisabled, online: true, serverId: null,
 		name: "Бухгалтерия", capabilities: [], version: "2026-09-22",
 	};
 	const agents = {
 		pickAdminAgent: async () => admin,
 		listAll: async () => [admin, business],
-		create: async (organizationUuid: string, name: string) => { journal.push(`create:${organizationUuid || "-"}:${name}`); return { agent: { id: "new", name, organizationUuid }, token: "bpa_x" }; },
+		// Организации у агента нет (Р1): журнал пишет роль и имя.
+		create: async (name: string, role: string) => { journal.push(`create:${role}:${name}`); return { agent: { id: "new", name, role }, token: "bpa_x" }; },
 		rename: async (id: string, name: string) => { journal.push(`rename:${id}:${name}`); return true; },
 		setDisabled: async (id: string, disabled: boolean) => { journal.push(`setDisabled:${id}:${disabled}`); return true; },
-		setOrganization: async (id: string, org: string) => { journal.push(`setOrganization:${id}:${org}`); return true; },
 		findById: async (id: string) => (id === "bizOld"
-			? { id: "bizOld", name: "Бухгалтерия", role: "business", online: false, disabled: true, organizationUuid: "org-2", capabilities: [], limits: { maxBases: null, maxBins: null } }
+			? { id: "bizOld", name: "Бухгалтерия", role: "business", online: false, disabled: true, capabilities: [], limits: { maxBases: null } }
 			: id === "biz"
-			? { id: "biz", name: "Бухгалтерия", role: "business", online: true, disabled: false, organizationUuid: "org-2",
+			? { id: "biz", name: "Бухгалтерия", role: "business", online: true, disabled: false,
 				capabilities: ["agent.procs", "agent.cancel", "agent.config", "agent.restart", "agent.update"],
-				limits: { maxBases: 2, maxBins: null } }
+				limits: { maxBases: 2 } }
 			: admin),
-		/** Исполнитель бизнес-команды по базе (самопроверка базы): кого выберет сервис для SELF_CHECK. */
-		pickAgentFor: async (_org: string, baseKey: string) => (opts.businessAgent === null ? null : {
-			id: "biz", organizationUuid: "org-1", role: "business", online: true, disabled: false,
-			capabilities: opts.businessAgent ?? ["HEALTH", "SELF_CHECK"], baseKey,
-		}),
+		/** Исполнитель SELF_CHECK для базы реестра (по её одобренным БИН, В2): `null` — никто. */
+		resolveForBase: async (baseId: string, baseKey: string) => {
+			journal.push(`resolveForBase:${baseId}:${baseKey}`);
+			return opts.businessAgent === null ? { kind: "none" } : {
+				kind: "agent", agent: { id: "biz", role: "business", online: true, disabled: false, capabilities: opts.businessAgent ?? ["HEALTH", "SELF_CHECK"] },
+			};
+		},
 		setLimits: async (id: string, l: unknown) => { journal.push(`setLimits:${id}:${JSON.stringify(l)}`); return true; },
-		setActiveBins: async (id: string, bins: unknown) => { journal.push(`setActiveBins:${id}:${JSON.stringify(bins)}`); return true; },
 	};
 	const agentBase = (key: string, pos: number, transport: string) => ({
 		key, pos, status: "ONLINE", transport, extVersion: "1.4.0", overLimit: null, seenAt: null,
@@ -135,7 +138,7 @@ async function harness(opts: {
 	const app = express();
 	app.use(express.json());
 	app.use("/v1/onec", onecRouter({
-		erp: erpDb(opts.superAdmin ?? true), cfg: { JWT_SECRET, ONEC_COMMAND_TIMEOUT_SECS: 5, RATE_LIMIT_ONEC_CLUSTER_PER_MIN: 1000, ONEC_SERVER_SCOPE: opts.scope ?? "all" },
+		erp: erpDb(opts.superAdmin ?? true), cfg: { JWT_SECRET, ONEC_COMMAND_TIMEOUT_SECS: 5, RATE_LIMIT_ONEC_CLUSTER_PER_MIN: 1000 },
 		log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 		agents, bases, queue, audit,
 		batches: { ownerOf: async () => ({ organizationUuid: "org-1", userUuid: null }) },
@@ -160,13 +163,9 @@ async function harness(opts: {
 			previousAgent: async (computer: string) => (computer === "BUH-PC-2" ? "bizOld" : computer === "BUH-PC-3" ? "biz" : null),
 			// Более новая ожидающая заявка той же службы (КР-20 аудита 27.09): у «enr-older» она есть.
 			newerPending: async (id: string) => (id === "enr-older" ? "NEW-777" : null),
-			approve: async (id: string, d: { organizationUuid: string; agentId: string }) => { journal.push(`approveEnroll:${id}:${d.organizationUuid || "-"}:${d.agentId}`); return true; },
+			approve: async (id: string, d: { agentId: string }) => { journal.push(`approveEnroll:${id}:${d.agentId}`); return true; },
 			list: async () => opts.enrollments ?? [],
 			previousAgents: async () => new Map(),
-		},
-		activation: {
-			get: async (agentId: string, bin: string) => ({ agentId, bin, state: bin === "000000000009" ? "APPROVED" : "PENDING" }),
-			decide: async (agentId: string, bin: string, d: { state: string }) => { journal.push(`decide:${agentId}:${bin}:${d.state}`); return true; },
 		},
 	} as never));
 
@@ -267,11 +266,12 @@ test("базы бизнес-агента: третья при maxBases=2 — с�
 	assert.equal(data.canEditLimits, true);
 	assert.deepEqual(data.bases.map((b) => b.overLimitService), [false, false, true]);
 
-	const bad = await h.call("PUT", "/agents/biz/limits", { maxBases: -1, maxBins: "" });
+	const bad = await h.call("PUT", "/agents/biz/limits", { maxBases: -1 });
 	assert.equal(bad.status, 400);
-	const ok = await h.call("PUT", "/agents/biz/limits", { maxBases: 3, maxBins: "" });
+	// Лимит БИН отменён (В8): поле maxBins больше ничего не значит.
+	const ok = await h.call("PUT", "/agents/biz/limits", { maxBases: 3, maxBins: 5 });
 	assert.equal(ok.status, 200);
-	assert.ok(h.journal.includes('setLimits:biz:{"maxBases":3,"maxBins":null}'));
+	assert.ok(h.journal.includes('setLimits:biz:{"maxBases":3}'));
 	const adm = await h.call("PUT", "/agents/adm/limits", { maxBases: 3 });
 	assert.equal(adm.status, 409);
 	h.close();
@@ -283,32 +283,17 @@ test("базы бизнес-агента: третья при maxBases=2 — с�
 	notSuper.close();
 });
 
-test("лимит: не названное в запросе поле сохраняет прежнее значение", async () => {
+test("активация БИН отменена (В8): маршрутов активации больше нет", async () => {
 	const h = await harness();
-	const r = await h.call("PUT", "/agents/biz/limits", { maxBins: 4 });
-	assert.equal(r.status, 200);
-	assert.ok(h.journal.includes('setLimits:biz:{"maxBases":2,"maxBins":4}'));
-	h.close();
+	try {
+		// Маршрута нет — отвечает сам express (не JSON), поэтому смотрим только код.
+		const raw = (method: string, path: string) => fetch(`${h.url}${path}`, {
+			method, headers: { authorization: `Bearer ${h.token}`, "content-type": "application/json" }, body: "{}",
+		}).then((r) => r.status);
+		assert.equal(await raw("POST", "/activation-requests/biz/000000000002/approve"), 404);
+		assert.equal(await raw("PUT", "/agents/biz/active-bins"), 404);
+	} finally { h.close(); }
 });
-
-test("активация БИН: у агента без списка — список заводится из обслуживаемых сейчас плюс новый; сверх тарифа — предупреждение", async () => {
-	const h = await harness();
-	// Агент biz: maxBases 2 → обслуживаются Б1 и Б2 (БИНы …000, …001); просят …002 из базы сверх лимита.
-	const r = await h.call("POST", "/activation-requests/biz/000000000002/approve", {});
-	assert.equal(r.status, 200);
-	assert.ok(h.journal.includes('setActiveBins:biz:["000000000000","000000000001","000000000002"]'), h.journal.join("\n"));
-	assert.ok(h.journal.includes("decide:biz:000000000002:APPROVED"));
-	const again = await h.call("POST", "/activation-requests/biz/000000000009/approve", {});
-	assert.equal(again.status, 409);
-	const noNote = await h.call("POST", "/activation-requests/biz/000000000002/reject", {});
-	assert.equal(noNote.status, 400);
-	h.close();
-
-	const notSuper = await harness({ superAdmin: false });
-	assert.equal((await notSuper.call("POST", "/activation-requests/biz/000000000002/approve", {})).status, 403);
-	notSuper.close();
-});
-
 const S1 = "aaaaaaaa-0000-4000-8000-000000000001";
 const S2 = "aaaaaaaa-0000-4000-8000-000000000002";
 
@@ -324,19 +309,6 @@ test("C10: одноимённая база на двух серверах — б
 	h.close();
 });
 
-test("C11: при ONEC_SERVER_SCOPE=organizations чужой сервер не виден не суперадмину", async () => {
-	const servers = [{ id: S1, name: "SRV-A", organizationUuid: "org-1" }, { id: S2, name: "SRV-B", organizationUuid: "org-2" }];
-	const h = await harness({ servers, scope: "organizations", superAdmin: false });
-	// Пользователь — в org-1: сервер org-2 ему закрыт, а одноимённая база однозначна (виден один сервер).
-	const denied = await h.call("GET", `/bases/_transition/info?serverId=${S2}`);
-	assert.equal(denied.status, 403);
-	const listed = await h.call("GET", "/servers");
-	assert.deepEqual(((listed.body.data as unknown as { items: { id: string }[] }).items).map((x) => x.id), [S1]);
-	const one = await h.call("GET", "/bases/_transition/info");
-	assert.equal(one.status, 200);
-	h.close();
-});
-
 test("п. 1: сводка бизнес-агента — его команда HEALTH, а не админская AGENT_HEALTH", async () => {
 	const h = await harness({ results: { HEALTH: { bases: [{ key: "Б1", status: "ONLINE" }], limits: { maxBases: 2 } } } });
 	const r = await h.call("GET", "/agents/biz/health");
@@ -345,22 +317,14 @@ test("п. 1: сводка бизнес-агента — его команда HE
 	h.close();
 });
 
-test("п. 7: снятие процесса адресуется выбранному агенту; чужой агент по id не виден", async () => {
+test("п. 7: снятие процесса адресуется выбранному агенту", async () => {
 	const h = await harness();
 	const r = await h.call("POST", "/agent-processes/4242/kill", { agentId: "11111111-1111-4111-8111-111111111111" });
 	// Агент по id — заглушка отдаёт админ-агента: команда ушла ему, а не «первому на связи».
 	assert.equal(r.status, 200);
 	assert.deepEqual(h.enqueued.map((c) => [c.type, c.payload.pid]), [["AGENT_KILL_PROCESS", 4242]]);
 	h.close();
-
-	const servers = [{ id: "aaaaaaaa-0000-4000-8000-000000000002", name: "SRV-B", organizationUuid: "org-2" }];
-	const scoped = await harness({ servers, scope: "organizations", superAdmin: false });
-	// Админ-агент заглушки — на srv-1, которого нет среди видимых серверов пользователя org-1.
-	const hidden = await scoped.call("GET", "/agents/adm/commands");
-	assert.equal(hidden.status, 404);
-	scoped.close();
 });
-
 test("управление службой бизнес-агента: настройки, перезапуск и обновление идут ему же", async () => {
 	const h = await harness({ results: { AGENT_CONFIG_GET: { ibParallel: 2, bases: [] }, AGENT_CONFIG_SET: { changed: ["ibParallel"] }, AGENT_RESTART: { ok: true }, AGENT_UPDATE: { ok: true, accepted: true } } });
 	assert.equal((await h.call("GET", "/agents/biz/config")).status, 200);
@@ -376,46 +340,45 @@ test("управление службой бизнес-агента: настр�
 	h.close();
 });
 
-test("агент кластера подключается без организации ERP: он обслуживает весь сервер, а не одну организацию", async () => {
+test("одобрение заявки — без организации у агента любой роли (Р1, В6)", async () => {
 	const h = await harness();
 	const adm = await h.call("POST", "/enrollments/enr-adm/approve", {});
 	assert.equal(adm.status, 200);
-	assert.ok(h.journal.some((j) => j.startsWith("approveEnroll:enr-adm:-:")), h.journal.join("\n"));
-	assert.ok(h.journal.includes("create:-:Кластер"), "агент заведён без организации");
-
-	// Бизнес-агенту организация по-прежнему обязательна: по ней выбирается исполнитель команд чата.
-	const biz = await h.call("POST", "/enrollments/enr-biz/approve", {});
-	assert.equal(biz.status, 400);
-
-	// И создание вручную: «агент кластера» — без организации.
+	assert.ok(h.journal.some((j) => j.startsWith("approveEnroll:enr-adm:")), h.journal.join("\n"));
+	assert.ok(h.journal.includes("create:admin:Кластер"));
+	// Организацию, присланную старой панелью, сервис не читает вовсе.
+	const biz = await h.call("POST", "/enrollments/enr-biz/approve", { organizationUuid: "org-1" });
+	assert.equal(biz.status, 200);
+	assert.ok(h.journal.includes("create:business:Бухгалтерия"));
+	// И создание вручную — без активной организации.
 	const created = await h.call("POST", "/agents", { name: "Кластер 2", cluster: true });
 	assert.equal(created.status, 201);
-	assert.ok(h.journal.includes("create:-:Кластер 2"));
+	assert.ok(h.journal.includes("create:admin:Кластер 2"));
+	const business = await h.call("POST", "/agents", { name: "Бизнес 2" });
+	assert.equal(business.status, 201);
+	assert.ok(h.journal.includes("create:business:Бизнес 2"));
 	h.close();
 });
 
 test("повторное подключение той же службы приводит прежнего агента в соответствие с решением", async () => {
 	const h = await harness();
-	// Заглушка агента «biz»: отключён, в организации org-2, со старым именем.
-	const r = await h.call("POST", "/enrollments/enr-again/approve", { organizationUuid: "org-1" });
+	const r = await h.call("POST", "/enrollments/enr-again/approve", {});
 	assert.equal(r.status, 200);
 	assert.equal((r.body.data as unknown as { created: boolean }).created, false, "агент тот же, а не новый");
 	assert.ok(h.journal.includes("setDisabled:bizOld:false"), "отключённого включаем: его только что одобрили");
 	assert.ok(h.journal.includes("rename:bizOld:Бухгалтерия, новое имя"));
-	assert.ok(h.journal.includes("setOrganization:bizOld:org-1"), "организация из решения, иначе команды чата его не найдут");
 	h.close();
 });
 
 test("аудит 21.09: заявка не забирает токен у работающего агента — по умолчанию заводится новый", async () => {
 	const h = await harness();
 	// «biz» на связи; заявка той же службы (previousAgent → biz) не должна занимать его без явного выбора.
-	const r = await h.call("POST", "/enrollments/enr-live/approve", { organizationUuid: "org-1" });
+	const r = await h.call("POST", "/enrollments/enr-live/approve", {});
 	assert.equal(r.status, 200);
 	assert.equal((r.body.data as unknown as { created: boolean }).created, true);
-	assert.ok(h.journal.some((j) => j.startsWith("create:org-1:")), h.journal.join("\n"));
+	assert.ok(h.journal.some((j) => j.startsWith("create:business:")), h.journal.join("\n"));
 	h.close();
 });
-
 test("КР-20: прежнюю заявку при более новой той же службы не одобрить — агент ждёт решения по новой", async () => {
 	const h = await harness();
 	try {
@@ -521,12 +484,14 @@ test("аудит 21.09: сводки пользователей и расшир�
 
 // ── Самопроверка базы средствами расширения (СВ16) и журнал вызовов чата (ПН8) ──
 
-test("самопроверка базы идёт бизнес-агенту той базы — командой SELF_CHECK с её ключом", async () => {
+test("самопроверка базы идёт бизнес-агенту той базы — командой SELF_CHECK, за организацией базы (В4)", async () => {
 	const h = await harness({ results: { SELF_CHECK: { ok: true, version: "1.6.0", checks: [] } } });
 	try {
 		const r = await h.call("POST", "/bases/_transition/self-check");
 		assert.equal(r.status, 200);
-		assert.deepEqual(h.enqueued.at(-1)!.type, "SELF_CHECK");
+		assert.ok(h.journal.includes("resolveForBase:id-_transition:_transition"), h.journal.join("\n"));
+		assert.equal(h.enqueued.at(-1)!.type, "SELF_CHECK");
+		assert.equal(h.enqueued.at(-1)!.organizationUuid, "org-base");
 		assert.equal((r.body as unknown as { data: { ok: boolean } }).data.ok, true);
 	} finally { h.close(); }
 });
@@ -536,7 +501,7 @@ test("самопроверка: агента нет — 409 и текст про
 	try {
 		const r = await h.call("POST", "/bases/_transition/self-check");
 		assert.equal(r.status, 409);
-		assert.equal((r.body as unknown as { error: { code: string } }).error.code, "AGENT_OFFLINE");
+		assert.equal((r.body as unknown as { error: { code: string } }).error.code, "AGENT_UNAVAILABLE");
 		assert.equal(h.enqueued.length, 0, "команда не ставится вовсе");
 	} finally { h.close(); }
 });
@@ -550,7 +515,6 @@ test("самопроверка: сборка агента не знает SELF_C
 		assert.equal(h.enqueued.length, 0, "минуту ожидания и UNKNOWN_COMMAND по сети экономим");
 	} finally { h.close(); }
 });
-
 test("журнал вызовов чата: отбор по базе доходит до хранилища, строки отдаются как есть", async () => {
 	const rows = [{ at: "2026-09-22T10:00:00.000Z", tool: "list_documents", target: "1c", state: "ok", organizationUuid: null }];
 	const h = await harness({ chatCalls: rows });
@@ -626,4 +590,21 @@ test("отключённый бизнес-агент в сводке молчи�
 		assert.deepEqual((summary.body as unknown as { data: { items: unknown[] } }).data.items, [],
 			"агенту, которого отключили, больше не верим: его базы в сводке нет");
 	} finally { h.close(); }
+});
+
+test("наименование базы в панели: сохраняется, пустое — возвращает имя из кластера, чужой тип и длина — отказ", async () => {
+	const h = await harness({ bases: [{ key: "buh1", clusterStatus: "ONLINE" }] });
+	const saved = await h.call("PUT", "/bases/buh1/name", { name: "  Бухгалтерия (основная)  " });
+	assert.equal(saved.status, 200);
+	assert.equal((saved.body.data as Record<string, unknown>).name, "Бухгалтерия (основная)");
+	const reset = await h.call("PUT", "/bases/buh1/name", { name: "" });
+	assert.equal(reset.status, 200);
+	assert.equal((reset.body.data as Record<string, unknown>).name, null);
+	assert.deepEqual(h.journal.filter((x) => x.startsWith("setDisplayName") || x === "audit"), [
+		"setDisplayName:id-buh1:Бухгалтерия (основная)", "audit", "setDisplayName:id-buh1:-", "audit",
+	]);
+	assert.equal((await h.call("PUT", "/bases/buh1/name", { name: 42 })).status, 400);
+	assert.equal((await h.call("PUT", "/bases/buh1/name", { name: "x".repeat(201) })).status, 400);
+	assert.equal((await h.call("PUT", "/bases/nope/name", { name: "X" })).status, 404);
+	h.close();
 });

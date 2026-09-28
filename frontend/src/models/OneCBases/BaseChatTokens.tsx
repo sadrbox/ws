@@ -97,7 +97,7 @@ export const BaseChatTokens: FC<{ baseId?: string; baseKey?: string; fitHeight?:
 		tokenState: stateOf(t).text,
 		__tone: stateOf(t).tone,
 	})), (r) => r.uuid), [items]);
-	const view = useStaticTableView(rows, { tokenIssued: "desc" });
+	const view = useStaticTableView(rows, { tokenIssued: "desc" }, all ? "OneCBases_tokens_all" : "OneCBases_tokens", baseId ? { scope: baseId } : undefined);
 	const active = items.find((t) => t.id === activeId) ?? null;
 	// Менять и отзывать можно только ДЕЙСТВУЮЩИЙ токен: у отозванного и сменённого менять нечего.
 	const live = !!active && !active.revokedAt && !active.replacedBy && !!q.data?.canRevoke;

@@ -140,7 +140,7 @@ export const ProcessesTab: FC = () => {
 		orphanLabel: p.orphan ? translate("onecProcOrphan") : "",
 		procCommand: p.commandId || "—",
 	})), (p) => p.uuid), [procs.data]);
-	const view = useStaticTableView(rows, { age: "desc" });
+	const view = useStaticTableView(rows, { age: "desc" }, "OneCAdmin_procs");
 
 	const orphans = (procs.data?.items ?? []).filter((p) => p.orphan).length;
 

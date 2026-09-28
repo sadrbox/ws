@@ -43,7 +43,7 @@ import { summarize, fmt, type Statement } from "../bank/schema.ts";
 import type { PurchaseDocumentStore } from "../purchase/store.ts";
 import { summarizePurchase, purchaseLinesText, purchasePayload, clean, fmt as fmtQty, KIND_LABEL, type PurchaseDocument } from "../purchase/schema.ts";
 import type { FileStore, FileRef } from "../files/store.ts";
-import { extractOrgBases, referencedBases, rememberIdBases } from "./orgBases.ts";
+import { extractOrgBases, onlyOrganization, referencedBases, rememberIdBases } from "./orgBases.ts";
 import { serverToolCard, serverToolQuestion } from "./serverTools.ts";
 import { HISTORY_MAX_CHARS, repairHistory, windowHistory } from "./history.ts";
 
@@ -124,14 +124,18 @@ type Context = {
 	erpText?: boolean;
 };
 
-/** Куда идёт команда чата (СВ3, C0): база агента, отказ по лимиту, смешение баз или «решит прежний путь». */
+/**
+ * Куда идёт команда чата (СВ3, C0; модель без владельца 28.09): база агента по БИН организации ERP, или отказ — по
+ * лимиту, несколько баз, смешение баз в вызове, чужая организация в вызове, нет БИН, некому ответить.
+ */
+type Resolved = Awaited<ReturnType<AgentService["resolveBusiness"]>>;
 type Target =
-	| (Extract<Awaited<ReturnType<AgentService["resolveBusiness"]>>, { kind: "agent" }> & { viaErpBin: string | null })
-	| Extract<Awaited<ReturnType<AgentService["resolveBusiness"]>>, { kind: "refused" }>
+	| (Extract<Resolved, { kind: "agent" }> & { orgBin: string })
+	| Extract<Resolved, { kind: "refused" }>
+	| Extract<Resolved, { kind: "ambiguous" }>
 	| { kind: "mixed"; message: string; details: { baseKeys: string[] } }
-	| { kind: "none" };
+	| { kind: "refusal"; code: string; message: string };
 
-const OVERVIEW_COMMANDS = new Set(["GET_ORGANIZATIONS", "HEALTH"]);
 
 export type ChatReply = {
 	conversationId: string;
@@ -704,42 +708,20 @@ export class ChatWorkflow {
 			await this.audit(user, { event: "chat.license_limit", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid, details: { tool: spec.name, ...target.details } });
 			return { result: { toolCallId: call.id, content: { error: target.code, message: target.message, details: target.details }, isError: true } };
 		}
-		if (target.kind === "agent" && !target.agent.online) {
+		if (target.kind === "ambiguous" || target.kind === "refusal") {
+			// Несколько баз с этим БИН, чужая организация в вызове, нет БИН, некому ответить — в очередь не ставим.
+			await this.audit(user, { event: "chat.agent_unavailable", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid,
+				details: { tool: spec.name, code: target.code, ...(target.kind === "ambiguous" ? target.details : {}) } });
+			return { result: { toolCallId: call.id, content: { error: target.code, message: target.message,
+				...(target.kind === "ambiguous" ? { details: target.details } : {}) }, isError: true } };
+		}
+		const agent = target.agent;
+		if (!agent.online) {
 			return { result: { toolCallId: call.id, content: { error: "AGENT_OFFLINE", message: `Агент 1С, обслуживающий базу «${target.baseKey}», сейчас не на связи (служба на компьютере с 1С не запущена или нет сети)` }, isError: true } };
 		}
-		const agent = target.kind === "agent" ? target.agent : await this.d.agents.pickOnline(user.organizationUuid);
-		if (!agent) {
-			// «Не настроен» и «не на связи» — разные ситуации с разными действиями пользователя:
-			// в первом случае бесполезно ждать, нужно переключить организацию или завести агента.
-			// Считаются только бизнес-агенты (C13): админ-агент документы не проводит, и «не на связи» про него — неправда.
-			const configured = (await this.d.agents.listByOrganization(user.organizationUuid)).filter((a) => !a.disabled && a.role === "business");
-			await this.audit(user, { event: "chat.agent_unavailable", conversationId: conv.id, userUuid: user.uuid, organizationUuid: user.organizationUuid, details: { configured: configured.length } });
-			const message = configured.length
-				? "Агент 1С этой организации сейчас не на связи (служба на компьютере с 1С не запущена или нет сети)"
-				: "Для активной организации ERP агент 1С не настроен. Переключите организацию на ту, к которой подключена база 1С, или заведите агента для этой организации";
-			return { result: { toolCallId: call.id, content: { error: configured.length ? "AGENT_OFFLINE" : "AGENT_NOT_CONFIGURED", message }, isError: true } };
-		}
-		if (target.kind === "agent") {
-			// Доступность — по базе, а не по агенту (C6): у многобазового агента одна база может лежать, другие — работать.
-			if (target.baseStatus === "OFFLINE") {
-				return { result: { toolCallId: call.id, content: { error: "ONEC_UNAVAILABLE", message: `База 1С «${target.baseKey}» сейчас недоступна для агента` }, isError: true } };
-			}
-		} else {
-			if (!agent.onec.reachable) {
-				return { result: { toolCallId: call.id, content: { error: "ONEC_UNAVAILABLE", message: "База 1С недоступна для агента" }, isError: true } };
-			}
-			// Адреса нет, а баз у агента несколько (C2): агент ответил бы BASE_REQUIRED — отвечаем сами, без очереди.
-			if (!OVERVIEW_COMMANDS.has(spec.commandType)) {
-				const keys = await this.d.agents.basesOf(agent.id);
-				if (keys.length > 1) {
-					return { result: { toolCallId: call.id, content: {
-						error: "BASE_REQUIRED",
-						message: `У агента несколько баз 1С (${keys.map((k) => `«${k}»`).join(", ")}), а из вызова не понять, в какую идти: `
-							+ "у организации ERP нет БИН или его нет ни в одной базе. Вызовите get_organizations и передайте organizationId нужной организации.",
-						details: { baseKeys: keys },
-					}, isError: true } };
-				}
-			}
+		// Доступность — по базе, а не по агенту (C6): у многобазового агента одна база может лежать, другие — работать.
+		if (target.baseStatus === "OFFLINE") {
+			return { result: { toolCallId: call.id, content: { error: "ONEC_UNAVAILABLE", message: `База 1С «${target.baseKey}» сейчас недоступна для агента` }, isError: true } };
 		}
 
 		/*
@@ -761,32 +743,16 @@ export class ChatWorkflow {
 		const prep = await this.preparePayload(user, spec, payload, call.id, conv);
 		if ("error" in prep) return { result: prep.error };
 		// База — в каждой бизнес-команде многобазового агента; в 1С `baseKey` не уходит, агент его снимает.
-		if (target.kind === "agent") {
-			prep.payload = { ...prep.payload, baseKey: target.baseKey };
-			/*
-			 * КАКАЯ ОРГАНИЗАЦИЯ БАЗЫ ИМЕЕТСЯ В ВИДУ — ГОВОРИМ ВСЕГДА, КОГДА ИНСТРУМЕНТ ЭТО ПРИНИМАЕТ.
-			 *
-			 * Раньше БИН уезжал только в одном случае: когда база и была НАЙДЕНА по БИН организации ERP (C7).
-			 * Но базу чаще опознают по объектам вызова — `counterpartyId` кассового ордера пришёл из неё же, —
-			 * и тогда организация не называлась вовсе. В базе одной фирмы это ничего не меняло, в многофирменной
-			 * 1С отвечала `409 ORGANIZATION_REQUIRED`: она не вправе гадать, чьи это деньги. Модель БИН подставить
-			 * не могла — в веб-чате она его попросту не знает, пока не спросит get_organizations.
-			 *
-			 * Теперь правило одно с каналом 1С (withOrganization): организация, в которой человек работает,
-			 * едет во ВСЕ инструменты, где для неё есть поле. Выбор модели при этом главнее — `organizationBin`
-			 * или `organizationId` из вызова не перезаписываются: если она спросила организации и назвала одну,
-			 * значит про эту и речь.
-			 */
-			const props = (spec.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
-			if ("organizationBin" in props && !prep.payload.organizationBin && !prep.payload.organizationId) {
-				// Базу нашли ПО ЭТОМУ БИН — он в ней заведомо есть. Иначе БИН организации ERP годится только если
-				// агент сообщил, что такая организация в базе есть: чужой БИН 1С отвергнет, и хуже того — в базе
-				// одной фирмы, где всё работало без него, вызов начал бы отказывать.
-				const bin = target.viaErpBin ?? await this.erpBin(conv, user);
-				if (bin && (target.viaErpBin === bin || target.baseBins.includes(bin))) {
-					prep.payload = { ...prep.payload, organizationBin: bin };
-				}
-			}
+		prep.payload = { ...prep.payload, baseKey: target.baseKey };
+		/*
+		 * КАКАЯ ОРГАНИЗАЦИЯ БАЗЫ ИМЕЕТСЯ В ВИДУ — ГОВОРИМ ВСЕГДА, КОГДА ИНСТРУМЕНТ ЭТО ПРИНИМАЕТ. В многофирменной базе
+		 * 1С без неё отвечает `409 ORGANIZATION_REQUIRED`: она не вправе гадать, чьи это деньги. Правило одно с каналом
+		 * 1С (withOrganization): организация, в которой человек работает, едет во ВСЕ инструменты, где для неё есть поле.
+		 * База найдена по этому БИН, поэтому он в ней заведомо есть. Организацию, названную вызовом, targetBase уже сверил.
+		 */
+		const props = (spec.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+		if ("organizationBin" in props && !prep.payload.organizationBin && !prep.payload.organizationId) {
+			prep.payload = { ...prep.payload, organizationBin: target.orgBin };
 		}
 
 		/*
@@ -800,7 +766,7 @@ export class ChatWorkflow {
 		const cmd = await this.d.queue.enqueue({
 			agentId: agent.id, organizationUuid: user.organizationUuid, type: spec.commandType, payload: prep.payload, requestId: rid,
 			// База — и в колонке очереди (C1): команды одной базы идут по очереди, повтор узнаётся в пределах базы.
-			...(target.kind === "agent" ? { baseKey: target.baseKey } : {}),
+			baseKey: target.baseKey,
 			// Больше предела агента (600 с) с запасом на ожидание пропуска (С24): при равных сроках команда
 			// объявлялась просроченной ровно тогда, когда агент ещё мог ответить.
 			userUuid: user.uuid, conversationId: conv.id, ttlSeconds: 900,
@@ -852,28 +818,29 @@ export class ChatWorkflow {
 		// выписка помечалась загруженной, а документ поставщика — созданным.
 		const outcome: Outcome = done.state === "canceled"
 			? { ok: false, error: { code: done.error?.code ?? "COMMAND_CANCELED", message: `${done.error?.message ?? "Команда отменена"} Операция в 1С не выполнена.` } }
-			: done.state === "failed" ? { ok: false, error: done.error ?? null } : { ok: true, data: done.result };
+			: done.state === "failed" ? { ok: false, error: done.error ?? null }
+				// Список организаций — только своя: в многофирменной базе остальные организации — чужие клиенты.
+				: { ok: true, data: spec.commandType === "GET_ORGANIZATIONS" ? onlyOrganization(done.result, target.orgBin) : done.result };
 		// Итог известен — номер операции больше не нужен; упавшая по TIMEOUT у агента могла дойти до 1С — номер храним.
 		await remember(done.state === "failed" && done.error?.code === "TIMEOUT");
 		// Объекты ответа — из этой базы (C0): следующий вызов с ними уйдёт туда же. Сохраняется вместе с контекстом в interpret.
-		if (target.kind === "agent") {
-			conv.context.idBases ??= {};
-			rememberIdBases(outcome.ok ? outcome.data : outcome.error?.details, target.baseKey, conv.context.idBases, collectIds);
-			conv.context.baseAgents = { ...conv.context.baseAgents, [target.baseKey]: agent.id };
-		} else if (outcome.ok && spec.commandType === "GET_ORGANIZATIONS") {
-			// Организации всех баз этого агента: их базы — его (C3).
-			const bases = Object.fromEntries(Object.values(extractOrgBases(outcome.data).map).map((k) => [k, agent.id]));
-			if (Object.keys(bases).length) conv.context.baseAgents = { ...conv.context.baseAgents, ...bases };
-		}
+		conv.context.idBases ??= {};
+		rememberIdBases(outcome.ok ? outcome.data : outcome.error?.details, target.baseKey, conv.context.idBases, collectIds);
+		conv.context.baseAgents = { ...conv.context.baseAgents, [target.baseKey]: agent.id };
 		return this.interpret(conv, user, spec, prep.payload, call.id, prep.statementId, outcome);
 	}
 
 	/**
-	 * БАЗА МНОГОБАЗОВОГО АГЕНТА ДЛЯ КОМАНДЫ ЧАТА (СВ3, C0). Порядок — как у агента, плюс память диалога:
-	 *   1) база, которую называет сам вызов: адрес `organizationId` у поиска и чтения, организация из ответа
-	 *      get_organizations, объекты, пришедшие из базы раньше (C0). Несколько разных — отказ MIXED_BASES;
-	 *   2) иначе база с организацией по БИН — из вызова, а без него по БИН организации ERP.
-	 * Обзорные команды без адреса (список организаций, здоровье) базу не получают — агент отдаёт их по всем базам.
+	 * БАЗА ДЛЯ КОМАНДЫ ЧАТА — ПО БИН ОРГАНИЗАЦИИ ERP (СВ3, C0; модель без владельца 28.09, В2).
+	 *
+	 * У агента нет организации, кандидаты — все агенты BuhProf, поэтому стеной между клиентами служит БИН: он берётся
+	 * ТОЛЬКО из ERP. БИН, который назвала модель, должен с ним совпадать — иначе это просьба о чужой организации, и
+	 * отказ. Обзорные команды (список организаций, здоровье) идут тем же путём: без базы агент отдал бы их по всем своим
+	 * базам, то есть по чужим клиентам тоже.
+	 *
+	 * Память диалога сужает выбор, но не расширяет: база, которую называет сам вызов (адрес `organizationId`, объекты,
+	 * пришедшие из базы раньше, C0), годится только если в ней есть организация с этим БИН (resolveBusiness).
+	 * Несколько разных баз в одном вызове — MIXED_BASES.
 	 */
 	private async targetBase(conv: Conversation, user: ChatUser, spec: ToolSpec, payload: Record<string, unknown>): Promise<Target> {
 		const explicit = typeof payload.baseKey === "string" && payload.baseKey.trim() ? payload.baseKey.trim() : null;
@@ -886,19 +853,33 @@ export class ChatWorkflow {
 				details: { baseKeys: named },
 			};
 		}
-		const baseKey = named[0] ?? null;
-		const callBin = typeof payload.organizationBin === "string" ? payload.organizationBin.trim() : "";
-		let bin: string | null = callBin || null;
-		let viaErpBin: string | null = null;
-		// БИН организации ERP — только когда вызов сам базу и организацию не назвал: иначе он ИСКАЛ БЫ чужую базу.
-		if (!bin && !baseKey && !OVERVIEW_COMMANDS.has(spec.commandType)) {
-			bin = await this.erpBin(conv, user);
-			viaErpBin = bin;
+		const orgBin = await this.erpBin(conv, user);
+		if (!orgBin) {
+			return { kind: "refusal", code: "ORG_BIN_REQUIRED", message: "У активной организации ERP не указан БИН, а по нему находится её база 1С. "
+				+ "Скажите пользователю указать БИН организации в ERP." };
 		}
-		if (!baseKey && !bin) return { kind: "none" };
+		const callBin = typeof payload.organizationBin === "string" ? payload.organizationBin.replace(/\s/g, "") : "";
+		if (callBin && callBin !== orgBin) {
+			return { kind: "refusal", code: "FOREIGN_ORGANIZATION", message: `БИН ${callBin} — не организация пользователя (активная организация ERP — БИН ${orgBin}). `
+				+ "Данные другой организации отсюда не доступны: пусть пользователь переключит организацию в ERP." };
+		}
+		const baseKey = named[0] ?? null;
 		const preferAgentId = baseKey ? conv.context.baseAgents?.[baseKey] ?? null : null;
-		const r = await this.d.agents.resolveBusiness(user.organizationUuid, { baseKey, bin, preferAgentId });
-		return r.kind === "agent" ? { ...r, viaErpBin } : r;
+		const r = await this.d.agents.resolveBusiness(user.organizationUuid, orgBin, { baseKey, preferAgentId });
+		if (r.kind === "agent") {
+			// Организация вызова — по id из этой базы: она обязана быть организацией пользователя (тот же БИН).
+			// Агент id организаций не сообщил (старая сборка) — проверить нечем, решит 1С.
+			const orgId = typeof payload.organizationId === "string" ? payload.organizationId.trim() : "";
+			if (orgId && r.baseOrgs?.some((o) => o.id) && !r.baseOrgs.some((o) => o.id === orgId && o.bin === orgBin)) {
+				const known = r.baseOrgs.find((o) => o.id === orgId);
+				return { kind: "refusal", code: "FOREIGN_ORGANIZATION", message: `Организация ${known?.name ? `«${known.name}»` : orgId} — не организация пользователя: `
+					+ "данные другой организации отсюда не доступны. Используйте его организацию (или вызов без organizationId)." };
+			}
+			return { ...r, orgBin };
+		}
+		if (r.kind !== "none") return r;
+		const why = await this.d.agents.explainUnresolved(orgBin, user.onec?.organization?.name ?? `БИН ${orgBin}`);
+		return { kind: "refusal", code: why.code, message: why.message };
 	}
 
 	/**

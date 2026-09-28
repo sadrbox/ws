@@ -94,6 +94,8 @@ export function buildOrganizationSeed(body) {
 		const number = iban(a.iban);
 		if (!number || accounts.some((x) => x.iban === number)) continue;
 		accounts.push({
+			// Наименование счёта из 1С (если агент его прислал) — то же поле `name` банковского счёта ERP.
+			name: clip(a.name, 300),
 			iban: number,
 			bik: clip(a.bik, 11)?.replace(/\s/g, "").toUpperCase() ?? null,
 			bankName: clip(a.bankName, 300),

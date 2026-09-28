@@ -22,9 +22,19 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "src/services/api/client";
 import { useAccessPermission } from "src/hooks/useAccessPermission";
 import { translate } from "src/i18";
+import SubTableSheets from "src/components/SubTableSheets";
 import { CategoryBars, TaskStackBars } from "./charts";
-import { fmtMaybe, fmtValue } from "./format";
+import { fmtMaybe } from "./format";
 import { barData, num, taskData, userTileValue } from "./metrics";
+import {
+	managerColumns,
+	managerTableRows,
+	perfCellText,
+	userColumns,
+	userTableRows,
+	type ManagerRow,
+	type PerfRow,
+} from "./tables";
 import {
 	BLOCKS,
 	KPI_TILES,
@@ -36,37 +46,12 @@ import styles from "./UserPerformance.module.scss";
 import main from "src/styles/main.module.scss";
 
 // ── Типы источников ──────────────────────────────────────────────────────────
-interface ManagerRow {
-	managerUuid: string | null;
-	managerName: string;
-	salesCount: number;
-	netRevenue: number;
-	grossProfit: number;
-	[k: string]: unknown;
-}
+// Строки менеджеров и пользователей описаны в tables.ts: по ним строится и табличный вид.
 interface ManagerTotals {
 	netRevenue: number;
 	grossProfit: number;
 	salesCount: number;
 	[k: string]: number;
-}
-interface PerfRow {
-	userUuid: string;
-	userName: string;
-	docs: number;
-	tasksTotal: number;
-	tasksDone: number;
-	tasksActive: number;
-	tasksOverdue: number;
-	// E17 (СК1.8): качество работы с задачами. Средние и доля — null, если считать не из чего.
-	doneWithResult?: number;
-	reminders?: number;
-	returned?: number;
-	requests?: number;
-	reactionMinutesAvg?: number | null;
-	resultShare?: number | null;
-	ratingAvg?: number | null;
-	[k: string]: unknown;
 }
 
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -219,6 +204,8 @@ export const UserPerformanceList: FC = () => {
 					blocks={shownBlocks}
 					managerRows={managerRows}
 					perfRows={perfRows}
+					managersState={{ loading: managersQ.isLoading, error: managersQ.isError }}
+					usersState={{ loading: usersQ.isLoading, error: usersQ.isError }}
 				/>
 			) : shownBlocks.length === 0 ? (
 				<div className={styles.Status}>Все блоки скрыты — выберите показатели выше.</div>
@@ -277,75 +264,44 @@ const BlockCard: FC<{
 };
 
 // ── Табличный вид (a11y / выгрузка глазами) ──────────────────────────────────
-const DataTables: FC<{ blocks: DashboardBlockDef[]; managerRows: ManagerRow[]; perfRows: PerfRow[] }> = ({
-	blocks,
-	managerRows,
-	perfRows,
-}) => {
+/*
+ * SubTableSheets вместо сырых <table> (28.09): общий вид ячеек, сортировка по заголовку, ресайз колонок.
+ * Подпись таблицы — заголовком карточки, как у графиков; подсказки к колонкам качества — в title заголовка.
+ */
+type SourceState = { loading: boolean; error: boolean };
+
+const DataTables: FC<{
+	blocks: DashboardBlockDef[];
+	managerRows: ManagerRow[];
+	perfRows: PerfRow[];
+	managersState: SourceState;
+	usersState: SourceState;
+}> = ({ blocks, managerRows, perfRows, managersState, usersState }) => {
 	const hasManagers = blocks.some((b) => b.source === "managers");
 	const hasUsers = blocks.some((b) => b.source === "users");
+	const managerData = useMemo(() => managerTableRows(managerRows), [managerRows]);
+	const userData = useMemo(() => userTableRows(perfRows), [perfRows]);
+	// Пустая таблица на загрузке — не «нет данных»: говорим, что идёт чтение или что оно не удалось.
+	const emptyText = (s: SourceState) => translate(s.loading ? "loading" : s.error ? "perfError" : "perfEmpty");
 	return (
 		<div className={styles.Tables}>
 			{hasManagers && (
-				<table className={styles.DataTable}>
-					<caption>По менеджерам</caption>
-					<thead>
-						<tr>
-							<th>Менеджер</th>
-							<th>Выручка</th>
-							<th>Валовая прибыль</th>
-							<th>Продаж, шт</th>
-						</tr>
-					</thead>
-					<tbody>
-						{managerRows.map((r) => (
-							<tr key={r.managerUuid ?? r.managerName}>
-								<td>{r.managerName}</td>
-								<td className={styles.numCell}>{fmtValue(num(r.netRevenue), "money")}</td>
-								<td className={styles.numCell}>{fmtValue(num(r.grossProfit), "money")}</td>
-								<td className={styles.numCell}>{num(r.salesCount)}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
+				<section className={styles.Card}>
+					<header className={styles.CardHead}>
+						<h3>{translate("perfByManagers")}</h3>
+					</header>
+					<SubTableSheets columns={managerColumns()} rows={managerData} renderCell={perfCellText}
+						emptyMessage={emptyText(managersState)} />
+				</section>
 			)}
 			{hasUsers && (
-				<table className={styles.DataTable}>
-					<caption>По пользователям</caption>
-					<thead>
-						<tr>
-							<th>{translate("perfUser")}</th>
-							<th>{translate("perfDocuments")}</th>
-							<th>{translate("perfTasksDone")}</th>
-							<th>{translate("perfTasksActive")}</th>
-							<th>{translate("perfTasksOverdue")}</th>
-							{/* E17 (СК1.8): качество работы с задачами. «—» — считать не из чего, а не ноль. */}
-							<th title={translate("perfBlockResultShareSub")}>{translate("perfResultShare")}</th>
-							<th>{translate("perfRequests")}</th>
-							<th title={translate("perfBlockReactionSub")}>{translate("perfReaction")}</th>
-							<th title={translate("perfBlockRemindersSub")}>{translate("perfReminders")}</th>
-							<th title={translate("perfBlockReturnedSub")}>{translate("perfReturned")}</th>
-							<th title={translate("perfBlockRatingSub")}>{translate("perfRating")}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{perfRows.map((r) => (
-							<tr key={r.userUuid}>
-								<td>{r.userName}</td>
-								<td className={styles.numCell}>{r.docs}</td>
-								<td className={styles.numCell}>{r.tasksDone}</td>
-								<td className={styles.numCell}>{r.tasksActive}</td>
-								<td className={styles.numCell}>{r.tasksOverdue}</td>
-								<td className={styles.numCell}>{fmtMaybe(r.resultShare, "percent")}</td>
-								<td className={styles.numCell}>{num(r.requests)}</td>
-								<td className={styles.numCell}>{fmtMaybe(r.reactionMinutesAvg, "minutes")}</td>
-								<td className={styles.numCell}>{num(r.reminders)}</td>
-								<td className={styles.numCell}>{num(r.returned)}</td>
-								<td className={styles.numCell}>{fmtMaybe(r.ratingAvg, "rating")}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
+				<section className={styles.Card}>
+					<header className={styles.CardHead}>
+						<h3>{translate("perfByUsers")}</h3>
+					</header>
+					<SubTableSheets columns={userColumns()} rows={userData} renderCell={perfCellText}
+						emptyMessage={emptyText(usersState)} />
+				</section>
 			)}
 		</div>
 	);

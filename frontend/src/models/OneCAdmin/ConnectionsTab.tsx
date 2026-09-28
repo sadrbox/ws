@@ -59,8 +59,8 @@ export const ConnectionsTab: FC = () => {
 	const [picked, setPicked] = useState<string[]>([]);
 	const [confirm, setConfirm] = useState(false);
 
-	const connView = useStaticTableView(toRows(connections.data?.items ?? [], "connection"), { connId: "asc" });
-	const lockView = useStaticTableView(toRows(locks.data?.items ?? [], "session"), { session: "asc" });
+	const connView = useStaticTableView(toRows(connections.data?.items ?? [], "connection"), { connId: "asc" }, "OneCAdmin_connections", { rememberFilters: false });
+	const lockView = useStaticTableView(toRows(locks.data?.items ?? [], "session"), { session: "asc" }, "OneCAdmin_locks");
 
 	const qc = useQueryClient();
 	const disconnect = useMutation({

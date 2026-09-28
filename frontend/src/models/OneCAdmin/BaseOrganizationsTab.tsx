@@ -56,7 +56,7 @@ export const BaseOrganizationsTab: FC = () => {
 	const erp = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000, enabled: !!list.data });
 	const items = useMemo(() => list.data?.items ?? [], [list.data]);
 	const rowsRaw = useMemo(() => withStableIds(pendingOrgRows(items, erp.data?.items ?? []), (r) => r.uuid), [items, erp.data]);
-	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
+	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" }, "OneCAdmin_base_organizations");
 	const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), "OneCAdmin_base_organizations"));
 	const [activeKey, setActiveKey] = useState<string | null>(null);
 	const active = items.find((o) => pendingOrgKey(o) === activeKey) ?? null;

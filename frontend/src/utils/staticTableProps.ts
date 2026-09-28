@@ -23,6 +23,8 @@ interface Params {
 	reloadTitle?: string;
 	/** Что написать вместо пустой таблицы: «данных нет» и «их ещё не читали» — разные ответы. */
 	emptyText?: string;
+	/** Итоги от источника и подпись строки итогов — вместо подсчёта по показанным строкам. */
+	footerValues?: Record<string, string | null>;
 	/**
 	 * Идёт обновление. Таблица НЕ гаснет: прежние данные читаются, сортируются и ищутся,
 	 * пока идёт запрос; крутится только кнопка «Обновить», а данные заменяются по приходе.
@@ -99,6 +101,7 @@ export function buildStaticTableProps(p: Params) {
 		hideReload: !p.onReload,
 		...(p.reloadTitle ? { reloadTitle: p.reloadTitle } : {}),
 		...(p.emptyText ? { emptyText: p.emptyText } : {}),
+		...(p.footerValues ? { footerValues: p.footerValues } : {}),
 		...(p.reloading ? { reloading: true } : {}),
 		hideToolbar: !!p.hideToolbar,
 		fitHeight: !!p.fitHeight,

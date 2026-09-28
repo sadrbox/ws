@@ -23,6 +23,7 @@ import { Button } from "src/components/Button";
 import { Field } from "src/components/Field";
 import { FormArea, GroupCol, GroupRow } from "src/components/UI";
 import main from "src/styles/main.module.scss";
+import dense from "./OneCBases.module.scss";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { getFormatDate } from "src/utils/datetime";
@@ -100,7 +101,7 @@ export const BaseCredentialsTab: FC<{
 	const busy = save.isPending || drop.isPending || creds.isLoading;
 	const isSet = !!stored?.user;
 
-	// Поля и команды — одни на оба вида: встроенный (вкладка «Основное») и полный.
+	// Поля и команды полного вида; встроенный (вкладка «Основное») рисует их сеткой карточки — см. ниже.
 	const fields = (
 		<GroupCol>
 			<GroupCol>
@@ -135,16 +136,52 @@ export const BaseCredentialsTab: FC<{
 	);
 
 	/*
-	 * ВСТРОЕННЫЙ ВИД (18.09): одна группа полей без каркаса формы — служебный вход стоит рядом с состоянием базы
-	 * во вкладке «Основное». Там же он и правится: своей вкладки у него больше нет.
+	 * ВСТРОЕННЫЙ ВИД (18.09): одна группа полей без каркаса формы — служебный вход стоит под состоянием базы во
+	 * вкладке «Основное». Там же он и правится: своей вкладки у него больше нет.
+	 *
+	 * ТОЙ ЖЕ СЕТКОЙ, ЧТО И КАРТОЧКА (28.09): подпись слева, поле справа, два столбца (OneCBases.module.scss → .Fields).
+	 * Штатные поля с подписью сверху вставали на свою вертикаль, и сквозного выравнивания с «Реквизитами» и
+	 * «Состоянием» не получалось. Кнопки — в свободной ячейке второго столбца, под колонкой значений.
 	 */
 	if (embedded) {
 		return (
 			<FormArea className={className} title={translate("onecCredsTitle")}>
-				<GroupCol>
-					{fields}
-					<QueryError error={creds.error} />
-				</GroupCol>
+				<div className={dense.Fields}>
+					<label className={dense.Field}>
+						<span className={dense.FieldLabel}>{translate("onecUserName")}</span>
+						<input className={dense.FieldInput} name="bc_user" autoComplete="off" value={user}
+							disabled={busy || !canWrite}
+							onChange={(e) => setUser(e.target.value)} />
+					</label>
+					<label className={dense.Field}>
+						<span className={dense.FieldLabel}>{translate("onecUserPassword")}</span>
+						<input className={dense.FieldInput} name="bc_pwd" type="password" autoComplete="new-password" value={password}
+							disabled={busy || !canWrite}
+							placeholder={stored?.hasPassword ? translate("onecCredsPasswordKeep") : ""}
+							onChange={(e) => setPassword(e.target.value)} />
+					</label>
+					<div className={dense.Field}>
+						<span className={dense.FieldLabel}>{translate("onecCredsUpdatedAt")}</span>
+						<span className={dense.FieldBox}>{stored?.updatedAt ? getFormatDate(stored.updatedAt) : "—"}</span>
+					</div>
+					{/* Пара «имя + пароль» — это вход агента в базу: правом «только просмотр» видно, задана ли она
+					    и когда менялась, но не переписывают (F5). */}
+					{canWrite && (
+						<div className={dense.FieldActions}>
+							<Button icon="save" variant="primary" disabled={busy || !user.trim()}
+								title={user.trim() ? translate("save") : translate("onecCredsNeedUser")}
+								onClick={() => save.mutate()}>
+								{translate("save")}
+							</Button>
+							<Button icon="clear" variant="secondary" disabled={busy || !isSet}
+								title={isSet ? translate("onecCredsClear") : translate("onecCredsNotSet")}
+								onClick={() => void askDrop()}>
+								{translate("onecCredsClear")}
+							</Button>
+						</div>
+					)}
+				</div>
+				<QueryError error={creds.error} />
 			</FormArea>
 		);
 	}

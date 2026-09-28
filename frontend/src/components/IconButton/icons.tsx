@@ -238,6 +238,24 @@ export const DirtyIcon: FC<SvgProps> = (props) => (
   </svg>
 );
 
+/** Замок — вход закрыт (блокировка начала сеансов базы 1С): корпус со скважиной и дужка. */
+export const LockIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3 7h10v7H3V7Zm1 1v5h8V8H4Z" />
+    <path d="M5 7V5a3 3 0 0 1 6 0v2h-1V5a2 2 0 0 0-4 0v2H5Z" />
+    <path d="M7.5 9.5h1v2h-1v-2Z" />
+  </svg>
+);
+
+/** Открытый замок — вход открыт: та же дужка, отведённая вверх с правой стороны. */
+export const UnlockIcon: FC<SvgProps> = (props) => (
+  <svg {...baseProps} {...props}>
+    <path d="M3 7h10v7H3V7Zm1 1v5h8V8H4Z" />
+    <path d="M5 7V4a3 3 0 0 1 5.9-.8l-.97.26A2 2 0 0 0 6 4v3H5Z" />
+    <path d="M7.5 9.5h1v2h-1v-2Z" />
+  </svg>
+);
+
 /** Восстановить — круговая стрелка против часовой с точкой в центре. */
 export const RestoreIcon: FC<SvgProps> = (props) => (
   <svg {...baseProps} {...props}>
@@ -416,6 +434,8 @@ export const ICONS = {
   notPosted: NotPostedIcon,
   dirty: DirtyIcon,
   restore: RestoreIcon,
+  lock: LockIcon,
+  unlock: UnlockIcon,
   save: SaveIcon,
   caretDown: CaretDownIcon,
   fromBasis: FromBasisIcon,

@@ -165,6 +165,9 @@ const FEATURE_KEY: Record<string, string> = {
 	log: "onecFeatureLog",
 	selftest: "onecFeatureSelftest",
 	info: "onecFeatureInfo",
+	organizations: "onecFeatureOrganizations",
+	// Нет `IB_EXPORT_EXTENSION` при `ib.admin` (С5, 28.09): кнопка выгрузки .cfe в карточке базы гаснет.
+	extensionExport: "onecFeatureExtensionExport",
 };
 
 /** Чего нет в сборке агента — словами (R3). Незнакомый ключ показывается как есть. */

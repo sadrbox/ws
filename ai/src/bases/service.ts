@@ -77,6 +77,8 @@ export type BaseRow = {
 	server_id: string;
 	key: string;
 	name: string;
+	/** Наименование, заданное в панели (миграция 046); null — показывать имя из кластера. */
+	display_name?: string | null;
 	status: string;
 	onec_version: string | null;
 	ext_version: string | null;
@@ -111,7 +113,15 @@ export type BaseView = {
 	serverId: string;
 	serverName: string;
 	key: string;
+	/** Наименование ДЛЯ ПОКАЗА: заданное в панели, а если его нет — имя из кластера. */
 	name: string;
+	/**
+	 * Имя, которое сообщает кластер (описание базы в срезе). Отдельно от `name`: наименование правят в панели, а
+	 * кластерное остаётся тем, по чему сервис узнаёт базу в ответах агента.
+	 */
+	clusterName: string;
+	/** Задано ли наименование в панели: пустое поле в карточке возвращает имя из кластера. */
+	nameCustom: boolean;
 	/** Когда проверяли наличие базы данных в СУБД; null — ни разу. */
 	dbCheckedAt: string | null;
 	/** Статус ДЛЯ ПОКАЗА: у скрытой базы — `DISABLED`, что бы ни говорил кластер. */
@@ -210,7 +220,7 @@ export type ServerParams = {
 	rasHost: string | null;
 	rasPort: number | null;
 	bases: number;
-	/** Организация ERP сервера (C11): по ней — видимость сервера при ONEC_SERVER_SCOPE=organizations. */
+	/** Пространство имён сервера: организация ERP (серверы, заведённые до 28.09) или `agent:<id>` агента. */
 	organizationUuid?: string;
 };
 
@@ -349,7 +359,7 @@ export const publicationReport = (
 	};
 };
 
-const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.status, b.onec_version, b.ext_version,
+const BASE_COLS = `b.id, b.server_id, b.key, b.name, b.display_name, b.status, b.onec_version, b.ext_version,
 	b.sessions_count, b.last_seen_at, b.disabled_at, b.created_at,
 	-- Расширения базы, как их последний раз читали (IB_LIST_EXTENSIONS). Именно счётчик,
 	-- а не флаг: колонка «Расширение» показывала «не установлено» всем базам подряд, хотя
@@ -696,6 +706,25 @@ export class BaseService {
 	 * База по ключу. `serverId` (C10) — на этом сервере: имя базы уникально только в пределах сервера. Без него —
 	 * первая по имени сервера (как раньше); неоднозначность ловят вызывающие через `serversWithKey`.
 	 */
+	/**
+	 * ОРГАНИЗАЦИЯ БАЗЫ (В4, модель без владельца 28.09): за ней числятся команды задания и монопольные операции в базе,
+	 * по ней решается, кто видит их результат. Источник — то, что организация сама назвала: одобренная заявка базы,
+	 * иначе действующий токен чата (самый свежий). Не назвала никто — null: результат видят администраторы BuhProf.
+	 */
+	async organizationOf(baseId: string): Promise<string | null> {
+		const r = await this.db.query<{ organization_uuid: string }>(
+			`SELECT organization_uuid FROM (
+			   SELECT organization_uuid, 1 AS src, decided_at AS at FROM base_registrations
+			    WHERE base_id = $1 AND state = 'APPROVED' AND organization_uuid IS NOT NULL AND organization_uuid <> ''
+			   UNION ALL
+			   SELECT organization_uuid, 2 AS src, created_at AS at FROM base_tokens
+			    WHERE base_id = $1 AND revoked_at IS NULL AND organization_uuid <> ''
+			 ) x ORDER BY src, at DESC NULLS LAST LIMIT 1`,
+			[baseId],
+		);
+		return r.rows[0]?.organization_uuid ?? null;
+	}
+
 	async findByKeyGlobal(key: string, serverId?: string | null): Promise<BaseView | null> {
 		const r = await this.db.query<BaseRow & { server_name: string }>(
 			`SELECT ${BASE_COLS}, s.name AS server_name, s.public_host
@@ -983,6 +1012,15 @@ export class BaseService {
 		return (r.rowCount ?? 0) > 0;
 	}
 
+	/**
+	 * НАИМЕНОВАНИЕ БАЗЫ В ПАНЕЛИ (миграция 046). Пустое — снять: снова показывать имя из кластера. Срез кластера эту
+	 * колонку не трогает, поэтому правка переживает heartbeat и «Обновить».
+	 */
+	async setDisplayName(id: string, name: string | null): Promise<boolean> {
+		const r = await this.db.query(`UPDATE bases SET display_name = $2 WHERE id = $1`, [id, name?.trim() || null]);
+		return (r.rowCount ?? 0) > 0;
+	}
+
 	async setDisabled(id: string, disabled: boolean): Promise<boolean> {
 		const r = await this.db.query(
 			`UPDATE bases SET disabled_at = ${disabled ? "now()" : "NULL"} WHERE id = $1`,
@@ -997,7 +1035,9 @@ export class BaseService {
 			serverId: r.server_id,
 			serverName: r.server_name ?? "",
 			key: r.key,
-			name: r.name,
+			name: r.display_name || r.name,
+			clusterName: r.name,
+			nameCustom: !!r.display_name,
 			status: r.disabled_at ? "DISABLED" : r.status,
 			clusterStatus: r.status,
 			onecVersion: r.onec_version,

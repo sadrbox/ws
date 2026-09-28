@@ -57,6 +57,12 @@ export type Op = {
 	 */
 	warning?: string;
 	/**
+	 * ПОДРОБНОСТЬ ИТОГА (28.09) — факт, который нужен и строке «Прогресса», и итогу в журнале: у команд расширений
+	 * 1С это путь исполнения («Путь: соединение с базой (COM)»). Отдельно от `note`: примечание успеха в итог не
+	 * попадает (там «пропущено», время по этапам), а путь нужен именно в итоге — по нему выбирают, что чинить.
+	 */
+	detail?: string;
+	/**
 	 * НАД ЧЕМ идёт работа. Пока операция выполняется, эти объекты правке не подлежат:
 	 * значения меняются прямо сейчас, и форма, позволяющая писать поверх, отправила бы
 	 * команду по данным, которых уже нет.
@@ -224,7 +230,7 @@ function noteOutcome(op: Op): void {
 	// ещё на экране, — строка уже говорит то же самое (MessagesView).
 	notify({
 		severity: failed ? "error" : warned ? "warning" : "success",
-		text: `${op.title}. ${result}${warned ? `. ${op.warning}` : ""}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
+		text: `${op.title}. ${result}${warned ? `. ${op.warning}` : ""}${op.detail ? `. ${op.detail}` : ""}. ${translate("onecOpElapsed")}: ${secs} ${translate("secShort")}`,
 		source: op.target || op.title,
 		scope: op.pane,
 		ref: op.ref,
@@ -286,11 +292,14 @@ const settledErrors = new WeakSet<object>();
 export const isSettledError = (e: unknown): boolean =>
 	!!e && typeof e === "object" && settledErrors.has(e);
 
+/** Чем закрывают операцию: отказы, примечание, исключение, оговорка и подробность итога. */
+export type OpFinish = { failed?: number; note?: string; error?: unknown; warning?: string; detail?: string };
+
 /**
  * Закрыть операцию, считаемую на клиенте. `error` — исключение, из-за которого не вышло: итог
  * операции о нём скажет, и маршрутизатор ошибок не запишет его второй раз.
  */
-export function finishOp(id: string, r: { failed?: number; note?: string; error?: unknown; warning?: string } = {}): void {
+export function finishOp(id: string, r: OpFinish = {}): void {
 	// Итог пишет реестр (не вызывающий) — только тогда об ошибке уже сказано.
 	if ((r.failed ?? 0) > 0 && r.error && typeof r.error === "object" && !ownOutcome.has(id)
 		&& ops.some((o) => o.id === id)) {
@@ -303,6 +312,8 @@ export function finishOp(id: string, r: { failed?: number; note?: string; error?
 		note: r.note ?? o.note,
 		// Успех с оговоркой (С41): итог операции выйдет предупреждением, а не чистым «Выполнено».
 		...(r.warning ? { warning: r.warning } : {}),
+		// Подробность итога (путь исполнения команды 1С, 28.09) — и в строку «Прогресса», и в итог журнала.
+		...(r.detail ? { detail: r.detail } : {}),
 		state: (r.failed ?? o.failed) > 0 ? "failed" : "done",
 		finishedAt: Date.now(),
 	}));

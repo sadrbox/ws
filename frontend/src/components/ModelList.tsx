@@ -21,6 +21,7 @@ import type { TColumn, TDataItem } from "src/components/Table/types";
 import { translate } from "src/i18";
 import { showToast } from "src/components/UIToast";
 import { getFormatColumnValue } from "src/components/Table/services";
+import { readTableState } from "src/components/Table/tableState";
 import { makePaneLabelFromData } from "src/utils/buildPaneLabel";
 import { Button } from "src/components/Button";
 
@@ -269,12 +270,9 @@ const ModelList: FC<ModelListProps> = ({
 
   const { addPane } = useAppActions().windows;
 
-  // Вид списка: "list" (обычный) | "split" (список + предпросмотр справа).
-  // Персист per-list в localStorage; тумблер в тулбаре Table шлёт "listLayoutToggle".
-  const layoutKey = `listPaneLayout:${componentName}`;
-  const [layout, setLayout] = useState<"list" | "split">(
-    () => ((localStorage.getItem(layoutKey) as "list" | "split") || "list"),
-  );
+  // Вид списка: "list" (обычный) | "split" (список + предпросмотр справа) — в общем состоянии таблицы
+  // (tableState.ts); тумблер в тулбаре Table пишет его туда и шлёт "listLayoutToggle".
+  const [layout, setLayout] = useState<"list" | "split">(() => readTableState(componentName).layout ?? "list");
   const [previewRow, setPreviewRow] = useState<TDataItem | null>(null);
   // Отмеченные строки нужны только спискам с групповыми командами (extraButtons-функция).
   const [selectedRows, setSelectedRows] = useState<TDataItem[]>([]);
@@ -286,11 +284,11 @@ const ModelList: FC<ModelListProps> = ({
   useEffect(() => {
     const onToggle = (e: Event) => {
       if ((e as CustomEvent).detail !== componentName) return;
-      setLayout((localStorage.getItem(layoutKey) as "list" | "split") || "list");
+      setLayout(readTableState(componentName).layout ?? "list");
     };
     window.addEventListener("listLayoutToggle", onToggle);
     return () => window.removeEventListener("listLayoutToggle", onToggle);
-  }, [componentName, layoutKey]);
+  }, [componentName]);
   // Split доступен только для самостоятельного списка (не встроенного в форму
   // владельца и не в режиме выбора-селектора, где onSelectItem уже занят).
   const splitActive = layout === "split" && !isPartOf && !onSelectItem;
@@ -338,6 +336,10 @@ const ModelList: FC<ModelListProps> = ({
     columnsVariant: isPartOf ? "part" : undefined,
     ownerFilter,
     extraQueryParams,
+    // Память поиска и отборов (useTableViewState): у списка с групповыми командами над отмеченными её нет —
+    // восстановленный поиск незаметно сузил бы выбор; у встроенного в карточку — только для этого владельца.
+    rememberFilters: !selectableButtons,
+    ...(isPartOf ? { filterScope: ownerUuid ?? null } : {}),
   });
 
   // Сбой догрузки при показанных строках — системная ошибка: тостом, один раз на ошибку.

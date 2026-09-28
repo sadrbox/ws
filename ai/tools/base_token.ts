@@ -1,6 +1,6 @@
 // Токены баз для чата внутри 1С (СВ1) — служебная команда до мастера в панели (ПН1).
 //
-//   npm run base-token -- issue  --base <ключ базы | id> [--server <имя сервера>] [--org <uuid ERP>] [--by <кто>]
+//   npm run base-token -- issue  --base <ключ базы | id> --org <uuid ERP> [--server <имя сервера>] [--by <кто>]
 //   npm run base-token -- revoke --id <id токена> [--by <кто>]
 //   npm run base-token -- list   [--base <ключ базы | id>]
 //
@@ -44,8 +44,9 @@ async function main(): Promise<number> {
 			if (!ref) { console.error("Нужен --base <ключ базы | id>"); return 2; }
 			const base = await findBase(ref);
 			if (!base) { console.error(`База «${ref}» не найдена`); return 1; }
-			const org = args.get("org") || null;
-			if (org && !UUID.test(org)) { console.error("--org: UUID организации ERP"); return 2; }
+			// Организация — только явная (В7): умолчание «организация сервера» у сервера агента дало бы agent:<id>.
+			const org = args.get("org") ?? "";
+			if (!UUID.test(org)) { console.error("Нужен --org <UUID организации ERP>: токен базы выпускается для названной организации"); return 2; }
 			const t = await store.issue({ baseId: base.id, organizationUuid: org, createdBy: args.get("by") || "base-token (служебная команда)" });
 			console.log(`База: ${base.key} (сервер ${base.server}), организация ERP: ${t.organizationUuid}`);
 			console.log(`Id токена: ${t.id}`);

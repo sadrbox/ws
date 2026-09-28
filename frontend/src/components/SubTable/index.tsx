@@ -18,6 +18,7 @@ import Table, { TOpenModelFormProps, type TableApi } from "src/components/Table"
 import type { TTableVariant } from "src/components/Table";
 import { useInfiniteModelList, GLOBAL_ADAPTIVE_LIMIT_REF } from "src/hooks/useInfiniteModelList";
 import { useModelDelete } from "src/hooks/useModelDelete";
+import { useTableViewState } from "src/hooks/useTableViewState";
 import { useAppActions } from "src/app/context";
 import { useQueryClient } from "@tanstack/react-query";
 import styles from "./SubTable.module.scss";
@@ -205,6 +206,25 @@ export interface SubTableProps {
    * напр. «Администрирование 1С» и его вложенные разрешения.
    */
   groupRows?: (row: TDataItem) => RowGroup | null | undefined;
+  /**
+   * СТРОКИ ОТ ВЛАДЕЛЬЦА, А НЕ ИЗ ЭНДПОИНТА (28.09). Табличные части бывают и у того, чего в ERP нет: организации
+   * базы 1С, их счета, договоры и контакты читает агент, и лежат они в кэше сервиса AI. С `items` SubTable не ходит
+   * в `model` и не фильтрует строки по владельцу (`model`/`parentKey`/`parentUuid` — пустые строки), а всё остальное —
+   * тулбар, «Редактирование в таблице», поля в ячейках, клавиатура, двойной щелчок → openFormFor — прежнее.
+   * Строки меняет владелец: новый массив `items` заменяет кэш, как ответ сервера.
+   */
+  items?: TDataItem[];
+  /** Строки владельца ещё загружаются. */
+  itemsLoading?: boolean;
+  /** Что написать вместо пустой таблицы: «данных нет» и «их ещё не читали» — разные ответы. */
+  emptyText?: string;
+  /**
+   * Идёт обновление строк владельца (долгое — например, чтение у 1С): крутится кнопка «Обновить», а таблица не
+   * гаснет — прежние строки читаются, ищутся и сортируются.
+   */
+  reloading?: boolean;
+  /** Подпись кнопки «Обновить»: откуда она перечитывает строки. */
+  reloadTitle?: string;
 }
 
 /** Контекст, передаваемый в кастомные колбэки */
@@ -331,8 +351,14 @@ const SubTable: FC<SubTableProps> = ({
   selectable = true,
   sortValue,
   groupRows,
+  items,
+  itemsLoading = false,
+  emptyText,
+  reloading = false,
+  reloadTitle,
 }) => {
   const queryClient = useQueryClient();
+  const itemsMode = items !== undefined;
   // Глобальный confirm (модалка вопроса пользователю) — для подтверждения
   // удаления при нажатии клавиши Delete.
   const { actions: { confirm } } = useAppActions();
@@ -369,13 +395,16 @@ const SubTable: FC<SubTableProps> = ({
   // Состав колонок (Серии/Партии появляются на лету) + служебная обёртка сеттера —
   // в хуке useSubTableColumns (синхронизация через mergeColumnDefs).
   const { columns, setColumns, setColumnsForTable } = useSubTableColumns(colJson, componentName);
-  const [sort, setSort] = useState<Record<string, "asc" | "desc">>(defaultSort);
+  // Сортировка, быстрый поиск и отборы — с памятью, как у списков (useTableViewState, 28.09). Сортировка — общая для
+  // табличной части всех документов (она ничего не прячет), а поиск и отборы — только ЭТОГО документа: в другой
+  // документ они не переносятся, а у незаписанного живут, пока открыт экран. Строка поиска с текстом открыта (Table).
+  const { sort, setSort, search, setSearch, filter, setFilter, sortRestored } =
+    useTableViewState(componentName, { sort: defaultSort }, { scope: parentUuid || null });
   // Т4: сортировку выбрал пользователь (щелчок по заголовку) — сортируются и новые строки; порядок запоминается
-  // до следующего щелчка или ответа сервера, чтобы строки не переезжали при вводе.
-  const explicitSortRef = useRef(false);
+  // до следующего щелчка или ответа сервера, чтобы строки не переезжали при вводе. Сохранённая сортировка — тоже его
+  // выбор, только сделанный раньше.
+  const explicitSortRef = useRef(sortRestored);
   const frozenOrderRef = useRef<{ key: string; order: Map<string, number> } | null>(null);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Record<string, { value: unknown; operator: string }> | undefined>(undefined);
   // Inline-режим (редактирование в таблице ↔ через форму) + доп-кнопки тулбара —
   // в useSubTableToolbar.
   const { inlineEditing, extraButtons } = useSubTableToolbar({
@@ -411,8 +440,18 @@ const SubTable: FC<SubTableProps> = ({
     extra: parentUuid ? { [parentKey]: parentUuid, ...(extraQueryParams ?? {}) } : undefined,
   }), [serverSort, filter, parentUuid, parentKey, extraQueryParams]);
 
-  const { allItems, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests, dataUpdatedAt } =
-    useInfiniteModelList<TDataItem>({ model, params, queryOptions: { enabled: !!parentUuid } });
+  const list = useInfiniteModelList<TDataItem>({ model, params, queryOptions: { enabled: !!parentUuid && !itemsMode } });
+  // Строки владельца (items) — вместо ответа эндпоинта: новый массив — как новый ответ сервера (dataUpdatedAt).
+  const itemsVersionRef = useRef({ items, version: 1 });
+  if (itemsVersionRef.current.items !== items) itemsVersionRef.current = { items, version: itemsVersionRef.current.version + 1 };
+  const ownerRefetch = useCallback(async () => { await onRefresh?.(); }, [onRefresh]);
+  const { allItems, isAnythingLoading, isFetchingNextPage, hasNextPage, error, refetch, fetchNextPage, cancelAllRequests, dataUpdatedAt } = itemsMode
+    ? {
+      ...list, allItems: items, isAnythingLoading: itemsLoading, isFetchingNextPage: false, hasNextPage: false, error: null,
+      refetch: ownerRefetch as unknown as typeof list.refetch, fetchNextPage: (() => Promise.resolve(undefined)) as unknown as typeof list.fetchNextPage,
+      dataUpdatedAt: itemsVersionRef.current.version,
+    }
+    : list;
 
   const handleDeleteRaw = useModelDelete(model, refetch);
 
@@ -489,7 +528,7 @@ const SubTable: FC<SubTableProps> = ({
     }
     explicitSortRef.current = s != null;
     setSort(next);
-  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort, cachedRowsRef, setCacheVersion, sortValue]);
+  }, [updateAdaptiveLimit, defaultSort, columns, serverSort, parentUuid, clientSort, cachedRowsRef, setCacheVersion, sortValue, setSort]);
 
   const handleFilterChange = useCallback((field: string, value: unknown, operator = "contains") => {
     setFilter(prev => {
@@ -498,10 +537,10 @@ const SubTable: FC<SubTableProps> = ({
       else next[field] = { value, operator };
       return Object.keys(next).length > 0 ? next : undefined;
     });
-  }, []);
+  }, [setFilter]);
 
-  const handleSearch = useCallback((v: string) => setSearch(v.trim()), []);
-  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, []);
+  const handleSearch = useCallback((v: string) => setSearch(v.trim()), [setSearch]);
+  const clearFilters = useCallback(() => { setSearch(""); setFilter(undefined); }, [setSearch, setFilter]);
 
   const doCleanRefresh = useCallback(() => {
     explicitSortRef.current = false;
@@ -525,7 +564,7 @@ const SubTable: FC<SubTableProps> = ({
     // Кэш cachedRowsRef НЕ сбрасываем — useEffect на [allItems] обновит его когда придут новые данные,
     // а пока пользователь видит предыдущие строки вместо пустой таблицы.
     return queryClient.invalidateQueries({ queryKey: [model] });
-  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent, cachedRowsRef, setCacheVersion, pendingAppliedRef]);
+  }, [queryClient, updateAdaptiveLimit, cancelAllRequests, defaultSort, model, deferRemoteChanges, notifyParent, cachedRowsRef, setCacheVersion, pendingAppliedRef, setSearch, setFilter, setSort]);
 
   // Т6: «Обновить» отменяет несохранённые изменения табличной части — только после вопроса.
   const handleCleanRefresh = useCallback(() => {
@@ -1014,7 +1053,11 @@ const SubTable: FC<SubTableProps> = ({
       : undefined,
     apiRef: tableApiRef,
     getCellMeta,
+    ...(emptyText ? { emptyText } : {}),
+    ...(reloading ? { reloading: true } : {}),
+    ...(reloadTitle ? { reloadTitle } : {}),
   }), [
+    emptyText, reloading, reloadTitle,
     componentName, displayRows, columns, adaptiveLimit, combinedLoading, error,
     sort, search, filter, handleSortChange, handleFilterChange, handleSearch, clearFilters,
     openModelForm, setColumns, setColumnsForTable, hasNextPage, isFetchingNextPage, fetchNextPage, updateAdaptiveLimit,
@@ -1023,7 +1066,7 @@ const SubTable: FC<SubTableProps> = ({
   ]);
 
   // ── Рендер ─────────────────────────────────────────────────────────────
-  if (!parentUuid && !deferRemoteChanges) {
+  if (!parentUuid && !deferRemoteChanges && !itemsMode) {
     return <div className={styles.EmptyParent}>{emptyMessage}</div>;
   }
 

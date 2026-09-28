@@ -18,13 +18,14 @@ import { decideInstance, instanceConflictMessage, isFarewell } from "../agents/i
 import { parseCommandStats } from "../agents/commandStats.ts";
 import type { AgentService } from "../agents/service.ts";
 import type { CommandQueue } from "../commands/queue.ts";
-import { DEFAULT_COMMAND_TTL_SECS, findAdminCommand, marksReachability } from "../commands/admin.ts";
+import { DEFAULT_COMMAND_TTL_SECS, agentKnowsType, findAdminCommand, marksReachability } from "../commands/admin.ts";
 import { BATCH_QUEUE_WAIT_SECS } from "../onec/batchRunner.ts";
-import { retriedByRunner } from "../onec/exclusiveOps.ts";
+import { EXCLUSIVE_ON_BUSY_TYPES as EXCLUSIVE_ON_BUSY, escalateBusyToExclusive, escalatesOnBusy, retriedByRunner } from "../onec/exclusiveOps.ts";
 import { BUSY_RETRY_DELAYS_SECS, isBusyFailure, runningLeaseSecs } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
 import type { IbExtension, IbUser, OnecRegistry } from "../onec/registry.ts";
 import { checkRoleIntent, checkShowInListIntent, parseEcho, roleVerdictMessage, showInListVerdictMessage } from "../onec/echo.ts";
+import { ibOrganizationsMeta } from "../onec/ibOrganizations.ts";
 import { listItems } from "../onec/listShape.ts";
 import { rememberAfterEcho, writeBackOf } from "../onec/writeBack.ts";
 import { parseLock, planWriteState, readsAfter, readsAfterFailure, type WriteStateAction } from "../onec/writeState.ts";
@@ -37,7 +38,6 @@ import {
 	type BaseService, type BaseState, type PublicationItem,
 } from "../bases/service.ts";
 import { AgentBasesStore, limitMismatches, limitsForAgent, type AgentBaseInput } from "../agents/agentBases.ts";
-import { ActivationStore, type ActivationInput } from "../agents/activation.ts";
 
 // Состояние одной базы в register/heartbeat (E15/A2). Незаполненное поле значит «не знаю»:
 // список баз и версию платформы даёт админ-агент, версию расширения — бизнес-агент, и
@@ -187,7 +187,6 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 	const { db, cfg, log, agents, bases, queue, audit, registry } = deps;
 	// Срез баз бизнес-агента в его порядке — по нему считается лимит тарифа и выбирается база команды (СВ3).
 	const agentBases = new AgentBasesStore(db);
-	const activation = new ActivationStore(db);
 
 
 	/** База результата — на сервере агента, который его прислал (C10): одноимённая база другого сервера — другая база. */
@@ -235,22 +234,13 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		}
 	};
 
-	/** Строка запроса активации: БИН обязателен (до 20 знаков), остальное — по возможности. */
-	const activationRow = z.object({
-		bin: z.string().trim().min(1).max(20),
-		name: z.string().max(300).nullable().optional(),
-		baseKey: z.string().max(200).nullable().optional(),
-		comment: z.string().max(2000).nullable().optional(),
-		requestedAt: z.string().max(40).nullable().optional(),
-	});
-	const parseActivation = (raw: unknown[] | undefined): ActivationInput[] =>
-		(raw ?? []).flatMap((x) => { const p = activationRow.safeParse(x); return p.success ? [p.data] : []; });
-
-	/** Лимиты и решения по активации — бизнес-агенту в ответах register/heartbeat (СВ3, СВ4). */
+	/**
+	 * Лимит баз — бизнес-агенту в ответах register/heartbeat (СВ3). Без `activeBins` и `activation`: допуск БИН
+	 * отменён (В8), и агент по контракту обслуживает все БИН своих баз (`maxBins: null`).
+	 */
 	const businessExtras = async (agentId: string): Promise<Record<string, unknown>> => {
 		const me = await agents.get(agentId);
-		const limits = me?.limits ?? { maxBases: null, maxBins: null };
-		return { limits: limitsForAgent(limits), activation: await activation.decisions(agentId) };
+		return { limits: limitsForAgent(me?.limits ?? { maxBases: null }) };
 	};
 	const r = Router();
 	/*
@@ -380,13 +370,12 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		const ras = { host: p.data.server?.rasHost ?? null, port: p.data.server?.rasPort ?? null };
 		const known = await agents.findById(req.agent!.agentId);
 		/*
-		 * СЕРВЕР АГЕНТА БЕЗ ОРГАНИЗАЦИИ — СВОЙ (аудит 21.09). Строка сервера уникальна парой «организация + имя», а
-		 * у агента кластера организации нет: два клиента с сервером «SRV-1C» получали ОДНУ строку, и базы разных
-		 * клиентов смешивались в реестре — вплоть до пароля базы одного клиента, ушедшего агенту другого. Своё
-		 * пространство имён по идентификатору агента такую встречу исключает; повторная регистрация того же агента
-		 * находит свой сервер через known.serverId и имя не плодит.
+		 * СЕРВЕР АГЕНТА — В СВОЁМ ПРОСТРАНСТВЕ ИМЁН (аудит 21.09; с 28.09 — у всех агентов, организации у агента нет).
+		 * Строка сервера уникальна парой «пространство + имя»: два клиента с сервером «SRV-1C» иначе получали бы ОДНУ
+		 * строку, и базы разных клиентов смешивались бы в реестре. Повторная регистрация того же агента находит свой
+		 * сервер через known.serverId и имя не плодит; сервер, заведённый раньше за организацией, остаётся за ней.
 		 */
-		const serverOrg = req.agent!.organizationUuid || `agent:${req.agent!.agentId}`;
+		const serverOrg = `agent:${req.agent!.agentId}`;
 		const server = known?.serverId
 			? (await bases.renameServer(known.serverId, p.data.server?.name ?? "", ras))
 				?? await bases.ensureServer(serverOrg, p.data.server?.name ?? "", ras)
@@ -462,7 +451,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		}
 		if (p.data.instanceId) await agents.touchInstance(req.agent!.agentId, p.data.instanceId, p.data.version, req.ip ?? null);
 		log.info({ agentId: req.agent!.agentId, version: p.data.version, role, bases: p.data.bases?.length ?? 0 }, "агент зарегистрирован");
-		await audit.write({ event: "agent.register", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
+		await audit.write({ event: "agent.register", agentId: req.agent!.agentId,
 			details: { version: p.data.version, os: p.data.os, role, capabilities: capabilities.length, bases: p.data.bases?.length ?? 0 } });
 		res.json({ success: true, data: {
 			ok: true,
@@ -538,17 +527,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 			// Срез бизнес-агента (СВ3): полный заменяет список, частичный правит названные базы.
 			await saveSlice(req.agent!.agentId, p.data.bases as AgentBaseInput[], p.data.basesComplete === true);
 		}
-		if (me?.role === "business" && p.data.activationRequests?.length) {
-			const reqs = parseActivation(p.data.activationRequests);
-			const fresh = await activation.upsert(req.agent!.agentId, reqs, me.limits.activeBins ?? null);
-			if (fresh.length) {
-				await audit.write({ event: "agent.bin_activation.requested", agentId: req.agent!.agentId, organizationUuid: req.agent!.organizationUuid,
-					details: { bins: fresh } });
-			}
-			if (reqs.length < p.data.activationRequests.length) {
-				log.warn({ agentId: req.agent!.agentId, dropped: p.data.activationRequests.length - reqs.length }, "запросы активации БИН: часть строк не разобрана");
-			}
-		}
+		// `activationRequests` старых сборок принимается и молча игнорируется: допуск БИН отменён (В8).
 		if (p.data.bases?.length && me?.serverId && me.role === "admin") {
 			// Реестр кластера — от админ-агента (СП4); срез бизнес-агента живёт в agent_bases (см. saveSlice выше).
 			await bases.sync(me.serverId, forRegistry(p.data.bases), { complete: p.data.basesComplete === true, authoritative: true });
@@ -736,7 +715,7 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 * Состояние, прочитанное агентом у 1С, правдиво независимо от приговора самой команде, поэтому
 		 * применяется и тогда, когда результат потом не примут (поздний результат по отменённой).
 		 */
-		const applied = { users: false, extensions: false };
+		const applied = { users: false, extensions: false, organizations: false };
 		let writeState: WriteStateAction[] = [];
 		/*
 		 * ПОБОЧНЫЕ ЗАПИСИ В РЕЕСТР НЕ ДЕРЖАТ КОМАНДУ ОТКРЫТОЙ (аудит 26.09). Сбой здесь (неожиданная форма списка,
@@ -774,6 +753,15 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 					const me = await agents.findById(req.agent!.agentId);
 					for (const a of writeState) {
 						if (a.kind === "processes") { await agents.setProcesses(cmd.agent_id, a.items); continue; }
+						if (a.kind === "organizations") {
+							// Кэш организаций — по базе агента, как у IB_LIST_ORGANIZATIONS (С6): неразобранный срез бросает и кэш не трогает.
+							const base = cmd.base_key ? await baseOfAgent(req.agent!.agentId, cmd.base_key) : null;
+							if (base) {
+								await registry.syncOrganizations(base.id, a.items, a.meta);
+								applied.organizations = true;
+							}
+							continue;
+						}
 						if (!me?.serverId) continue;
 						if (a.kind === "infobases") {
 							await bases.sync(me.serverId, a.items as unknown as BaseState[], { complete: true, authoritative: me.role === "admin" });
@@ -886,7 +874,8 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				}
 				// Списки содержимого базы оседают в кэше здесь, а не в HTTP-ручке панели: тем же
 				// путём приходят результаты ПАКЕТНОЙ проверки, которую никто не ждёт в запросе.
-				if (p.data.status === "SUCCESS" && cmd.base_key && (cmd.type === "IB_LIST_USERS" || cmd.type === "IB_LIST_EXTENSIONS")) {
+				if (p.data.status === "SUCCESS" && cmd.base_key
+					&& (cmd.type === "IB_LIST_USERS" || cmd.type === "IB_LIST_EXTENSIONS" || cmd.type === "IB_LIST_ORGANIZATIONS")) {
 					/*
 					 * НЕУЗНАННУЮ ФОРМУ НЕ СЧИТАЕМ ПУСТЫМ СРЕЗОМ. Прежний код видел непустой массив,
 					 * не находил в нём ни одной записи и удалял из кэша ВСЕХ: полный срез,
@@ -902,6 +891,9 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 						const base = await baseOfAgent(req.agent!.agentId, cmd.base_key);
 						if (base) {
 							if (cmd.type === "IB_LIST_USERS") await registry.syncUsers(base.id, list.items as IbUser[]);
+							else if (cmd.type === "IB_LIST_ORGANIZATIONS") {
+								await registry.syncOrganizations(base.id, list.items, ibOrganizationsMeta(p.data.result));
+							}
 							else await registry.syncExtensions(base.id, list.items as IbExtension[]);
 						}
 					}
@@ -937,10 +929,22 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 		 * снятия сеансов (exclusiveOps.ts). Раннера нет (перезапуск сервиса) — повтора нет: отказ остаётся в задании,
 		 * база возвращается восстановлением, «Повторить неуспешные» пойдёт через подготовку.
 		 */
-		if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id && retriedByRunner(row.payload)) {
+		const busy = wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && !!row.batch_id;
+		/*
+		 * УСТАНОВКА И УДАЛЕНИЕ РАСШИРЕНИЯ: ПЕРВАЯ ПОПЫТКА БЕЗ ПОДГОТОВКИ, «ЗАНЯТО» — ПОВТОР ЧЕРЕЗ НЕЁ (С4 задачи агента
+		 * 28.09, exclusiveOps.EXCLUSIVE_ON_BUSY_TYPES): обновление кода расширения проходит при пользователях в базе, и
+		 * выгонять их на каждой раскатке незачем. Агенту, который не входит в закрытую базу, — обычный повтор.
+		 */
+		const escalate = busy && !row.payload?.exclusive && EXCLUSIVE_ON_BUSY.has(row.type)
+			? await agents.findById(row.agent_id) : null;
+		if (busy && retriedByRunner(row.payload)) {
 			log.info({ commandId: row.id, baseKey: row.base_key, code: wire.error?.code },
 				"база занята — повтор монопольной операции ведёт её раннер");
-		} else if (wire.status === "ERROR" && isBusyFailure(wire.error?.code, wire.error?.message) && row.batch_id) {
+		} else if (escalate && escalatesOnBusy(row.type, escalate)) {
+			const again = await escalateBusyToExclusive({ queue, log, parallel: queue.ibParallel }, row, escalate, BATCH_QUEUE_WAIT_SECS);
+			log.info({ commandId: row.id, retry: again, baseKey: row.base_key, code: wire.error?.code },
+				again ? "база занята — повтор через подготовку базы (закрыть вход, снять сеансы)" : "база занята — попытки кончились или задание остановлено");
+		} else if (busy) {
 			const again = await queue.retryBusy(row.id, BATCH_QUEUE_WAIT_SECS);
 			if (again) {
 				const attempt = (row.attempt ?? 1) + 1;
@@ -987,6 +991,12 @@ export function agentRouter(deps: { db: Db; cfg: Config; log: Logger; agents: Ag
 				? readsAfter(row.type, (row.payload ?? {}) as Record<string, unknown>, applied)
 				: readsAfterFailure(row.type, p.data.error?.code);
 		for (const refreshType of reads) {
+			// Организации дочитываем только у сборки, которая знает команду: у старой это отказ «неизвестный тип» в журнале
+			// на каждую загрузку, а вкладка у неё всё равно пишет «Нет в этой сборке».
+			if (refreshType === "IB_LIST_ORGANIZATIONS") {
+				const me = await agents.findById(req.agent!.agentId);
+				if (!me || !agentKnowsType(me, refreshType)) continue;
+			}
 			await queue.enqueue({
 				agentId: req.agent!.agentId,
 				organizationUuid: row.organization_uuid,

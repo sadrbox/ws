@@ -67,16 +67,17 @@ export type BatchStartInput = {
 	userUuid: string | null;
 	/** Сервер 1С (C9, C10): базы — на нём. Нет — база ищется по ключу; одноимённая на двух серверах пропускается. */
 	serverId?: string | null;
-	/** Видимые пользователю серверы (C11); null — все. */
-	allowedServers?: ReadonlySet<string> | null;
 };
 
 export type BatchDeps = {
 	agents: AgentService; queue: CommandQueue; batches: BatchService;
 	/** Журнал для монопольных операций (exclusiveOps.ts); без него — молча. */
 	log?: ExclusiveLog;
-	/** Состояние базы в реестре: скрытая и удалённая из кластера отсеиваются со своей причиной (С44). */
-	bases: Pick<BaseService, "findByKeyGlobal"> & Partial<Pick<BaseService, "serversWithKey">>;
+	/**
+	 * Состояние базы в реестре: скрытая и удалённая из кластера отсеиваются со своей причиной (С44). Организация базы
+	 * (В4) — за ней числится команда задания; нет метода — организации у команды нет.
+	 */
+	bases: Pick<BaseService, "findByKeyGlobal"> & Partial<Pick<BaseService, "serversWithKey" | "organizationOf">>;
 };
 
 /** Почему запуск невозможен — текстом для человека (в HTTP уходит как VALIDATION_ERROR). */
@@ -92,12 +93,16 @@ export type BatchStartError = { error: string };
  */
 export async function enqueueBatchCommand(
 	deps: Pick<BatchDeps, "queue" | "batches" | "log">, batchId: string,
-	c: { agent: ExclusiveAgent; spec: AdminCommandSpec; baseKey: string | null; payload: Record<string, unknown>; userUuid: string | null },
+	c: {
+		agent: ExclusiveAgent; spec: AdminCommandSpec; baseKey: string | null; payload: Record<string, unknown>; userUuid: string | null;
+		/** Организация базы (В4): чьи данные затронуты — из заявки базы или её токена чата; не знаем — null. */
+		organizationUuid: string | null;
+	},
 ): Promise<string> {
 	const { exclusive: _previous, ...payload } = c.payload;
 	const exclusive = !!c.baseKey && EXCLUSIVE_TYPES.has(c.spec.type) && typeof deps.queue.release === "function";
 	const cmd = await deps.queue.enqueue({
-		agentId: c.agent.id, organizationUuid: c.agent.organizationUuid, baseKey: c.baseKey,
+		agentId: c.agent.id, organizationUuid: c.organizationUuid, baseKey: c.baseKey,
 		type: c.spec.type, payload: exclusive ? { ...payload, exclusive: {} } : payload, userUuid: c.userUuid,
 		ttlSeconds: c.spec.ttlSeconds ?? DEFAULT_COMMAND_TTL_SECS,
 		queueWaitSeconds: BATCH_QUEUE_WAIT_SECS,
@@ -164,7 +169,7 @@ export async function startBatch(
 		// Одноимённая база на нескольких серверах без выбранного сервера — пропуск с причиной (C10): угадывать сервер
 		// значит выполнить операцию не там.
 		if (!input.serverId && deps.bases.serversWithKey) {
-			const servers = (await deps.bases.serversWithKey(key)).filter((x) => !input.allowedServers || input.allowedServers.has(x.id));
+			const servers = await deps.bases.serversWithKey(key);
 			if (servers.length > 1) {
 				skipped.push({ baseKey: key, reason: `база есть на нескольких серверах (${servers.map((x) => x.name).join(", ")}) — выберите сервер` });
 				continue;
@@ -176,7 +181,7 @@ export async function startBatch(
 		if (!base) { skipped.push({ baseKey: key, reason: "базы нет в реестре — обновите список из кластера" }); continue; }
 		const refused = baseRefusal(spec, base);
 		if (refused) { skipped.push({ baseKey: key, reason: refused.message }); continue; }
-		const agent = await deps.agents.pickAdminAgent(key, { serverId: input.serverId ?? null, allowedServers: input.allowedServers ?? null });
+		const agent = await deps.agents.pickAdminAgent(key, { serverId: input.serverId ?? null });
 		if (!agent || !agentCanRun(agent, spec)) {
 			skipped.push({ baseKey: key, reason: agent ? `нет способности ${spec.capability}` : "нет агента на связи" });
 			continue;
@@ -187,7 +192,8 @@ export async function startBatch(
 		if (refusal) { skipped.push({ baseKey: key, reason: refusal }); continue; }
 		// Монопольная операция (exclusiveOps.ts) встаёт в задание сразу, но выдаётся агенту только после того, как
 		// сервис закрыл базу и снял сеансы, — в свою очередь цепочки агента (КР-12).
-		await enqueueBatchCommand(deps, batchId, { agent, spec, baseKey: key, payload: built.payload, userUuid: input.userUuid });
+		const organizationUuid = deps.bases.organizationOf ? await deps.bases.organizationOf(base.id) : null;
+		await enqueueBatchCommand(deps, batchId, { agent, spec, baseKey: key, payload: built.payload, userUuid: input.userUuid, organizationUuid });
 		queued += 1;
 	}
 

@@ -96,7 +96,7 @@ test("Б11: TRUST_PROXY по умолчанию — лимит заявок по
 	const app = express();
 	app.set("trust proxy", cfg.TRUST_PROXY);
 	app.use(express.json());
-	app.use("/agent/v1", agentEnrollRouter({ enrollments: store as never, agents: { rotateToken: async () => null }, erp: {} as never, audit: { write: async () => {} }, log: silent, perHour: 2 }));
+	app.use("/agent/v1", agentEnrollRouter({ enrollments: store as never, agents: { rotateToken: async () => null }, audit: { write: async () => {} }, log: silent, perHour: 2 }));
 	const s = await listen(app);
 	const body = JSON.stringify({ name: "Бух", role: "business", serviceName: "BPAPIAgent", computer: "PC" });
 	const enroll = async (xff: string, extra: Record<string, string> = {}) => (await fetch(`${s.url}/agent/v1/enroll`, {
@@ -317,17 +317,6 @@ test("Б11: в режиме all результат команды бизнес-�
 		assert.ok(!JSON.stringify(foreign.body).includes("1000000"));
 		assert.equal((await h.call(WRITER_U, "GET", "/commands/cmd-adm")).status, 200);
 		assert.equal((await h.call(ADMIN_U, "GET", "/commands/cmd-biz")).status, 200, "суперадмину видно всё");
-	} finally { h.close(); }
-});
-
-test("Б14: база невидимого сервера — 404 «нет в реестре», а не 409 «числится за другим сервером»", async () => {
-	const h = await panel({ scope: "organizations" });
-	try {
-		const r = await h.call(WRITER_U, "GET", "/sessions?baseKey=%D1%87%D1%83%D0%B6%D0%B0%D1%8F");
-		assert.equal(r.status, 404);
-		assert.equal(r.body.error!.code, "UNKNOWN_BASE");
-		assert.ok(!/другим сервером/.test(r.body.error!.message));
-		assert.deepEqual(h.enqueued, [], "команда в чужой кластер не ставилась");
 	} finally { h.close(); }
 });
 

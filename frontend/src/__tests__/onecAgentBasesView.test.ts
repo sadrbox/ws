@@ -35,8 +35,8 @@ describe("базы агента: состояние и лимит", () => {
 		for (const bad of ["-1", "1.5", "abc", "1e3"]) expect(parseLimitInput(bad)).toBeUndefined();
 		expect(limitInput(null)).toBe("");
 		expect(limitInput(7)).toBe("7");
-		expect(sameLimits({ maxBases: 2, maxBins: null }, { maxBases: 2, maxBins: null })).toBe(true);
-		expect(sameLimits({ maxBases: 2, maxBins: null }, { maxBases: 2, maxBins: 0 })).toBe(false);
+		expect(sameLimits({ maxBases: 2 }, { maxBases: 2 })).toBe(true);
+		expect(sameLimits({ maxBases: 2 }, { maxBases: null })).toBe(false);
 	});
 
 	it("транспорт: HTTP, COM, неизвестно", () => {

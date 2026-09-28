@@ -1,6 +1,6 @@
 // Административный API (X-Admin-Key): регистрация агентов и служебные операции.
 //
-//   POST   /admin/v1/agents                  {organizationUuid, name} → агент + токен (один раз)
+//   POST   /admin/v1/agents                  {name, role} → агент + токен (один раз); организации у агента нет
 //   GET    /admin/v1/agents
 //   POST   /admin/v1/agents/:id/rotate-token
 //   POST   /admin/v1/agents/:id/disable | /enable
@@ -19,10 +19,9 @@ import { requireAdmin } from "../auth/index.ts";
 import type { AgentService } from "../agents/service.ts";
 import { CommandQueue } from "../commands/queue.ts";
 import type { Audit } from "../audit/index.ts";
-import { resolveTarget, type AgentBasesStore } from "../agents/agentBases.ts";
+import { baseLimitRefusal, type AgentBasesStore } from "../agents/agentBases.ts";
 
 const createAgentSchema = z.object({
-	organizationUuid: z.string().min(1).max(64),
 	name: z.string().max(200).optional().default(""),
 	// Роль назначается здесь и дальше не меняется: агент её только сообщает, а не задаёт (аудит 21.09).
 	role: z.enum(["business", "admin"]).optional().default("business"),
@@ -52,12 +51,12 @@ export function adminRouter(deps: {
 	r.post("/agents", async (req, res) => {
 		const p = createAgentSchema.safeParse(req.body);
 		if (!p.success) {
-			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "organizationUuid обязателен" } });
+			res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Некорректные name или role" } });
 			return;
 		}
-		const { agent, token } = await agents.create(p.data.organizationUuid, p.data.name, p.data.role);
-		log.info({ agentId: agent.id, organizationUuid: agent.organizationUuid }, "агент создан");
-		await audit.write({ event: "agent.create", agentId: agent.id, organizationUuid: agent.organizationUuid });
+		const { agent, token } = await agents.create(p.data.name, p.data.role);
+		log.info({ agentId: agent.id, role: agent.role }, "агент создан");
+		await audit.write({ event: "agent.create", agentId: agent.id, details: { role: agent.role } });
 		res.status(201).json({ success: true, data: { agent, token, note: "Токен показывается один раз. Впишите его в agent.toml: cloud.token" } });
 	});
 
@@ -99,29 +98,27 @@ export function adminRouter(deps: {
 			return;
 		}
 		/*
-		 * ЛИМИТ ТАРИФА И ДЛЯ СЛУЖЕБНОГО ВХОДА (C8). Бизнес-команда с адресом (baseKey или БИН) проверяется тем же
-		 * правилом, что в чате; обход — только флагом `force`, и он пишется в аудит отдельным событием. Без адреса
-		 * решает агент, как и раньше.
+		 * ЛИМИТ ТАРИФА И ДЛЯ СЛУЖЕБНОГО ВХОДА (C8). Бизнес-команда с явной базой проверяется лимитом баз, как в чате;
+		 * обход — только флагом `force`, и он пишется в аудит отдельным событием. Без адреса решает агент.
 		 */
 		const baseKey = typeof p.data.payload.baseKey === "string" ? p.data.payload.baseKey : null;
-		const bin = typeof p.data.payload.organizationBin === "string" ? p.data.payload.organizationBin : null;
-		if (agent.role === "business" && agentBases && (baseKey || bin)) {
-			const d = resolveTarget([{ agentId: agent.id, online: agent.online, bases: await agentBases.list(agent.id), limits: agent.limits }], { baseKey, bin });
-			if (d.kind === "refused") {
+		if (agent.role === "business" && agentBases && baseKey) {
+			const d = baseLimitRefusal({ agentId: agent.id, online: agent.online, bases: await agentBases.list(agent.id), limits: agent.limits }, baseKey);
+			if (d) {
 				if (!p.data.force) {
 					res.status(403).json({ success: false, error: { code: d.code, message: d.message, details: d.details } });
 					return;
 				}
-				await audit.write({ event: "command.limit_bypass", agentId: agent.id, organizationUuid: agent.organizationUuid,
-					details: { type: p.data.type, baseKey, bin, reason: d.message } });
-				log.warn({ agentId: agent.id, type: p.data.type, baseKey, bin }, "служебная команда поставлена в обход лимита тарифа (force)");
+				await audit.write({ event: "command.limit_bypass", agentId: agent.id, details: { type: p.data.type, baseKey, reason: d.message } });
+				log.warn({ agentId: agent.id, type: p.data.type, baseKey }, "служебная команда поставлена в обход лимита тарифа (force)");
 			}
 		}
+		// Служебная команда по ключу администратора — ничьей организации: результат видят администраторы BuhProf (В4).
 		const cmd = await queue.enqueue({
-			agentId: agent.id, organizationUuid: agent.organizationUuid, type: p.data.type,
+			agentId: agent.id, organizationUuid: null, type: p.data.type,
 			payload: p.data.payload, requestId: p.data.requestId ?? null, ttlSeconds: p.data.ttlSeconds,
 		});
-		await audit.write({ event: "command.enqueue", agentId: agent.id, organizationUuid: agent.organizationUuid,
+		await audit.write({ event: "command.enqueue", agentId: agent.id,
 			commandId: cmd.id, requestId: cmd.request_id, details: { type: cmd.type, source: "admin" } });
 		res.status(201).json({ success: true, data: CommandQueue.toView(cmd) });
 	});

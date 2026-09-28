@@ -15,7 +15,6 @@ import { BaseOrganizationsStore } from "./bases/organizations.ts";
 import { ErpTasks } from "./erp/tasks.ts";
 import { serverTools } from "./chat/serverTools.ts";
 import { agentEnrollRouter } from "./http/agentEnrollRouter.ts";
-import { ActivationStore } from "./agents/activation.ts";
 import { RegistrationStore } from "./bases/registrations.ts";
 import { baseRegistrationRouter } from "./http/baseRegistrationRouter.ts";
 import { AgentBasesStore } from "./agents/agentBases.ts";
@@ -118,15 +117,13 @@ function createExtractor(cfg: Config, log: Logger): StatementExtractor | null {
 
 export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; agents: AgentService; workflow: ChatWorkflow | null } {
 	const { cfg, log, db, erp } = deps;
-	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS, cfg.AGENT_ORG_BINDING);
-	// Режим `any` (C14) — для стенда разработки: команды и чат уходят агентам ЧУЖИХ организаций, если у своей агента нет.
-	if (cfg.AGENT_ORG_BINDING === "any" && cfg.NODE_ENV === "production") {
-		log.warn("AGENT_ORG_BINDING=any в production: команды организаций без своего агента уйдут агентам других организаций — нужен strict");
-	}
+	const agents = new AgentService(db, cfg.AGENT_OFFLINE_AFTER_SECS);
 	// Один реестр на оба роутера: списки из базы кладёт агентский путь, читает панель.
 	const onecRegistry = new OnecRegistry(db);
 	const baseRegistry = new BaseService(db);
 	const queue = new CommandQueue(db, cfg.AGENT_IB_PARALLEL);
+	// Сбои, которые очередь переживает сама (файл выполненной установки не заменён сводкой, 28.09), — в общий журнал.
+	queue.setLog(log);
 	// Учётные записи отдельных баз: ключ шифрования выводится из секрета сервиса, своей
 	// переменной окружения не заводим — лишний секрет в .env это лишний способ потерять доступ.
 	const credentials = new CredentialsStore(db, cfg.JWT_SECRET);
@@ -180,6 +177,20 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 		.catch((e) => log.warn({ err: e }, "очистка файлов"));
 	void purge();
 	setInterval(purge, 3_600_000).unref();
+	// Файлы .cfe в журнале команд (С3, 28.09): неуспешная установка — через сутки, выгрузка — через час; вместо файла —
+	// сводка `{size, sha256}`. Своей цепочкой, а не звеном `purge`: сбой уборки файлов диалогов не должен её пропускать.
+	// Проходы не накладываются: первый после выкладки разбирает накопленное за полгода порциями.
+	let scrubBusy = false;
+	const scrubContent = () => {
+		if (scrubBusy) return;
+		scrubBusy = true;
+		queue.scrubStoredContent()
+			.then((r) => { if (r.installs || r.exports) log.info(r, "журнал команд: файлы расширений заменены сводкой"); })
+			.catch((e) => log.warn({ err: e }, "журнал команд: очистка файлов расширений"))
+			.finally(() => { scrubBusy = false; });
+	};
+	scrubContent();
+	setInterval(scrubContent, 3_600_000).unref();
 	// Старые диалоги, выписки и команды — при старте и раз в сутки.
 	const retention = () => purgeOldData(db, cfg.CONVERSATION_TTL_DAYS)
 		.then((r) => { if (r.conversations || r.statements || r.purchases || r.commands || r.audit) log.info(r, "удалены данные старше срока хранения"); })
@@ -200,13 +211,10 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// следующий тик шёл поверх него.
 	let maintenanceBusy = false;
 	// Режим organizations (C11): ночной запуск идёт только на серверы организации расписания.
-	const serversOf = cfg.ONEC_SERVER_SCOPE === "organizations"
-		? async (org: string) => new Set((await baseRegistry.listServers()).filter((x) => x.organizationUuid === org).map((x) => x.id))
-		: null;
 	const maintenance = () => {
 		if (maintenanceBusy) return;
 		maintenanceBusy = true;
-		runDueSchedules({ agents, queue, batches, bases: baseRegistry, schedules, audit, log, serversOf })
+		runDueSchedules({ agents, queue, batches, bases: baseRegistry, schedules, audit, log })
 			.then((r) => { if (r.started || r.failed) log.info(r, "расписание обслуживания: проход"); })
 			.catch((e) => log.warn({ err: e }, "расписание обслуживания"))
 			.finally(() => { maintenanceBusy = false; });
@@ -318,11 +326,11 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	// Администрирование 1С (E15): отдельный префикс, своя проверка прав.
 	app.use("/v1/onec", onecRouter({
 		erp, cfg, log, agents, bases: baseRegistry, queue, audit,
-		batches, registry: onecRegistry, credentials, schedules, agentBases: new AgentBasesStore(db), registrations, baseTokens, activation: new ActivationStore(db), enrollments, baseOrgs,
+		batches, registry: onecRegistry, credentials, schedules, agentBases: new AgentBasesStore(db), registrations, baseTokens, enrollments, baseOrgs,
 		chatExchange,
 	}));
 	// Подключение агента по коду (СВ5) — до agentRouter: у агента, который просит подключение, токена ещё нет.
-	app.use("/agent/v1", agentEnrollRouter({ enrollments, agents, erp, audit, log }));
+	app.use("/agent/v1", agentEnrollRouter({ enrollments, agents, audit, log }));
 	app.use("/agent/v1", agentRouter({ db, cfg, log, agents, bases: baseRegistry, queue, audit, registry: onecRegistry }));
 	app.use("/admin/v1", adminRouter({ cfg, log, agents, queue, audit, agentBases: new AgentBasesStore(db) }));
 	// Регистрация базы (СВ4) — до канала чата: у базы, подающей заявку, токена ещё нет.
@@ -342,7 +350,7 @@ export function createApp(deps: AppDeps): { app: Express; queue: CommandQueue; a
 	}));
 	// Стандарт качества (E17, СК7.1): проверка ответа клиенту моделью — до userRouter, иначе JWT проверялся бы дважды.
 	app.use("/v1/quality", qualityRouter({ erp, cfg, llm, audit, log }));
-	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, agentBases: new AgentBasesStore(db), db,
+	app.use("/v1", userRouter({ erp, cfg, agents, workflow, log, files, version: VERSION, db,
 		// Числа из 1С в карточке организации (ПН9): команда агенту и запись о ней в журнал.
 		queue, audit }));
 

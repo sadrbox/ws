@@ -8,20 +8,34 @@
  * ТОЛЬКО ЧТЕНИЕ. Базы заводит кластер 1С, токены выдаёт администратор BuhProf (панель → «Базы 1С»),
  * список организаций присылает сама база при открытии чата. Менять это из карточки организации
  * нечем и незачем — здесь только показано, как оно сложилось.
+ *
+ * ТАБЛИЦА — общий компонент Table (28.09), как у соседних вкладок-списков карточки: сортировка по колонкам,
+ * быстрый поиск, ширины и видимость колонок запоминаются, «Обновить» перечитывает список у сервиса.
  */
-import { FC } from "react";
+import { FC, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "src/i18";
-import { getFormatDate } from "src/utils/datetime";
+import Table from "src/components/Table";
+import { getModelColumns } from "src/components/Table/services";
+import type { TColumn } from "src/components/Table/types";
+import { buildStaticTableProps } from "src/utils/staticTableProps";
+import { useStaticTableView } from "src/hooks/useStaticTableView";
+import { asText } from "src/utils/asText";
 import { fetchOrganizationBases } from "src/services/onec/api";
 import { QueryError } from "src/models/OneCAdmin/sharedUi";
 import admin from "src/models/OneCAdmin/OneCAdmin.module.scss";
+import { organizationBaseRows, type BaseRow } from "./onecBasesView";
 
-const CHAT_LABEL: Record<string, string> = {
-  active: "onecOrgBaseChatActive",
-  revoked: "onecOrgBaseChatRevoked",
-  none: "onecOrgBaseChatNone",
-};
+const COMPONENT = "Organizations_onec_bases";
+
+// Идентификатор колонки — ключ перевода её заголовка (getTranslateColumn).
+const columns = (): TColumn[] => ([
+  { identifier: "onecBase", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+  { identifier: "onecServer", type: "string", width: "170px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
+  { identifier: "onecTabChat", type: "string", width: "170px", minWidth: "100px", alignment: "left", visible: true, inlist: true },
+  { identifier: "binIin", type: "string", width: "150px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+  { identifier: "onecOrgBaseLastSeen", type: "datetime", width: "170px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+] as unknown as TColumn[]);
 
 export const OnecBasesTab: FC<{ organizationUuid: string }> = ({ organizationUuid }) => {
   const q = useQuery({
@@ -29,47 +43,42 @@ export const OnecBasesTab: FC<{ organizationUuid: string }> = ({ organizationUui
     queryFn: () => fetchOrganizationBases(organizationUuid),
     enabled: !!organizationUuid,
   });
-  const items = q.data?.items ?? [];
+  const rowsRaw = useMemo(() => organizationBaseRows(q.data?.items ?? []), [q.data]);
+  const view = useStaticTableView(rowsRaw, { onecBase: "asc" }, COMPONENT, { scope: organizationUuid });
+  const [cols, setCols] = useState<TColumn[]>(() => getModelColumns(columns(), COMPONENT));
 
   return (
-    <div className={admin.Instances}>
+    <>
       <div className={admin.Hint}>{translate("onecOrgBasesHint")}</div>
       <QueryError error={q.error} noticeKey={`organization-bases-${organizationUuid}`} source={translate("onecOrgBases")} />
-      {q.data && !items.length && <div className={admin.Hint}>{translate("onecOrgBasesNone")}</div>}
-      {items.length > 0 && (
-        <table className={`${admin.StatsTable} ${admin.ReqTable}`}>
-          <thead>
-            <tr>
-              <th>{translate("onecBase")}</th>
-              <th>{translate("onecServer")}</th>
-              <th>{translate("onecTabChat")}</th>
-              <th>{translate("binIin")}</th>
-              <th>{translate("onecOrgBaseLastSeen")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((b) => (
-              <tr key={`${b.serverName ?? ""}-${b.baseKey}`}>
-                <td>
-                  {b.name}
-                  {/* Отключённая база остаётся в списке: задачи, которые она успела создать, никуда не делись. */}
-                  {b.disabled && <span className={admin.ReqOff}> · {translate("onecBaseDisabled")}</span>}
-                </td>
-                <td>{b.serverName || "—"}</td>
-                <td>
-                  <span className={b.chat === "active" ? admin.ReqOk : admin.ReqOff}>
-                    {translate(CHAT_LABEL[b.chat] ?? "onecOrgBaseChatNone")}
-                  </span>
-                </td>
-                {/* БИН из списка самой базы: пусто — организацию она не называет, задачи по ней не заведёт. */}
-                <td>{b.declaredBin || "—"}</td>
-                <td>{b.lastSeenAt ? getFormatDate(b.lastSeenAt) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+      <Table {...buildStaticTableProps({
+        componentName: COMPONENT, rows: view.rows, columns: cols, setColumns: setCols,
+        sorting: view.sorting, search: view.search,
+        isLoading: q.isLoading, reloading: q.isFetching && !q.isLoading,
+        onReload: () => void q.refetch(),
+        emptyText: q.data ? translate("onecOrgBasesNone") : undefined,
+        renderCell: (r, col) => {
+          const row = r as BaseRow;
+          if (col.identifier === "onecBase") {
+            // Имя и пометка — ОДНИМ span ячейки: на `.TableBodyCell > span` держатся отступ и многоточие, а два
+            // соседних span дали бы двойной отступ между именем и пометкой.
+            return (
+              <span>
+                {asText(row.onecBase)}
+                {/* Отключённая база остаётся в списке: задачи, которые она успела создать, никуда не делись. */}
+                {row.__disabled && <span className={admin.ReqOff}> · {translate("onecBaseDisabled")}</span>}
+              </span>
+            );
+          }
+          if (col.identifier === "onecTabChat") {
+            return <span className={row.__chat === "active" ? admin.ReqOk : admin.ReqOff}>{asText(row.onecTabChat)}</span>;
+          }
+          // БИН сверяют посимвольно — моноширинным, как в заявках 1С.
+          if (col.identifier === "binIin" && row.binIin !== "—") return <span className={admin.ReqCode}>{asText(row.binIin)}</span>;
+          return undefined;
+        },
+      })} />
+    </>
   );
 };
 

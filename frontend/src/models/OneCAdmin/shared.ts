@@ -18,7 +18,7 @@ import { buildOnecPermissions, type OnecPermissions } from "./onecPermissions";
 import type { NoticeItem } from "src/components/Notice";
 import { showToast } from "src/components/UIToast";
 import {
-	fetchBaseExtensions, fetchBaseUsers, fetchServers,
+	fetchBaseExtensions, fetchBaseOrganizations, fetchBaseUsers, fetchServers,
 	type BatchStart, type OnecBase,
 } from "src/services/onec/api";
 import { previewUrl } from "./ServerParams";
@@ -27,6 +27,7 @@ import { useAgents } from "./agentsQuery";
 import { noteNotice, notify } from "src/components/TechMessages/store";
 import { useOpenOnecBase } from "src/models/OneCBases";
 import { requestBaseTab } from "src/models/OneCBases/openAt";
+import { SESSIONS_DENIED_CODE, errorCode, failureText, viaText } from "src/services/onec/commandFacts";
 
 /**
  * Применимость операции к базе.
@@ -274,8 +275,24 @@ export function reportBatchStart(r: BatchStart, source?: string): void {
 	showToast(`${translate("onecBatchQueued")}: ${r.queued}/${r.total}`, "success");
 }
 
-/** Что читаем у базы: её пользователей или её расширения. */
-export type BaseContentKind = "users" | "extensions";
+/** Что читаем у базы: её пользователей, расширения или организации. */
+export type BaseContentKind = "users" | "extensions" | "organizations";
+
+/** Чем чтения различаются: подпись операции, запрос к 1С, кэш карточки базы и сводки реестра, которые от него считаются. */
+const CONTENT: Record<BaseContentKind, {
+	title: string;
+	read: (baseKey: string) => Promise<{ items: unknown[] }>;
+	cacheKey: string;
+	summaries: string[];
+	/** Кэш карточки перечитать у сервиса, а не класть в него ответ агента: сервис дополняет прочитанное. */
+	reread?: true;
+}> = {
+	users: { title: "onecUsersCheck", read: fetchBaseUsers, cacheKey: "base-users", summaries: ["user-summary", "base-users-cached", "user-where"] },
+	extensions: { title: "onecExtCheck", read: fetchBaseExtensions, cacheKey: "base-ext", summaries: ["ext-summary", "bases"] },
+	// Сводок по организациям в реестре нет: прочитанное нужно только карточке базы (28.09). Связь с ERP сервис
+	// проставляет при чтении кэша — поэтому карточка перечитывает его (в 1С это не ходит).
+	organizations: { title: "onecOrgsCheck", read: fetchBaseOrganizations, cacheKey: "base-orgs", summaries: [], reread: true },
+};
 
 /**
  * «Обновить содержимое базы» — ОДИН механизм на все экраны.
@@ -297,7 +314,7 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 	const qc = useQueryClient();
 	const parallel = useCheckParallel();
 	const [checking, setChecking] = useState(false);
-	const isUsers = kind === "users";
+	const spec = CONTENT[kind];
 
 	const run = useCallback(async (keys: string[]) => {
 		const asked = keys.filter(Boolean);
@@ -333,7 +350,7 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 			// секунды: при десятке отсеянных баз в тосте помещается только первая, а
 			// остальные нужны, чтобы понять, чинить одну базу или все сразу.
 			const details = skipped.map((x) => `${x.baseKey} — ${x.message}`).join("\n");
-			noteNotice(translate(isUsers ? "onecUsersCheck" : "onecExtCheck"), { type: "warning", text: details });
+			noteNotice(translate(spec.title), { type: "warning", text: details });
 			showToast(skipped.length > 1
 				? `${translate("onecNothingToCheck")}: ${skipped.length}`
 				: `${first.baseKey} — ${first.message}`, "warning");
@@ -342,17 +359,20 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 
 		setChecking(true);
 		const op = startOp({
-			kind: "read", title: translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
+			kind: "read", title: translate(spec.title),
 			target: targets.length === 1 ? targets[0] : `${translate("onecBases")}: ${targets.length}`,
 			total: targets.length,
 			note: skipped.length ? `${translate("onecSkippedBases")}: ${skipped.length}` : "",
 			// Читаем содержимое этих баз — карточки их пользователей на это время не правятся.
 			scope: { bases: targets },
 		});
+		// Ответы баз — ради пути исполнения в итоге (С1, 28.09): сами списки уже ушли в кэш карточек.
+		const answers: unknown[] = [];
 		const r = await checkBases(
 			targets,
 			async (baseKey) => {
-				const data = isUsers ? await fetchBaseUsers(baseKey) : await fetchBaseExtensions(baseKey);
+				const data = await spec.read(baseKey);
+				answers.push(data);
 				// Время чтения ставим здесь: у агента его в ответе нет, а карточка показывает
 				// возраст данных (колонка «Прочитано»). Без метки только что прочитанное
 				// выглядело бы как «неизвестно когда» — ровно наоборот правде.
@@ -360,7 +380,8 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 				const stamped = { items: (data.items as { seenAt?: string | null }[]).map((x) => ({ ...x, seenAt })) };
 				// Прочитанное сразу становится данными карточки базы: иначе она сделала бы
 				// второй такой же вход в базу, чтобы показать то же самое.
-				qc.setQueryData(["onec", isUsers ? "base-users" : "base-ext", baseKey], stamped);
+				if (spec.reread) void qc.invalidateQueries({ queryKey: ["onec", spec.cacheKey, baseKey] });
+				else qc.setQueryData(["onec", spec.cacheKey, baseKey], stamped);
 				return data;
 			},
 			parallel,
@@ -369,14 +390,15 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 		finishOp(op, {
 			failed: r.failed.length,
 			note: r.failed.length ? `${r.failed[0].baseKey}: ${r.failed[0].message}` : "",
+			// Путь исполнения чтения (С1, 28.09): у расширений агент отвечает, шёл ли он через COM или ibcmd.
+			detail: viaText(...answers, ...r.failed.map((f) => f.error)) || undefined,
 		});
 		setChecking(false);
 
 		// Пропущенные называем поимённо и с причиной: «проверено 3 из 5» без объяснения
 		// выглядит как потеря половины выбора.
 		for (const sk of skipped) {
-			noteNotice(translate(isUsers ? "onecUsersCheck" : "onecExtCheck"),
-				{ type: "warning", text: `${sk.baseKey} — ${sk.message}` });
+			noteNotice(translate(spec.title), { type: "warning", text: `${sk.baseKey} — ${sk.message}` });
 		}
 		const tail = skipped.length ? ` ${translate("onecSkippedBases")}: ${skipped.length}.` : "";
 		showToast(
@@ -386,15 +408,8 @@ export function useBaseContentCheck(kind: BaseContentKind = "users"): {
 			r.failed.length || skipped.length ? "warning" : "success",
 		);
 		// Сводки считаются из того же кэша реестра, что наполняет чтение.
-		if (isUsers) {
-			void qc.invalidateQueries({ queryKey: ["onec", "user-summary"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "base-users-cached"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "user-where"] });
-		} else {
-			void qc.invalidateQueries({ queryKey: ["onec", "ext-summary"] });
-			void qc.invalidateQueries({ queryKey: ["onec", "bases"] });
-		}
-	}, [qc, parallel, checking, isUsers]);
+		for (const summary of spec.summaries) void qc.invalidateQueries({ queryKey: ["onec", summary] });
+	}, [qc, parallel, checking, spec]);
 
 	return { run, checking };
 }
@@ -432,11 +447,26 @@ export function useCheckParallel(): number {
  * ПОЧЕМУ НЕ «СНЯТЬ СЕАНС». Платформа называет держателя НОМЕРОМ сеанса, а команда кластера принимает только
  * UUID — на номер агент отвечает VALIDATION_ERROR. Поэтому ведём в список сеансов базы, где строка уже
  * подсвечена, а снимают её там, по самой строке.
+ *
+ * ВХОД ЗАКРЫТ БЛОКИРОВКОЙ (`IB_SESSIONS_DENIED`, С2 28.09) — не «база занята». Повтор с той же блокировкой даст
+ * тот же отказ, а сеансы тут ни при чём: ни «Повторить», ни «Показать сеансы» — только «Открыть карточку базы»,
+ * где видна блокировка и где её снимают («Операции» → вход в базу). Сервис отдаёт такой отказ с
+ * `retryable: false`; код проверяем и сами — сервис старее С2 мог назвать его повторимым по тексту.
  */
 export function useOnecErrorActions() {
 	const openBase = useOpenOnecBase();
 	return (e: unknown, opts: { baseKey?: string | null; retry?: () => void | Promise<void> } = {}):
 		{ label: string; onClick: () => void | Promise<void> }[] => {
+		if (errorCode(e) === SESSIONS_DENIED_CODE) {
+			const baseKey = opts.baseKey;
+			return baseKey ? [{
+				label: translate("onecBaseOpenCard"),
+				onClick: () => {
+					requestBaseTab(baseKey, { tab: "main" });
+					openBase(baseKey);
+				},
+			}] : [];
+		}
 		const err = e as { retryable?: boolean; details?: { lockedBy?: { sessionId?: string | null } } } | null;
 		const held = err?.details?.lockedBy;
 		// Повтор предлагаем только там, где он осмыслен: сервис отмечает такие отказы сам.
@@ -497,10 +527,10 @@ export async function checkBases(
 	limit = 4,
 	/** Сколько баз уже обработано — для вкладки прогресса: проверка сотни баз идёт минутами. */
 	onProgress?: (done: number, failed: number) => void,
-): Promise<{ ok: number; failed: { baseKey: string; message: string }[] }> {
+): Promise<{ ok: number; failed: { baseKey: string; message: string; error?: unknown }[] }> {
 	const queue = [...keys];
 	let ok = 0;
-	const failed: { baseKey: string; message: string }[] = [];
+	const failed: { baseKey: string; message: string; error?: unknown }[] = [];
 
 	const worker = async () => {
 		for (;;) {
@@ -510,7 +540,8 @@ export async function checkBases(
 				await read(key);
 				ok += 1;
 			} catch (e) {
-				failed.push({ baseKey: key, message: e instanceof Error ? e.message : String(e) });
+				// Текст — с подсказкой по коду отказа (С2, 28.09); сам отказ — ради пути исполнения в итоге (С1).
+				failed.push({ baseKey: key, message: failureText(e), error: e });
 			}
 			onProgress?.(ok + failed.length, failed.length);
 		}

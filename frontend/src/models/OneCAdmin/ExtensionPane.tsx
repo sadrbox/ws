@@ -122,7 +122,7 @@ const BasesTab: FC = () => {
 		[list.data],
 	);
 	const summary = useMemo(() => extensionSummary(rows), [rows]);
-	const view = useStaticTableView(rows, { baseKey: "asc" });
+	const view = useStaticTableView(rows, { baseKey: "asc" }, "OneCAdmin_extension_bases");
 
 	return (
 		<>

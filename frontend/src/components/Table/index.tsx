@@ -12,6 +12,7 @@ import {
   TypeFormAction,
 } from './types';
 import { isNarrowedView, isRowSelected, remapActiveRow, remapSelection, rowIdentities, toggleRowSelection, type SelectionState } from './services';
+import { readTableState, writeTableState } from './tableState';
 
 import { translate } from 'src/i18';
 import {
@@ -162,6 +163,8 @@ export interface TableProps {
   disableActiveRow?: boolean;
   /** Что написать вместо пустой таблицы (см. context.emptyText). */
   emptyText?: string;
+  /** Итоги, посчитанные источником, и подпись строки итогов (см. context.footerValues). */
+  footerValues?: Record<string, string | null>;
   /**
    * Активная строка сменилась — ОДИНОЧНЫЙ клик (и стрелки клавиатуры).
    *
@@ -333,15 +336,14 @@ const TableControlPanel = memo(({
         <>
           <Toolbar.Divider />
           <Toolbar.PeriodButton onClick={onDateRangeToggle} active={visibleDateRange} />
-          {/* Переключатель вида списка (список / split-предпросмотр), персист per-list.
+          {/* Переключатель вида списка (список / split-предпросмотр) — в общем состоянии таблицы (tableState.ts).
               Раскладку рендерит ModelList — она слушает CustomEvent "listLayoutToggle". */}
           {componentName && (
             <Toolbar.ToggleSplit
-              pressed={(localStorage.getItem(`listPaneLayout:${componentName}`) || 'list') === 'split'}
+              pressed={readTableState(componentName).layout === 'split'}
               onClick={() => {
-                const key = `listPaneLayout:${componentName}`;
-                const next = (localStorage.getItem(key) || 'list') === 'split' ? 'list' : 'split';
-                localStorage.setItem(key, next);
+                const next = readTableState(componentName).layout === 'split' ? undefined : 'split';
+                writeTableState(componentName, { layout: next });
                 window.dispatchEvent(new CustomEvent('listLayoutToggle', { detail: componentName }));
               }}
             />
@@ -428,6 +430,7 @@ const Table: FC<TableProps> = memo((props) => {
     onToggleExpand,
     disableActiveRow = false,
     emptyText,
+    footerValues,
     onActiveRowChange,
     apiRef,
     highlightUuid,
@@ -553,7 +556,15 @@ const Table: FC<TableProps> = memo((props) => {
   }, [selectedRows, isAllSelectedMode, excludedRows]);
   const [configModalAction, setConfigModalAction] = useState<TypeFormAction>('');
   const [dateRangeModalAction, setDateRangeModalAction] = useState<TypeFormAction>('');
-  const [visibleFastSearch, setVisibleFastSearch] = useState(false);
+  /*
+   * Строка быстрого поиска видна, пока в ней есть текст (28.09). Поиск теперь хранится вместе с остальным состоянием
+   * таблицы (tableState.ts) и восстанавливается при открытии — скрытая строка с непустым поиском значила бы строки,
+   * пропавшие без видимой причины. Скрыть строку — значит и очистить поиск (handleSearchToggle).
+   */
+  const [visibleFastSearch, setVisibleFastSearch] = useState(() => !!search.value);
+  useEffect(() => {
+    if (search.value) setVisibleFastSearch(true);
+  }, [search.value]);
 
   // ── Авто-активация первой строки и клавиатурная навигация (режим выбора) ──
   // Stable refs для использования в эффектах без лишних пересозданий
@@ -832,6 +843,7 @@ const Table: FC<TableProps> = memo((props) => {
       onToggleExpand,
       disableActiveRow,
       emptyText,
+      footerValues,
       // Только сеттеры — стабильны, поэтому contextValue НЕ меняется при навигации.
       states: {
         toggleRowSelect,
@@ -857,7 +869,7 @@ const Table: FC<TableProps> = memo((props) => {
       // Раскрытие строк — часть значения контекста: без этих зависимостей раскрытие
       // обновлялось лишь попутно, когда менялись строки.
       expandedRowIds, renderExpandedRow, childRows, onChildToggle, onToggleExpand,
-      disableActiveRow, emptyText, groupSelection, wrapCells,
+      disableActiveRow, emptyText, footerValues, groupSelection, wrapCells,
       // сеттеры стабильны (useState) — в deps не нужны; волатильные ЗНАЧЕНИЯ ушли
       // в отдельный контекст (см. volatileValue ниже).
       toggleRowSelect,

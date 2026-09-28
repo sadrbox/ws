@@ -151,7 +151,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 		rolesCount: (o.roles ?? []).length,
 		state: o.disabled ? translate("onecUserDisabled") : translate("onecUserActive"),
 	})), [occ]);
-	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });
+	const baseView = useStaticTableView(baseRows, { baseKey: "asc" }, "OneCAdmin_wizBases", { rememberFilters: false });
 
 	// ── Таблица шага 2: одинаковое сводим, различающееся разводим ───────────
 	const [dataCols, setDataCols] = useState<TColumn[]>(() => getModelColumns(dataColumns(), "OneCAdmin_wizData"));
@@ -209,7 +209,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 		});
 		return rows;
 	}, [chosen, profile, valueOf]);
-	const dataView = useStaticTableView(dataRows, {});
+	const dataView = useStaticTableView(dataRows, {}, "OneCAdmin_wizData", { rememberFilters: false });
 	const [activeData, setActiveData] = useState<TDataItem | null>(null);
 
 	// ── Таблица шага 3: роли по ВЫБРАННЫМ базам ─────────────────────────────
@@ -228,7 +228,7 @@ export const BaseUserWizard: FC<Partial<TPane>> = (paneProps) => {
 			changedLabel: changed ? `${translate("onecChanged")}: ${changed}` : "",
 		};
 	}), [allRoles, chosen, isOn, draft]);
-	const rightsView = useStaticTableView(rightsRows, { role: "asc" });
+	const rightsView = useStaticTableView(rightsRows, { role: "asc" }, "OneCAdmin_wizRights", { rememberFilters: false });
 
 	/**
 	 * Вложенные строки — ТОЛЬКО по выбранным базам. Даже если человек есть в других,

@@ -7,6 +7,9 @@
  * то прятались, а «Сменить токен» стояла между безобидными и однажды отключила живого
  * агента случайным нажатием.
  *
+ * КОМАНДЫ НАД ОТМЕЧЕННЫМИ — ОДНОЙ КНОПКОЙ «ОПЕРАЦИИ» (28.09), как у списка баз кластера: разделы, опасное последним,
+ * у каждого пункта подсказка — что он сделает или почему недоступен (agentsOperations.ts).
+ *
  * ТОКЕН ПОКАЗЫВАЕТСЯ ОДИН РАЗ. В БД лежит только его SHA-256; забыли — значит ротация,
  * а не «посмотреть ещё раз».
  */
@@ -16,7 +19,7 @@ import { translate } from "src/i18";
 import Table from "src/components/Table";
 import Notice from "src/components/Notice";
 import Modal from "src/components/Modal";
-import { Button } from "src/components/Button";
+import ActionsDropdownButton from "src/components/Toolbar/ActionsDropdownButton";
 import { Field, FieldSelect } from "src/components/Field";
 import { SegmentedControl, type SegmentOption } from "src/components/SegmentedControl";
 import { showToast } from "src/components/UIToast";
@@ -26,7 +29,7 @@ import { getModelColumns } from "src/components/Table/services";
 import type { TColumn } from "src/components/Table/types";
 import { buildStaticTableProps } from "src/utils/staticTableProps";
 import { useStaticTableView } from "src/hooks/useStaticTableView";
-import { createAgent, fetchErpOrganizations, fetchServers, restartAgent, setAgentDisabled, updateAgent, type OnecAgent } from "src/services/onec/api";
+import { createAgent, fetchServers, restartAgent, setAgentDisabled, updateAgent, type OnecAgent } from "src/services/onec/api";
 import EnrollmentsTab from "./EnrollmentsTab";
 import { agentMatches, agentOfflineSummary, type AgentRoleFilter, type AgentStateFilter } from "./agentsView";
 import { withStableIds } from "src/utils/stableRowId";
@@ -35,6 +38,7 @@ import { agentBuildLabel } from "./agentHealth";
 import { useAgents, useOnecPermissions } from "./shared";
 import { QueryError } from "./sharedUi";
 import { agentsAllow } from "./onecPermissions";
+import { agentOperationsMenu, agentOpTargets, type AgentOp } from "./agentsOperations";
 import styles from "./OneCAdmin.module.scss";
 
 const columns = (): TColumn[] => ([
@@ -63,11 +67,9 @@ export const AgentsTab: FC = () => {
 	const qc = useQueryClient();
 	const agents = useAgents();
 	const limits = agents.data?.limits;
-	// Имена кластеров и организаций — справочники панели: в списке агентов нужны только подписи.
+	// Имена кластеров — справочник панели: в списке агентов нужны только подписи.
 	const servers = useQuery({ queryKey: ["onec", "servers"], queryFn: fetchServers, staleTime: 60_000 });
-	const erpOrgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
 	const serverNames = useMemo(() => new Map((servers.data?.items ?? []).map((s) => [s.id, s.name])), [servers.data]);
-	const orgNames = useMemo(() => new Map((erpOrgs.data?.items ?? []).map((o) => [o.uuid, o.name])), [erpOrgs.data]);
 	const quota = {
 		left: limits?.clusterRemaining ?? 0,
 		max: limits?.clusterPerMin ?? 0,
@@ -111,13 +113,22 @@ export const AgentsTab: FC = () => {
 		onError: (e) => reportError(e, { source: translate("onecTabAgents") }),
 	});
 
+	const selectedAgents = useMemo(
+		() => (agents.data?.items ?? []).filter((a) => selected.includes(a.id)),
+		[agents.data, selected],
+	);
+	// Кому какая команда уйдёт: умеет ли, на связи ли, включён ли (agentsOperations.ts) — меню, окна и сами запросы
+	// считают по одному правилу. Молчащему агенту команда ушла бы в очередь и умерла по сроку.
+	const targets = useMemo(() => agentOpTargets(selectedAgents), [selectedAgents]);
+
 	/*
 	 * ГРУППОВОЕ ВКЛЮЧЕНИЕ И ОТКЛЮЧЕНИЕ (п. 5) — по отмеченным строкам, с подтверждением. Перевыпуск токенов группой
 	 * не делаем: каждый новый токен показывается один раз и его надо вписать на своём компьютере — это работа по одному.
 	 */
 	const bulk = useMutation({
+		// Только тем, чьё состояние меняется (agentOpTargets): отключать отключённого — лишний запрос и лишняя строка в журнале.
 		mutationFn: async (disabled: boolean) => {
-			const results = await Promise.allSettled(selected.map((id) => setAgentDisabled(id, disabled)));
+			const results = await Promise.allSettled(targets[disabled ? "disable" : "enable"].map((a) => setAgentDisabled(a.id, disabled)));
 			return { ok: results.filter((r) => r.status === "fulfilled").length, failed: results.filter((r) => r.status === "rejected").length };
 		},
 		onSuccess: (r) => {
@@ -132,22 +143,16 @@ export const AgentsTab: FC = () => {
 	 * ПЕРЕЗАПУСК И ОБНОВЛЕНИЕ ГРУППОЙ (задача агенту §2). Только тем из отмеченных, кто это умеет: способность
 	 * агент объявляет, лишь когда запущен службой. Занятый изменяющей командой откажет сам — это видно в итоге.
 	 */
-	const selectedAgents = useMemo(
-		() => (agents.data?.items ?? []).filter((a) => selected.includes(a.id)),
-		[agents.data, selected],
-	);
-	const ableTo = (cap: string) => selectedAgents.filter((a) => a.capabilities.includes(cap));
 	const service = useMutation({
 		mutationFn: async (what: "restart" | "update") => {
-			// Молчащему агенту команда уйдёт в очередь и умрёт по сроку — и всё это время панель будет её ждать.
-			const targets = ableTo(what === "restart" ? "agent.restart" : "agent.update").filter((a) => a.online && !a.disabled);
-			const results = await Promise.allSettled(targets.map((a) => (what === "restart"
+			const list = targets[what];
+			const results = await Promise.allSettled(list.map((a) => (what === "restart"
 				? restartAgent(a.id, translate("onecAgentRestartReason"))
 				: updateAgent(a.id))));
 			const failures = results.flatMap((r, i) => (r.status === "rejected"
-				? [`${targets[i].name || targets[i].id.slice(0, 8)}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`]
+				? [`${list[i].name || list[i].id.slice(0, 8)}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`]
 				: []));
-			return { ok: results.length - failures.length, failures, skipped: selectedAgents.length - targets.length };
+			return { ok: results.length - failures.length, failures, skipped: selectedAgents.length - list.length };
 		},
 		onSuccess: (r) => {
 			setDialog(null);
@@ -173,7 +178,8 @@ export const AgentsTab: FC = () => {
 		name: a.name || "—", role: a.role === "admin" ? translate("onecRoleAdminFull") : translate("onecRoleBusinessFull"),
 		agentScope: a.role === "admin"
 			? `${translate("onecServer")}: ${(a.serverId && serverNames.get(a.serverId)) || a.serverId?.slice(0, 8) || "—"}`
-			: `${translate("organization")}: ${(a.organizationUuid && orgNames.get(a.organizationUuid)) || a.organizationUuid?.slice(0, 8) || translate("onecAgentNoOrg")}`,
+			// «Обслуживает» (В6, 28.09): организации у агента нет — кого он обслуживает, говорят его базы.
+			: `${translate("onecAgentServesOrgs")}: ${a.organizationsCount ?? 0} · ${translate("onecAgentServesBases")}: ${a.basesCount ?? 0}`,
 		// Отключённый агент не «оффлайн»: его исключили намеренно, и это разные вещи.
 		// Три состояния, а не два: «выполняет команду» — не «на связи» (см. stateLabel).
 		onlineLabel: stateLabel(a),
@@ -190,7 +196,7 @@ export const AgentsTab: FC = () => {
 		// перезапуске службы, и за сутки их набирается десяток.
 		instancesCount: (a.instances ?? []).filter((i) => i.live).length,
 		ownerInstance: a.owner?.instanceId || "—",
-	})), (r) => r.uuid), [filtered, serverNames, orgNames]);
+	})), (r) => r.uuid), [filtered, serverNames]);
 
 	// Больше одного процесса под одним токеном — предупреждаем прямо в панели. Симптом
 	// (команда отказывает через раз, при этом «пароль верный») ни на что другое не похож,
@@ -204,7 +210,7 @@ export const AgentsTab: FC = () => {
 
 	// Дату форматирует сама таблица (колонка типа datetime): один формат на приложение и
 	// сортировка по значению, а не по тексту.
-	const view = useStaticTableView(rowsRaw, { name: "asc" });
+	const view = useStaticTableView(rowsRaw, { name: "asc" }, "OneCAdmin_agents", { rememberFilters: false });
 	const rows = view.rows;
 
 	return (
@@ -258,28 +264,26 @@ export const AgentsTab: FC = () => {
 				onRowClick: openAgent,
 				// Отметки — для групповых действий (п. 5); по номеру строки берём id агента.
 				selectable: canManage,
-				onSelectionChange: (_ids, sel) => setSelected(sel.map((r) => String(r.agentId))),
-				// Регистрация агента — это выдача доступа к серверу 1С: только полный доступ (F5).
+				/*
+				 * ВТОРОЙ АРГУМЕНТ — ВСЕ СТРОКИ ТАБЛИЦЫ, А НЕ ОТМЕЧЕННЫЕ (Table.onSelectionChange: видимые плюс отмеченные скрытые
+				 * поиском). Выбор — те из них, чьи номера в первом аргументе. Раньше здесь брались все строки: стоило отметить
+				 * одного агента, и «Отключить», «Перезапустить службу», «Обновить агента» уходили всем агентам списка (28.09).
+				 */
+				onSelectionChange: (ids, all) => setSelected(all.filter((r) => ids.has(Number(r.id))).map((r) => String(r.agentId))),
+				// Регистрация агента — это выдача доступа к серверу 1С: только полный доступ (F5). Все команды — одним меню
+				// «Операции», как у списка баз кластера: подключение — без отметок, остальное — над отмеченными.
 				extraButtons: !canManage ? undefined : (
-					<>
-						<Button icon="plus" variant="secondary" onClick={() => { setName(""); setDialog("create"); }}>
-							{translate("onecAgentCreate")}
-						</Button>
-						{/* Подключение по коду (СВ5): агент просит сам, здесь заявку находят по коду и одобряют. */}
-						<Button variant="secondary" onClick={() => setDialog("enroll")}>{translate("onecEnrollByCode")}</Button>
-						<Button disabled={!selected.length} onClick={() => setDialog("disable")}>
-							{translate("onecAgentDisable")}{selected.length ? ` (${selected.length})` : ""}
-						</Button>
-						<Button disabled={!selected.length} onClick={() => setDialog("enable")}>
-							{translate("onecAgentEnable")}{selected.length ? ` (${selected.length})` : ""}
-						</Button>
-						<Button variant="danger" disabled={!ableTo("agent.restart").length} onClick={() => setDialog("restart")}>
-							{translate("onecAgentRestart")}{ableTo("agent.restart").length ? ` (${ableTo("agent.restart").length})` : ""}
-						</Button>
-						<Button variant="danger" disabled={!ableTo("agent.update").length} onClick={() => setDialog("update")}>
-							{translate("onecAgentUpdate")}{ableTo("agent.update").length ? ` (${ableTo("agent.update").length})` : ""}
-						</Button>
-					</>
+					<ActionsDropdownButton
+						label={translate("onecOperations")}
+						icon="settings"
+						options={agentOperationsMenu(selectedAgents, agents.data?.limits.latestBuild)}
+						title={selectedAgents.length ? `${translate("onecAgentsMarked")}: ${selectedAgents.length}` : translate("onecAgentOpsTitle")}
+						onSelect={(id) => {
+							const op = id as AgentOp;
+							if (op === "create") setName("");
+							setDialog(op);
+						}}
+					/>
 				),
 			})} />
 
@@ -295,14 +299,7 @@ export const AgentsTab: FC = () => {
 								{ value: "business", label: translate("onecAgentKindBusiness") },
 								{ value: "cluster", label: translate("onecAgentKindCluster") },
 							]}
-							hint={translate(cluster ? "onecEnrollClusterHint" : "onecEnrollOrgHint")} />
-						{/*
-						 * К КАКОЙ ОРГАНИЗАЦИИ ПРИВЯЖЕТСЯ АГЕНТ — СКАЗАНО ЗАРАНЕЕ (С3.6 аудита 23.09). Организацию это окно
-						 * не спрашивает вовсе: бизнес-агент привязывается к АКТИВНОЙ организации того, кто его заводит, а
-						 * без неё сервис отвечает 409 ORGANIZATION_REQUIRED. Про это в окне не было ни слова, и отказ
-						 * выглядел поломкой, хотя чинится он выбором организации в шапке панели.
-						 */}
-						{!cluster && <div className={styles.Hint}>{translate("onecAgentCreateOrgHint")}</div>}
+							hint={translate(cluster ? "onecEnrollClusterHint" : "onecEnrollBusinessHint")} />
 						<div className={styles.Hint}>{translate("onecAgentCreateHint")}</div>
 					</div>
 				</Modal>
@@ -312,7 +309,7 @@ export const AgentsTab: FC = () => {
 				<Modal title={translate(dialog === "disable" ? "onecAgentDisable" : "onecAgentEnable")} onClose={() => setDialog(null)}
 					onApply={() => { if (!bulk.isPending) bulk.mutate(dialog === "disable"); }}>
 					<div className={styles.ModalForm}>
-						<div>{(agents.data?.items ?? []).filter((a) => selected.includes(a.id)).map((a) => a.name || a.id.slice(0, 8)).join(", ")}</div>
+						<div>{targets[dialog].map((a) => a.name || a.id.slice(0, 8)).join(", ")}</div>
 						{dialog === "disable" && <div className={styles.ConfirmWarning}>{translate("onecAgentsBulkDisableWarning")}</div>}
 					</div>
 				</Modal>
@@ -322,7 +319,7 @@ export const AgentsTab: FC = () => {
 				<Modal title={translate(dialog === "restart" ? "onecAgentRestart" : "onecAgentUpdate")} onClose={() => setDialog(null)}
 					onApply={() => { if (!service.isPending) service.mutate(dialog); }}>
 					<div className={styles.ModalForm}>
-						<div>{ableTo(dialog === "restart" ? "agent.restart" : "agent.update").map((a) => a.name || a.id.slice(0, 8)).join(", ")}</div>
+						<div>{targets[dialog].map((a) => a.name || a.id.slice(0, 8)).join(", ")}</div>
 						<div className={styles.ConfirmWarning}>
 							{translate(dialog === "restart" ? "onecAgentRestartWarning" : "onecAgentUpdateWarning")}
 						</div>

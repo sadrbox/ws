@@ -21,7 +21,7 @@ import { translate } from 'src/i18';
 import { cx } from 'src/utils/cx';
 import type { TColumn, TDataItem } from './types';
 import { useTableContext, useTableVolatile } from './context';
-import { getFormatColumnValue } from './services';
+import { getFormatColumnValue, wrapCellText } from './services';
 import { CHECKBOX_COL_ID } from './tableKeyboardNav';
 import { ROW_HEIGHT, OVERSCAN, EXPANDED_NO_VIRTUAL_LIMIT } from './constants';
 import styles from './Table.module.scss';
@@ -683,7 +683,7 @@ const TableBodyRow: FC<TableBodyRowProps> = memo(({ row, columns, isActive, isSe
                   <div className={cellClassName} {...(cellTitle ? { title: cellTitle } : {})}>
                     {isFirstCol && chevron}
                     <CellFieldStateScope value={cellFieldState ?? {}}>
-                      {customCell}
+                      {wrapCellText(customCell)}
                     </CellFieldStateScope>
                     {cellMeta?.errorTooltip}
                   </div>

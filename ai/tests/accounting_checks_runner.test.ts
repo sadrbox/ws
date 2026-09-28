@@ -159,7 +159,7 @@ describe("каталог проверок", () => {
 
 type Agent = {
 	id: string; name: string; role: "business" | "admin"; disabled: boolean; online: boolean; capabilities: string[];
-	organizationUuid: string; limits: { maxBases: number | null; maxBins: number | null; activeBins?: string[] | null };
+	limits: { maxBases: number | null };
 };
 type Base = { key: string; status?: string | null; organizations: { id: string | null; name: string | null; bin: string | null }[] | null };
 
@@ -167,7 +167,7 @@ const ALL_TYPES = ["HEALTH", "LIST_ACCOUNTING_CHECKS", "RUN_ACCOUNTING_CHECK", "
 
 const agent = (id: string, over: Partial<Agent> = {}): Agent => ({
 	id, name: `agent ${id}`, role: "business", disabled: false, online: true, capabilities: ALL_TYPES,
-	organizationUuid: "org-owner", limits: { maxBases: null, maxBins: null }, ...over,
+	limits: { maxBases: null }, ...over,
 });
 
 type Reply = { state: string; result?: unknown; error?: { code: string; message: string }; onec_http_status?: number | null } | null;
@@ -593,7 +593,7 @@ test("проверки базы идут один раз — с первой о�
 
 test("сверх тарифа, лежащая база и БИН второй базы — не проверяются", async () => {
 	const h = harness({
-		agents: [agent("ag-1", { limits: { maxBases: 3, maxBins: null } })],
+		agents: [agent("ag-1", { limits: { maxBases: 3 } })],
 		bases: { "ag-1": [
 			{ key: "Main", organizations: [{ id: "o1", name: "А", bin: BIN_A }] },
 			// Копия основной базы: тот же БИН проверяется только в первой по порядку среза.
@@ -714,7 +714,7 @@ describe("отбор организаций: обслуживаемые фирм
 test("проверки базы — первой ОБСЛУЖИВАЕМОЙ организации, даже если в цели есть и другие", async () => {
 	const h = harness({ agents: [agent("ag-1")], bases: {} });
 	const report = await h.runner.runBase({
-		agentId: "ag-1", agentOrganizationUuid: "org-owner", baseKey: "Multi", snapshots: false, blocked: null,
+		agentId: "ag-1", organizationUuid: ORG_C, baseKey: "Multi", snapshots: false, blocked: null,
 		orgs: [
 			{ bin: BIN_C, uuid: ORG_C, name: "В", served: false },
 			{ bin: BIN_A, uuid: ORG_A, name: "А", served: true },
@@ -848,7 +848,7 @@ const erpDb = (who: { superAdmin?: boolean; full?: number; any?: number }) => ({
 	},
 });
 
-async function routes(who: { superAdmin?: boolean; full?: number; any?: number }, scope: "all" | "organizations" = "all") {
+async function routes(who: { superAdmin?: boolean; full?: number; any?: number }) {
 	const started: { kind: string; userUuid: string | null; baseKey?: string | null }[] = [];
 	const audited: unknown[] = [];
 	const runner = {
@@ -861,7 +861,7 @@ async function routes(who: { superAdmin?: boolean; full?: number; any?: number }
 	const app = express();
 	app.use(express.json());
 	app.use("/v1/onec/accounting-checks", accountingChecksRouter({
-		erp: erpDb(who) as never, cfg: { JWT_SECRET, ONEC_SERVER_SCOPE: scope }, runner: runner as never,
+		erp: erpDb(who) as never, cfg: { JWT_SECRET }, runner: runner as never,
 		store: { list: async () => [{ id: "run-0", kind: "schedule" }] as never }, audit: { write: async (e) => { audited.push(e); } }, log: silent,
 	}));
 	const srv = await new Promise<import("node:http").Server>((ok) => { const s = app.listen(0, () => ok(s)); });
@@ -896,23 +896,11 @@ test("маршруты: запуск с полным доступом — 202 и
 	} finally { ro.close(); }
 });
 
-test("маршруты: без права «Администрирование 1С» — нет; в многоклиентской установке — только администратору BuhProf", async () => {
+test("маршруты: без права «Администрирование 1С» — нет (режим видимости по организациям отменён, В5)", async () => {
 	const none = await routes({ full: 0, any: 0 });
 	try {
 		assert.equal((await none.call("GET", "/runs")).status, 403);
 	} finally { none.close(); }
-
-	const tenant = await routes({ full: 1, any: 1 }, "organizations");
-	try {
-		const r = await tenant.call("POST", "/run", {});
-		assert.equal(r.status, 403, "прогон идёт по базам всех клиентов — клиенту его не запустить");
-		assert.equal(tenant.started.length, 0);
-	} finally { tenant.close(); }
-
-	const owner = await routes({ superAdmin: true }, "organizations");
-	try {
-		assert.equal((await owner.call("POST", "/run", {})).status, 202);
-	} finally { owner.close(); }
 });
 
 // ── Аудит 26.09 ──────────────────────────────────────────────────────────────

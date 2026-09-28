@@ -21,9 +21,12 @@ const ONEC_SECTIONS: Record<string, string> = {
 	"agent-processes": "onecTabProcesses",
 	schedules: "onecTabSchedules",
 	batches: "onecTabBatches",
+	// «Пользователи баз», а не короткое имя вкладки: здесь просто «Пользователи» — это список ERP (реестр моделей).
 	"base-users-cached": "onecTabUsers",
 	"user-summary": "onecTabUsers",
 	"user-where": "onecTabUsers",
+	// Тоже уточнённо: «Организации» здесь — справочник ERP.
+	"base-orgs": "onecBaseOrgsSource",
 	"ext-summary": "onecTabExtensions",
 	"base-ext": "onecTabExtensions",
 };

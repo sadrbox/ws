@@ -161,41 +161,6 @@
   gap: 20px;
 }
 
-.DataTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-
-  caption {
-    text-align: left;
-    font-weight: 650;
-    color: var(--ink, var(--n-20));
-    padding-bottom: 8px;
-  }
-
-  th, td {
-    padding: 7px 12px;
-    border-bottom: 1px solid var(--line, var(--n-94a, var(--n-88)));
-    text-align: left;
-  }
-
-  th {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-    font-weight: 600;
-    background: var(--surface-muted);
-  }
-
-  td { color: var(--text-secondary); }
-}
-
-.numCell {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
 .Status {
   flex: 1 1 auto;
   min-height: 120px;

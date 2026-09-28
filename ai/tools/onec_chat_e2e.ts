@@ -67,7 +67,7 @@ async function main(): Promise<number> {
 	await db.query(`INSERT INTO servers (id, organization_uuid, name) VALUES ($1, $2, $3)`, [serverId, ORG, `onec-chat-e2e ${serverId.slice(0, 8)}`]);
 	await db.query(`INSERT INTO bases (id, server_id, key, name) VALUES ($1, $2, 'onec_chat_e2e', 'onec-chat-e2e (временная)')`, [baseId, serverId]);
 	const tokens = new BaseTokenStore(db);
-	const issued = await tokens.issue({ baseId, createdBy: "onec-chat-e2e" });
+	const issued = await tokens.issue({ baseId, organizationUuid: ORG, createdBy: "onec-chat-e2e" });
 	console.log(`AI Service: ${base}\nорганизация ERP ${ORG}, организация 1С «${organization.name}» БИН ${organization.bin}, исполнитель: ${EXECUTOR}\n`);
 
 	const headers = (token = issued.token) => ({ "content-type": "application/json", "x-base-token": token, "x-1c-user-id": USER_ID });
@@ -102,9 +102,10 @@ async function main(): Promise<number> {
 		let res: ClientResult;
 		if (EXECUTOR === "stub") res = stub(c);
 		else {
-			const agent = await agents.pickOnline(ORG);
-			if (!agent) return { success: false, status: 503, error: { code: "AGENT_OFFLINE", message: "бизнес-агент организации не на связи (e2e-исполнитель)" } };
-			const cmd = await queue.enqueue({ agentId: agent.id, organizationUuid: ORG, type: c.commandType, payload: c.payload, requestId: c.requestId ?? null, conversationId, ttlSeconds: 900 });
+			// Исполнитель — тем же правилом, что у чата (В2): база с БИН организации у любого бизнес-агента.
+			const target = await agents.resolveBusiness(ORG, organization.bin);
+			if (target.kind !== "agent" || !target.agent.online) return { success: false, status: 503, error: { code: "AGENT_OFFLINE", message: "бизнес-агент с базой организации не на связи (e2e-исполнитель)" } };
+			const cmd = await queue.enqueue({ agentId: target.agent.id, organizationUuid: ORG, baseKey: target.baseKey, type: c.commandType, payload: { ...c.payload, baseKey: target.baseKey }, requestId: c.requestId ?? null, conversationId, ttlSeconds: 900 });
 			const done = await queue.waitResult(cmd.id, 180_000);
 			res = done?.state === "done" ? { success: true, status: 200, data: done.result }
 				: { success: false, status: done?.onec_http_status ?? 500, error: done?.error ?? { code: "TIMEOUT", message: `команда в состоянии ${done?.state ?? "?"}` } };

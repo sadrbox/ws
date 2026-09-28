@@ -34,7 +34,7 @@ export function extractOrgBases(data: unknown): { visible: unknown; map: Record<
 		if (!baseKey) return o;
 		const id = text(o.id);
 		const bin = text(o.bin);
-		// Один БИН в нескольких базах: первая строка — первая база по порядку агента, как и в resolveTarget.
+		// Одна и та же организация в ответе дважды — берётся первая строка.
 		if (id && !(id in map)) map[id] = baseKey;
 		if (bin && !(bin in map)) map[bin] = baseKey;
 		const { baseKey: _hidden, ...rest } = o;
@@ -45,8 +45,21 @@ export function extractOrgBases(data: unknown): { visible: unknown; map: Record<
 }
 
 /**
+ * ТОЛЬКО СВОЯ ОРГАНИЗАЦИЯ В ОТВЕТЕ GET_ORGANIZATIONS (модель без владельца, 28.09). База выбрана по БИН организации
+ * ERP, но в многофирменной базе живут и другие организации — чужие клиенты той же фирмы. Модель их видеть не должна:
+ * агент у организации больше не «свой», и назвать чужую ей было бы нечем, кроме этого списка. Ответ другой формы —
+ * как есть: сузить его нечем, а организацию вызова сверяет targetBase.
+ */
+export function onlyOrganization(data: unknown, bin: string): unknown {
+	const items = itemsOf(data);
+	if (!items) return data;
+	const own = items.filter((o) => !!o && typeof o === "object" && text(o.bin) === bin);
+	return Array.isArray(data) ? own : { ...(data as object), items: own };
+}
+
+/**
  * Какую базу назвал вызов: явный `baseKey` → по `organizationId` → по `organizationBin` из запомненного. `null` —
- * вызов базу не называет, и её выберет сервис по БИН организации ERP (agents/agentBases.resolveTarget).
+ * вызов базу не называет, и её выберет сервис по БИН организации ERP (agents/agentBases.resolveBusinessTarget).
  */
 export function baseKeyOf(payload: Record<string, unknown>, remembered: Record<string, string> | undefined): string | null {
 	const direct = text(payload.baseKey);

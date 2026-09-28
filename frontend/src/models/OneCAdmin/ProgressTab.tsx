@@ -68,7 +68,8 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		// Дату рисует таблица: колонка типа datetime, значение — как есть.
 		opStartedAt: new Date(o.startedAt).toISOString(),
 		// Причина — человеческими словами: «Failed to fetch» в колонке ничего не объясняет.
-		opNote: humanErrorText(o.note) || opDuration(o),
+		// Путь исполнения команды 1С (28.09) — рядом с причиной: по нему видно, что чинить, COM или ibcmd.
+		opNote: [humanErrorText(o.note) || opDuration(o), o.detail].filter(Boolean).join(" · "),
 		// Неизвестной доли не бывает: у работы без известного объёма полоса стоит на нуле,
 		// а «сколько уже идёт» говорит колонка примечания.
 		__percent: opPercent(o) ?? 0,
@@ -78,7 +79,7 @@ export const ProgressTab: FC<{ onRefresh: () => void; isLoading?: boolean }> = (
 		// Отменить можно только НЕ НАЧАТОЕ: ту команду, что агент забрал, останавливает он.
 		__cancelable: o.cancelable,
 	})), [ops]);
-	const view = useStaticTableView(rows, {});
+	const view = useStaticTableView(rows, {}, "OneCAdmin_ops");
 
 	const running = ops.filter((o) => o.state === "running").length;
 	const finished = ops.length - running;

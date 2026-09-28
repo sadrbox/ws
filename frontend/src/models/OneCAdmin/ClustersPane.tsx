@@ -136,7 +136,7 @@ const ClustersPaneBody: FC<{ uniqId?: string }> = ({ uniqId }) => {
 		apply(id);
 	};
 
-	const tableView = useStaticTableView(rows, { clusterName: "asc" });
+	const tableView = useStaticTableView(rows, { clusterName: "asc" }, "OneCAdmin_clusters");
 	const current = rows.find((r) => r.uuid === selected) ?? null;
 	// Пока кластеров нет (до первой регистрации агента) показывать нечего: реестр объясняет, почему он пуст.
 	const showRegistry = view === "registry" || !current;
@@ -224,7 +224,9 @@ const ClustersPaneBody: FC<{ uniqId?: string }> = ({ uniqId }) => {
 				{ id: "connections", label: translate("onecTabConnections"), component: tab === "connections" ? <ConnectionsTab /> : null },
 				{ id: "server", label: translate("onecTabServer"), component: tab === "server" ? <ServerTab /> : null },
 				{ id: "extensions", label: translate("onecTabExtensions"), component: tab === "extensions" ? <ExtensionsTab /> : null },
-				{ id: "users", label: translate("onecTabUsers"), component: tab === "users" ? <UsersTab /> : null },
+				// «Пользователи» — коротко, как соседние вкладки: чьи они, видно по разделу. В доске сообщений и в источниках
+				// ошибок остаётся «Пользователи баз» (onecTabUsers): там просто «Пользователи» — это пользователи ERP.
+				{ id: "users", label: translate("onecTabUsersList"), component: tab === "users" ? <UsersTab /> : null },
 				{ id: "schedules", label: translate("onecTabSchedules"), component: tab === "schedules" ? <SchedulesTab /> : null },
 				{
 					id: "progress",

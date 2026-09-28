@@ -1,5 +1,6 @@
 /**
- * Вкладка «Пользователи баз» (E15/A3): две связанные таблицы и карточка пары.
+ * Вкладка «Пользователи» (E15/A3; до 28.09 — «Пользователи баз»): две связанные таблицы и карточка пары. В доске
+ * сообщений и в источниках ошибок она по-прежнему «Пользователи баз» (onecTabUsers): там «Пользователи» — это ERP.
  *
  * УСТРОЙСТВО. Слева и справа — «Базы» и «Пользователи»; какая где, решает переключатель.
  * ОДИНОЧНЫЙ щелчок по строке слева (activeRow) наполняет правую таблицу связанными
@@ -122,7 +123,7 @@ export const UsersTab: FC = () => {
 			};
 		});
 	}, [primary, bases.data, occurrences.data]);
-	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });
+	const baseView = useStaticTableView(baseRows, { baseKey: "asc" }, "OneCAdmin_ubBases", { rememberFilters: false });
 
 	// ── Строки: пользователи ────────────────────────────────────────────────
 	const userRows = useMemo(() => {
@@ -142,7 +143,7 @@ export const UsersTab: FC = () => {
 			rolesLabel: u.roles,
 		}));
 	}, [primary, summary.data, baseUsers.data]);
-	const userView = useStaticTableView(userRows, { name: "asc" });
+	const userView = useStaticTableView(userRows, { name: "asc" }, "OneCAdmin_ubUsers");
 
 	// Проверка содержимого базы — общий механизм (см. useBaseUsersCheck): та же кнопка
 	// в карточке базы обязана делать ровно то же самое.

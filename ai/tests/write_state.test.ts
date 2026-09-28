@@ -7,7 +7,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseLock, parseProcesses, planWriteState, readsAfter, readsAfterFailure } from "../src/onec/writeState.ts";
+import { parseLock, parseProcesses, planWriteState, readsAfter, readsAfterFailure, parseOrganizationsEcho } from "../src/onec/writeState.ts";
 import { humanizeAgentError } from "../src/onec/errorHints.ts";
 import { ibFailureReason } from "../src/bases/service.ts";
 
@@ -98,15 +98,17 @@ describe("состояние после изменяющей команды", ()
 		[{ kind: "publication", published: false, url: null, seenAt: "t" }]);
 	});
 
-	it("чтения после: загрузка — пользователи и расширения, минус принесённое эхом", () => {
+	it("чтения после: загрузка — пользователи, расширения и организации, минус принесённое эхом", () => {
 		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b" }, { users: false, extensions: false }),
-			["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]);
-		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b" }, { users: true, extensions: false }), ["IB_LIST_EXTENSIONS"]);
+			["IB_LIST_USERS", "IB_LIST_EXTENSIONS", "IB_LIST_ORGANIZATIONS"]);
+		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b" }, { users: true, extensions: false }), ["IB_LIST_EXTENSIONS", "IB_LIST_ORGANIZATIONS"]);
+		// Организации пришли эхом (С6 задачи агента 28.09) — второго входа за ними нет.
+		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b" }, { users: true, extensions: true, organizations: true }), []);
 		assert.deepEqual(readsAfter("IB_RESTORE", { baseKey: "b", dryRun: true }, { users: false, extensions: false }), []);
 		assert.deepEqual(readsAfter("IB_UPDATE_USER", { baseKey: "b" }, { users: true, extensions: false }), []);
 		// Обновление конфигурации без эха: и расширения, и пользователи — роли могли пропасть (T4).
 		assert.deepEqual(readsAfter("IB_APPLY_UPDATE", { baseKey: "b" }, { users: false, extensions: false }),
-			["IB_LIST_USERS", "IB_LIST_EXTENSIONS"]);
+			["IB_LIST_USERS", "IB_LIST_EXTENSIONS", "IB_LIST_ORGANIZATIONS"]);
 		assert.deepEqual(readsAfter("CLUSTER_SET_SESSIONS_LOCK", { baseKey: "b" }, { users: false, extensions: false }), []);
 	});
 });
@@ -298,5 +300,30 @@ describe("С42: держатель базы — поля агента в фор�
 		});
 		assert.equal(normalizeLockedBy(null), null);
 		assert.equal(normalizeLockedBy({}), null);
+	});
+});
+
+describe("С6 (задача агента 28.09): организации в эхе загрузки выгрузки и обновления", () => {
+	const orgs = { items: [{ id: "a", name: "ТОО Альфа", main: true }], complete: true, mainSource: "single", readAt: "2026-09-28T09:00:00Z" };
+
+	it("полный блок — действие organizations с разбором корня; без блока — нет", () => {
+		for (const type of ["IB_RESTORE", "IB_APPLY_UPDATE"]) {
+			const a = planWriteState(type, { baseKey: "b", path: "x" }, { ok: true, state: { organizations: orgs } });
+			const o = a.find((x) => x.kind === "organizations");
+			assert.ok(o && o.kind === "organizations", type);
+			assert.deepEqual(o.items, orgs.items);
+			assert.equal(o.meta.mainSource, "single");
+			assert.equal(planWriteState(type, { baseKey: "b", path: "x" }, { ok: true }).some((x) => x.kind === "organizations"), false, type);
+		}
+	});
+
+	it("неполный блок (нет complete: true) и не список — не применяются: частичный срез «удалил» бы организации", () => {
+		assert.equal(parseOrganizationsEcho({ ...orgs, complete: false }), null);
+		assert.equal(parseOrganizationsEcho({ items: "x", complete: true }), null);
+		assert.equal(parseOrganizationsEcho(null), null);
+	});
+
+	it("сухой прогон ничего не применяет", () => {
+		assert.deepEqual(planWriteState("IB_RESTORE", { baseKey: "b", path: "x", dryRun: true }, { ok: true, state: { organizations: orgs } }), []);
 	});
 });

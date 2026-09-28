@@ -32,7 +32,7 @@ function memStore() {
 			const row = {
 				id: `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, code: newRegistrationCode(), computer: input.computer, serviceName: input.serviceName,
 				name: input.name, role: input.role, serverName: input.serverName ?? null, version: input.version ?? null, ip, repeats: 0, state: "PENDING" as const,
-				note: null, decidedBy: null, decidedAt: null, organizationUuid: null, agentId: null, tokenDeliveredAt: null,
+				note: null, decidedBy: null, decidedAt: null, agentId: null, tokenDeliveredAt: null,
 				createdAt: now, updatedAt: now, expiresAt: new Date(now.getTime() + 86400_000), secretHash: hash(secret),
 			};
 			rows.push(row);
@@ -57,7 +57,7 @@ async function harness(perHour = 100) {
 	app.set("trust proxy", true);
 	app.use(express.json());
 	app.use("/agent/v1", agentEnrollRouter({
-		enrollments: store as never, erp: { query: async () => ({ rows: [{ name: "ИП Азимов С.М.", legal_name: null }] }) } as never, log: silent, perHour,
+		enrollments: store as never, log: silent, perHour,
 		agents: { rotateToken: async (id: string) => (id === AGENT ? `bpa_secret_${++rotations}` : null) },
 		audit: { write: async (e: { event: string; details?: Record<string, unknown> }) => { journal.push(`${e.event} ${JSON.stringify(e.details ?? {})}`); } },
 	}));
@@ -96,11 +96,11 @@ test("одобрение: идентификатор и токен — один 
 	const h = await harness();
 	try {
 		const a = await h.enroll(request());
-		Object.assign(h.store.rows[0], { state: "APPROVED", agentId: AGENT, organizationUuid: "org-1", decidedBy: "admin" });
+		Object.assign(h.store.rows[0], { state: "APPROVED", agentId: AGENT, decidedBy: "admin" });
 		const p1 = await h.poll(a.body.data!.enrollmentId, a.body.data!.pollSecret);
 		assert.equal(p1.body.data!.agentId, AGENT);
 		assert.equal(p1.body.data!.token, "bpa_secret_1");
-		assert.deepEqual(p1.body.data!.organization, { uuid: "org-1", name: "ИП Азимов С.М." });
+		assert.equal(p1.body.data!.organization, undefined, "организации у агента нет (Р1)");
 		const p2 = await h.poll(a.body.data!.enrollmentId, a.body.data!.pollSecret);
 		assert.deepEqual([p2.body.data!.state, p2.body.data!.token, p2.body.data!.agentId], ["APPROVED", undefined, undefined]);
 		assert.ok(!h.journal.some((j) => j.includes("bpa_secret") || j.includes(a.body.data!.pollSecret)));

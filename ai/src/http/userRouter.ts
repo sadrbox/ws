@@ -7,7 +7,6 @@
 //   GET /v1/organization-bases  базы 1С организации: откуда приходят её задачи, заметки и документы
 //   POST /v1/chat, GET /v1/conversations/:id — см. chatRouter (если LLM настроена)
 
-import { describeAgentBases, type AgentBasesStore } from "../agents/agentBases.ts";
 import { Router } from "express";
 import { safeRouter } from "./safeRouter.ts";
 import type { Db } from "../db/pool.ts";
@@ -27,8 +26,6 @@ export function userRouter(deps: {
 	erp: Db; cfg: Config; agents: AgentService; workflow: ChatWorkflow | null; log: Logger; files: FileStore; version: string;
 	/** База сервиса: реестр баз 1С и их организаций (ПН4). Нет — список баз организации не отдаём. */
 	db?: Db;
-	/** Срез баз бизнес-агентов (C12): список агентов показывает их базы и лимит. Нет — без баз. */
-	agentBases?: Pick<AgentBasesStore, "listMany">;
 	/**
 	 * Очередь команд агенту: нужна для чисел из 1С в карточке организации (ПН9). Без неё маршрут отвечает
 	 * «не включено» — сервис без агентов эти числа взять неоткуда.
@@ -36,7 +33,7 @@ export function userRouter(deps: {
 	queue?: Pick<CommandQueue, "enqueue" | "waitResult">;
 	audit?: Pick<Audit, "write">;
 }) {
-	const { erp, cfg, agents, workflow, log, files, version, agentBases } = deps;
+	const { erp, cfg, agents, workflow, log, files, version } = deps;
 	const queue = deps.queue ?? null;
 	const audit = deps.audit ?? null;
 	const db = deps.db ?? erp;
@@ -45,6 +42,16 @@ export function userRouter(deps: {
 	safeRouter(r, log, "маршрут пользователя ERP");
 	r.use(requireErpUser(erp, cfg.JWT_SECRET));
 	if (workflow) r.use(chatRouter({ workflow, log, maxAttachmentBytes: cfg.CHAT_ATTACHMENT_MAX_MB * 1048576, chatPerMin: cfg.RATE_LIMIT_CHAT_PER_MIN, attachmentsPerMin: cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN }));
+
+	/**
+	 * БИН И НАЗВАНИЕ ОРГАНИЗАЦИИ — ИЗ ERP, а не от клиента: по БИН ищутся её базы у всех агентов BuhProf (модель без
+	 * владельца, 28.09), и присланный БИН открыл бы чужую базу. Не 12 цифр — БИН нет.
+	 */
+	const orgOf = async (org: string): Promise<{ bin: string | null; name: string | null }> => {
+		const o = await erp.query<{ bin: string | null; name: string | null }>(`SELECT bin, name FROM organizations WHERE uuid = $1`, [org]);
+		const bin = (o.rows[0]?.bin ?? "").trim();
+		return { bin: /^\d{12}$/.test(bin) ? bin : null, name: o.rows[0]?.name ?? null };
+	};
 
 	r.get("/me", (req, res) => {
 		const u = req.erpUser!;
@@ -104,7 +111,7 @@ export function userRouter(deps: {
 			key: string; name: string | null; server_name: string | null; disabled_at: Date | null;
 			tokens: string; revoked: string; bin: string | null; org_name: string | null; declared_at: Date | null; last_seen: Date | null;
 		}>(
-			`SELECT b.key, b.name, s.name AS server_name, b.disabled_at,
+			`SELECT b.key, COALESCE(NULLIF(b.display_name, ''), b.name) AS name, s.name AS server_name, b.disabled_at,
 			        count(t.id) FILTER (WHERE t.revoked_at IS NULL AND (t.accepted_until IS NULL OR t.accepted_until > now())) AS tokens,
 			        count(t.id) FILTER (WHERE t.revoked_at IS NOT NULL) AS revoked,
 			        o.bin, o.name AS org_name, o.updated_at AS declared_at, b.last_seen_at AS last_seen
@@ -116,7 +123,7 @@ export function userRouter(deps: {
 			   -- Только одобренные (Б11 аудита 26.09): БИН, который база лишь заявила, ещё не делает её базой организации.
 			   LEFT JOIN base_organizations o ON o.base_id = b.id::text AND $2 <> '' AND o.bin = $2 AND o.approved_at IS NOT NULL
 			  WHERE t.id IS NOT NULL OR o.bin IS NOT NULL
-			  GROUP BY b.key, b.name, s.name, b.disabled_at, o.bin, o.name, o.updated_at, b.last_seen_at
+			  GROUP BY b.key, b.name, b.display_name, s.name, b.disabled_at, o.bin, o.name, o.updated_at, b.last_seen_at
 			  ORDER BY b.key`,
 			[org, bin],
 		);
@@ -165,21 +172,25 @@ export function userRouter(deps: {
 			res.status(503).json({ success: false, error: { code: "AGENTS_DISABLED", message: "Служба агентов 1С не настроена — чисел из 1С нет" } });
 			return;
 		}
-		// БИН берём у ERP, а не у клиента: по присланному БИН можно было бы спросить чужую базу.
-		const o = await erp.query<{ bin: string | null; name: string | null }>(`SELECT bin, name FROM organizations WHERE uuid = $1`, [org]);
-		const bin = (o.rows[0]?.bin ?? "").trim();
-		const orgName = o.rows[0]?.name ?? null;
-		if (!/^\d{12}$/.test(bin)) {
+		const { bin, name: orgName } = await orgOf(org);
+		if (!bin) {
 			res.status(409).json({ success: false, error: { code: "ORG_BIN_REQUIRED", message: "У организации не указан БИН — по нему находится её база 1С" } });
 			return;
 		}
-		const target = await agents.resolveBusiness(org, { bin });
-		if (target.kind === "refused") {
+		const target = await agents.resolveBusiness(org, bin);
+		if (target.kind === "refused" || target.kind === "ambiguous") {
 			res.status(409).json({ success: false, error: { code: target.code, message: target.message } });
 			return;
 		}
 		if (target.kind !== "agent") {
-			res.status(409).json({ success: false, error: { code: "AGENT_OFFLINE", message: `Базу организации «${orgName ?? bin}» некому спросить: агент BuhProf не на связи или база с этим БИН ему неизвестна` } });
+			// Что именно чинить: добавить базу агенту, включить или запустить агента — «некому спросить» этого не говорит.
+			const why = await agents.explainUnresolved(bin, orgName ?? bin);
+			res.status(409).json({ success: false, error: why });
+			return;
+		}
+		// Агент не на связи — отказ сразу: иначе две команды простояли бы в очереди до таймаута, а ответ был бы тот же.
+		if (!target.agent.online) {
+			res.status(409).json({ success: false, error: { code: "AGENT_OFFLINE", message: `Агент BuhProf «${target.agent.name}», обслуживающий базу «${target.baseKey}», сейчас не на связи (служба на компьютере с 1С не запущена или нет сети)` } });
 			return;
 		}
 		if (!agentKnowsType(target.agent, "GET_DEBTS")) {
@@ -192,7 +203,9 @@ export function userRouter(deps: {
 		const waitMs = cfg.ORG_FINANCE_TIMEOUT_SECS * 1000;
 		const ask = async (type: string, payload: Record<string, unknown>) => {
 			const cmd = await queue.enqueue({
-				agentId: target.agent.id, organizationUuid: target.agent.organizationUuid, baseKey: target.baseKey,
+				// Команда — организации, которая спросила: у агента обслуживающей фирмы своя организация, и под ней
+				// команда клиента оказалась бы в списке команд фирмы, а не клиента.
+				agentId: target.agent.id, organizationUuid: org, baseKey: target.baseKey,
 				type, payload, userUuid: u.uuid, ttlSeconds: Math.max(cfg.ORG_FINANCE_TIMEOUT_SECS * 2, 120),
 				/*
 				 * ПОВТОР ПРИСОЕДИНЯЕТСЯ К ИДУЩЕМУ ЧТЕНИЮ (аудит 26.09). Без номера запроса «повторите чтение» после
@@ -229,19 +242,16 @@ export function userRouter(deps: {
 			res.status(409).json({ success: false, error: { code: "ORGANIZATION_REQUIRED", message: "У пользователя не выбрана активная организация" } });
 			return;
 		}
-		const list = await agents.visibleTo(org);
-		// Роль и базы (C12): у многобазового бизнес-агента «на связи» ещё не значит, что нужная база доступна.
-		const slices = agentBases ? await agentBases.listMany(list.filter((a) => a.role === "business").map((a) => a.id)) : new Map();
-		const items = list.map((a) => {
-			const view = a.role === "business" && slices.has(a.id) ? describeAgentBases(slices.get(a.id) ?? [], a.limits) : null;
-			return {
-				id: a.id, name: a.name, role: a.role, status: a.status, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt,
-				...(view ? {
-					limits: view.limits, usage: view.usage,
-					bases: view.bases.map((b) => ({ key: b.key, status: b.status, transport: b.transport, overLimit: b.overLimitService || b.overLimit === true })),
-				} : {}),
-			};
-		});
+		/*
+		 * АГЕНТЫ ОРГАНИЗАЦИИ — ТЕ, У КОГО ЕЁ БИН В БАЗАХ (модель без владельца, 28.09): «своих» агентов больше нет. Базы —
+		 * только те, где есть эта организация: остальные базы агента принадлежат другим клиентам. Лимит тарифа агента —
+		 * не дело клиента, его здесь нет; «сверх лимита» у базы — есть: команды в неё не уйдут.
+		 */
+		const { bin } = await orgOf(org);
+		const items = (await agents.servingBin(bin)).map(({ agent: a, bases }) => ({
+			id: a.id, name: a.name, role: a.role, status: a.status, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt,
+			bases: bases.map((b) => ({ key: b.key, status: b.status, transport: b.transport, overLimit: a.limits.maxBases !== null && b.pos >= a.limits.maxBases })),
+		}));
 		res.json({ success: true, data: { items } });
 	});
 
@@ -249,8 +259,8 @@ export function userRouter(deps: {
 	// организации; модель — по последнему обращению к провайдеру (см. llm/health.ts).
 	r.get("/status", async (req, res) => {
 		const org = req.erpUser!.organizationUuid;
-		// Статус чата — про бизнес-агентов (C12, C13): документы проводят они; админ-агент на связи чату не помогает.
-		const list = org ? (await agents.visibleTo(org)).filter((a) => a.role === "business") : [];
+		// Статус чата — про бизнес-агентов, у которых организация есть в базах (C12, C13; модель без владельца 28.09).
+		const list = org ? (await agents.servingBin((await orgOf(org)).bin)).map((x) => x.agent) : [];
 		const items = list.map((a) => ({ id: a.id, name: a.name, online: a.online, onec: a.onec, version: a.version, lastSeenAt: a.lastSeenAt }));
 		const a = items.find((x) => x.online && x.onec.reachable) ?? items.find((x) => x.online) ?? items[0] ?? null;
 		res.json({

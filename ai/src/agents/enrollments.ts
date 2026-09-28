@@ -18,24 +18,24 @@ export type EnrollmentInput = {
 export type EnrollmentRow = {
 	id: string; code: string; computer: string; serviceName: string; name: string; role: "business" | "admin";
 	serverName: string | null; version: string | null; ip: string | null; repeats: number; state: EnrollmentState;
-	note: string | null; decidedBy: string | null; decidedAt: Date | null; organizationUuid: string | null;
+	note: string | null; decidedBy: string | null; decidedAt: Date | null;
 	agentId: string | null; tokenDeliveredAt: Date | null; createdAt: Date; updatedAt: Date; expiresAt: Date;
 };
 
 type Raw = {
 	id: string; code: string; computer: string; service_name: string; name: string; role: "business" | "admin";
 	server_name: string | null; version: string | null; ip: string | null; repeats: number; state: EnrollmentState;
-	note: string | null; decided_by: string | null; decided_at: Date | null; organization_uuid: string | null;
+	note: string | null; decided_by: string | null; decided_at: Date | null;
 	agent_id: string | null; token_delivered_at: Date | null; created_at: Date; updated_at: Date; expires_at: Date;
 };
 
 const COLS = `id, code, computer, service_name, name, role, server_name, version, ip, repeats, state, note, decided_by,
-	decided_at, organization_uuid, agent_id, token_delivered_at, created_at, updated_at, expires_at`;
+	decided_at, agent_id, token_delivered_at, created_at, updated_at, expires_at`;
 
 const toRow = (r: Raw): EnrollmentRow => ({
 	id: r.id, code: r.code, computer: r.computer, serviceName: r.service_name, name: r.name, role: r.role,
 	serverName: r.server_name, version: r.version, ip: r.ip, repeats: r.repeats, state: r.state, note: r.note,
-	decidedBy: r.decided_by, decidedAt: r.decided_at, organizationUuid: r.organization_uuid, agentId: r.agent_id,
+	decidedBy: r.decided_by, decidedAt: r.decided_at, agentId: r.agent_id,
 	tokenDeliveredAt: r.token_delivered_at, createdAt: r.created_at, updatedAt: r.updated_at, expiresAt: r.expires_at,
 });
 
@@ -175,14 +175,14 @@ export class EnrollmentStore {
 		return r.rows[0]?.code ?? null;
 	}
 
-	async approve(id: string, d: { organizationUuid: string; agentId: string; decidedBy: string; note?: string | null }): Promise<boolean> {
+	async approve(id: string, d: { agentId: string; decidedBy: string; note?: string | null }): Promise<boolean> {
 		await this.expire();
 		const r = await this.db.query<{ computer: string; service_name: string; code: string }>(
-			`UPDATE agent_enrollments SET state = 'APPROVED', organization_uuid = $2, agent_id = $3, decided_by = $4, note = $5,
+			`UPDATE agent_enrollments SET state = 'APPROVED', agent_id = $2, decided_by = $3, note = $4,
 			        decided_at = now(), updated_at = now()
 			  WHERE id = $1 AND state = 'PENDING'
 			  RETURNING computer, service_name, code`,
-			[id, d.organizationUuid, d.agentId, d.decidedBy, d.note ?? null],
+			[id, d.agentId, d.decidedBy, d.note ?? null],
 		);
 		const row = r.rows[0];
 		if (!row) return false;

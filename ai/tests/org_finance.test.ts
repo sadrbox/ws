@@ -41,16 +41,19 @@ type Opts = {
 	bin?: string | null;
 	/** Способности бизнес-агента; `null` — агента для этой организации нет. */
 	capabilities?: string[] | null;
+	/** Агент на связи (по умолчанию да). */
+	online?: boolean;
 	/** Что вернёт очередь по типу команды; `null` — не дождались (жива, но ответа нет). */
 	results?: Record<string, { state: string; result?: unknown; error?: { code: string; message: string } } | null>;
 };
 
 async function harness(opts: Opts = {}) {
-	const enqueued: { type: string; payload: Record<string, unknown>; baseKey?: string }[] = [];
+	const enqueued: { type: string; payload: Record<string, unknown>; baseKey?: string; organizationUuid?: string }[] = [];
+	const wants: Record<string, unknown>[] = [];
 	const results = opts.results ?? {};
 	const queue = {
-		enqueue: async (i: { type: string; payload: Record<string, unknown>; baseKey?: string }) => {
-			enqueued.push({ type: i.type, payload: i.payload, baseKey: i.baseKey });
+		enqueue: async (i: { type: string; payload: Record<string, unknown>; baseKey?: string; organizationUuid?: string }) => {
+			enqueued.push({ type: i.type, payload: i.payload, baseKey: i.baseKey, organizationUuid: i.organizationUuid });
 			return { id: `cmd-${enqueued.length}`, type: i.type };
 		},
 		waitResult: async (id: string) => {
@@ -60,14 +63,25 @@ async function harness(opts: Opts = {}) {
 			return r ?? { id, state: "done", result: { rows: [] } };
 		},
 	};
+	// Агент без организации (модель без владельца, 28.09): его находит БИН организации в срезе баз.
+	const agent = {
+		id: "biz", name: "Сервер, бизнес", role: "business", online: opts.online ?? true, limits: { maxBases: null },
+		disabled: false, capabilities: opts.capabilities ?? ["GET_DEBTS", "GET_BALANCES"],
+		status: "ONLINE", onec: { reachable: true, version: "1.8.3" }, version: "2026-09-28", lastSeenAt: null,
+	};
 	const agents = {
-		resolveBusiness: async () => (opts.capabilities === null
-			? { kind: "none" as const }
-			: {
-				kind: "agent" as const, baseKey: "Dev_01", alsoIn: [], baseStatus: "ONLINE",
-				agent: { id: "biz", organizationUuid: ORG, role: "business", online: true, disabled: false, capabilities: opts.capabilities ?? ["GET_DEBTS", "GET_BALANCES"] },
-			}),
-		visibleTo: async () => [],
+		resolveBusiness: async (_org: string, bin: string | null) => {
+			wants.push({ bin });
+			return opts.capabilities === null
+				? { kind: "none" as const }
+				: { kind: "agent" as const, baseKey: "Dev_01", alsoIn: [], baseStatus: "ONLINE", baseOrgs: null, agent };
+		},
+		explainUnresolved: async () => ({ code: "BASE_NOT_SERVED", message: "Организации нет ни в одной базе агентов BuhProf" }),
+		// Кто обслуживает организацию — агент и только базы с её БИН.
+		servingBin: async (bin: string | null) => {
+			wants.push({ servingBin: bin });
+			return opts.capabilities === null || !bin ? [] : [{ agent, bases: [{ key: "Dev_01", pos: 0, status: "ONLINE", transport: "com" }] }];
+		},
 	};
 	const app = express();
 	app.use(express.json());
@@ -88,8 +102,44 @@ async function harness(opts: Opts = {}) {
 		});
 		return { status: r.status, body: await r.json() as { success: boolean; data?: any; error?: { code: string; message: string } } };
 	};
-	return { call, enqueued, close: () => srv.close() };
+	const get = async (path: string) => {
+		const r = await fetch(`http://127.0.0.1:${port}/v1${path}`, { headers: { authorization: `Bearer ${token}` } });
+		return { status: r.status, body: await r.json() as { success: boolean; data?: any } };
+	};
+	return { call, get, enqueued, wants, close: () => srv.close() };
 }
+
+// ── Статус чата и список агентов: агент фирмы или сервера (28.09) ─────────
+
+test("статус чата: организацию обслуживает агент, у которого её БИН в базах, — «настроен»", async () => {
+	const h = await harness();
+	try {
+		const s = await h.get("/status");
+		assert.equal(s.status, 200, JSON.stringify(s.body));
+		assert.equal(s.body.data.agent.configured, true);
+		assert.equal(s.body.data.agent.name, "Сервер, бизнес");
+		// БИН — из ERP, а не от клиента.
+		assert.deepEqual(h.wants.at(-1), { servingBin: BIN });
+	} finally { h.close(); }
+});
+
+test("список агентов: агент показан с базами ТОЛЬКО этой организации и без лимита тарифа", async () => {
+	const h = await harness();
+	try {
+		const r = await h.get("/agents");
+		assert.equal(r.body.data.items.length, 1);
+		assert.deepEqual(r.body.data.items[0].bases.map((b: { key: string }) => b.key), ["Dev_01"]);
+		assert.equal(r.body.data.items[0].limits, undefined, "лимит тарифа агента — не дело клиента");
+	} finally { h.close(); }
+});
+
+test("никто не обслуживает — статус «не настроен», как прежде", async () => {
+	const h = await harness({ capabilities: null });
+	try {
+		assert.equal((await h.get("/status")).body.data.agent.configured, false);
+		assert.equal((await h.get("/agents")).body.data.items.length, 0);
+	} finally { h.close(); }
+});
 
 test("ПН9: числа читаются без права «Администрирование 1С» — маршрут пользовательский", async () => {
 	const h = await harness({ results: {
@@ -131,13 +181,37 @@ test("ПН9: без БИН у организации спрашивать неч
 	} finally { h.close(); }
 });
 
-test("ПН9: агента для организации нет — 409 про агента, команда не ставится", async () => {
+test("ПН9: исполнителя нет — 409 с конкретной причиной, а не «некому спросить», команда не ставится", async () => {
 	const h = await harness({ capabilities: null });
 	try {
 		const r = await h.call({ organizationUuid: ORG });
 		assert.equal(r.status, 409);
-		assert.equal(r.body.error!.code, "AGENT_OFFLINE");
+		assert.equal(r.body.error!.code, "BASE_NOT_SERVED");
+		assert.match(r.body.error!.message, /нет ни в одной базе агентов BuhProf/);
 		assert.equal(h.enqueued.length, 0);
+	} finally { h.close(); }
+});
+
+test("ПН9: агент базы не на связи — отказ сразу, а не две команды до таймаута", async () => {
+	const h = await harness({ online: false });
+	try {
+		const r = await h.call({ organizationUuid: ORG });
+		assert.equal(r.status, 409);
+		assert.equal(r.body.error!.code, "AGENT_OFFLINE");
+		assert.match(r.body.error!.message, /«Сервер, бизнес».*«Dev_01»/);
+		assert.equal(h.enqueued.length, 0);
+	} finally { h.close(); }
+});
+
+test("ПН9: база клиента у агента фирмы — исполнитель по БИН из ERP, команда числится за клиентом (В4)", async () => {
+	const h = await harness();
+	try {
+		const r = await h.call({ organizationUuid: ORG });
+		assert.equal(r.status, 200);
+		// Исполнитель — по БИН организации из ERP (В2): у агента организации нет.
+		assert.deepEqual(h.wants, [{ bin: BIN }]);
+		// Команда — организации, которая спросила, а не организации агента.
+		assert.deepEqual(h.enqueued.map((c) => c.organizationUuid), [ORG, ORG]);
 	} finally { h.close(); }
 });
 

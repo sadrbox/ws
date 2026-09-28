@@ -6,14 +6,12 @@ import {
 	useInfiniteModelList,
 	GLOBAL_ADAPTIVE_LIMIT_REF,
 } from "src/hooks/useInfiniteModelList";
-import useQueryParams from "src/hooks/useQueryParams";
+import { useTableViewState } from "src/hooks/useTableViewState";
 import { useModelDelete } from "src/hooks/useModelDelete";
 import {
 	getModelColumns,
 	matchRowBySearch,
 	parseSearchQuery,
-	loadTableView,
-	saveTableView,
 } from "src/components/Table/services";
 import type {
 	TColumn,
@@ -50,6 +48,16 @@ export interface UseModelListStateOptions {
 	ownerFilter?: Record<string, { value: unknown; operator: string }>;
 	/** Дополнительные query-параметры, отправляемые напрямую (не через filter[...]) */
 	extraQueryParams?: Record<string, string>;
+	/**
+	 * Помнить ли поиск и отборы (по умолчанию — да). Нет — у списка, где отмеченные строки уходят в групповую
+	 * операцию: восстановленный поиск незаметно сузил бы выбор (useTableViewState).
+	 */
+	rememberFilters?: boolean;
+	/**
+	 * Список встроен в карточку владельца (вкладка «Контактные лица» организации): поиск и отборы относятся к ЭТОМУ
+	 * владельцу и в карточку другого не переносятся (useTableViewState, `scope`).
+	 */
+	filterScope?: string | null;
 }
 
 /**
@@ -72,6 +80,8 @@ export function useModelListState(opts: UseModelListStateOptions) {
 		columnsVariant,
 		ownerFilter,
 		extraQueryParams,
+		rememberFilters = true,
+		filterScope,
 	} = opts;
 
 	const queryClient = useQueryClient();
@@ -83,31 +93,11 @@ export function useModelListState(opts: UseModelListStateOptions) {
 	const [columns, setColumns] = useState<TColumn[]>(() =>
 		getModelColumns(opts.columnsJson as TColumn[], componentName, columnsVariant),
 	);
-	// Восстанавливаем сохранённый на клиенте вид таблицы (сортировка + период).
-	const persistedView = useMemo(() => loadTableView(componentName), [componentName]);
-	const [sort, setSort] = useQueryParams<Record<string, "asc" | "desc">>(
-		"sort",
-		defaultSort,
-		persistedView?.sort,
-	);
-	const [search, setSearch] = useQueryParams<string>("search", "");
-	const [filter, setFilter] = useQueryParams<
-		Record<string, { value: unknown; operator: string }> | undefined
-	>(
-		"filter",
-		undefined,
-		persistedView?.dateRange
-			? { dateRange: persistedView.dateRange as unknown as { value: unknown; operator: string } }
-			: undefined,
-	);
-
-	// Сохраняем сортировку и период (dateRange) на клиенте при изменении.
-	useEffect(() => {
-		saveTableView(componentName, {
-			sort,
-			dateRange: filter?.dateRange as unknown as { startDate?: string; endDate?: string } | undefined,
-		});
-	}, [componentName, sort, filter]);
+	// Сортировка, быстрый поиск и отборы (с периодом) — с памятью: остаются, пока пользователь их не изменит
+	// (useTableViewState, общее состояние таблицы — components/Table/tableState.ts).
+	const { sort, setSort, search, setSearch, filter, setFilter } =
+		useTableViewState(componentName, { sort: defaultSort },
+			filterScope !== undefined ? { rememberFilters, scope: filterScope } : { rememberFilters });
 
 	const [adaptiveLimit, setAdaptiveLimit] = useState(500);
 	useEffect(() => {

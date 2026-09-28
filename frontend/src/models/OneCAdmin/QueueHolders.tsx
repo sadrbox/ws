@@ -7,22 +7,38 @@
  * оставляет базу в промежуточном состоянии — так же решает и сервис).
  *
  * Время по типам — сводно по снимкам агентов: рядом с оценкой «сколько ждать» видно, из чего она.
+ *
+ * ОБЕ ТАБЛИЦЫ — SubTableSheets (28.09): виджет стоит над таблицей «Прогресса», и ему нужна простыня, растущая по
+ * строкам, а не второй список с тулбаром. Вид ячейки — общий с Table.
  */
-import { FC, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
+import SubTableSheets from "src/components/SubTableSheets";
+import type { TColumn, TDataItem } from "src/components/Table/types";
 import { showToast } from "src/components/UIToast";
 import { reportError } from "src/services/errors/route";
 import { abortCommand, type OnecQueueStats } from "src/services/onec/api";
-import { durationRows } from "./agentStats";
-import { formatDuration } from "./queueStats";
+import { ageText, durationCellText, durationColumns, durationTableRows, holderRows, type HolderRow } from "./agentTablesView";
 import {
 	useOnecPermissions,
 } from "./shared";
 import { agentsAllow } from "./onecPermissions";
 import styles from "./OneCAdmin.module.scss";
 import diag from "./AgentDiag.module.scss";
+
+// Идентификатор колонки — ключ перевода её заголовка (getTranslateColumn).
+const HOLDER_COLUMNS: TColumn[] = [
+	{ identifier: "onecStatType", type: "string", width: "220px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "onecQueueBase", type: "string", width: "200px", minWidth: "120px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "onecQueueAge", type: "number", width: "110px", minWidth: "80px", alignment: "right", visible: true, inlist: true },
+];
+/** Кнопка «Прервать» — служебная колонка (`__`, без заголовка): только у того, кто вправе прерывать. */
+const ABORT_COLUMN: TColumn = {
+	identifier: "__abort", type: "string", width: "130px", minWidth: "110px", alignment: "left", sortable: false, visible: true, inlist: true,
+};
+const TIME_COLUMNS = durationColumns();
 
 export const QueueHolders: FC<{ stats: OnecQueueStats | undefined }> = ({ stats }) => {
 	const canAbort = agentsAllow(useOnecPermissions(), "manage");
@@ -41,42 +57,29 @@ export const QueueHolders: FC<{ stats: OnecQueueStats | undefined }> = ({ stats 
 		onError: (e) => reportError(e, { source: translate("onecQueueHolders") }),
 	});
 
-	const holders = stats?.runningCommands ?? [];
-	const times = durationRows(stats?.agentDurations);
+	const holders = useMemo(() => holderRows(stats?.runningCommands ?? []), [stats]);
+	const times = useMemo(() => durationTableRows(stats?.agentDurations), [stats]);
+	const holderColumns = useMemo(() => (canAbort ? [...HOLDER_COLUMNS, ABORT_COLUMN] : HOLDER_COLUMNS), [canAbort]);
 	if (!holders.length && !times.length) return null;
+
+	const renderHolderCell = (r: TDataItem, col: TColumn) => {
+		const row = r as HolderRow;
+		if (col.identifier === "onecQueueAge") return ageText(row.onecQueueAge);
+		if (col.identifier !== ABORT_COLUMN.identifier) return undefined;
+		// «Прервать» — только у чтений: обрыв загрузки или обновления оставил бы базу в промежуточном состоянии.
+		return row.__abortable && canAbort ? (
+			<Button variant="secondary" disabled={abort.isPending} onClick={() => abort.mutate(row.uuid)}>
+				{translate("onecQueueAbort")}
+			</Button>
+		) : null;
+	};
 
 	return (
 		<div className={diag.QueueHolders}>
 			{holders.length > 0 && (
 				<>
 					<div className={styles.StatsTitle}>{translate("onecQueueHolders")}</div>
-					<table className={styles.StatsTable}>
-						<thead>
-							<tr>
-								<th>{translate("onecStatType")}</th>
-								<th>{translate("onecQueueBase")}</th>
-								<th>{translate("onecQueueAge")}</th>
-								<th />
-							</tr>
-						</thead>
-						<tbody>
-							{holders.map((c) => (
-								<tr key={c.commandId}>
-									<td>{c.type}</td>
-									<td>{c.baseKey ?? "—"}</td>
-									<td>{formatDuration(c.ageSecs) || `0 ${translate("secShort")}`}</td>
-									<td>
-										{c.abortable && canAbort && (
-											<Button variant="secondary" disabled={abort.isPending}
-												onClick={() => abort.mutate(c.commandId)}>
-												{translate("onecQueueAbort")}
-											</Button>
-										)}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
+					<SubTableSheets className={diag.QueueSheet} columns={holderColumns} rows={holders} renderCell={renderHolderCell} />
 				</>
 			)}
 			{times.length > 0 && (
@@ -85,24 +88,7 @@ export const QueueHolders: FC<{ stats: OnecQueueStats | undefined }> = ({ stats 
 						{translate("onecQueueTypeTimes")}
 					</Button>
 					{showTimes && (
-						<table className={styles.StatsTable}>
-							<thead>
-								<tr>
-									<th>{translate("onecStatType")}</th>
-									<th>{translate("onecStatCount")}</th>
-									<th>{translate("onecStatAvg")}</th>
-									<th>{translate("onecStatP95")}</th>
-									<th>{translate("onecStatMax")}</th>
-								</tr>
-							</thead>
-							<tbody>
-								{times.map((r) => (
-									<tr key={r.type}>
-										<td>{r.type}</td><td>{r.count}</td><td>{r.avg}</td><td>{r.p95}</td><td>{r.max}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+						<SubTableSheets className={diag.QueueSheet} columns={TIME_COLUMNS} rows={times} renderCell={durationCellText} defaultSort={{ onecStatAvg: "desc" }} />
 					)}
 				</>
 			)}

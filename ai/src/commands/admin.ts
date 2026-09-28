@@ -18,6 +18,7 @@
 import { z } from "zod";
 import type { OperationClass } from "../tools/registry.ts";
 import type { AgentRole, AgentView } from "../agents/service.ts";
+import { INSTALL_EXTENSION_TYPE } from "./contentDigest.ts";
 
 /**
  * Способности агента, которые проверяет сервис.
@@ -433,6 +434,21 @@ export const ADMIN_COMMANDS: AdminCommandSpec[] = [
 		 */
 		type: "IB_INFO",
 		title: "Сведения о базе",
+		operation: "READ",
+		capability: "ib.admin",
+		role: "admin",
+		requiresBase: true,
+		schema: z.object({ baseKey }).strict(),
+	},
+	{
+		/*
+		 * ОРГАНИЗАЦИИ БАЗЫ (28.09, карточка базы → «Организации» → «Обновить»). Чтение по запросу, как пользователи и
+		 * расширения: список целиком с реквизитами в формате заявки на подключение (`details`) и отметкой основной
+		 * организации (`main`). Ответ заменяет кэш реестра (`base_ib_organizations`, OnecRegistry.syncOrganizations).
+		 * Сборка агента без этой команды — отказ CAPABILITY_MISSING до постановки (agentKnowsType).
+		 */
+		type: "IB_LIST_ORGANIZATIONS",
+		title: "Организации базы",
 		operation: "READ",
 		capability: "ib.admin",
 		role: "admin",
@@ -938,10 +954,28 @@ export function requiredCapability(
 	return null;
 }
 
+/** Причина пропуска базы при повторе установки, чей файл уже заменён сводкой (С3, 28.09). */
+export const STORED_CONTENT_GONE = "файл расширения уже не хранится (сутки после отказа) — запустите установку заново";
+
+/**
+ * ФАЙЛ УСТАНОВКИ УЖЕ НЕ ХРАНИТСЯ (С3, 28.09). Payload неуспешной установки через сутки после отказа несёт вместо файла
+ * сводку `contentDigest` (CommandQueue.scrubStoredContent), а «Повторить неуспешные» берёт payload из самой команды,
+ * мимо схемы (`contentBase64` обязателен только при сборке новой команды). Без этой проверки агент получил бы установку
+ * без файла. `null` — файл на месте или команда не установка.
+ */
+export function storedContentRefusal(type: string, payload: Record<string, unknown> | null | undefined): string | null {
+	if (type !== INSTALL_EXTENSION_TYPE) return null;
+	const content = payload?.contentBase64;
+	return typeof content === "string" && content.length > 0 ? null : STORED_CONTENT_GONE;
+}
+
 /** Чего агенту не хватает для ЭТОЙ команды с ЭТИМ содержимым; `null` — хватает всего. */
 export function payloadRefusal(
 	agent: Pick<AgentView, "capabilities">, spec: Pick<AdminCommandSpec, "type">, payload: Record<string, unknown>,
 ): string | null {
+	// Нечего отдавать агенту (С3) — раньше любых способностей: их наличие файла не вернёт.
+	const gone = storedContentRefusal(spec.type, payload);
+	if (gone) return gone;
 	const need = requiredCapability(spec, payload);
 	return need && !agent.capabilities.includes(need.capability) ? need.message : null;
 }

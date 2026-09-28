@@ -79,12 +79,6 @@ const schema = z.object({
 	 */
 	BUSINESS_IB_PARALLEL: z.coerce.number().int().min(1).max(32).default(4),
 	/**
-	 * Кто видит какие серверы 1С в панели (C11). `all` — все, кому открыта панель (сервер один на установку, как
-	 * было); `organizations` — не суперадмин видит только серверы своих организаций ERP: у клиентов BuhProf свои
-	 * серверы, и чужие им видеть незачем.
-	 */
-	ONEC_SERVER_SCOPE: z.enum(["all", "organizations"]).default("all"),
-	/**
 	 * Откуда агент берёт новую сборку при обновлении из панели (задача агенту §2). Адрес — https и хост, который
 	 * агент считает своим; `{build}` в адресе заменяется на сборку. Пусто — панель попросит адрес и хэш руками.
 	 */
@@ -101,9 +95,6 @@ const schema = z.object({
 	// Решение принимает сервер и сообщает его в ответе на heartbeat, поэтому интервал меняется
 	// без переустановки службы на сервере 1С.
 	AGENT_BASES_FULL_EVERY_SECS: z.coerce.number().int().min(30).max(3600).default(300),
-	// Привязка агентов к организациям ERP: strict — команды идут только агенту своей организации;
-	// any — если у организации агента нет, берётся любой онлайн-агент (режим разработки на одном стенде).
-	AGENT_ORG_BINDING: z.enum(["strict", "any"]).default("strict"),
 	// §17: спрашивать подтверждение перед созданием документа (WRITE). CRITICAL — всегда.
 	CONFIRM_WRITE: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
 	// Глубина рассуждений модели: извлечение намерения — не задача на xhigh.
@@ -287,7 +278,6 @@ export function describe(cfg: Config): Record<string, unknown> {
 		publicUrl: cfg.PUBLIC_URL,
 		allowedOrigins: cfg.ALLOWED_ORIGINS,
 		trustProxy: cfg.TRUST_PROXY,
-		agentOrgBinding: cfg.AGENT_ORG_BINDING,
 		retention: `files ${cfg.FILE_TTL_DAYS}d, conversations ${cfg.CONVERSATION_TTL_DAYS}d`,
 		rateLimits: `chat ${cfg.RATE_LIMIT_CHAT_PER_MIN}/min, attachments ${cfg.RATE_LIMIT_ATTACHMENTS_PER_MIN}/min, кластер 1С ${cfg.RATE_LIMIT_ONEC_CLUSTER_PER_MIN}/min на кластер, проверка ответа клиенту ${cfg.RATE_LIMIT_QUALITY_REVIEW_PER_MIN}/min (до ${cfg.QUALITY_REVIEW_TIMEOUT_SECS} с)`,
 		accountingChecks: cfg.ACCOUNTING_CHECKS_ENABLED

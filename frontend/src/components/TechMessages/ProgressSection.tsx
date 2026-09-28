@@ -229,6 +229,8 @@ const OpRow: FC<{ op: Op; withDate: boolean }> = ({ op, withDate }) => {
 					<span>{translate("onecOpElapsed")}: {opDuration(op)}</span>
 					{/* Причина — человеческими словами: «Failed to fetch» не объясняет ничего. */}
 					{op.note && <span>{humanErrorText(op.note)}</span>}
+					{/* Подробность итога — путь исполнения команды 1С (28.09): у COM и ibcmd разные отказы и лекарства. */}
+					{op.detail && <span>{op.detail}</span>}
 				</div>
 			</div>
 
@@ -285,7 +287,7 @@ export const ProgressSection: FC<{
 		if (pane && o.pane && o.pane !== pane) return false;
 		if (!history && o.state !== "running") return false;
 		if (errorsOnly && o.state !== "failed") return false;
-		if (q && !`${o.title} ${o.target} ${o.note}`.toLowerCase().includes(q)) return false;
+		if (q && !`${o.title} ${o.target} ${o.note} ${o.detail ?? ""}`.toLowerCase().includes(q)) return false;
 		return true;
 	});
 	// Ожидание сервера — не ошибка и ни на какой поиск не отвечает: при отборе его не показываем.

@@ -14,6 +14,7 @@ import Modal from "src/components/Modal";
 import { FieldSelect } from "src/components/Field";
 import { FileViewerPane } from "src/models/Files/FileViewerPane";
 import UploadProgress, { formatFileSize } from "./UploadProgress";
+import { useTableViewState } from "src/hooks/useTableViewState";
 
 const MODEL_ENDPOINT = "files";
 const COMPONENT_NAME = "FilesList_part";
@@ -50,8 +51,10 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
   const [isUploading, setIsUploading] = useState(false);
   // Прогресс загрузки выбранного файла: имя, размер, процент (инлайн-баннер).
   const [uploadInfo, setUploadInfo] = useState<{ name: string; size: number; percent: number } | null>(null);
-  const [searchValue, setSearchValue] = useState("");
-  const [sortState, setSortState] = useState<Record<string, "asc" | "desc">>({ uploadedAt: "desc" });
+  // Сортировка и быстрый поиск — с памятью, как у остальных таблиц (useTableViewState, 28.09). Вкладка «Файлы» карточки —
+  // поиск этого владельца: в файлы другой записи он не переносится; общий список файлов (allFiles) — как обычный список.
+  const { sort: sortState, setSort: setSortState, search: searchValue, setSearch: setSearchValue } =
+    useTableViewState(COMPONENT_NAME, { sort: { uploadedAt: "desc" } }, allFiles ? {} : { scope: ownerUuid || null });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { windows: { addPane }, actions } = useAppActions();
 
@@ -328,7 +331,7 @@ const FilesPanel: FC<FilesPanelProps> = ({ ownerType, ownerUuid, allFiles = fals
       extraButtons,
       onDelete: handleTableDelete,
     }),
-    [displayRows, columns, isLoading, isUploading, loadFiles, customOpenModelForm, extraButtons, handleTableDelete, searchValue, sortState],
+    [displayRows, columns, isLoading, isUploading, loadFiles, customOpenModelForm, extraButtons, handleTableDelete, searchValue, sortState, setSearchValue, setSortState],
   );
 
   return (

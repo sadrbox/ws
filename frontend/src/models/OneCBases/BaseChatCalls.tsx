@@ -81,7 +81,7 @@ export const BaseChatCalls: FC<{ baseId?: string; baseNames?: ReadonlyMap<string
 			__tone: s.tone,
 		};
 	}), (r) => r.uuid), [items, baseNames]);
-	const view = useStaticTableView(rows, { callAt: "desc" });
+	const view = useStaticTableView(rows, { callAt: "desc" }, all ? "OneCBases_chat_calls_all" : "OneCBases_chat_calls", baseId ? { scope: baseId } : undefined);
 
 	return (
 		<>

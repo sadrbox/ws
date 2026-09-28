@@ -1,6 +1,6 @@
 /**
  * TableConfigModalForm — модалка настройки колонок таблицы: видимость + порядок
- * (рендерит TableConfigColumns) с сохранением в localStorage по componentName.
+ * (рендерит TableConfigColumns) с сохранением в общее состояние таблицы по componentName (tableState.ts).
  *
  * Вынесено из Table/index.tsx (T4). Потребитель useTableContext; служебные
  * колонки (__*) скрыты из настроек и не сохраняются.
@@ -11,6 +11,7 @@ import Modal from '../Modal';
 import type { TColumn, TypeModalFormProps } from './types';
 import { useTableContext } from './context';
 import { normalizeLastColumnWidth } from './services';
+import { saveTableColumns } from './tableState';
 import { TableConfigColumns } from './TableConfigColumns';
 import styles from './Table.module.scss';
 
@@ -21,7 +22,7 @@ export const TableConfigModalForm: FC<TypeModalFormProps> = ({ method }) => {
 
   const onApply = useCallback(() => {
     const normalized = normalizeLastColumnWidth(columnsConfig.filter(c => !c.identifier.startsWith("__")));
-    localStorage.setItem(`table_columns_${componentName}`, JSON.stringify(normalized));
+    saveTableColumns(componentName, normalized);
     actions?.setColumns?.(normalized);
   }, [columnsConfig, componentName, actions]);
 

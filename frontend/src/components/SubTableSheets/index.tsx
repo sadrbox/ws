@@ -21,7 +21,7 @@
  */
 import { FC, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TColumn, TDataItem } from "src/components/Table/types";
-import { sortTableRows, getFormatColumnValue, getColumnAlignment, computeFooterValue } from "src/components/Table/services";
+import { sortTableRows, getFormatColumnValue, getColumnAlignment, computeFooterValue, wrapCellText } from "src/components/Table/services";
 import { getTranslateColumn } from "src/i18";
 import tableStyles from "src/components/Table/Table.module.scss";
 import styles from "./SubTableSheets.module.scss";
@@ -193,10 +193,10 @@ const SubTableSheets: FC<SubTableSheetsProps> = ({
   }
 
   return (
-    <div className={[tableStyles.TableScrollContainer, className].filter(Boolean).join(" ")}>
+    <div className={[tableStyles.TableScrollContainer, styles.sheet, className].filter(Boolean).join(" ")}>
       <div
         ref={scrollRef}
-        className={tableStyles.TableScrollWrapper}
+        className={`${tableStyles.TableScrollWrapper} ${styles.sheetScroll}`}
         style={maxHeight != null ? { maxHeight } : undefined}
         tabIndex={0}
         onKeyDown={handleKeyDown}
@@ -266,12 +266,12 @@ const SubTableSheets: FC<SubTableSheetsProps> = ({
                     ].filter(Boolean).join(" ");
                     return (
                       <td key={col.identifier} onClick={() => handleCellClick(key, col.identifier)}>
-                        {/* Кастомный renderCell отдаёт готовый узел (часто уже <span>) — рендерим
-                            как есть, без обёртки. Fallback-значение оборачиваем в <span> (под него
-                            заточены стили .TableBodyCell span / .wrapCell span). Как в Table. */}
+                        {/* Кастомный renderCell: узел (span, кнопка) — как есть, строка или число — в <span>
+                            (wrapCellText); fallback-значение — тоже в <span>: под него заточены стили
+                            .TableBodyCell span / .wrapCell span. Как в Table. */}
                         <div className={cellClass}>
                           {content !== undefined
-                            ? content
+                            ? wrapCellText(content)
                             : <span>{String(getFormatColumnValue(row, col) ?? "")}</span>}
                         </div>
                       </td>

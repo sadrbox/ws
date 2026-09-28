@@ -110,12 +110,12 @@ export const SchedulesTab: FC = () => {
 			: translate("onecSchedOff"),
 		lastRunLabel: s.lastRunAt ? getFormatDate(s.lastRunAt) : "—",
 	}));
-	const view = useStaticTableView(rows, { atTime: "asc" });
+	const view = useStaticTableView(rows, { atTime: "asc" }, "OneCAdmin_schedules");
 
 	const baseRows = (bases.data?.items ?? []).map((b, i) => ({
 		id: i + 1, uuid: b.key, baseKey: b.key, name: b.name ?? "", serverName: b.serverName ?? "—",
 	}));
-	const baseView = useStaticTableView(baseRows, { baseKey: "asc" });
+	const baseView = useStaticTableView(baseRows, { baseKey: "asc" }, "OneCAdmin_schedBases", { rememberFilters: false });
 	const [baseCols, setBaseCols] = useState<TColumn[]>(() => getModelColumns([
 		{ identifier: "baseKey", type: "string", width: "220px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
 		{ identifier: "name", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },

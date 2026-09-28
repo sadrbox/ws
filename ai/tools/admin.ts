@@ -3,7 +3,7 @@
 // нового агента пишется прямо в файл конфигурации агента, если указан --agent-toml.
 //
 //   node --experimental-strip-types --env-file=.env tools/admin.ts agents
-//   node ... tools/admin.ts create-agent --org <uuid> --name "..." [--role business|admin] [--agent-toml <путь>]
+//   node ... tools/admin.ts create-agent --name "..." [--role business|admin] [--agent-toml <путь>]
 //   node ... tools/admin.ts rotate --agent <id> [--agent-toml <путь>]
 //   node ... tools/admin.ts disable|enable --agent <id>
 //   node ... tools/admin.ts command --agent <id> --type HEALTH [--payload '{...}'] [--request-id <uuid>]
@@ -48,7 +48,7 @@ async function patchAgentToml(path: string, agentId: string | null, token: strin
 	console.log(`agent.toml обновлён: ${path} (cloud.url = ${base}, токен записан)`);
 }
 
-type AgentView = { id: string; name: string; organizationUuid: string; status: string; online: boolean; onec: { reachable: boolean; version: string | null }; lastSeenAt: string | null; disabled: boolean };
+type AgentView = { id: string; name: string; role: string; status: string; online: boolean; onec: { reachable: boolean; version: string | null }; lastSeenAt: string | null; disabled: boolean };
 
 async function main(): Promise<void> {
 	switch (cmd) {
@@ -56,18 +56,17 @@ async function main(): Promise<void> {
 			const d = await call<{ items: AgentView[] }>("GET", "/admin/v1/agents");
 			if (!d.items.length) console.log("агентов нет");
 			for (const a of d.items) {
-				console.log(`${a.id}  ${a.online ? "ONLINE " : "offline"}  1С:${a.onec.reachable ? "да" : "нет"}${a.onec.version ? " v" + a.onec.version : ""}  ${a.name || "-"}  org=${a.organizationUuid}${a.disabled ? "  [ОТКЛЮЧЁН]" : ""}  seen=${a.lastSeenAt ?? "-"}`);
+				console.log(`${a.id}  ${a.online ? "ONLINE " : "offline"}  1С:${a.onec.reachable ? "да" : "нет"}${a.onec.version ? " v" + a.onec.version : ""}  ${a.name || "-"}  ${a.role}${a.disabled ? "  [ОТКЛЮЧЁН]" : ""}  seen=${a.lastSeenAt ?? "-"}`);
 			}
 			break;
 		}
 		case "create-agent": {
-			const org = opt.get("org");
-			if (!org) throw new Error("--org обязателен");
-			// Роль назначается при заведении и дальше не меняется: `--role admin` — агент кластера.
+			// Роль назначается при заведении и дальше не меняется: `--role admin` — агент кластера. Организации у агента
+			// нет (модель без владельца, 28.09): кого он обслуживает, скажут его базы.
 			const role = opt.get("role") ?? "business";
 			if (role !== "business" && role !== "admin") throw new Error("--role: business | admin");
-			const d = await call<{ agent: AgentView; token: string }>("POST", "/admin/v1/agents", { organizationUuid: org, name: opt.get("name") ?? "", role });
-			console.log(`агент создан: ${d.agent.id} (org ${org}, роль ${role})`);
+			const d = await call<{ agent: AgentView; token: string }>("POST", "/admin/v1/agents", { name: opt.get("name") ?? "", role });
+			console.log(`агент создан: ${d.agent.id} (роль ${role})`);
 			const tomlPath = opt.get("agent-toml");
 			if (tomlPath) await patchAgentToml(tomlPath, d.agent.id, d.token);
 			else console.log("токен (показан один раз):", d.token);
@@ -101,7 +100,7 @@ async function main(): Promise<void> {
 			break;
 		}
 		default:
-			console.log("команды: agents | create-agent --org <uuid> [--name] [--role business|admin] [--agent-toml] | rotate --agent <id> [--agent-toml] | disable|enable --agent <id> | command --agent <id> --type <TYPE> [--payload json] [--request-id uuid]");
+			console.log("команды: agents | create-agent [--name] [--role business|admin] [--agent-toml] | rotate --agent <id> [--agent-toml] | disable|enable --agent <id> | command --agent <id> --type <TYPE> [--payload json] [--request-id uuid]");
 	}
 }
 

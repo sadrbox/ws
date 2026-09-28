@@ -9,6 +9,7 @@
  * Отдельно от agentRouter, чтобы правила проверял тест, а не разбор кода обработчика.
  */
 import type { AgentProcess } from "../agents/service.ts";
+import { ibOrganizationsMeta, type IbOrganizationsMeta } from "./ibOrganizations.ts";
 
 export type LockState = {
 	enabled: boolean;
@@ -39,7 +40,12 @@ export type WriteStateAction =
 	| { kind: "processes"; items: AgentProcess[] }
 	/** Запрет регламентных заданий по факту команды: эха блокировки в ответе может не быть (С39). */
 	| { kind: "scheduledJobs"; denied: boolean; source: "cluster" | "command"; seenAt: string | null }
-	| { kind: "publication"; published: boolean; url: string | null; seenAt: string | null };
+	| { kind: "publication"; published: boolean; url: string | null; seenAt: string | null }
+	/**
+	 * Организации базы после загрузки выгрузки или обновления конфигурации (С6 задачи агента 28.09): те же `items`, что
+	 * у `IB_LIST_ORGANIZATIONS`, — кэш вкладки «Организации» заменяется целиком тем же разбором (syncOrganizations).
+	 */
+	| { kind: "organizations"; items: unknown[]; meta: IbOrganizationsMeta };
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
@@ -59,6 +65,15 @@ export function parseLock(v: unknown): LockState | null {
 		seenAt: str(v.readAt),
 		scheduledJobsDenied: typeof v.scheduledJobsDenied === "boolean" ? v.scheduledJobsDenied : null,
 	};
+}
+
+/**
+ * Блок `state.organizations` эха: `{items, complete: true, mainSource, readAt}` (агент 2026-09-28 13:57). Только полный
+ * список: частичный заменил бы кэш и «удалил» организации, которые просто не прочитались.
+ */
+export function parseOrganizationsEcho(v: unknown): { items: unknown[]; meta: IbOrganizationsMeta } | null {
+	if (!isObj(v) || v.complete !== true || !Array.isArray(v.items)) return null;
+	return { items: v.items, meta: ibOrganizationsMeta(v) };
 }
 
 /** Процессы в форме heartbeat; одна кривая строка — весь список не принимаем. */
@@ -157,6 +172,10 @@ export function planWriteState(
 			// показывала «Вход закрыт» у уже открытой базы. При `warning` агент блок не кладёт — не применяем.
 			const lock = parseLock(stateOf(result, "lock"));
 			if (lock) out.push({ kind: "lock", lock, source: "cluster" });
+			// Загрузка выгрузки приносит СВОИ организации: без этого вкладка показывала бы организации прежней базы до
+			// ручного «Обновить». Нет блока (агент старее 13:57, блок не прочитался) — дочитает readsAfter.
+			const orgs = parseOrganizationsEcho(stateOf(result, "organizations"));
+			if (orgs) out.push({ kind: "organizations", ...orgs });
 			const config = parseConfig(stateOf(result, "config"));
 			if (config) {
 				out.push({ kind: "config", config, exact: true });
@@ -207,7 +226,7 @@ export function planWriteState(
 	}
 }
 
-export type ReadAfter = "IB_LIST_USERS" | "IB_LIST_EXTENSIONS";
+export type ReadAfter = "IB_LIST_USERS" | "IB_LIST_EXTENSIONS" | "IB_LIST_ORGANIZATIONS";
 
 /**
  * Какие чтения поставить после ОТКАЗА (S3). `IB_FIELD_NOT_APPLIED` после записи: остальные поля
@@ -222,11 +241,12 @@ export function readsAfterFailure(type: string, code: string | undefined): ReadA
 /**
  * Какие чтения поставить после изменения — только то, чего эхо не принесло.
  *
- * Загрузка из выгрузки заменяет базу целиком: и пользователей, и расширения. Обновление
- * конфигурации может сделать расширения неприменимыми. `dryRun` не меняет ничего.
+ * Загрузка из выгрузки заменяет базу целиком: и пользователей, и расширения, и организации. Обновление
+ * конфигурации может сделать расширения неприменимыми и поменять реквизиты организаций. `dryRun` не меняет ничего.
+ * `organizations` в `applied` нет у старых вызовов — тогда считаем, что блок не пришёл.
  */
 export function readsAfter(
-	type: string, payload: Record<string, unknown>, applied: { users: boolean; extensions: boolean },
+	type: string, payload: Record<string, unknown>, applied: { users: boolean; extensions: boolean; organizations?: boolean },
 ): ReadAfter[] {
 	const MAP: Record<string, ReadAfter[]> = {
 		IB_CREATE_USER: ["IB_LIST_USERS"],
@@ -234,10 +254,13 @@ export function readsAfter(
 		IB_DELETE_USER: ["IB_LIST_USERS"],
 		IB_INSTALL_EXTENSION: ["IB_LIST_EXTENSIONS"],
 		IB_DELETE_EXTENSION: ["IB_LIST_EXTENSIONS"],
-		IB_RESTORE: ["IB_LIST_USERS", "IB_LIST_EXTENSIONS"],
+		IB_RESTORE: ["IB_LIST_USERS", "IB_LIST_EXTENSIONS", "IB_LIST_ORGANIZATIONS"],
 		// Новая конфигурация может не знать ролей, выданных в старой (агент R7-А5): пользователи тоже (T4).
-		IB_APPLY_UPDATE: ["IB_LIST_USERS", "IB_LIST_EXTENSIONS"],
+		IB_APPLY_UPDATE: ["IB_LIST_USERS", "IB_LIST_EXTENSIONS", "IB_LIST_ORGANIZATIONS"],
 	};
 	if (dryRun(payload)) return [];
-	return (MAP[type] ?? []).filter((t) => !(t === "IB_LIST_USERS" ? applied.users : applied.extensions));
+	const done: Record<ReadAfter, boolean> = {
+		IB_LIST_USERS: applied.users, IB_LIST_EXTENSIONS: applied.extensions, IB_LIST_ORGANIZATIONS: applied.organizations === true,
+	};
+	return (MAP[type] ?? []).filter((t) => !done[t]);
 }

@@ -29,7 +29,7 @@ import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { withStableIds } from "src/utils/stableRowId";
 import { asText } from "src/utils/asText";
 import {
-	approveEnrollment, fetchEnrollments, fetchErpOrganizations, rejectEnrollment,
+	approveEnrollment, fetchEnrollments, rejectEnrollment,
 	type AgentEnrollment, type EnrollmentState,
 } from "src/services/onec/api";
 import { isSharedListForbidden, useAgents } from "./shared";
@@ -122,7 +122,7 @@ export const EnrollmentsTab: FC = () => {
 		__siblings: siblingsCount(e) > 0 || !!approveBlockReason(e),
 		reqRepeats: e.repeats ? `${e.repeats}${e.ip ? ` · ${e.ip}` : ""}` : "—",
 	})), (r) => r.uuid), [items, names]);
-	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
+	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" }, "OneCAdmin_enrollments");
 	const pending = active?.state === "PENDING" && canDecide;
 	// Есть более новая заявка той же службы — агент ждёт её, эту одобрять нельзя (КР-20): кнопка недоступна, причина — в подсказке.
 	const blocked = active ? approveBlockReason(active) : null;
@@ -170,21 +170,17 @@ export const EnrollmentsTab: FC = () => {
 
 const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: () => void; onDone: () => void }> = ({ enr, previousName, onClose, onDone }) => {
 	/*
-	 * ОРГАНИЗАЦИЯ — ТОЛЬКО БИЗНЕС-АГЕНТУ. Он ходит в базы одной организации ERP: по ней выбирается исполнитель
-	 * команд чата и считается лимит тарифа. Агент кластера обслуживает весь сервер — все базы всех клиентов, и
-	 * организация ему ни на что не влияет: спрашивать её значило бы требовать выбор «для галочки».
+	 * ОРГАНИЗАЦИИ У АГЕНТА НЕТ (28.09, docs/TASK_SERVICE_AGENT_OWNER_MODEL_2026-09-28.md, В6): доверие даёт само
+	 * одобрение, а кого обслуживает бизнес-агент, говорят его базы. Поэтому окно спрашивает только имя и агента.
 	 */
-	const needsOrg = enr.role !== "admin";
-	const [organizationUuid, setOrganizationUuid] = useState("");
 	const [name, setName] = useState(enr.name);
 	const [reuse, setReuse] = useState(!!enr.previousAgentId);
 	const [note, setNote] = useState("");
-	const orgs = useQuery({ queryKey: ["onec", "erp-organizations"], queryFn: fetchErpOrganizations, staleTime: 60_000 });
 	// Двойной щелчок по заявке, у которой есть более новая той же службы (КР-20): окно объясняет, «Применить» недоступно.
 	const blocked = approveBlockReason(enr);
 	const approve = useMutation({
 		mutationFn: () => approveEnrollment(enr.id, {
-			...(needsOrg ? { organizationUuid } : {}), name: name.trim() || undefined,
+			name: name.trim() || undefined,
 			/*
 			 * ВЫБОР ИЗ СПИСКА ДОЛЖЕН ИСПОЛНЯТЬСЯ — ОБА (С3.1 аудита 23.09). «Новый агент» уходил явным `null`, а
 			 * «тот же агент» не уходил вовсе — и сервис в этом случае решает сам: прежнего агента он занимает только
@@ -204,19 +200,13 @@ const ApproveModal: FC<{ enr: AgentEnrollment; previousName: string; onClose: ()
 	});
 	return (
 		<Modal title={`${translate("onecReqApprove")}: ${enr.code}`} onClose={onClose} applyDisabled={!!blocked}
-			onApply={() => { if (!blocked && (!needsOrg || organizationUuid) && !approve.isPending) approve.mutate(); }}>
+			onApply={() => { if (!blocked && !approve.isPending) approve.mutate(); }}>
 			<div className={styles.ModalForm}>
 				<div>{enr.computer} · {enr.serviceName} · {enr.role === "admin" ? translate("onecRoleAdmin") : translate("onecRoleBusiness")}</div>
 				{blocked && <Notice inline items={[{ type: "error", text: blocked }]} />}
 				{/* Две ожидающие заявки одной службы (Б11): одобрение этой отклонит остальные — сверить код, а не имя. */}
 				{!blocked && siblingsWarning(enr) && <Notice inline items={[{ type: "warning", text: siblingsWarning(enr)! }]} />}
-				{needsOrg
-					? (
-						<FieldSelect name="enr_org" label={translate("onecReqErpOrg")} value={organizationUuid} required error={!organizationUuid}
-							onChange={(e) => setOrganizationUuid(e.target.value)} hint={translate("onecEnrollOrgHint")}
-							options={[{ value: "", label: "—" }, ...(orgs.data?.items ?? []).map((o) => ({ value: o.uuid, label: `${o.name}${o.bin ? ` (${o.bin})` : ""}` }))]} />
-					)
-					: <div className={styles.Hint}>{translate("onecEnrollClusterHint")}</div>}
+				<div className={styles.Hint}>{translate(enr.role === "admin" ? "onecEnrollClusterHint" : "onecEnrollBusinessHint")}</div>
 				<Field name="enr_name" label={translate("name")} width={FIELD_WIDTH.lg} value={name}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
 				{enr.previousAgentId && (

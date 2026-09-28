@@ -26,7 +26,7 @@ export function buildOutdated(version: string | null | undefined, latest: string
 }
 
 /** Функции панели, которые требуют чего-то от агента. Ключи — панель переводит их в слова. */
-export type AgentFeature = "abort" | "roles" | "commandStats" | "health" | "log" | "selftest" | "info";
+export type AgentFeature = "abort" | "roles" | "commandStats" | "health" | "log" | "selftest" | "info" | "organizations" | "extensionExport";
 
 /**
  * Чего не хватает сборке. Только у админ-агента: бизнес-агенту эти функции не нужны вовсе.
@@ -50,5 +50,10 @@ export function missingFeatures(agent: {
 	if (!has("IB_SELFTEST") && has("ib.admin")) out.push("selftest");
 	// Сведения о базе (С35) — со сборки 2026-09-15 23:24; условие то же, что у самопроверки.
 	if (!has("IB_INFO") && has("ib.admin")) out.push("info");
+	// Организации базы с реквизитами (28.09, вкладка карточки базы) — условие то же.
+	if (!has("IB_LIST_ORGANIZATIONS") && has("ib.admin")) out.push("organizations");
+	// Выгрузка расширения в .cfe (27.09, карточка базы → «Расширения») — условие то же (С5 задачи агента 28.09): без
+	// признака кнопка видна у сборки без команды, и сервис отказывает CAPABILITY_MISSING уже после нажатия.
+	if (!has("IB_EXPORT_EXTENSION") && has("ib.admin")) out.push("extensionExport");
 	return out;
 }

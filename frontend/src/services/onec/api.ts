@@ -12,7 +12,12 @@ export type OnecBase = {
 	serverName: string;
 	/** Имя базы в кластере — им она адресуется в командах. */
 	key: string;
+	/** Наименование для показа: заданное в панели, а если его нет — имя из кластера. */
 	name: string;
+	/** Имя из кластера (описание базы в срезе); сервис старее миграции 046 его не отдаёт. */
+	clusterName?: string;
+	/** Наименование задано в панели (миграция 046). */
+	nameCustom?: boolean;
 	/** Статус для показа: у скрытой базы — `DISABLED`. */
 	status: string;
 	/**
@@ -323,12 +328,22 @@ export const fetchBaseUsers = (baseKey: string) =>
 	aiFetch<{ items: IbUser[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/users`)
 		.then((d) => awaitCommand<{ items: IbUser[] }>(d));
 
+/** Расширения базы у самой 1С; `via` — каким путём агент их прочитал (С1, 28.09): `com` | `ibcmd`. */
 export const fetchBaseExtensions = (baseKey: string) =>
-	aiFetch<{ items: IbExtension[] } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`)
-		.then((d) => awaitCommand<{ items: IbExtension[] }>(d));
+	aiFetch<{ items: IbExtension[]; via?: string | null } | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions`)
+		.then((d) => awaitCommand<{ items: IbExtension[]; via?: string | null }>(d));
 
-/** Выгрузка расширения в файл .cfe (карточка базы, 27.09): файл — в `contentBase64`, агент читает базу. */
-export type ExtensionExport = { name?: string; contentBase64: string; version?: string | null; fileName?: string | null };
+/**
+ * Выгрузка расширения в файл .cfe (карточка базы, 27.09): файл — в `contentBase64`, агент читает базу. `via` — путь
+ * исполнения (С1, 28.09): соединение с базой (`com`) или напрямую через СУБД (`ibcmd`).
+ *
+ * Через час сервис убирает `contentBase64` из журнала и оставляет `contentDigest` (С3, 28.09): файл был, но его уже
+ * нет — разбор ответа в OneCAdmin/extensionExport.ts.
+ */
+export type ExtensionExport = {
+	name?: string; contentBase64?: string; version?: string | null; fileName?: string | null; via?: string | null;
+	contentDigest?: { size?: number; sha256?: string } | null;
+};
 export const exportExtension = (baseKey: string, name: string) =>
 	aiFetch<ExtensionExport | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions/${encodeURIComponent(name)}/export`, { method: "POST" })
 		.then((d) => awaitCommand<ExtensionExport>(d));
@@ -488,6 +503,54 @@ export const fetchBaseExtensionsCached = (baseKey: string) =>
 	aiFetch<{ items: IbExtension[] }>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/extensions/cached`);
 
 /**
+ * Организация базы 1С, как её прочитал агент у самой базы (`IB_LIST_ORGANIZATIONS`, 28.09): вкладка «Организации»
+ * карточки базы. Реквизиты — в формате заявки на подключение (`OnecOrgDetails`).
+ */
+export type IbOrganization = {
+	/** Ссылка 1С (уникальный идентификатор элемента справочника); у старых ответов может не быть. */
+	id?: string | null;
+	name: string;
+	bin?: string | null;
+	/** Основная организация базы — её 1С подставляет по умолчанию. Только показ: меняется в самой 1С. */
+	main?: boolean;
+	details?: OnecOrgDetails | null;
+	/** Организация ERP с тем же БИН — связь со справочником «Организации»; `null` — такой в ERP нет. */
+	erp?: ErpOrganization | null;
+	seenAt?: string | null;
+};
+
+/**
+ * Откуда отметка «Основная» (ответ агента 28.09): в Бухгалтерии для Казахстана основная организация — настройка
+ * пользователя, поэтому агент выводит её по правилу. single — организация одна; extension — константа расширения
+ * BuhProf «организация по умолчанию»; users — одна и та же у всех пользователей, кто её задал; null — не определена.
+ */
+export type IbOrganizationsMainSource = "single" | "extension" | "users";
+
+/** Организации базы вместе со свойствами среза: источник отметки «Основная» и недочитанные блоки реквизитов. */
+export type IbOrganizationsList = {
+	items: IbOrganization[];
+	/** Поля нет — сервис старее панели; null — основная не определена или источник не назван. */
+	mainSource?: IbOrganizationsMainSource | null;
+	/** Что агент не дочитал: блок реквизитов — непрочитанное показано по прошлому чтению; `main` — источник «Основной». */
+	notes?: IbOrganizationsNote[];
+};
+
+/**
+ * Записка агента о непрочитанном (С7, 28.09): `block` — `contacts | responsible | bankAccounts` (блок реквизитов у всех
+ * организаций сразу) или `main` (константа расширения или настройки пользователей); `null` — записка без блока.
+ */
+export type IbOrganizationsNote = { block: string | null; message: string };
+
+/** Прочитать организации у самой базы — команда агенту, стоит входа в базу. */
+export const fetchBaseOrganizations = (baseKey: string) =>
+	aiFetch<IbOrganizationsList | Pending>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/organizations`)
+		.then((d) => awaitCommand<IbOrganizationsList>(d));
+
+/** Организации базы ИЗ КЭША реестра — без обращения к 1С; связь с ERP сервис проставляет при каждом чтении. */
+export const fetchBaseOrganizationsCached = (baseKey: string) =>
+	aiFetch<IbOrganizationsList>(`/v1/onec/bases/${encodeURIComponent(baseKey)}/organizations/cached`);
+
+/**
  * Сколько держателей роли в каждой базе — для защиты «последний администратор».
  * Кэш реестра, в 1С не ходит.
  */
@@ -583,9 +646,16 @@ export type BatchProgress = {
 	items: {
 		/** Идентификатор команды — по нему её отменяют, пока она не начата. */
 		commandId: string | null;
-		baseKey: string | null; state: string; error: { code: string; message: string } | null;
+		baseKey: string | null; state: string;
+		/** Отказ базы. `details` — как прислал агент: в нём путь исполнения `via` (С1, 28.09) и держатели базы. */
+		error: { code: string; message: string; details?: unknown } | null;
 		/** Итог одной строкой: путь к выгрузке или адрес публикации. */
 		outcome: string | null;
+		/**
+		 * Путь исполнения успешной команды расширения: `com` | `ibcmd` (С1, 28.09). Сервис его в строку задания пока не
+		 * кладёт — поле ждёт его; нет — путь успеха неизвестен.
+		 */
+		via?: string | null;
 		/** Начатую команду можно прервать: это чтение, и агент умеет отмену (S4). */
 		abortable?: boolean;
 		/** Выполнено с оговоркой: признак не перечитан или свойства не приняты платформой (П12). */
@@ -780,11 +850,14 @@ export const killAgentProcess = (pid: number, force?: boolean, agentId?: string)
 export type OnecAgent = {
 	id: string; name: string; role: "business" | "admin";
 	online: boolean; capabilities: string[]; lastSeenAt: string | null; disabled: boolean;
-	/** Что сервис знает об агенте (п. 6): ОС, состояние, доступность 1С, регистрация, организация, счётчики. */
+	/** Что сервис знает об агенте (п. 6): ОС, состояние, доступность 1С, регистрация, счётчики. */
 	os?: string | null; status?: string | null; onecReachable?: boolean; registeredAt?: string | null;
-	organizationUuid?: string; commandsDone?: number | null; commandsFailed?: number | null;
-	/** Бизнес-агент: сколько баз в его срезе. */
-	basesCount?: number;
+	commandsDone?: number | null; commandsFailed?: number | null;
+	/**
+	 * Бизнес-агент — кого обслуживает (В6, 28.09): организации у агента нет, её заменяют его базы — сколько баз в срезе
+	 * и сколько разных организаций (БИН) в них.
+	 */
+	basesCount?: number; organizationsCount?: number;
 	/** Ход обновления службы (heartbeat агента): downloading | installing | restarting | failed | done. */
 	update?: { state?: string; build?: string; error?: string | null; at?: string } | null;
 	/** Сервер, за который отвечает агент: по нему база находит свою платформу. */
@@ -802,7 +875,10 @@ export type OnecAgent = {
 	build?: string | null;
 	/** Старше эталона сервиса (R3); null — сравнивать не с чем. */
 	buildOutdated?: boolean | null;
-	/** Функции панели, которых нет в этой сборке (R3): abort, roles, commandStats, health, log, selftest, info. */
+	/**
+	 * Функции панели, которых нет в этой сборке (R3): abort, roles, commandStats, health, log, selftest, info,
+	 * organizations, extensionExport (нет `IB_EXPORT_EXTENSION` при `ib.admin`, С5 28.09). Словами — agentHealth.ts.
+	 */
 	missingFeatures?: string[];
 	/**
 	 * Экземпляры (процессы) агента, отзывавшиеся за последнее время. Больше одного — авария:
@@ -931,7 +1007,7 @@ export type BusinessHealth = Record<string, unknown> & {
 		/** Когда база отвечала в последний раз и когда последний раз отказала. */
 		lastOkAt?: string | null; lastError?: { message?: string; at?: string } | null;
 	}[];
-	limits?: { maxBases?: number | null; maxBins?: number | null; activeBins?: string[] };
+	limits?: { maxBases?: number | null; maxBins?: number | null };
 };
 
 export const fetchBusinessHealth = (agentId: string) =>
@@ -979,24 +1055,16 @@ export const renameAgent = (id: string, name: string) =>
 		method: "PATCH", body: JSON.stringify({ name }),
 	});
 
-/** Лимит тарифа бизнес-агента: сколько баз и разных БИНов он обслуживает; null — без ограничения. */
-export type AgentLimits = {
-	maxBases: number | null; maxBins: number | null;
-	/** Активные БИНы (СВ4): есть — обслуживаются ровно они; null — правило «первые maxBins по порядку». */
-	activeBins?: string[] | null;
-};
+/** Лимит тарифа бизнес-агента: сколько баз он обслуживает; null — без ограничения. Лимит и допуск БИН отменены (В8). */
+export type AgentLimits = { maxBases: number | null };
 
 /** Организация базы бизнес-агента с пометками лимита. */
 export type AgentBaseOrg = {
 	id: string | null; name: string | null; bin: string | null;
-	/** Сверх лимита: база сверх лимита баз или БИН сверх лимита БИНов. */
+	/** Сверх лимита: база сверх лимита баз. */
 	overLimit: boolean;
-	/** Другие базы агента с тем же БИН. */
+	/** Другие базы агента с тем же БИН: какая выполнит команду, решает сервис (своя база организации). */
 	alsoIn: string[];
-	/** База, в которую уходят команды по этому БИН (первая обслуживаемая по порядку); null — ни в какую. */
-	usedBase: string | null;
-	/** Активирован ли БИН; null — списка активных нет. */
-	active?: boolean | null;
 };
 
 /** База в срезе бизнес-агента — как её прислал агент, плюс решение сервиса по лимиту. */
@@ -1033,19 +1101,6 @@ export const setAgentLimits = (id: string, limits: AgentLimits) =>
 	aiFetch<AgentBasesView>(`/v1/onec/agents/${encodeURIComponent(id)}/limits`, {
 		method: "PUT", body: JSON.stringify(limits),
 	});
-
-/**
- * Активные БИНы агента целиком: список, `null` — вернуться к правилу «первые N», `fixCurrent` — записать то, что
- * агент обслуживает сейчас. Только администратор BuhProf.
- */
-export const setAgentActiveBins = (id: string, body: { bins: string[] | null } | { fixCurrent: true }) =>
-	aiFetch<AgentBasesView>(`/v1/onec/agents/${encodeURIComponent(id)}/active-bins`, {
-		method: "PUT", body: JSON.stringify(body),
-	});
-
-/** Всем бизнес-агентам без списка — записать активными то, что они обслуживают сейчас (C15). */
-export const fixAllActiveBins = () =>
-	aiFetch<{ fixed: { agentId: string; name: string; bins: number }[]; skipped: number }>("/v1/onec/active-bins/fix-all", { method: "POST", body: "{}" });
 
 // ── Управление самой службой агента (задача агенту, выпуск 2026-09-20) ───────────────────────────────
 
@@ -1119,7 +1174,7 @@ export type EnrollmentState = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 export type AgentEnrollment = {
 	id: string; code: string; computer: string; serviceName: string; name: string; role: "business" | "admin";
 	serverName: string | null; version: string | null; ip: string | null; repeats: number; state: EnrollmentState;
-	note: string | null; decidedBy: string | null; decidedAt: string | null; organizationUuid: string | null;
+	note: string | null; decidedBy: string | null; decidedAt: string | null;
 	agentId: string | null; tokenDeliveredAt: string | null; createdAt: string; expiresAt: string;
 	/** Та же служба уже подключалась — одобрение отдаст ей того же агента с новым токеном. */
 	previousAgentId: string | null;
@@ -1143,7 +1198,7 @@ export const fetchEnrollments = (params: { state?: EnrollmentState | ""; q?: str
 };
 
 /** Организация нужна бизнес-агенту; агент кластера обслуживает весь сервер — ему её не задают. */
-export const approveEnrollment = (id: string, body: { organizationUuid?: string; name?: string; agentId?: string | null; note?: string }) =>
+export const approveEnrollment = (id: string, body: { name?: string; agentId?: string | null; note?: string }) =>
 	aiFetch<{ ok: boolean; agentId: string; created: boolean }>(`/v1/onec/enrollments/${encodeURIComponent(id)}/approve`, {
 		method: "POST", body: JSON.stringify(body),
 	});
@@ -1169,7 +1224,21 @@ export type OnecOrgDetails = {
 	phones: string[]; emails: string[]; website: string | null;
 	director: { fullName: string; position: string | null } | null;
 	chiefAccountant: { fullName: string; position: string | null } | null;
-	bankAccounts: { iban: string; bik: string | null; bankName: string | null; currency: string | null; isPrimary: boolean }[];
+	/** `name` — наименование счёта в 1С; приходит только от агента, который его шлёт (задача агенту 28.09, Д3). */
+	bankAccounts: { iban: string; bik: string | null; bankName: string | null; currency: string | null; isPrimary: boolean; name?: string | null }[];
+	/** Договоры организации — только в срезе `IB_LIST_ORGANIZATIONS` (задача агенту 28.09); сервис старее — поля нет. */
+	contracts?: OnecOrgContract[];
+};
+
+/** Договор организации из 1С («Договоры контрагентов» с этой организацией, ai/src/bases/orgDetails.ts). */
+export type OnecOrgContract = {
+	id: string | null; name: string; number: string | null;
+	/** `ГГГГ-ММ-ДД`. */
+	date: string | null; validUntil: string | null;
+	/** Вид договора как в 1С: «С поставщиком», «С покупателем», «Прочее»… */
+	kind: string | null;
+	currency: string | null;
+	counterparty: { id: string | null; name: string | null; bin: string | null } | null;
 };
 
 export type RegistrationOrganization = {
@@ -1386,36 +1455,6 @@ export const revokeBaseToken = (id: string) =>
 export const rotateBaseToken = (id: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/base-tokens/${encodeURIComponent(id)}/rotate`, { method: "POST", body: "{}" });
 
-// ── Активация БИНов (СВ4, часть 2) ──────────────────────────────────────────────────────────────────────
-
-export type ActivationState = "PENDING" | "APPROVED" | "REJECTED";
-
-export type ActivationRequest = {
-	agentId: string; agentName: string | null; agentOnline: boolean;
-	bin: string; name: string | null; baseKey: string | null; comment: string | null; requestedAt: string | null;
-	state: ActivationState; note: string | null; decidedBy: string | null; decidedAt: string | null;
-	createdAt: string; updatedAt: string;
-	/** Активен ли БИН сейчас; null — у агента нет списка активных. */
-	active: boolean | null;
-	limits: AgentLimits | null;
-};
-
-export const fetchActivationRequests = (params: { state?: ActivationState | ""; agentId?: string } = {}) => {
-	const qs = new URLSearchParams();
-	if (params.state) qs.set("state", params.state);
-	if (params.agentId) qs.set("agentId", params.agentId);
-	return aiFetch<{ items: ActivationRequest[]; canDecide: boolean }>(`/v1/onec/activation-requests${qs.toString() ? `?${qs.toString()}` : ""}`);
-};
-
-export const approveActivation = (agentId: string, bin: string) =>
-	aiFetch<{ ok: boolean; activeBins: string[]; warning?: string }>(
-		`/v1/onec/activation-requests/${encodeURIComponent(agentId)}/${encodeURIComponent(bin)}/approve`, { method: "POST", body: "{}" });
-
-export const rejectActivation = (agentId: string, bin: string, note: string) =>
-	aiFetch<{ ok: boolean }>(`/v1/onec/activation-requests/${encodeURIComponent(agentId)}/${encodeURIComponent(bin)}/reject`, {
-		method: "POST", body: JSON.stringify({ note }),
-	});
-
 /** Удалить агента вместе с историей его команд. Работающего сервис удалить не даст. */
 export const deleteAgent = (id: string) =>
 	aiFetch<{ ok: boolean }>(`/v1/onec/agents/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -1462,6 +1501,15 @@ export const dropBaseRegistration = (baseKey: string) =>
  */
 export const removeBaseFromRegistry = (key: string) =>
 	aiFetch<{ ok: boolean; removed: boolean }>(`/v1/onec/bases/${encodeURIComponent(key)}`, { method: "DELETE" });
+
+/**
+ * НАИМЕНОВАНИЕ БАЗЫ В ПАНЕЛИ (28.09). Пустое — вернуть показ имени из кластера. В самом кластере 1С ничего не
+ * меняется: срез кластера это наименование не перезаписывает.
+ */
+export const renameBase = (key: string, name: string) =>
+	aiFetch<{ ok: boolean; name: string | null }>(`/v1/onec/bases/${encodeURIComponent(key)}/name`, {
+		method: "PUT", body: JSON.stringify({ name }),
+	});
 
 export const setBaseHidden = (key: string, hidden: boolean) =>
 	aiFetch<{ ok: boolean; hidden: boolean }>(`/v1/onec/bases/${encodeURIComponent(key)}/hidden`, {

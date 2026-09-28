@@ -10,17 +10,56 @@
  *      никто не скажет, откуда они.
  *
  * Половины независимы: долги могли не дать, а остатки дать — показываем то, что есть, и называем, чего нет.
+ *
+ * ТАБЛИЦЫ — общий компонент Table (28.09), как у соседних вкладок карточки: сортировка по колонкам, быстрый
+ * поиск, ширины и видимость колонок запоминаются. Две таблицы делят высоту вкладки (`fitHeight`) и листают
+ * свои строки сами. Кнопки «Обновить» у таблиц нет: чтение одно на обе половины — кнопкой над ними.
  */
-import { FC, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { translate } from "src/i18";
 import { Button } from "src/components/Button";
 import Notice from "src/components/Notice";
+import Table from "src/components/Table";
+import { getModelColumns } from "src/components/Table/services";
+import type { TColumn, TDataItem } from "src/components/Table/types";
+import { buildStaticTableProps } from "src/utils/staticTableProps";
+import { useStaticTableView } from "src/hooks/useStaticTableView";
 import { reportError } from "src/services/errors/route";
 import { getFormatDate } from "src/utils/datetime";
 import { fetchOrganizationFinance, type OrganizationFinance } from "src/services/onec/api";
-import { balanceRows, debtRows, debtTotals, showMoney, totalOf } from "./financeView";
+import {
+	balanceRows, balanceTableRows, debtFooterValues, debtRows, debtTableRows, showMoney, totalOf,
+} from "./financeView";
 import admin from "src/models/OneCAdmin/OneCAdmin.module.scss";
+
+const DEBTS = "Organizations_onec_debts";
+const BALANCES = "Organizations_onec_balances";
+
+// Идентификатор колонки — ключ перевода её заголовка (getTranslateColumn).
+const debtColumns = (): TColumn[] => ([
+	{ identifier: "counterparty", type: "string", width: "260px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "binIin", type: "string", width: "150px", minWidth: "110px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "onecOrgDebtReceivable", type: "number", width: "150px", minWidth: "100px", alignment: "right", visible: true, inlist: true, footer: "sum" },
+	{ identifier: "onecOrgDebtPayable", type: "number", width: "150px", minWidth: "100px", alignment: "right", visible: true, inlist: true, footer: "sum" },
+	{ identifier: "onecOrgDebtOverdue", type: "number", width: "150px", minWidth: "100px", alignment: "right", visible: true, inlist: true, footer: "sum" },
+] as unknown as TColumn[]);
+
+const balanceColumns = (): TColumn[] => ([
+	{ identifier: "account", type: "string", width: "120px", minWidth: "80px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "name", type: "string", width: "320px", minWidth: "140px", alignment: "left", visible: true, inlist: true },
+	{ identifier: "onecOrgBalance", type: "number", width: "160px", minWidth: "100px", alignment: "right", visible: true, inlist: true },
+] as unknown as TColumn[]);
+
+const MONEY = new Set(["onecOrgDebtReceivable", "onecOrgDebtPayable", "onecOrgDebtOverdue", "onecOrgBalance"]);
+
+/** Суммы — с разрядами и «—» вместо пустого; просрочка — единственное красное: остальное нормальный ход дел. */
+const renderMoneyCell = (row: TDataItem, col: TColumn) => {
+	if (!MONEY.has(col.identifier)) return undefined;
+	const n = row[col.identifier] as number | null;
+	if (col.identifier === "onecOrgDebtOverdue" && n) return <span className={admin.ReqOff}>{showMoney(n)}</span>;
+	return showMoney(n);
+};
 
 export const OnecFinanceTab: FC<{ organizationUuid: string }> = ({ organizationUuid }) => {
 	const [data, setData] = useState<OrganizationFinance | null>(null);
@@ -31,13 +70,17 @@ export const OnecFinanceTab: FC<{ organizationUuid: string }> = ({ organizationU
 		onError: (e) => reportError(e, { source: translate("onecOrgFinance") }),
 	});
 
-	const debts = data?.debts.ok ? debtRows(data.debts.data) : [];
-	const totals = data?.debts.ok ? debtTotals(data.debts.data, debts) : null;
+	const debts = useMemo(() => (data?.debts.ok ? debtRows(data.debts.data) : []), [data]);
 	const debtsTotal = data?.debts.ok ? totalOf(data.debts.data) : null;
-	const balances = data?.balances.ok ? balanceRows(data.balances.data) : [];
+	const debtView = useStaticTableView(useMemo(() => debtTableRows(debts), [debts]), {}, DEBTS, { scope: organizationUuid });
+	const debtFooter = useMemo(() => (data?.debts.ok ? debtFooterValues(data.debts.data, translate("total")) : undefined), [data]);
+	const [debtCols, setDebtCols] = useState<TColumn[]>(() => getModelColumns(debtColumns(), DEBTS));
+
+	const balanceView = useStaticTableView(useMemo(() => (data?.balances.ok ? balanceTableRows(balanceRows(data.balances.data)) : []), [data]), {}, BALANCES, { scope: organizationUuid });
+	const [balanceCols, setBalanceCols] = useState<TColumn[]>(() => getModelColumns(balanceColumns(), BALANCES));
 
 	return (
-		<div className={admin.Instances}>
+		<>
 			<div className={admin.Hint}>{translate("onecOrgFinanceHint")}</div>
 			<div className={admin.ModalForm}>
 				<Button icon="reload" variant="secondary" disabled={read.isPending} onClick={() => read.mutate()}>
@@ -60,41 +103,13 @@ export const OnecFinanceTab: FC<{ organizationUuid: string }> = ({ organizationU
 						{/* Показано меньше, чем есть, — говорим прямо: молча обрезанный список читается как полный. */}
 						{debtsTotal !== null && debtsTotal > debts.length ? ` · ${translate("onecOrgFinanceShown")} ${debts.length} ${translate("onecOrgFinanceOf")} ${debtsTotal}` : ""}
 					</div>
-					{!debts.length
-						? <div className={admin.Hint}>{translate("onecOrgFinanceEmpty")}</div>
-						: (
-							<table className={`${admin.StatsTable} ${admin.ReqTable}`}>
-								<thead>
-									<tr>
-										<th>{translate("counterparty")}</th>
-										<th>{translate("binIin")}</th>
-										<th>{translate("onecOrgDebtReceivable")}</th>
-										<th>{translate("onecOrgDebtPayable")}</th>
-										<th>{translate("onecOrgDebtOverdue")}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{debts.map((d, i) => (
-										<tr key={`${d.bin}-${d.name}-${i}`}>
-											<td>{d.name || "—"}</td>
-											<td>{d.bin || "—"}</td>
-											<td>{showMoney(d.receivable)}</td>
-											<td>{showMoney(d.payable)}</td>
-											{/* Просрочка — единственное, что здесь красное: остальное нормальный ход дел. */}
-											<td className={d.overdue ? admin.ReqOff : undefined}>{showMoney(d.overdue)}</td>
-										</tr>
-									))}
-									{totals && (
-										<tr>
-											<td colSpan={2}><b>{translate("total")}</b></td>
-											<td><b>{showMoney(totals.receivable)}</b></td>
-											<td><b>{showMoney(totals.payable)}</b></td>
-											<td><b>{showMoney(totals.overdue)}</b></td>
-										</tr>
-									)}
-								</tbody>
-							</table>
-						)}
+					<Table {...buildStaticTableProps({
+						componentName: DEBTS, rows: debtView.rows, columns: debtCols, setColumns: setDebtCols,
+						sorting: debtView.sorting, search: debtView.search, fitHeight: true,
+						emptyText: translate("onecOrgFinanceEmpty"),
+						footerValues: debts.length ? debtFooter : undefined,
+						renderCell: renderMoneyCell,
+					})} />
 				</>
 			)}
 
@@ -104,31 +119,15 @@ export const OnecFinanceTab: FC<{ organizationUuid: string }> = ({ organizationU
 			{data?.balances.ok && (
 				<>
 					<div className={admin.Hint}>{translate("onecOrgBalances")}</div>
-					{!balances.length
-						? <div className={admin.Hint}>{translate("onecOrgFinanceEmpty")}</div>
-						: (
-							<table className={`${admin.StatsTable} ${admin.ReqTable}`}>
-								<thead>
-									<tr>
-										<th>{translate("account")}</th>
-										<th>{translate("name")}</th>
-										<th>{translate("onecOrgBalance")}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{balances.map((b, i) => (
-										<tr key={`${b.account}-${i}`}>
-											<td>{b.account || "—"}</td>
-											<td>{b.name || "—"}</td>
-											<td>{showMoney(b.balance)}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						)}
+					<Table {...buildStaticTableProps({
+						componentName: BALANCES, rows: balanceView.rows, columns: balanceCols, setColumns: setBalanceCols,
+						sorting: balanceView.sorting, search: balanceView.search, fitHeight: true,
+						emptyText: translate("onecOrgFinanceEmpty"),
+						renderCell: renderMoneyCell,
+					})} />
 				</>
 			)}
-		</div>
+		</>
 	);
 };
 

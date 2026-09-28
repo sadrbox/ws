@@ -132,7 +132,7 @@ export const RegistrationsTab: FC<{ fitHeight?: boolean }> = ({ fitHeight }) => 
 		__newer: !!registrationNewerMark(r),
 		reqRepeats: r.repeats ? `${r.repeats}${r.ip ? ` · ${r.ip}` : ""}` : "—",
 	})), (r) => r.uuid), [items]);
-	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" });
+	const view = useStaticTableView(rowsRaw, { reqReceived: "desc" }, "OneCAdmin_registrations");
 
 	const pending = active?.state === "PENDING" && canDecide;
 	// Есть более новая заявка той же базы — 1С ждёт её, эту одобрять нельзя (КР-20): кнопка недоступна, причина — в подсказке.
