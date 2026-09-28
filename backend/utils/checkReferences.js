@@ -19,6 +19,7 @@ import { Prisma } from "@prisma/client";
 import { pool } from "../prisma/prisma-client.js";
 import { checkOwnership } from "./auth.js";
 import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError, PeriodLockedError } from "../services/periodLock.js";
+import { POSTING_TX_OPTIONS } from "../services/documentLock.js";
 
 /**
  * ДОКУМЕНТЫ: ЗАПИСЬ БЕЗ ОРГАНИЗАЦИИ — НЕ «ОБЩАЯ» (аудит 26.09, п. 14 отчёта инспекции маршрутов).
@@ -419,6 +420,33 @@ export async function guardBasisDependents(res, modelName, uuid) {
 }
 
 /**
+ * Удалить запись (soft/hard). С хуком inTransaction — хук и удаление ОДНОЙ транзакцией
+ * (КР-13 аудита 27.09): у кассы проверка остатка и снятие проводок ПКО шли отдельно от
+ * удаления, и РКО, проведённый в этот промежуток, видел ещё не снятые проводки.
+ */
+async function removeRecord(prisma, modelName, where, softDelete, existing, inTransaction) {
+	const remove = (client) => (softDelete
+		? client[modelName].update({ where, data: { deletedAt: new Date() } })
+		: client[modelName].delete({ where }));
+	if (typeof inTransaction !== "function") return remove(prisma);
+	return prisma.$transaction(async (tx) => {
+		await inTransaction(tx, existing);
+		return remove(tx);
+	}, POSTING_TX_OPTIONS);
+}
+
+/** Текст отказа, который respondError отправил бы в ответе (для строк пакетного удаления). */
+function messageOfResponse(respondError, err) {
+	let body = null;
+	const capture = { status() { return capture; }, json(b) { body = b; return capture; } };
+	try {
+		return respondError(err, capture) ? body?.message ?? null : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Универсальный обработчик DELETE по `:id` (id или uuid в одном параметре).
  *
  * Делает 3 вещи:
@@ -434,6 +462,11 @@ export async function guardBasisDependents(res, modelName, uuid) {
  * @param {string}  opts.modelName           — camelCase Prisma-модель ("unitOfMeasure")
  * @param {string}  [opts.notFoundMessage]   — текст 404-ответа
  * @param {boolean} [opts.softDelete=false]  — true → update deletedAt, false → delete
+ * @param {(tx: object, existing: object) => Promise<void>} [opts.inTransaction] — шаги, которые
+ *        должны пройти в ОДНОЙ транзакции с удалением (выполняются до него). Ошибка откатывает и
+ *        удаление. Без опции удаление идёт как раньше, без транзакции.
+ * @param {(err: Error, res: object) => boolean} [opts.respondError] — ответ на ошибку хука
+ *        (true — ответ отправлен); в пакетном удалении из него берётся текст отказа строки.
  */
 export async function handleDelete({
 	req,
@@ -446,6 +479,8 @@ export async function handleDelete({
 	/** Вид документа для нумерации: задан → после удаления откатываем счётчик
 	 *  (освобождаем номер удалённого верхнего документа для переиспользования). */
 	numberDocType = null,
+	inTransaction = null,
+	respondError = null,
 }) {
 	const param = req.params.id ?? req.params.uuid;
 	const numId = Number(param);
@@ -475,14 +510,7 @@ export async function handleDelete({
 		// пока на него ссылаются другие документы (basisDocumentUuid).
 		if (await guardBasisDependents(res, modelName, existing.uuid)) return;
 
-		if (softDelete) {
-			await prisma[modelName].update({
-				where,
-				data: { deletedAt: new Date() },
-			});
-		} else {
-			await prisma[modelName].delete({ where });
-		}
+		await removeRecord(prisma, modelName, where, softDelete, existing, inTransaction);
 		// Хук после успешного удаления (например, удаление движений регистра).
 		if (typeof onDeleted === "function") {
 			try {
@@ -496,6 +524,7 @@ export async function handleDelete({
 		return res.status(200).json({ success: true, message: "Удалено" });
 	} catch (error) {
 		if (respondPeriodLockError(error, res)) return;
+		if (typeof respondError === "function" && respondError(error, res)) return;
 		if (error.code === "P2025") {
 			return res.status(404).json({ success: false, message: notFoundMessage });
 		}
@@ -527,6 +556,9 @@ export async function handleBatchDelete({
 	softDelete = false,
 	onDeleted = null,
 	numberDocType = null,
+	// Как у handleDelete: шаги в одной транзакции с удалением каждой записи и ответ на их ошибку.
+	inTransaction = null,
+	respondError = null,
 }) {
 	const { uuids } = req.body;
 	if (!Array.isArray(uuids) || uuids.length === 0) {
@@ -572,11 +604,7 @@ export async function handleBatchDelete({
 				}
 			}
 
-			if (softDelete) {
-				await prisma[modelName].update({ where: { uuid }, data: { deletedAt: new Date() } });
-			} else {
-				await prisma[modelName].delete({ where: { uuid } });
-			}
+			await removeRecord(prisma, modelName, { uuid }, softDelete, existing, inTransaction);
 			if (typeof onDeleted === "function") {
 				try {
 					await onDeleted(existing);
@@ -586,9 +614,10 @@ export async function handleBatchDelete({
 			}
 			deleted++;
 		} catch (err) {
-			const msg = err.code === "P2003"
-				? "Невозможно удалить — запись используется в других документах"
-				: "Ошибка удаления";
+			// Отказ хука (например, касса уйдёт в минус) — его текст, как в одиночном удалении.
+			const hookMessage = typeof respondError === "function" ? messageOfResponse(respondError, err) : null;
+			const msg = hookMessage
+				?? (err.code === "P2003" ? "Невозможно удалить — запись используется в других документах" : "Ошибка удаления");
 			failed.push({ uuid, message: msg });
 		}
 	}

@@ -8,8 +8,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { parseBankStatement, normalizeAccount } from "./parseStatement.js";
 import { resolveCounterpartyByBin } from "../esf/resolver.js";
+import { r2 } from "../money.js";
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Деньги — общим округлением money.js (P3 аудита 27.09): прежнее округление теряло «половинки» (1.005 → 1.00).
+const round2 = r2;
 
 /**
  * Автопривязка движения (Z10): договор контрагента + счёт на оплату по ТОЧНОЙ сумме.

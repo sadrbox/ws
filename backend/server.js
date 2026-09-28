@@ -130,6 +130,7 @@ import backupRouter from "./api/router/backup.js";
 import { runBackup, listBackups } from "./services/backup.js";
 import { pruneAuditLog, retentionDays } from "./services/auditLog.js";
 import { purgeOrphanEntries } from "./services/accountingPosting.js";
+import { resumeDirtyRecomputes, stopRecomputes } from "./services/recomputeCosting.js";
 import { registerTask, startScheduler } from "./services/scheduler.js";
 import { withClusterLock, closeClusterLocks } from "./services/clusterLock.js";
 import { pruneIdempotencyKeys } from "./services/idempotency.js";
@@ -203,7 +204,10 @@ const extraTrustedPeers = (process.env.TRUSTED_PROXY_IPS || "")
 	.map((x) => x.trim())
 	.filter(Boolean);
 const peerGuardEnabled = !!process.env.TRUSTED_PROXY_IPS;
-const seenRejected = new Set(); // лог отклонённого источника — один раз на IP
+// Лог отклонённого источника — один раз на IP. Предел (P3 аудита 27.09): поток сканеров с разных
+// адресов раздувал множество без конца; переполнилось — начинаем заново (повтор строки безвреден).
+const SEEN_REJECTED_MAX = 1000;
+const seenRejected = new Set();
 function isTrustedPeer(peer) {
 	if (!peer) return false;
 	if (peer === "127.0.0.1" || peer === "::1") return true;
@@ -219,6 +223,7 @@ app.use((req, res, next) => {
 	const peer = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
 	if (isTrustedPeer(peer)) return next();
 	if (!seenRejected.has(peer)) {
+		if (seenRejected.size >= SEEN_REJECTED_MAX) seenRejected.clear();
 		seenRejected.add(peer);
 		console.warn(`[peer-guard] отклонён публичный источник: ${peer}`);
 	}
@@ -734,6 +739,16 @@ const server = app.listen(port, () => {
 			return n ? `удалено ключей идемпотентности: ${n}` : undefined;
 		},
 	});
+	// Учёт (КР-16 аудита 27.09): пересчёты себестоимости, не пройденные до перезапуска или
+	// падения воркера (отметки costing.dirtyFrom.* в app_settings), — дообработать после
+	// старта и затем раз в 6 ч.
+	registerTask({
+		name: "costing-recompute-resume", intervalMs: 6 * 3_600_000, initialDelayMs: 60_000,
+		run: async () => {
+			const n = await resumeDirtyRecomputes();
+			return n ? `дообрабатывается пересчёт себестоимости организаций: ${n}` : undefined;
+		},
+	});
 	/*
 	 * Блокировка между процессами: в проде воркеров четыре, и без неё бэкап делался бы
 	 * четырежды одновременно. На одиночном процессе она просто всегда достаётся первому.
@@ -765,6 +780,9 @@ const gracefulShutdown = (signal) => {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	console.log(`${signal} received: closing HTTP server`);
+	// Фоновый пересчёт себестоимости доделывает текущий документ и выходит; отметка в базе
+	// остаётся до следующего старта (КР-16 аудита 27.09). Ждём его до отключения от БД.
+	const recomputeStopped = stopRecomputes({ timeoutMs: SHUTDOWN_TIMEOUT_MS - 2_000 });
 
 	// Принудительное завершение, если запросы не уложились в срок.
 	setTimeout(() => {
@@ -775,6 +793,7 @@ const gracefulShutdown = (signal) => {
 
 	server.close(async () => {
 		console.log("HTTP server closed");
+		await recomputeStopped;
 		await Promise.allSettled([prisma.$disconnect(), closeClusterLocks()]);
 		process.exit(0);
 	});

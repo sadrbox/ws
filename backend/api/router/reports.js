@@ -7,6 +7,7 @@ import { replayProductCosting, sortMovements } from "../../services/costingRepla
 import { reportOrgs, reportSingleOrg, orgWhere, respondReportScopeError } from "../../services/reportScope.js";
 import { dateRangeWhere, startOfLocalDay, endOfLocalDay, orgTimeZone, respondBadDateError, BadDateError } from "../../services/periodBounds.js";
 import { r2 } from "../../services/money.js";
+import { withLongStatements } from "../../services/documentLock.js";
 
 const router = express.Router();
 
@@ -67,8 +68,14 @@ const COST_BEARING_IN_DOCS = new Set([
 	"sale_return",
 	"inventory_transfer",
 ]);
+// Количества в отчётах — 3 знака (точность количества, не денег; деньги — r2 из money.js).
 const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const num = (v) => Number(v ?? 0) || 0;
+
+// Тяжёлые выборки отчётов (агрегаты за период, вся история регистра) — со своим пределом
+// запроса (КР-15 аудита 27.09): на большой базе 30 с пула мало, и отчёт падал «Ошибкой сервера».
+const longQuery = (sql, ...params) => withLongStatements(prisma, (tx) => tx.$queryRawUnsafe(sql, ...params));
+const longRegisterRead = (args) => withLongStatements(prisma, (tx) => tx.productRegister.findMany(args));
 
 // Аудит 26.09 (Б6, У5): организация из запроса ПЕРЕСЕКАЕТСЯ с доступными (reportOrgs —
 // чужая → 403), а не перезаписывает tenantFilter; сутки периода — местные (periodBounds).
@@ -137,7 +144,7 @@ router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"),
 		const costRetCond = docSql(req, "s", filter, costParams);
 
 		const [saleRows, returnRows, costRows] = await Promise.all([
-			prisma.$queryRawUnsafe(
+			longQuery(
 				`SELECT i."productUuid" AS product_uuid, MIN(i."unitOfMeasureUuid") AS uom_uuid,
 				        SUM(i."quantity")::text AS qty, SUM(i."amount")::text AS amount,
 				        SUM(i."exciseAmount")::text AS excise, SUM(i."vatAmount")::text AS vat,
@@ -147,7 +154,7 @@ router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"),
 				  GROUP BY i."productUuid"`,
 				...saleParams,
 			),
-			prisma.$queryRawUnsafe(
+			longQuery(
 				`SELECT i."productUuid" AS product_uuid, MIN(i."unitOfMeasureUuid") AS uom_uuid,
 				        SUM(i."quantity")::text AS qty, SUM(i."amount")::text AS amount,
 				        SUM(COALESCE(i."amountWithoutVat", i."amount"))::text AS no_tax,
@@ -162,7 +169,7 @@ router.get("/reports/sales-by-product", requireReportAccess("sales-by-product"),
 			// Проводки формируются на проведении по фактической политике организации
 			// (ФИФО/средняя), поэтому отчёт всегда сходится с ОСВ и карточкой счёта.
 			// Номенклатура — с той стороны проводки, где стоит 7010 (она есть на обеих).
-			prisma.$queryRawUnsafe(
+			longQuery(
 				`SELECT a."objectUuid" AS product_uuid,
 				        SUM(CASE WHEN e."debitAccountCode" = '${COGS_ACCOUNT_CODE}' THEN e."amount" ELSE -e."amount" END)::text AS cost
 				   FROM "accounting_entries" e
@@ -295,7 +302,7 @@ router.get("/reports/sales-by-product-xyz", requireReportAccess("sales-by-produc
 			const cond = docSql(req, "s", filter, params);
 			if (!cond) return [];
 			params.push(tz);
-			return prisma.$queryRawUnsafe(
+			return longQuery(
 				`SELECT i."productUuid" AS product_uuid, MIN(i."unitOfMeasureUuid") AS uom_uuid,
 				        to_char((s."date" AT TIME ZONE 'UTC') AT TIME ZONE $${params.length}, 'YYYY-MM') AS ym,
 				        SUM(i."quantity")::text AS qty, SUM(i."amount")::text AS amount
@@ -415,7 +422,7 @@ router.get("/reports/material-statement", requireReportAccess("material-statemen
 
 		// Порядок ОБЯЗАН совпадать с себестоимостью в проводках — единый порядок регистра
 		// (sortMovements: при равной дате приход раньше расхода, затем тип и id документа).
-		const movements = sortMovements(await prisma.productRegister.findMany({
+		const movements = sortMovements(await longRegisterRead({
 			where,
 			include: {
 				product: { select: { uuid: true, name: true, sku: true } },
@@ -528,7 +535,7 @@ router.get("/reports/inventory-batches", requireReportAccess("inventory-batches"
 		const range = dateRangeWhere(null, dateTo, orgTimeZone(orgs?.[0] ?? null));
 		if (range) where.date = range;
 
-		const movements = sortMovements(await prisma.productRegister.findMany({
+		const movements = sortMovements(await longRegisterRead({
 			where,
 			include: {
 				product: { select: { uuid: true, name: true, sku: true } },
@@ -817,7 +824,7 @@ router.get("/reports/user-performance", requireReportAccess("user-performance"),
 			`SELECT uid, COUNT(*)::int AS docs FROM (
 				${PERF_DOC_TABLES.map(subquery).join("\n\t\t\t\tUNION ALL\n\t\t\t\t")}
 			) u WHERE uid IS NOT NULL GROUP BY uid`;
-		const docRows = await prisma.$queryRawUnsafe(docSql, from ? from.toISOString() : null, to ? to.toISOString() : null, orgs);
+		const docRows = await longQuery(docSql, from ? from.toISOString() : null, to ? to.toISOString() : null, orgs);
 
 		// ── Задачи по исполнителю ──────────────────────────────────────────────
 		const taskWhere = { deletedAt: null };

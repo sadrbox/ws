@@ -23,7 +23,7 @@ import { getCached } from "./refCache.js";
 import { computeDepreciationEntries } from "./depreciation.js";
 import { r2 } from "./money.js";
 import { periodBounds, orgTimeZone } from "./periodBounds.js";
-import { inDocumentTransaction } from "./documentLock.js";
+import { inDocumentTransaction, DocumentBusyError, isLockWaitError } from "./documentLock.js";
 import { compareMovements } from "./costingReplay.js";
 
 // Коды типовых счетов РК (см. seed-accounting.js).
@@ -1237,6 +1237,33 @@ export async function findOverlappingMonthClose(doc, client = prisma) {
 	return null;
 }
 
+/** Отказ «период уже закрыт» с реквизитами пересекающегося закрытия (other=null — без них). */
+function overlapErrorOf(other, tz) {
+	const fmt = (d) => new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
+	const who = other
+		? `документом «Закрытие месяца» ${other.number ? `№ ${other.number}` : "б/н"} (${fmt(other.periodStart)}–${fmt(other.periodEnd)})`
+		: "другим документом «Закрытие месяца»";
+	return new MonthCloseOverlapError(
+		`Период уже закрыт ${who}. Второе закрытие удвоило бы обороты — распроведите прежнее закрытие или измените период.`,
+	);
+}
+
+/**
+ * Отказ MonthCloseOverlapError для закрытия doc — когда пересечение поймала сама база
+ * (частичный уникальный индекс month_closes_posted_period_uq, КР-14 аудита 27.09): два
+ * одновременных закрытия одного месяца проходят проверку оба, и второе получает P2002 —
+ * отвечаем тем же 409 с реквизитами уже проведённого закрытия, а не «Ошибкой сервера».
+ */
+export async function monthCloseOverlapError(doc, client = prisma) {
+	let other = null;
+	try {
+		other = doc ? await findOverlappingMonthClose(doc, client) : null;
+	} catch (err) {
+		console.error("monthCloseOverlapError lookup error:", err?.message ?? err);
+	}
+	return overlapErrorOf(other, orgTimeZone(doc?.organizationUuid ?? null));
+}
+
 /**
  * Проверяет возможность проведения документа. Бросает PostingValidationError
  * при нарушениях. Не пишет в БД.
@@ -1270,14 +1297,7 @@ export async function validatePosting(documentType, doc, items, client = prisma)
 		else if (b.start > b.end) errors.push("Начало периода закрытия позже его конца");
 		else {
 			const other = await findOverlappingMonthClose(doc, client);
-			if (other) {
-				const fmt = (d) => new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
-				throw new MonthCloseOverlapError(
-					`Период уже закрыт документом «Закрытие месяца» ${other.number ? `№ ${other.number}` : "б/н"} ` +
-					`(${fmt(other.periodStart)}–${fmt(other.periodEnd)}). Второе закрытие удвоило бы обороты — ` +
-					`распроведите прежнее закрытие или измените период.`,
-				);
-			}
+			if (other) throw overlapErrorOf(other, tz);
 		}
 	}
 
@@ -1579,10 +1599,21 @@ export async function purgeOrphanEntries({ organizationUuid = null } = {}, clien
 	return purged;
 }
 
-/** Маппинг PostingValidationError → HTTP 422. Возвращает true, если ответ отправлен. */
+/**
+ * Маппинг PostingValidationError → HTTP 422 (409 — у MonthCloseOverlapError). Сюда же —
+ * DocumentBusyError (КР-15 аудита 27.09): блокировку документа, товара или кассы дольше
+ * предела держит другая транзакция → 409 «занят, повторите», а не «Ошибка сервера»; так же —
+ * не дождались блокировки СТРОКИ в транзакции проведения (lock_timeout, 55P03).
+ * Возвращает true, если ответ отправлен.
+ */
 export function respondPostingError(err, res) {
-	if (err instanceof PostingValidationError) {
+	if (err instanceof PostingValidationError || err instanceof DocumentBusyError) {
 		res.status(err.status ?? 422).json({ success: false, message: err.message, errors: err.errors });
+		return true;
+	}
+	if (isLockWaitError(err)) {
+		const busy = new DocumentBusyError();
+		res.status(busy.status).json({ success: false, message: busy.message, errors: busy.errors });
 		return true;
 	}
 	return false;
@@ -1605,5 +1636,6 @@ export default {
 	entryDateOf,
 	PostingValidationError,
 	MonthCloseOverlapError,
+	monthCloseOverlapError,
 	respondPostingError,
 };

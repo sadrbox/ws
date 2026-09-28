@@ -346,7 +346,16 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 			const warehouseUuid =
 				data.warehouseUuid !== undefined ? data.warehouseUuid : existing.warehouseUuid;
 			// Предпроверка остатка до записи (окончательная — в транзакции commitDocumentHeader).
-			await assertStockForPosting("sale", existing.uuid, { warehouseUuid, date: data.date ?? undefined });
+			// Основание — из тела запроса (КР-8 аудита 27.09): форма выбирает резерв-основание и
+			// проводит одним PUT, а предпроверка брала основание из сохранённого документа — резерв,
+			// который эта реализация закрывает, не исключался, и был ложный 409 «не хватает».
+			// Не присланное поле (undefined) оставляет сохранённое значение.
+			await assertStockForPosting("sale", existing.uuid, {
+				warehouseUuid,
+				date: data.date ?? undefined,
+				basisDocumentType: data.basisDocumentType,
+				basisDocumentUuid: data.basisDocumentUuid,
+			});
 			// Бух. проверки проведения (организация, дата, счета, субконто, Дт=Кт).
 			await assertPostable("sale", existing.uuid, { ...data, posted: true });
 		}

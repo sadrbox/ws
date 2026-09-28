@@ -13,19 +13,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { tenantFilter, isAdminOfOrg } from "../../utils/auth.js";
+import { tenantFilter, isAdminOfOrg, orgIsAccessible } from "../../utils/auth.js";
 import { getDocumentEntries, filterPostedEntries, postedEntrySql, documentNumbers } from "../../services/accountingPosting.js";
 import { getClosedBoundary } from "../../services/periodLock.js";
-import { recomputeCosting, recomputeLockName } from "../../services/recomputeCosting.js";
+import { recomputeCosting, recomputeLockName, markRecomputeNeeded } from "../../services/recomputeCosting.js";
 import { withClusterLock } from "../../services/clusterLock.js";
 import { reportOrgs, orgWhere, respondReportScopeError } from "../../services/reportScope.js";
 import { dateRangeWhere, startOfLocalDay, endOfLocalDay, orgTimeZone, respondBadDateError, BadDateError } from "../../services/periodBounds.js";
 import { r2 } from "../../services/money.js";
+import { withLongStatements } from "../../services/documentLock.js";
 
 const router = express.Router();
 
 // Пояс организации отчёта (сейчас общий для установки — см. periodBounds).
 const tzOf = (orgs) => orgTimeZone(orgs?.[0] ?? null);
+
+// Агрегаты по всей истории проводок (ОСВ, сальдо карточки, субконто, взаиморасчёты) и выборки
+// журнала — со своим пределом запроса (КР-15 аудита 27.09): 30 с пула на большой базе мало.
+const longQuery = (sql, ...params) => withLongStatements(prisma, (tx) => tx.$queryRawUnsafe(sql, ...params));
 
 /** Начало/конец периода отчёта (местные сутки). Мусор → BadDateError (400). */
 function periodOf(orgs, dateFrom, dateTo) {
@@ -126,10 +131,11 @@ router.get("/accounting/document-entries", async (req, res) => {
 		if (!documentType || !documentUuid)
 			return res.status(400).json({ success: false, message: "documentType и documentUuid обязательны" });
 		// Только проводки проведённого документа (непроведённый/удалённый — пусто) и только
-		// доступных пользователю организаций: чужой документ по uuid ничего не отдаёт.
-		const orgs = reportOrgs(req, null);
+		// доступных пользователю организаций: чужой документ по uuid ничего не отдаёт. Доступных —
+		// а не одной активной (P3 аудита 27.09): документ другой своей организации, открытый из
+		// сводного списка или по ссылке, показывал пустые проводки.
 		const all = await filterPostedEntries(await getDocumentEntries(documentType, documentUuid));
-		const entries = orgs === null ? all : all.filter((e) => orgs.includes(e.organizationUuid));
+		const entries = all.filter((e) => orgIsAccessible(req, e.organizationUuid));
 		const accMap = await loadAccountMap(req, entries[0]?.organizationUuid);
 		const rows = entries.map((e) => ({
 			uuid: e.uuid,
@@ -176,12 +182,30 @@ router.get("/accounting/journal", async (req, res) => {
 		if (warehouseUuid) analyticAnd.push({ subkontoType: "Warehouse", objectUuid: warehouseUuid });
 		if (analyticAnd.length) where.AND = analyticAnd.map((cond) => ({ analytics: { some: cond } }));
 
-		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
-			where,
-			include: { analytics: true },
-			orderBy: [{ date: "asc" }, { id: "asc" }],
-			take: limit,
-		}));
+		// Проводки непроведённых документов отбрасываются ДО обрезки (КР-22 аудита 27.09): раньше
+		// выбирались первые `limit` строк, из них выкидывались «сироты», и `truncated` считался по
+		// остатку — журнал молча терял хвост. Теперь добираем страницами, пока не наберём `limit`
+		// проведённых строк или не кончится выборка; обрезано — если за ними есть ещё.
+		const posted = await withLongStatements(prisma, async (tx) => {
+			const out = [];
+			let cursor = null;
+			let more = true;
+			while (out.length <= limit && more) {
+				const batch = await tx.accountingEntry.findMany({
+					where,
+					include: { analytics: true },
+					orderBy: [{ date: "asc" }, { id: "asc" }],
+					take: limit + 1,
+					...(cursor !== null ? { cursor: { id: cursor }, skip: 1 } : {}),
+				});
+				more = batch.length === limit + 1;
+				if (batch.length) cursor = batch[batch.length - 1].id;
+				out.push(...(await filterPostedEntries(batch, tx)));
+			}
+			return out;
+		});
+		const truncated = posted.length > limit;
+		const entries = posted.slice(0, limit);
 		const accMap = await loadAccountMap(req, organizationUuid);
 		const tz = orgTimeZone(organizationUuid || null);
 		const numbers = await documentNumbers(entries);
@@ -204,7 +228,7 @@ router.get("/accounting/journal", async (req, res) => {
 			creditAnalytics: analyticsText(e.analytics, "credit"),
 		}));
 		const total = r2(rows.reduce((s, x) => s + x.amount, 0));
-		return res.json({ success: true, items: rows, count: rows.length, total, truncated: rows.length >= limit });
+		return res.json({ success: true, items: rows, count: rows.length, total, truncated });
 	} catch (err) {
 		if (respondReportError(err, res)) return;
 		console.error("GET /accounting/journal error:", err);
@@ -228,7 +252,7 @@ router.get("/accounting/balance-sheet", async (req, res) => {
 		if (conds) {
 			const before = from ? `e."date" < ${tsParam(params, from)}` : "false";
 			const where = conds.join(" AND ");
-			const rows = await prisma.$queryRawUnsafe(
+			const rows = await longQuery(
 				`SELECT code, SUM(open_net)::text AS open_net, SUM(turn_debit)::text AS turn_debit, SUM(turn_credit)::text AS turn_credit
 				   FROM (
 					SELECT e."debitAccountCode" AS code,
@@ -306,7 +330,7 @@ router.get("/accounting/account-card", async (req, res) => {
 			if (conds) {
 				params.push(String(accountCode));
 				const acc = `$${params.length}`;
-				const [row] = await prisma.$queryRawUnsafe(
+				const [row] = await longQuery(
 					`SELECT COALESCE(SUM(CASE WHEN e."debitAccountCode" = ${acc} THEN e."amount" ELSE -e."amount" END), 0)::text AS opening
 					   FROM "accounting_entries" e
 					  WHERE (e."debitAccountCode" = ${acc} OR e."creditAccountCode" = ${acc})
@@ -319,11 +343,11 @@ router.get("/accounting/account-card", async (req, res) => {
 
 		const where = entryWhere(req, { dateFrom, dateTo, organizationUuid });
 		where.OR = [{ debitAccountCode: accountCode }, { creditAccountCode: accountCode }];
-		const entries = await filterPostedEntries(await prisma.accountingEntry.findMany({
+		const entries = await withLongStatements(prisma, async (tx) => filterPostedEntries(await tx.accountingEntry.findMany({
 			where,
 			include: { analytics: true },
 			orderBy: [{ date: "asc" }, { id: "asc" }],
-		}));
+		}), tx));
 		const accMap = await loadAccountMap(req, organizationUuid);
 		const tz = tzOf(orgs);
 		const numbers = await documentNumbers(entries);
@@ -395,7 +419,7 @@ router.get("/accounting/subkonto", async (req, res) => {
 				params.push(String(accountCode));
 				conds.push(`(e."debitAccountCode" = $${params.length} OR e."creditAccountCode" = $${params.length})`);
 			}
-			const rows = await prisma.$queryRawUnsafe(
+			const rows = await longQuery(
 				`SELECT a."objectUuid" AS object_uuid, MAX(a."objectName") AS object_name,
 				        SUM(CASE WHEN a."side" = 'debit' THEN e."amount" ELSE 0 END)::text AS debit,
 				        SUM(CASE WHEN a."side" = 'debit' THEN 0 ELSE e."amount" END)::text AS credit
@@ -457,7 +481,7 @@ router.get("/accounting/settlements", async (req, res) => {
 			const before = from ? `t."date" < ${tsParam(params, from)}` : "false";
 			const toP = tsParam(params, to);
 			const sign = isActive ? 1 : -1; // вклад в сальдо: активный Дт−Кт, пассивный Кт−Дт
-			const raw = await prisma.$queryRawUnsafe(
+			const raw = await longQuery(
 				`WITH s AS (
 					SELECT e."amount" AS amount, e."date" AS "date", (e."debitAccountCode" = ${accP}) AS on_debit,
 					       cp."objectUuid" AS cp_uuid, cp."objectName" AS cp_name
@@ -562,6 +586,12 @@ router.post("/accounting/recompute-costing", async (req, res) => {
 		const result = await withClusterLock(recomputeLockName(organizationUuid), () => recomputeCosting({ organizationUuid, dateFilter }));
 		if (result === undefined) {
 			return res.status(409).json({ success: false, message: "Пересчёт себестоимости этой организации уже идёт — повторите позже" });
+		}
+		// Сервер останавливается (КР-16 аудита 27.09): проход прерван между документами — след в
+		// базе, чтобы хвост дообработал следующий старт, а пользователю — честный ответ.
+		if (result.interrupted) {
+			await markRecomputeNeeded(organizationUuid, dateFilter?.gte ?? (dateFilter?.gt ? new Date(dateFilter.gt.getTime() + 1) : new Date(0)));
+			return res.status(503).json({ success: false, message: "Пересчёт прерван остановкой сервера — он будет продолжен автоматически после перезапуска" });
 		}
 		return res.json({ success: true, ...result, boundary: boundary ? boundary.toISOString() : null });
 	} catch (err) {

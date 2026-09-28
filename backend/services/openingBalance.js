@@ -28,6 +28,7 @@ import crypto from "node:crypto";
 import { prisma } from "../prisma/prisma-client.js";
 import { resolveUnitCost } from "./accountingPosting.js";
 import { normalizeSerials } from "./serialNumbers.js";
+import { r2 } from "./money.js";
 import { warehouseBatchBalances } from "./batches.js";
 
 export const OPENING_DOC_TYPE = "opening_balance";
@@ -214,7 +215,7 @@ export async function addOpeningBatch(
 	// Себестоимость снимаемого остатка — её же переносим в приход, чтобы
 	// перемаркировка не изменила стоимость запаса.
 	const unit = await resolveUnitCost(organizationUuid, productUuid, warehouseUuid, new Date(), qty);
-	const amount = Math.round((Number(unit) || 0) * qty * 100) / 100;
+	const amount = r2((Number(unit) || 0) * qty);
 
 	const batch = await client.productBatch.create({
 		data: {

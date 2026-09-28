@@ -54,8 +54,13 @@ export async function commitDocumentHeader(
 	{ documentType, model, uuid, data, existing, itemModel = null, parentField = null, include = undefined, inTransaction = null },
 	client = prisma,
 ) {
+	// Шапка ДО изменения — целиком: по ней решается, нужен ли пересчёт хвоста (КР-9 аудита
+	// 27.09). Роутеры выбирают `existing` частично (без пошлин ГТД, сумм), и сравнение с ним
+	// пропускало бы изменения или, наоборот, считало изменением любое поле из тела запроса.
+	let before = null;
 	await client.$transaction(async (tx) => {
 		await lockDocument(tx, documentType, uuid);
+		before = await tx[model].findUnique({ where: { uuid } });
 		const updated = await tx[model].update({ where: { uuid }, data });
 		// Денормализованные поля строк — те же, что у syncItemsFromParent (фабрика строк),
 		// но без глушения ошибки: внутри транзакции она и так откатывает всё.
@@ -84,13 +89,14 @@ export async function commitDocumentHeader(
 	const item = await client[model].findUnique({ where: { uuid }, ...(include ? { include } : {}) });
 	// Ввод задним числом делает COGS последующих документов устаревшим — пересчёт хвоста
 	// (в фоне) от меньшей из дат: прежней и новой.
-	const from = [existing?.date, item?.date].filter(Boolean).map((d) => new Date(d)).sort((x, y) => x - y)[0];
+	const prev = before ?? existing;
+	const from = [prev?.date, item?.date].filter(Boolean).map((d) => new Date(d)).sort((x, y) => x - y)[0];
 	if (item && from) {
-		await recomputeIfRetroactive({
-			organizationUuid: item.organizationUuid,
-			date: from,
-			changed: costingFieldsChanged(existing, data),
-		}, client);
+		const changed = costingFieldsChanged(prev, data);
+		// Перенос в другую организацию меняет хвост обеих.
+		for (const org of new Set([prev?.organizationUuid, item.organizationUuid].filter(Boolean))) {
+			await recomputeIfRetroactive({ organizationUuid: org, date: from, changed }, client);
+		}
 	}
 	return item;
 }

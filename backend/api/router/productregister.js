@@ -10,11 +10,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
-import { computeShortages } from "../../services/productRegister.js";
+import { computeShortages, savedDocumentForCheck } from "../../services/productRegister.js";
 import { resolveStockControl, documentNumbers } from "../../services/accountingPosting.js";
 import { reportOrgs, orgWhere, respondReportScopeError } from "../../services/reportScope.js";
+import { orgIsAccessible } from "../../utils/auth.js";
 import { dateRangeWhere, orgTimeZone, respondBadDateError } from "../../services/periodBounds.js";
 import { r2, r4 } from "../../services/money.js";
+import { withLongStatements } from "../../services/documentLock.js";
 
 const router = express.Router();
 const MODEL = "productRegister";
@@ -44,7 +46,8 @@ function buildWhere(req) {
 router.get(`/${ROUTE}`, async (req, res) => {
 	try {
 		const where = buildWhere(req);
-		const items = await prisma[MODEL].findMany({
+		// Выборка по всей истории регистра — со своим пределом запроса (КР-15 аудита 27.09).
+		const items = await withLongStatements(prisma, (tx) => tx[MODEL].findMany({
 			where,
 			take: MAX_ROWS,
 			orderBy: [{ date: "asc" }, { id: "asc" }],
@@ -54,7 +57,7 @@ router.get(`/${ROUTE}`, async (req, res) => {
 				unitOfMeasure: true,
 				organization: true,
 			},
-		});
+		}));
 		// Номер документа движения — чтобы отчёт показывал «№ номер», а не id (И22).
 		const numbers = await documentNumbers(items);
 		const withNumbers = items.map((m) => ({ ...m, documentNumber: numbers.get(`${m.documentType}:${m.documentUuid}`) ?? null }));
@@ -73,12 +76,12 @@ router.get(`/${ROUTE}`, async (req, res) => {
 router.get(`/${ROUTE}/balances`, async (req, res) => {
 	try {
 		const where = buildWhere(req);
-		const groups = await prisma[MODEL].groupBy({
+		const groups = await withLongStatements(prisma, (tx) => tx[MODEL].groupBy({
 			by: ["productUuid", "warehouseUuid", "movementType"],
 			where,
 			_sum: { quantity: true, amount: true },
 			_max: { unitOfMeasureUuid: true },
-		});
+		}));
 
 		// Сворачиваем по ключу товар+склад (знак — по movementType).
 		const map = new Map();
@@ -126,7 +129,8 @@ router.get(`/${ROUTE}/balances`, async (req, res) => {
 });
 
 // ── POST проверка доступности остатка (pre-check перед проведением) ──────────
-// Body: { documentType, documentUuid?, warehouseUuid?, fromWarehouseUuid?,
+// Body: { documentType, documentUuid?, organizationUuid?, date?, warehouseUuid?,
+//         fromWarehouseUuid?, toWarehouseUuid?, basisDocumentType?, basisDocumentUuid?,
 //         items: [{ productUuid, quantity }] }
 // Считает дефициты по ПЕРЕДАННЫМ (ещё не сохранённым) строкам — для UX-проверки
 // в форме до сохранения. Источник истины — бэкенд-гард при проведении.
@@ -150,7 +154,7 @@ router.post(`/${ROUTE}/check-availability`, async (req, res) => {
 		// Остатки — только по складам доступных организаций (Б6): иначе предпроверка
 		// показывала бы количество товара на чужом складе по его uuid.
 		const orgs = reportOrgs(req, null);
-		const whUuids = [warehouseUuid, fromWarehouseUuid].filter((w) => typeof w === "string" && w);
+		const whUuids = [warehouseUuid, fromWarehouseUuid, req.body?.toWarehouseUuid].filter((w) => typeof w === "string" && w);
 		if (orgs !== null && whUuids.length) {
 			const whs = await prisma.warehouse.findMany({ where: { uuid: { in: whUuids } }, select: { organizationUuid: true } });
 			if (whs.some((w) => w.organizationUuid && !orgs.includes(w.organizationUuid))) {
@@ -164,23 +168,33 @@ router.post(`/${ROUTE}/check-availability`, async (req, res) => {
 			return res.status(200).json({ success: true, shortages: [] });
 		}
 		// Дата документа — контроль по хронологии (аудит 26.09, У4): предпроверка формы
-		// совпадает с серверным гардом. Резерв-основание и id документа — из сохранённого.
+		// совпадает с серверным гардом. id документа — из сохранённого: его движения в регистре
+		// — «до изменения». Поля выборки — по модели типа, ошибка не глушится (КР-7 аудита 27.09:
+		// у перемещения нет основания, выборка падала молча, и проведённое перемещение не
+		// исключало свои движения — ложная нехватка при пересохранении).
 		let saved = null;
 		if (documentUuid && typeof documentUuid === "string") {
-			const model = { sale: "sale", inventory_transfer: "inventoryTransfer", purchase_return: "purchaseReturn", write_off: "writeOff" }[documentType];
-			saved = model ? await prisma[model].findUnique({ where: { uuid: documentUuid }, select: { id: true, organizationUuid: true, basisDocumentType: true, basisDocumentUuid: true } }).catch(() => null) : null;
+			saved = await savedDocumentForCheck(documentType, documentUuid);
 			if (saved && saved.organizationUuid && orgUuid && saved.organizationUuid !== orgUuid) saved = null;
+			// Склады сохранённого документа ниже подставляются в проверку — только доступного.
+			if (saved?.organizationUuid && !orgIsAccessible(req, saved.organizationUuid)) saved = null;
 		}
+		// Склады и основание — из формы, если она их прислала (в т. ч. очищенные), иначе из
+		// сохранённого документа: форма перемещения шлёт только склад-источник, и без склада-
+		// получателя его приход уходил бы «на склад без имени».
+		const body = req.body ?? {};
+		const pick = (f) => (f in body ? body[f] ?? null : saved?.[f] ?? null);
 		const shortages = await computeShortages({
 			documentType,
 			documentUuid: saved ? documentUuid : undefined,
 			doc: {
-				warehouseUuid,
-				fromWarehouseUuid,
+				warehouseUuid: pick("warehouseUuid"),
+				fromWarehouseUuid: pick("fromWarehouseUuid"),
+				toWarehouseUuid: pick("toWarehouseUuid"),
 				date: date ? new Date(date) : new Date(),
 				id: saved?.id ?? null,
-				basisDocumentType: req.body?.basisDocumentType ?? saved?.basisDocumentType ?? null,
-				basisDocumentUuid: req.body?.basisDocumentUuid ?? saved?.basisDocumentUuid ?? null,
+				basisDocumentType: pick("basisDocumentType"),
+				basisDocumentUuid: pick("basisDocumentUuid"),
 			},
 			items,
 		});

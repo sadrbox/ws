@@ -16,10 +16,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { compareMovements } from "./costingReplay.js";
+import { withLongStatements } from "./documentLock.js";
+import { r2, r4, roundTo } from "./money.js";
 
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const r4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
-const r6 = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
+// Округления — общие из money.js (P3 аудита 27.09): прежние `Math.round(x*100)/100` теряли
+// «половинки» (1.005 → 1.00).
+const r6 = (n) => roundTo(n, 6);
 const EPS = 1e-6;
 
 /**
@@ -30,6 +32,12 @@ const EPS = 1e-6;
  */
 export async function buildSnapshotsAt(organizationUuid, asOfDate, client = prisma) {
 	if (!organizationUuid || !asOfDate) return 0;
+	// Вся история регистра до границы — на большой базе дольше 30 с пула: свой предел запроса
+	// (КР-15 аудита 27.09), а замена снапшотов (удалить + записать) — одной транзакцией.
+	return withLongStatements(client, (c) => buildSnapshotsIn(organizationUuid, asOfDate, c));
+}
+
+async function buildSnapshotsIn(organizationUuid, asOfDate, client) {
 	// Порядок — единый порядок регистра (compareMovements: при равной дате приход раньше
 	// расхода, затем тип и id документа), как у себестоимости в проводках (У8 аудита 26.09).
 	const rows = (await client.productRegister.findMany({

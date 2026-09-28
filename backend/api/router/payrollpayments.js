@@ -8,7 +8,11 @@ import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodL
 import { assertCashForPosting, respondCashError } from "../../services/cashBalance.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { lockCash, POSTING_TX_OPTIONS } from "../../services/documentLock.js";
 const DOC_TYPE = "payroll_payment";
+
+// Выплата через кассу — наличными; способ не задан — тоже касса (как в cashBalance.cashSign).
+const paidFromCash = (method) => !method || method === "cash";
 
 const router = express.Router();
 const MODEL = "payrollPayment";
@@ -171,10 +175,20 @@ router.post(`/${ROUTE}`, async (req, res) => {
 		};
 		if (willPost) await validatePosting(DOC_TYPE, docData, []);
 		// Выплата наличными (paymentMethod=cash) — из кассы, и касса не может уйти в минус
-		// (аудит 26.09, У8); через банк касса не затрагивается — сервис пропустит.
-		if (willPost) await assertCashForPosting(DOC_TYPE, null, docData);
-		const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
-		if (item.posted) await reconcileDocumentEntries(DOC_TYPE, item.uuid);
+		// (аудит 26.09, У8); через банк касса не затрагивается — сервис пропустит. Проверка кассы,
+		// запись и проводки — одной транзакцией под блокировкой кассы организации (КР-13 аудита
+		// 27.09): две выплаты или выплата и РКО одновременно больше не уводят кассу в минус.
+		const saved = await prisma.$transaction(async (tx) => {
+			if (willPost && paidFromCash(docData.paymentMethod)) {
+				await lockCash(tx, docData.organizationUuid);
+				await assertCashForPosting(DOC_TYPE, null, docData, tx);
+			}
+			const row = await tx[MODEL].create({ data: docData, select: { uuid: true, posted: true } });
+			if (row.posted) await reconcileDocumentEntries(DOC_TYPE, row.uuid, tx);
+			return row;
+		}, POSTING_TX_OPTIONS);
+		// Связи — после фиксации (внутри транзакции у неё одно соединение).
+		const item = await prisma[MODEL].findUnique({ where: { uuid: saved.uuid }, include: INCLUDE });
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgAccessError(error, res)) return;
@@ -227,20 +241,25 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
 		// Выплата наличными — из кассы: на любое изменение касса не должна уйти в минус
-		// (аудит 26.09, У8); собственные проводки документа сервис исключает сам.
-		await assertCashForPosting(DOC_TYPE, existing.uuid, {
+		// (аудит 26.09, У8); собственные проводки документа сервис исключает сам. Проверка,
+		// запись и проводки — одной транзакцией под блокировкой кассы (КР-13 аудита 27.09).
+		const next = {
 			organizationUuid: data.organizationUuid ?? existing.organizationUuid,
 			date: data.date ?? existing.date,
 			amount: data.amount ?? existing.amount,
 			paymentMethod: data.paymentMethod ?? existing.paymentMethod,
 			posted: willBePosted,
-		});
-		const item = await prisma[MODEL].update({
-			where: w,
-			data,
-			include: INCLUDE,
-		});
-		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
+		};
+		const saved = await prisma.$transaction(async (tx) => {
+			if (paidFromCash(existing.paymentMethod) || paidFromCash(next.paymentMethod)) {
+				await lockCash(tx, [existing.organizationUuid, next.organizationUuid]);
+				await assertCashForPosting(DOC_TYPE, existing.uuid, next, tx);
+			}
+			const row = await tx[MODEL].update({ where: { uuid: existing.uuid }, data, select: { uuid: true } });
+			await reconcileDocumentEntries(DOC_TYPE, row.uuid, tx);
+			return row;
+		}, POSTING_TX_OPTIONS);
+		const item = await prisma[MODEL].findUnique({ where: { uuid: saved.uuid }, include: INCLUDE });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgAccessError(error, res)) return;

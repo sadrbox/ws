@@ -44,12 +44,14 @@
 // шапок — зона «backend-безопасность», useFormStore — frontend).
 // ─────────────────────────────────────────────────────────────────────────────
 import express from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma/prisma-client.js";
 import { checkOwnership } from "../../utils/auth.js";
 import { buildOrderBy } from "../../utils/sortOrder.js";
 import {
 	reconcileByParentModel,
 	assertStockAvailable,
+	stockPairsOfDocument,
 	documentTypeForParentModel,
 	respondStockError,
 } from "../../services/productRegister.js";
@@ -60,7 +62,7 @@ import {
 } from "../../services/accountingPosting.js";
 import { reconcileReservationByParentModel } from "../../services/reservationRegister.js";
 import { PERIOD_LOCKED_MODELS, assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
-import { lockDocument, POSTING_TX_OPTIONS } from "../../services/documentLock.js";
+import { lockDocument, lockStockPairs, POSTING_TX_OPTIONS } from "../../services/documentLock.js";
 import { recomputeIfRetroactive } from "../../services/recomputeCosting.js";
 import { assertReturnWithinBasis, respondBasisError } from "../../services/basisValidation.js";
 import { r2 } from "../../services/money.js";
@@ -327,6 +329,20 @@ export function createDocumentItemsRouter({
 	}
 
 	// ── Сумма документа по строкам (внутри транзакции записи) ─────────────────
+	/*
+	 * Итоговые поля — только те, что есть у документа-родителя по схеме (КР-2 аудита 27.09). У инвентаризации
+	 * (StockCount) суммы нет вовсе: раньше её «пересчёт» падал внутри try/catch и молча пропускался, а с переносом
+	 * в транзакцию записи строк та же ошибка (`Unknown argument amount`) откатывала сами строки — 500 на любой записи.
+	 */
+	const parentFields = (() => {
+		const model = Prisma.dmmf?.datamodel?.models?.find((m) => m.name.toLowerCase() === String(PARENT_MODEL).toLowerCase());
+		return model ? new Set(model.fields.map((f) => f.name)) : null;
+	})();
+	const parentTotals = (data) => {
+		if (!parentFields) return data;
+		return Object.fromEntries(Object.entries(data).filter(([k]) => parentFields.has(k)));
+	};
+
 	async function recalcParentTotals(parentUuid, tx) {
 		// Поступление: к сумме ТМЗ добавляется табличная часть «Основные средства»
 		// (аудит 26.09, У8) — иначе запись строк ТМЗ затирала итог, собранный формой.
@@ -346,17 +362,16 @@ export function createDocumentItemsRouter({
 			const totalAmount = r2((Number(result._sum.amount) || 0) + faAmount);
 			const totalVat = r2((Number(result._sum.vatAmount) || 0) + faVat);
 			const totalDiscount = r2(Number(result._sum.discountAmount) || 0);
-			await tx[PARENT_MODEL].update({
-				where: { uuid: parentUuid },
-				data: {
-					amount: totalAmount,
-					vatAmount: totalVat,
-					discountAmount: totalDiscount,
-					amountWithoutVat: r2(totalAmount - totalVat),
-				},
+			const totals = parentTotals({
+				amount: totalAmount,
+				vatAmount: totalVat,
+				discountAmount: totalDiscount,
+				amountWithoutVat: r2(totalAmount - totalVat),
 			});
+			if (Object.keys(totals).length) await tx[PARENT_MODEL].update({ where: { uuid: parentUuid }, data: totals });
 		} else {
-			// ТМЗ: только сумма quantity × price (Сумма без налогов)
+			// ТМЗ: только сумма quantity × price (Сумма без налогов). Итога у родителя нет (инвентаризация) — нечего писать.
+			if (parentFields && !parentFields.has("amount")) return;
 			const result = await tx[MODEL].aggregate({
 				where: { [PARENT_FIELD]: parentUuid },
 				_sum: { amount: true },
@@ -394,6 +409,15 @@ export function createDocumentItemsRouter({
 		const result = await db.$transaction(async (tx) => {
 			for (const p of parents) await lockDocument(tx, lockType, p);
 			const r = await work(tx);
+			// Товары всех документов пакета — ОДНИМ отсортированным набором до проверок (P3 аудита
+			// 27.09): раньше каждый документ брал свои по очереди, и два пакета с общими товарами
+			// могли ждать друг друга по кругу (deadlock → 500). Проверка остатка ниже берёт те же
+			// локи повторно — в своей транзакции это мгновенно.
+			if (registerType && parents.length > 1) {
+				const pairs = [];
+				for (const p of parents) pairs.push(...(await stockPairsOfDocument(registerType, p, tx)));
+				await lockStockPairs(tx, pairs);
+			}
 			for (const p of parents) await repostParent(p, tx);
 			return r;
 		}, POSTING_TX_OPTIONS);

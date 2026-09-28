@@ -28,7 +28,9 @@ import {
 	assertPostable,
 	validatePosting,
 	respondPostingError,
+	monthCloseOverlapError,
 } from "../../services/accountingPosting.js";
+import { POSTING_TX_OPTIONS } from "../../services/documentLock.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
@@ -36,6 +38,20 @@ import { assertBasisExists, respondBasisError } from "../../services/basisValida
 import { idSearchCondition } from "../../utils/searchId.js";
 
 const BASIS_FIELDS = ["basisDocumentType", "basisDocumentUuid", "basisDocumentLabel"];
+
+/**
+ * Документ и его проводки — ОДНОЙ транзакцией (P3 аудита 27.09): раньше шапка писалась, а
+ * сбой проводок давал 500 при уже сохранённой шапке (проведённый документ без проводок или
+ * с прежними). write(tx) → uuid записанного документа. Без проведения — просто запись.
+ */
+async function writeWithEntries(posting, write) {
+	if (!posting) return write(prisma);
+	return prisma.$transaction(async (tx) => {
+		const uuid = await write(tx);
+		await reconcileDocumentEntries(posting.docType, uuid, tx);
+		return uuid;
+	}, POSTING_TX_OPTIONS);
+}
 
 export function createDocumentHeaderRouter({
 	MODEL,
@@ -64,6 +80,15 @@ export function createDocumentHeaderRouter({
 	afterDelete = null,
 }) {
 	const router = express.Router();
+
+	// Два одновременных проведённых закрытия одного месяца: проверку пересечения проходят оба,
+	// второе ловит частичный уникальный индекс month_closes_posted_period_uq (P2002) — это 409
+	// «период уже закрыт», а не «Ошибка сервера» (КР-14 аудита 27.09). Других уникальных
+	// ограничений, кроме uuid, у закрытия нет.
+	const respondPeriodCloseConflict = async (error, doc, res) => {
+		if (MODEL !== "monthClose" || error?.code !== "P2002") return false;
+		return respondPostingError(await monthCloseOverlapError(doc), res);
+	};
 
 	// ── GET list ─────────────────────────────────────────────────────────────
 	router.get(`/${ROUTE}`, async (req, res) => {
@@ -164,6 +189,7 @@ export function createDocumentHeaderRouter({
 
 	// ── POST create ────────────────────────────────────────────────────────────
 	router.post(`/${ROUTE}`, async (req, res) => {
+		let conflictDoc = null;
 		try {
 			if (!req.user?.uuid)
 				return res.status(401).json({ success: false, message: "Автор документа обязателен: требуется авторизация" });
@@ -192,11 +218,14 @@ export function createDocumentHeaderRouter({
 			// Блокировка закрытого периода (кроме документов с periodExempt — month_close).
 			if (!periodExempt) await assertPeriodOpen(data.organizationUuid, data.date);
 			if (posting && data.posted) await validatePosting(posting.docType, data, []);
-			const item = await prisma[MODEL].create({ data, include });
-			if (posting && item.posted) await reconcileDocumentEntries(posting.docType, item.uuid);
-			if (afterSave) await afterSave(item.uuid);
+			conflictDoc = data;
+			const uuid = await writeWithEntries(posting, async (c) => (await c[MODEL].create({ data, select: { uuid: true } })).uuid);
+			if (afterSave) await afterSave(uuid);
+			// Связи — после фиксации (внутри транзакции у неё одно соединение).
+			const item = await prisma[MODEL].findUnique({ where: { uuid }, include });
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
+			if (await respondPeriodCloseConflict(error, conflictDoc, res)) return;
 			if (respondOrgAccessError(error, res)) return;
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;
@@ -210,6 +239,7 @@ export function createDocumentHeaderRouter({
 
 	// ── PUT update ─────────────────────────────────────────────────────────────
 	router.put(`/${ROUTE}/:id`, async (req, res) => {
+		let conflictDoc = null;
 		try {
 			const p = req.params.id;
 			const n = Number(p);
@@ -264,11 +294,13 @@ export function createDocumentHeaderRouter({
 				const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 				if (willBePosted) await assertPostable(posting.docType, existing.uuid, { ...data, posted: true });
 			}
-			const item = await prisma[MODEL].update({ where: w, data, include });
-			if (posting) await reconcileDocumentEntries(posting.docType, item.uuid);
-			if (afterSave) await afterSave(item.uuid);
+			conflictDoc = { ...existing, ...data };
+			const uuid = await writeWithEntries(posting, async (c) => (await c[MODEL].update({ where: { uuid: existing.uuid }, data, select: { uuid: true } })).uuid);
+			if (afterSave) await afterSave(uuid);
+			const item = await prisma[MODEL].findUnique({ where: { uuid }, include });
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
+			if (await respondPeriodCloseConflict(error, conflictDoc, res)) return;
 			if (respondOrgAccessError(error, res)) return;
 			if (respondBasisError(error, res)) return;
 			if (respondOrgFieldError(error, res)) return;

@@ -19,8 +19,11 @@ import {
 	resolveOrCreateProduct,
 	resolveOrCreateFixedAsset,
 } from "./resolver.js";
+import { r2 } from "../money.js";
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Деньги — общим округлением money.js (P3 аудита 27.09): `Math.round(x*100)/100` терял
+// «половинки» (1.005 → 1.00), и итог поступления расходился с ЭСФ на тийын.
+const round2 = r2;
 
 // Резолверы справочников вынесены в общий модуль (T7.14): единый кэш на сделку для
 // ЭСФ+СНТ+ЭАВР. Реэкспортируем чистые функции для обратной совместимости.

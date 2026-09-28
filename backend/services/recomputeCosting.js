@@ -24,6 +24,7 @@ import { reconcileDocumentEntries, POSTING_DOC_TYPES } from "./accountingPosting
 import { getClosedBoundary } from "./periodLock.js";
 import { buildSnapshotsAt, deleteSnapshotsAfter } from "./costSnapshot.js";
 import { withClusterLock } from "./clusterLock.js";
+import { getSetting, setSetting } from "./appSettings.js";
 
 // Идущие пересчёты — ПО ОРГАНИЗАЦИИ (аудит 26.09). Раньше флаг был один на процесс:
 // пересчёт организации A молча отменял авто-пересчёт организации B («already_recomputing»),
@@ -119,10 +120,14 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 
 	// Ошибка одного документа не обрывает пересчёт и не глушится: документ остаётся в
 	// прежнем состоянии (его перепроведение атомарно), а список сбоев возвращается.
+	// Остановка процесса (stopRecomputes, КР-16 аудита 27.09) обрывает проход МЕЖДУ
+	// документами: текущий доделывается, следующий не начинается — interrupted: true.
 	const failed = [];
+	let interrupted = false;
 	async function phase(types, fn, extraArg) {
 		const docs = await collect(types);
 		for (const d of docs) {
+			if (stopping) { interrupted = true; break; }
 			try {
 				await fn(d.type, d.uuid, client, extraArg);
 			} catch (err) {
@@ -148,7 +153,8 @@ export async function recomputeCosting({ organizationUuid = null, dateFilter = n
 		// себестоимости читаем один раз на весь пересчёт через общий costCache
 		// (иначе каждый документ×строка перечитывал бы всю историю → O(история²)).
 		const registers = await phase(REGISTER_DOC_TYPES, reconcileDocumentRegister);
-		const entries = await phase(POSTING_DOC_TYPES, reconcileDocumentEntries, new Map());
+		const entries = interrupted ? 0 : await phase(POSTING_DOC_TYPES, reconcileDocumentEntries, new Map());
+		if (interrupted) return { registers, entries, interrupted: true, ...(failed.length ? { failed } : {}) };
 
 		// Регистр перестроен → возвращаем материализацию на текущую границу, иначе
 		// оптимизация осталась бы выключенной до следующего сохранения «Закрытия месяца».
@@ -201,13 +207,65 @@ export async function recomputeIfRetroactive({ organizationUuid, date, changed =
 		console.error("recomputeIfRetroactive error:", err.message);
 		return { recomputed: false, reason: "error" };
 	}
+	// След — ДО постановки в очередь (КР-16): ответ 200 уйдёт, а пересчёт может не успеть.
+	await markDirty(organizationUuid, docDate, client);
 	scheduleRecompute(organizationUuid, docDate, client);
 	return { recomputed: false, scheduled: true, reason: "scheduled" };
 }
 
+// ─── «Грязная дата» организации (КР-16 аудита 27.09) ─────────────────────────────
+// БЫЛО. Очередь фонового пересчёта жила только в памяти процесса: правка задним числом
+// отвечала 200, а деплой (pm2 restart) или падение воркера до или во время прохода теряли
+// пересчёт хвоста без следа — COGS оставался устаревшим до ручного «Пересчитать».
+// СТАЛО. Запрос сначала записывается в app_settings: `costing.dirtyFrom.<организация>` —
+// самая ранняя дата, с которой хвост устарел. Проход берёт её под межпроцессным локом
+// организации вместе с очередью в памяти и снимает только после прохода без сбоев — и
+// только если за время прохода её не сменили. При старте процесса и раз в 6 ч непройденные
+// отметки дообрабатываются (resumeDirtyRecomputes, server.js). Остановка процесса не рвёт
+// проход посреди документа: он доделывает текущий и выходит, отметка остаётся.
+// Окно гонки: две записи отметки одной организации из разных воркеров в одну и ту же
+// миллисекунду могут оставить более позднюю дату — сам пересчёт при этом идёт в памяти
+// отметившего воркера, теряется лишь след на случай его падения.
+const DIRTY_PREFIX = "costing.dirtyFrom.";
+/** Ключ отметки организации в app_settings. */
+export const dirtyKey = (organizationUuid) => `${DIRTY_PREFIX}${organizationUuid}`;
+
+let dirtyStore = null; // тесты: { get(key), set(key, value) }
+/** Для тестов: подменить хранилище отметок (null — app_settings). */
+export function _setDirtyStore(store) {
+	dirtyStore = store ?? null;
+}
+// Отметка живёт в базе приложения — пишется только при работе через его основной клиент:
+// тесты на мок-клиентах и сторонние клиенты чужую базу не трогают.
+const storeFor = (client) => dirtyStore ?? (client === prisma ? { get: getSetting, set: setSetting } : null);
+const parseDate = (v) => {
+	const d = v ? new Date(v) : null;
+	return d && !isNaN(d.getTime()) ? d : null;
+};
+
+/** Записать «грязную дату» организации, если она раньше уже записанной. Сбой — в журнал. */
+async function markDirty(organizationUuid, from, client) {
+	const store = storeFor(client);
+	if (!store || !organizationUuid || !from) return;
+	try {
+		const cur = parseDate(await store.get(dirtyKey(organizationUuid)));
+		if (!cur || from < cur) await store.set(dirtyKey(organizationUuid), from.toISOString());
+	} catch (err) {
+		console.error(`recomputeCosting: отметка пересчёта ${organizationUuid} не записана:`, err?.message ?? err);
+	}
+}
+
+/** Отметить, что хвост организации с даты `from` нужно пересчитать (прерванный ручной пересчёт). */
+export async function markRecomputeNeeded(organizationUuid, from, client = prisma) {
+	await markDirty(organizationUuid, from instanceof Date ? from : parseDate(from), client);
+}
+
+// Остановка процесса: новые проходы не начинаются, идущие выходят после текущего документа.
+let stopping = false;
+
 /** Пауза перед повтором, если пересчёт организации ведёт другой воркер. */
 export const RETRY_MS = 5_000;
-const queue = new Map(); // org → { from: Date, running: boolean, done: Promise }
+const queue = new Map(); // org → { from: Date|null, adopt: boolean (взять дату из отметки), running: boolean, done: Promise }
 let lockRunner = withClusterLock; // подменяется в тестах
 
 /** Для тестов: подменить межпроцессный лок (name, run) → результат | undefined (занят). */
@@ -219,30 +277,34 @@ export function _setRecomputeLockRunner(fn) {
  * Поставить пересчёт хвоста организации с даты `from` в очередь. Возвращает промис
  * завершения текущего прохода очереди (роутеры его не ждут; тесты — ждут).
  */
-export function scheduleRecompute(organizationUuid, from, client = prisma) {
+export function scheduleRecompute(organizationUuid, from, client = prisma, { adopt = false } = {}) {
 	let st = queue.get(organizationUuid);
-	if (!st) { st = { from: null, running: false, done: null }; queue.set(organizationUuid, st); }
-	if (!st.from || from < st.from) st.from = from;
+	if (!st) { st = { from: null, adopt: false, running: false, done: null }; queue.set(organizationUuid, st); }
+	if (from && (!st.from || from < st.from)) st.from = from;
+	if (adopt) st.adopt = true;
+	// Процесс останавливается — проход не начинаем: отметка в базе дождётся следующего старта.
+	if (stopping) return st.done ?? Promise.resolve();
 	if (!st.running) {
 		st.running = true;
-		st.done = drain(organizationUuid, st, client).finally(() => { st.running = false; if (!st.from) queue.delete(organizationUuid); });
+		st.done = drain(organizationUuid, st, client).finally(() => { st.running = false; if (!st.from && !st.adopt) queue.delete(organizationUuid); });
 	}
 	return st.done;
 }
 
 async function drain(organizationUuid, st, client) {
-	while (st.from) {
+	while ((st.from || st.adopt) && !stopping) {
 		const from = st.from;
+		const adopt = st.adopt;
 		st.from = null;
+		st.adopt = false;
 		try {
-			// Закрытый период не трогаем: пересчитываем строго после его границы.
-			const boundary = await getClosedBoundary(organizationUuid, client);
-			const dateFilter = boundary && boundary >= from ? { gt: boundary } : { gte: from };
-			const res = await lockRunner(recomputeLockName(organizationUuid), () => recomputeCosting({ organizationUuid, dateFilter }, client));
+			const res = await lockRunner(recomputeLockName(organizationUuid), () => runPass(organizationUuid, from, client));
 			if (res === undefined) {
 				// Пересчёт этой организации ведёт другой процесс — наш запрос мог прийти
 				// после того, как он собрал документы. Повторяем позже, а не теряем.
-				if (!st.from || from < st.from) st.from = from;
+				if (from && (!st.from || from < st.from)) st.from = from;
+				if (adopt) st.adopt = true;
+				if (stopping) break;
 				await new Promise((r) => setTimeout(r, RETRY_MS).unref?.());
 			} else if (res?.failed?.length) {
 				console.error(`recomputeCosting(${organizationUuid}): не пересчитано документов — ${res.failed.length}`);
@@ -254,19 +316,137 @@ async function drain(organizationUuid, st, client) {
 }
 
 /**
- * Поменялось ли в документе что-то, влияющее на себестоимость и движения: дата,
- * проведение, склад(ы), организация. Правка комментария, номера, договора — нет.
- * Строки документа меняются своими роутерами (они и зовут пересчёт).
+ * Один проход под межпроцессным локом организации: с самой ранней из дат — очереди в
+ * памяти и отметки в базе (её мог оставить упавший или остановленный воркер). Отметка
+ * снимается после прохода без сбоев, если за время прохода её не сменили.
+ */
+async function runPass(organizationUuid, queued, client) {
+	const store = storeFor(client);
+	let markRaw = null;
+	if (store) {
+		try {
+			markRaw = await store.get(dirtyKey(organizationUuid));
+		} catch (err) {
+			console.error(`recomputeCosting: отметка пересчёта ${organizationUuid} не прочитана:`, err?.message ?? err);
+		}
+	}
+	const from = [queued, parseDate(markRaw)].filter(Boolean).sort((a, b) => a - b)[0] ?? null;
+	if (!from) return { registers: 0, entries: 0, skipped: true };
+	// Закрытый период не трогаем: пересчитываем строго после его границы.
+	const boundary = await getClosedBoundary(organizationUuid, client);
+	const dateFilter = boundary && boundary >= from ? { gt: boundary } : { gte: from };
+	const res = await recomputeCosting({ organizationUuid, dateFilter }, client);
+	if (store && markRaw && !res.interrupted && !res.failed?.length) {
+		try {
+			if ((await store.get(dirtyKey(organizationUuid))) === markRaw) await store.set(dirtyKey(organizationUuid), null);
+		} catch (err) {
+			console.error(`recomputeCosting: отметка пересчёта ${organizationUuid} не снята:`, err?.message ?? err);
+		}
+	}
+	return res;
+}
+
+/**
+ * Дообработать непройденные отметки (старт процесса и раз в 6 ч — задача планировщика в
+ * server.js): по каждой организации с отметкой ставится проход, который возьмёт дату из
+ * отметки под локом (уже снятая другим воркером — пропуск).
+ * @returns {Promise<number>} сколько организаций поставлено в пересчёт
+ */
+export async function resumeDirtyRecomputes(client = prisma) {
+	const store = storeFor(client);
+	if (!store || stopping) return 0;
+	const orgs = await client.organization.findMany({ select: { uuid: true } });
+	let n = 0;
+	for (const o of orgs) {
+		if (!parseDate(await store.get(dirtyKey(o.uuid)))) continue;
+		scheduleRecompute(o.uuid, null, client, { adopt: true });
+		n++;
+	}
+	return n;
+}
+
+/**
+ * Остановка процесса (server.js): новые проходы не начинаются, идущие доделывают текущий
+ * документ и выходят; отметки в базе остаются до следующего старта. Ждёт не дольше timeoutMs.
+ * @returns {Promise<boolean>} true — все проходы завершились
+ */
+export async function stopRecomputes({ timeoutMs = 5_000 } = {}) {
+	stopping = true;
+	const running = [...queue.values()].map((st) => st.done).filter(Boolean);
+	if (!running.length) return true;
+	let timer = null;
+	const expired = new Promise((r) => { timer = setTimeout(() => r(false), timeoutMs); timer.unref?.(); });
+	const ok = await Promise.race([Promise.allSettled(running).then(() => true), expired]);
+	clearTimeout(timer);
+	return ok;
+}
+
+/** Для тестов: сбросить состояние (остановку и очередь). */
+export function _resetRecomputeState() {
+	stopping = false;
+	queue.clear();
+}
+
+/**
+ * Поля шапки, которые НЕ влияют на себестоимость и движения последующих документов.
+ *
+ * СПИСОК ИСКЛЮЧЕНИЙ, А НЕ СПИСОК ВЛИЯЮЩИХ (КР-9 аудита 27.09). Раньше перечислялись
+ * влияющие поля (дата, проведение, склады, организация, основание), и о пошлинах ГТД никто
+ * не вспомнил: пошлина 0→500 задним числом меняла регистр ГТД и проводку 1330/3390, а
+ * себестоимость уже проданного оставалась прежней — и после фонового пересчёта, до ручного
+ * «Пересчитать». Теперь влияет всё, кроме заведомо безразличного: реквизиты, по которым
+ * себестоимость не считается, и служебные отметки. Контрагент, договор и менеджер попадают
+ * только в аналитику проводок САМОГО документа (они пересобираются в его транзакции), а
+ * хвост от них не зависит. Лишний пересчёт стоит только времени, пропущенный — неверного COGS.
+ */
+export const NON_COSTING_FIELDS = new Set([
+	"id", "uuid", "number", "comment", "authorUuid", "createdAt", "updatedAt",
+	"counterpartyUuid", "contractUuid", "managerUuid", "priceTypeUuid", "basisDocumentLabel",
+	// ГТД: реквизиты декларации (суммы платежей — влияют).
+	"declarationNumber", "declarationDate", "countryCode",
+	// Обмен с ИС ЭСФ (ЭАВР, СНТ): статусы и ссылки.
+	"awpStatus", "awpId", "awpRegistrationNumber", "awpSentAt", "awpErrorText", "awpXml", "awpRelatedUuid",
+	"sntStatus", "sntId", "sntRegistrationNumber", "sntSentAt", "sntErrorText", "sntXml", "sntRelatedUuid",
+]);
+
+/** Значение поля для сравнения: дата и Decimal — числом, пусто — null. */
+function comparable(v) {
+	if (v === undefined || v === null) return null;
+	if (v instanceof Date) return v.getTime();
+	if (typeof v === "object" && typeof v.toNumber === "function") return v.toNumber(); // Prisma.Decimal
+	return v;
+}
+
+/** Одинаковы ли значения поля (Decimal/число/строка числа из тела, дата/ISO-строка). */
+function sameValue(a, b) {
+	const x = comparable(a);
+	const y = comparable(b);
+	if (x === y) return true;
+	if (x === null || y === null) return false;
+	const asNumber = (s) => {
+		if (typeof s !== "string" || !s.trim()) return NaN;
+		const n = Number(s);
+		return Number.isFinite(n) ? n : Date.parse(s);
+	};
+	if (typeof x === "number" && typeof y === "string") return asNumber(y) === x;
+	if (typeof y === "number" && typeof x === "string") return asNumber(x) === y;
+	return false;
+}
+
+/**
+ * Поменялось ли в документе что-то, влияющее на себестоимость и движения последующих
+ * документов: любое поле из `data`, кроме NON_COSTING_FIELDS, со значением, отличным от
+ * `existing`. Поля, которого в `existing` нет (роутер выбрал шапку не целиком), считается
+ * изменившимся — лучше лишний пересчёт, чем пропущенный. Строки документа меняются своими
+ * роутерами (они и зовут пересчёт).
  */
 export function costingFieldsChanged(existing, data) {
-	const fields = ["date", "posted", "warehouseUuid", "fromWarehouseUuid", "toWarehouseUuid", "organizationUuid", "deletedAt", "basisDocumentUuid"];
-	for (const f of fields) {
-		if (data?.[f] === undefined) continue;
-		const a = existing?.[f] instanceof Date ? existing[f].getTime() : existing?.[f] ?? null;
-		const b = data[f] instanceof Date ? data[f].getTime() : data[f] ?? null;
-		if (a !== b) return true;
+	for (const [f, v] of Object.entries(data ?? {})) {
+		if (v === undefined || NON_COSTING_FIELDS.has(f)) continue;
+		if (!existing || !(f in existing)) return true;
+		if (!sameValue(existing[f], v)) return true;
 	}
 	return false;
 }
 
-export default { recomputeCosting, recomputeIfRetroactive, scheduleRecompute, costingFieldsChanged, unmappedDocTypes, isRecomputing, recomputeLockName };
+export default { recomputeCosting, recomputeIfRetroactive, scheduleRecompute, resumeDirtyRecomputes, stopRecomputes, markRecomputeNeeded, costingFieldsChanged, unmappedDocTypes, isRecomputing, recomputeLockName };

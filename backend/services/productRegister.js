@@ -14,6 +14,7 @@
 //   sale_return        → приход (+) на warehouseUuid
 //   purchase_return    → расход (−) с warehouseUuid
 // ─────────────────────────────────────────────────────────────────────────────
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma/prisma-client.js";
 import { reservedQuantities } from "./reservationRegister.js";
 import { createCostingContext, resolveStockControl, resolveUseVat } from "./accountingPosting.js";
@@ -326,8 +327,9 @@ export async function removeDocumentRegister(
 //
 // Теперь сравниваются два сценария — движения документа ДО изменения (как в регистре) и
 // ПОСЛЕ (по строкам и шапке) — на всей хронологии товара на складе начиная с самой ранней
-// затронутой даты. Отказ, если в какой-то момент остаток (за вычетом активных резервов —
-// для расходных документов) становится отрицательным И ниже, чем был бы без изменения.
+// затронутой даты. Отказ, если в какой-то момент остаток становится отрицательным И ниже,
+// чем был бы без изменения. Активные резервы (для расходных документов) сверяются с
+// остатком после всех движений, а не вычитаются из каждого момента истории (КР-8 аудита 27.09).
 // Одно правило покрывает и новый расход, и увеличение расхода, и перенос даты назад, и
 // снятие/уменьшение прихода; а старый «провал» в истории, к которому изменение не
 // причастно, ничего не блокирует. В один момент приход раньше расхода (compareMovements).
@@ -357,6 +359,12 @@ export function formatShortageMessage(shortages) {
 	if (!shortages?.length) return "Недостаточно остатка для проведения";
 	const lines = shortages.map((s) => {
 		const who = `• ${s.productName || s.productUuid}${s.warehouseName ? ` (${s.warehouseName})` : ""}: `;
+		// Нехватка под резерв (КР-8 аудита 27.09): физически товар есть, но он зарезервирован.
+		if (s.reserved) {
+			return s.kind === "inflow"
+				? `${who}без этого прихода остатка не хватит под резерв ${s.reserved} (не хватит ${s.deficit})`
+				: `${who}нужно ${s.requested}, доступно ${s.available} с учётом резерва ${s.reserved} (не хватает ${s.deficit})`;
+		}
 		if (s.kind === "inflow") {
 			return `${who}без этого прихода остаток${s.date ? ` на ${fmtShortDate(s.date)}` : ""} станет отрицательным (не хватит ${s.deficit})`;
 		}
@@ -482,8 +490,17 @@ export async function computeStockChangeShortages({ documentType, documentUuid =
 		after.get(k).push(r);
 	}
 
-	// Активные резервы вычитаются только для расходных документов; резерв-основание
-	// самой реализации исключается — она его и закрывает.
+	// Активные резервы — только для расходных документов; резерв-основание самой реализации
+	// исключается — она его и закрывает.
+	//
+	// РЕЗЕРВ — ПРОТИВ КОНЕЧНОГО ОСТАТКА, А НЕ ПО ВСЕЙ ХРОНОЛОГИИ (КР-8 аудита 27.09). Раньше
+	// резерв вычитался из остатка на начало затронутого периода и тянулся через всю историю:
+	// приход 10 (01.08), продажа 3 (05.08), приход 100 (01.09), резерв 100 (10.09) — правка
+	// августовской продажи 3→4 давала 409 «доступно 0, не хватает 94», хотя свободно 7, а
+	// новая продажа 20.08 на 2 шт. не проводилась вовсе. Резерв держит товар из того, что есть
+	// на складе в итоге. Поэтому хронология проверяется по физическому остатку (≥ 0 в каждый
+	// момент), а резерв — отдельно: остаток после всех движений не меньше активного резерва
+	// (как и в хронологии — отказ, только если изменение сделало хуже).
 	const isOutflowDoc = cfg.movements.some((m) => m.type === "out");
 	const excludeReservationUuid = doc?.basisDocumentType === "reservation" ? doc?.basisDocumentUuid ?? null : null;
 	const reserved = isOutflowDoc
@@ -497,8 +514,7 @@ export async function computeStockChangeShortages({ documentType, documentUuid =
 			...p.old.map((m) => ({ ...m, src: "old" })),
 			...p.new.map((m) => ({ ...m, src: "new" })),
 		].sort(compareMovements);
-		const res = reserved.get(k) ?? 0;
-		let balOld = (base.get(k) ?? 0) - res;
+		let balOld = base.get(k) ?? 0;
 		let balNew = balOld;
 		let worst = null;
 		for (const e of events) {
@@ -506,8 +522,13 @@ export async function computeStockChangeShortages({ documentType, documentUuid =
 			if (e.src !== "new") balOld += d;
 			if (e.src !== "old") balNew += d;
 			if (balNew < -EPS && balNew < balOld - EPS && (worst === null || balNew < worst.bal)) {
-				worst = { bal: balNew, date: e.date };
+				worst = { bal: balNew, old: balOld, date: e.date };
 			}
+		}
+		// Физически хватает — сверяем конечный остаток с активным резервом (без даты).
+		const res = reserved.get(k) ?? 0;
+		if (!worst && res > EPS && balNew - res < -EPS && balNew < balOld - EPS) {
+			worst = { bal: balNew - res, old: balOld - res, date: null, reserved: res };
 		}
 		if (!worst) continue;
 		const sum = (list, type) => list.filter((m) => m.movementType === type).reduce((acc, m) => acc + Number(m.quantity || 0), 0);
@@ -515,7 +536,10 @@ export async function computeStockChangeShortages({ documentType, documentUuid =
 		// Расход документа по этой паре — «не хватает на расход»; иначе ухудшение дал
 		// снятый/уменьшенный приход (распроведение, удаление, правка строк прихода).
 		const kind = newOut > EPS ? "out" : "inflow";
-		const deficit = r4(-worst.bal);
+		// Не хватает — на сколько изменение ухудшило остаток в худший момент, но не больше глубины
+		// самой нехватки (КР-8): при прежнем «провале» (остаток был в минусе и без изменения) это
+		// доля изменения, а не весь провал — «нужно 4, не хватает 94» больше не бывает.
+		const deficit = r4(Math.min(-worst.bal, worst.old - worst.bal));
 		const requested = kind === "out" ? r4(newOut) : r4(sum(p.old, "in") - sum(p.new, "in"));
 		found.push({
 			productUuid: p.productUuid,
@@ -525,6 +549,7 @@ export async function computeStockChangeShortages({ documentType, documentUuid =
 			deficit,
 			date: worst.date,
 			kind,
+			...(worst.reserved ? { reserved: r4(worst.reserved) } : {}),
 		});
 	}
 	if (!found.length) return [];
@@ -583,6 +608,34 @@ export async function warehouseBalances(
 	return map;
 }
 
+/** Имена полей prisma-модели по схеме (DMMF). */
+const modelFieldNames = (model) =>
+	new Set(Prisma.dmmf?.datamodel?.models?.find((m) => m.name.toLowerCase() === String(model).toLowerCase())?.fields?.map((f) => f.name) ?? []);
+
+/**
+ * Сохранённый документ для предпроверки формы (check-availability): id, организация, склады
+ * движений и — у моделей, где оно есть, — основание.
+ *
+ * КР-7 аудита 27.09: предпроверка выбирала у всех типов { basisDocumentType,
+ * basisDocumentUuid }, а у перемещения этих полей нет. Prisma отвечала ошибкой, её глушил
+ * `.catch(() => null)`, документ «не находился» и не исключал собственные движения —
+ * проведённое перемещение нельзя было пересохранить: «нужно 10, доступно 0». Теперь поля —
+ * по схеме модели, а ошибка выборки уходит вызывающему (500 с записью в журнал, а не ложная
+ * нехватка).
+ *
+ * @returns {Promise<object|null>} null — тип без регистра или документа нет
+ */
+export async function savedDocumentForCheck(documentType, documentUuid, client = prisma) {
+	const cfg = DOC_CONFIG[documentType];
+	if (!cfg || !documentUuid) return null;
+	const fields = modelFieldNames(cfg.parentModel);
+	const select = { id: true, organizationUuid: true };
+	for (const f of [...cfg.movements.map((m) => m.warehouseField), "basisDocumentType", "basisDocumentUuid"]) {
+		if (fields.has(f)) select[f] = true;
+	}
+	return client[cfg.parentModel].findUnique({ where: { uuid: documentUuid }, select });
+}
+
 /**
  * Дефициты остатка для расходного документа по ПЕРЕДАННЫМ строкам (предпроверка формы
  * /product-register/check-availability и прежние вызовы). doc — склад(ы), дата,
@@ -609,6 +662,20 @@ async function affectedPairs(documentType, documentUuid, doc, items, client) {
 		? await client.productRegister.findMany({ where: { documentType, documentUuid }, select: { productUuid: true, warehouseUuid: true } })
 		: [];
 	return [...newMv, ...oldMv].filter((m) => m.productUuid);
+}
+
+/**
+ * Пары товар|склад, которые затронет изменение документа в его ТЕКУЩЕМ состоянии (строки и
+ * шапка — через тот же клиент, движения — прежние из регистра). Для общего отсортированного
+ * набора блокировок пакета строк нескольких документов (P3 аудита 27.09).
+ */
+export async function stockPairsOfDocument(documentType, documentUuid, client = prisma) {
+	const cfg = DOC_CONFIG[documentType];
+	if (!cfg || !documentUuid) return [];
+	const doc = await client[cfg.parentModel].findUnique({ where: { uuid: documentUuid } });
+	if (!doc) return [];
+	const items = await client[cfg.itemModel].findMany({ where: { [cfg.parentField]: documentUuid } });
+	return affectedPairs(documentType, documentUuid, doc, items, client);
 }
 
 /**
@@ -696,6 +763,8 @@ export default {
 	prospectiveMovements,
 	computeStockChangeShortages,
 	computeShortages,
+	savedDocumentForCheck,
+	stockPairsOfDocument,
 	assertStockAvailable,
 	assertStockAfterChange,
 	assertStockForPosting,

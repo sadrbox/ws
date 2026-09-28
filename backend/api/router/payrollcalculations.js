@@ -7,6 +7,7 @@ import { reconcileDocumentEntries, removeDocumentEntries, assertPostable, valida
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { POSTING_TX_OPTIONS } from "../../services/documentLock.js";
 const DOC_TYPE = "payroll_calculation";
 
 const router = express.Router();
@@ -186,8 +187,14 @@ router.post(`/${ROUTE}`, async (req, res) => {
 			authorUuid: req.user.uuid,
 		};
 		if (willPost) await validatePosting(DOC_TYPE, docData, []);
-		const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
-		if (item.posted) await reconcileDocumentEntries(DOC_TYPE, item.uuid);
+		// Документ и проводки — одной транзакцией (P3 аудита 27.09): сбой проводок раньше
+		// оставлял записанный проведённый документ без проводок (500 при сохранённой шапке).
+		const saved = await prisma.$transaction(async (tx) => {
+			const row = await tx[MODEL].create({ data: docData, select: { uuid: true, posted: true } });
+			if (row.posted) await reconcileDocumentEntries(DOC_TYPE, row.uuid, tx);
+			return row;
+		}, POSTING_TX_OPTIONS);
+		const item = await prisma[MODEL].findUnique({ where: { uuid: saved.uuid }, include: INCLUDE });
 		return res.status(201).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgAccessError(error, res)) return;
@@ -251,12 +258,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		data.number = await ensureDocumentNumber({ docType: DOC_TYPE, modelName: MODEL, manual: req.body.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid });
 		const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 		if (willBePosted) await assertPostable(DOC_TYPE, existing.uuid, { ...data, posted: true });
-		const item = await prisma[MODEL].update({
-			where: w,
-			data,
-			include: INCLUDE,
-		});
-		await reconcileDocumentEntries(DOC_TYPE, item.uuid);
+		// Шапка и проводки — одной транзакцией (P3 аудита 27.09).
+		const saved = await prisma.$transaction(async (tx) => {
+			const row = await tx[MODEL].update({ where: { uuid: existing.uuid }, data, select: { uuid: true } });
+			await reconcileDocumentEntries(DOC_TYPE, row.uuid, tx);
+			return row;
+		}, POSTING_TX_OPTIONS);
+		const item = await prisma[MODEL].findUnique({ where: { uuid: saved.uuid }, include: INCLUDE });
 		return res.status(200).json({ success: true, item });
 	} catch (error) {
 		if (respondOrgAccessError(error, res)) return;

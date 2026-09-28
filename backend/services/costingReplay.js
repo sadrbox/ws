@@ -13,8 +13,10 @@
 //
 // Вход НЕ обращается к БД: движения передаёт вызывающий (уже отсортированные).
 // ─────────────────────────────────────────────────────────────────────────────
+import { roundTo } from "./money.js";
 
-const r = (n, p = 100) => Math.round((Number(n) || 0) * p) / p;
+// Округление — общее из money.js (P3 аудита 27.09): деньги — 2 знака, количества — 3.
+const r = (n, p = 100) => roundTo(n, Math.round(Math.log10(p)));
 
 const timeOf = (d) => (d instanceof Date ? d.getTime() : new Date(d).getTime());
 

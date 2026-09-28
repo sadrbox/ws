@@ -12,7 +12,7 @@ import express from "express";
 import { prisma } from "../../prisma/prisma-client.js";
 import { checkOwnership } from "../../utils/auth.js";
 import { assertPeriodOpen, respondPeriodLockError } from "../../services/periodLock.js";
-import { reconcileDocumentEntries } from "../../services/accountingPosting.js";
+import { reconcileDocumentEntries, respondPostingError } from "../../services/accountingPosting.js";
 import { lockDocument, POSTING_TX_OPTIONS } from "../../services/documentLock.js";
 import { r2 } from "../../services/money.js";
 
@@ -156,6 +156,8 @@ export function createPurchaseFixedAssetItemsRouter({ client = prisma } = {}) {
 		} catch (err) {
 			if (err instanceof FixedAssetLineError) return res.status(422).json({ success: false, message: err.message });
 			if (respondPeriodLockError(err, res)) return;
+			// Поступление держит другая транзакция дольше предела — 409 «занят, повторите» (КР-15 аудита 27.09).
+			if (respondPostingError(err, res)) return;
 			console.error(`POST /${ROUTE}/batch error:`, err);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
 		}

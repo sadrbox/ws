@@ -319,8 +319,13 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Шапка, строки (денормализация), контроль остатка, возврат ≤ основания, регистр и
 		// проводки — ОДНОЙ транзакцией под блокировкой документа (У2/У4 аудита 26.09):
 		// отказ или сбой откатывает и шапку — «проведён без движений» больше не бывает.
+		// Шапка ДО изменения — целиком, в транзакции (КР-9 аудита 27.09): по ней решается, нужен ли
+		// пересчёт хвоста. В `existing` выбраны не все поля, и суммы из тела формы иначе считались бы
+		// изменением на каждом сохранении — фоновый пересчёт шёл бы зря.
+		let before = null;
 		const saved = await prisma.$transaction(async (tx) => {
 			await lockDocument(tx, "purchase_return", existing.uuid);
+			before = await tx[MODEL].findUnique({ where: { uuid: existing.uuid } });
 			// Без include: связи Prisma грузит параллельными запросами, а у транзакции одно
 			// соединение — дочитываем их после фиксации.
 			const updated = await tx[MODEL].update({ where: { uuid: existing.uuid }, data });
@@ -344,8 +349,9 @@ router.put(`/${ROUTE}/:id`, async (req, res) => {
 		// Ввод задним числом делает COGS последующих документов устаревшим — пересчёт
 		// хвоста в фоне, и только если поменялось влияющее на себестоимость (не комментарий).
 		{
-			const from = [existing.date, item.date].filter(Boolean).map((d) => new Date(d)).sort((x, y) => x - y)[0];
-			await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: from, changed: costingFieldsChanged(existing, data) });
+			const prev = before ?? existing;
+			const from = [prev.date, item.date].filter(Boolean).map((d) => new Date(d)).sort((x, y) => x - y)[0];
+			await recomputeIfRetroactive({ organizationUuid: item.organizationUuid, date: from, changed: costingFieldsChanged(prev, data) });
 		}
 		return res.status(200).json({ success: true, item });
 	} catch (error) {

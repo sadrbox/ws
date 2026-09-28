@@ -19,6 +19,7 @@ import { respondDuplicateNumberError } from "../../utils/uniqueNumber.js";
 import { ensureDocumentNumber } from "../../services/documentNumberAssign.js";
 import { assertBasisExists, respondBasisError } from "../../services/basisValidation.js";
 import { idSearchCondition } from "../../utils/searchId.js";
+import { lockCash, POSTING_TX_OPTIONS } from "../../services/documentLock.js";
 
 const MODEL = "cashOrder";
 const TEXT_FIELDS = ["comment"];
@@ -148,12 +149,24 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			// Блокировка закрытого периода: нельзя создавать кассовый ордер в закрытом месяце.
 			await assertPeriodOpen(docData.organizationUuid, docData.date);
 			if (willPost) await validatePosting(docType, docData, []);
-			// Касса не может уйти в минус (как склад — assertStockForPosting).
-			if (willPost) await assertCashForPosting(docType, null, docData);
 			// Номер документа: автоматически при записи (ручной/импорт или автоген) + уникальность.
 			docData.number = await ensureDocumentNumber({ docType, modelName: MODEL, manual: req.body.number, organizationUuid: docData.organizationUuid, date: docData.date, uniqueWhere: { direction } });
-			const item = await prisma[MODEL].create({ data: docData, include: INCLUDE });
-			if (item.posted) await reconcileDocumentEntries(docType, item.uuid);
+			// Проверка кассы, запись ордера и его проводки — ОДНОЙ транзакцией под блокировкой кассы
+			// организации (КР-13 аудита 27.09). Раньше остаток проверялся вне транзакции и без
+			// блокировки: касса 1000, два РКО по 600 одновременно — оба 201, сальдо −200. Теперь
+			// второй ждёт первого и проверяет остаток уже с его проводками; сбой проводок
+			// откатывает и сам ордер (P3: шапка без проводок больше не остаётся).
+			const saved = await prisma.$transaction(async (tx) => {
+				if (willPost) {
+					await lockCash(tx, docData.organizationUuid);
+					await assertCashForPosting(docType, null, docData, tx);
+				}
+				const row = await tx[MODEL].create({ data: docData, select: { uuid: true, posted: true } });
+				if (row.posted) await reconcileDocumentEntries(docType, row.uuid, tx);
+				return row;
+			}, POSTING_TX_OPTIONS);
+			// Связи — после фиксации (внутри транзакции у неё одно соединение).
+			const item = await prisma[MODEL].findUnique({ where: { uuid: saved.uuid }, include: INCLUDE });
 			return res.status(201).json({ success: true, item });
 		} catch (error) {
 			if (respondOrgAccessError(error, res)) return;
@@ -204,22 +217,33 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			}, prisma);
 			const willBePosted = data.posted !== undefined ? data.posted : existing.posted;
 			if (willBePosted) await assertPostable(docType, existing.uuid, { ...data, posted: true });
-			// Касса не уходит в минус — на ЛЮБОЕ изменение (аудит 26.09, У8): распроведение,
-			// уменьшение или перенос ПКО, из которого уже выдано, тоже оставляют выданные деньги
-			// без источника. Собственные проводки документа сервис исключает сам.
-			await assertCashForPosting(docType, existing.uuid, {
-				organizationUuid: data.organizationUuid ?? existing.organizationUuid,
-				date: data.date ?? existing.date,
-				amount: data.amount ?? existing.amount,
-				posted: willBePosted,
-			});
 			// Номер документа: гарантируем при записи (автоген если пусто) + уникальность.
 			{
 				const _num = await ensureDocumentNumber({ docType, modelName: MODEL, manual: data.number, existingNumber: existing.number, organizationUuid: data.organizationUuid ?? existing.organizationUuid, date: data.date ?? existing.date, excludeUuid: existing.uuid, uniqueWhere: { direction } });
 				if (_num) data.number = _num; // всегда фиксируем итоговый номер (в т.ч. при очистке поля)
 			}
-			const item = await prisma[MODEL].update({ where: { uuid: existing.uuid }, data, include: INCLUDE });
-			await reconcileDocumentEntries(docType, item.uuid);
+			// Касса не уходит в минус — на ЛЮБОЕ изменение (аудит 26.09, У8): распроведение,
+			// уменьшение или перенос ПКО, из которого уже выдано, тоже оставляют выданные деньги
+			// без источника. Собственные проводки документа сервис исключает сам. Проверка, запись
+			// и проводки — одной транзакцией под блокировкой кассы (КР-13 аудита 27.09); перенос в
+			// другую организацию — под блокировками обеих, и прежняя касса проверяется на уход ордера.
+			const next = {
+				organizationUuid: data.organizationUuid ?? existing.organizationUuid,
+				date: data.date ?? existing.date,
+				amount: data.amount ?? existing.amount,
+				posted: willBePosted,
+			};
+			const saved = await prisma.$transaction(async (tx) => {
+				await lockCash(tx, [existing.organizationUuid, next.organizationUuid]);
+				if (existing.organizationUuid && existing.organizationUuid !== next.organizationUuid) {
+					await assertCashForPosting(docType, existing.uuid, { ...next, organizationUuid: existing.organizationUuid, posted: false }, tx);
+				}
+				await assertCashForPosting(docType, existing.uuid, next, tx);
+				const row = await tx[MODEL].update({ where: { uuid: existing.uuid }, data, select: { uuid: true } });
+				await reconcileDocumentEntries(docType, row.uuid, tx);
+				return row;
+			}, POSTING_TX_OPTIONS);
+			const item = await prisma[MODEL].findUnique({ where: { uuid: saved.uuid }, include: INCLUDE });
 			return res.status(200).json({ success: true, item });
 		} catch (error) {
 			if (respondOrgAccessError(error, res)) return;
@@ -243,27 +267,33 @@ export function createCashOrderRouter({ direction, route, docType }) {
 	 */
 	const sameDirectionOwned = (row, req) => !!row && row.direction === direction && checkOwnership(row, req, "organizationUuid", { allowShared: false });
 	// Удалить проведённый ПКО, из которого уже выдано, нельзя — касса уйдёт в минус (У8): 409.
-	// РКО удалением кассу только пополняет — проверка не нужна.
-	const assertCashRemovable = async (row) => {
-		if (direction !== "receipt" || !row?.posted || row.deletedAt) return;
-		await assertCashForPosting(docType, row.uuid, { organizationUuid: row.organizationUuid, date: row.date, amount: row.amount, posted: false });
+	// РКО удалением кассу только пополняет — проверка не нужна. Проверка, снятие проводок и само
+	// удаление — ОДНОЙ транзакцией (КР-13 аудита 27.09, хук inTransaction общего обработчика) под
+	// блокировкой кассы организации: раньше проверка шла до обработчика, а удаление и снятие
+	// проводок — после, и РКО, проведённый в этот промежуток, видел ещё не снятые проводки ПКО —
+	// касса уходила в минус. В пакете каждый ордер проверяется с учётом уже удалённых.
+	const removeInTransaction = async (tx, row) => {
+		if (direction === "receipt" && row?.posted && !row.deletedAt) {
+			await lockCash(tx, row.organizationUuid);
+			await assertCashForPosting(docType, row.uuid, { organizationUuid: row.organizationUuid, date: row.date, amount: row.amount, posted: false }, tx);
+		}
+		await removeDocumentEntries(docType, row.uuid, tx);
 	};
-	const DELETE_SELECT = { uuid: true, direction: true, organizationUuid: true, posted: true, deletedAt: true, date: true, amount: true };
+	const respondRemoveError = (err, res) => respondCashError(err, res) || respondPostingError(err, res);
+	const DELETE_SELECT = { uuid: true, direction: true, organizationUuid: true };
 	router.delete(`/${route}/:id`, async (req, res, next) => {
 		try {
 			const n = Number(req.params.id);
 			const where = !isNaN(n) && Number.isInteger(n) && n > 0 ? { id: n } : { uuid: String(req.params.id) };
 			const row = await prisma[MODEL].findUnique({ where, select: DELETE_SELECT });
 			if (!sameDirectionOwned(row, req)) return res.status(404).json({ success: false, message: "Не найдено" });
-			await assertCashRemovable(row);
 			return next();
 		} catch (error) {
-			if (respondCashError(error, res)) return;
 			console.error(`DELETE /${route}/:id error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
 		}
 	}, (req, res) =>
-		handleDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid), numberDocType: docType }),
+		handleDelete({ req, res, prisma, modelName: MODEL, numberDocType: docType, inTransaction: removeInTransaction, respondError: respondRemoveError }),
 	);
 	router.post(`/${route}/batch-delete`, async (req, res, next) => {
 		try {
@@ -273,15 +303,13 @@ export function createCashOrderRouter({ direction, route, docType }) {
 			if (rows.some((r) => !sameDirectionOwned(r, req))) {
 				return res.status(404).json({ success: false, message: "Часть записей не найдена — удаление не выполнено" });
 			}
-			for (const r of rows) await assertCashRemovable(r);
 			return next();
 		} catch (error) {
-			if (respondCashError(error, res)) return;
 			console.error(`POST /${route}/batch-delete error:`, error);
 			return res.status(500).json({ success: false, message: "Ошибка сервера" });
 		}
 	}, (req, res) =>
-		handleBatchDelete({ req, res, prisma, modelName: MODEL, onDeleted: (doc) => removeDocumentEntries(docType, doc.uuid), numberDocType: docType }),
+		handleBatchDelete({ req, res, prisma, modelName: MODEL, numberDocType: docType, inTransaction: removeInTransaction, respondError: respondRemoveError }),
 	);
 
 	return router;

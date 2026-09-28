@@ -259,6 +259,12 @@ test("У8: пакет без налогов сохраняет batchUuid, positi
 	const u = await sc.call("POST", "/stockcountitems/batch", { operations: [{ action: "update", uuid: "sci-1", data: { accountingQuantity: 12 } }] }, org);
 	assert.equal(u.status, 200);
 	assert.equal(sc.db._tables.stockCountItem[0].accountingQuantity, 12);
+	// КР-2 аудита 27.09: у StockCount нет колонки amount — настоящий Prisma отвечал «Unknown argument amount» и
+	// откатывал запись строк (500). Итог родителю без такого поля не пишется вовсе.
+	assert.equal("amount" in sc.db._tables.stockCount[0], false, "инвентаризации не пишется несуществующая сумма");
+	const created = await sc.call("POST", "/stockcountitems", { stockCountUuid: "sc-1", productUuid: "p2", quantity: 3, price: 0, accountingQuantity: 3 }, org);
+	assert.equal(created.status, 201);
+	assert.equal("amount" in sc.db._tables.stockCount[0], false);
 });
 
 // ─── У9: отрицательное количество ────────────────────────────────────────────

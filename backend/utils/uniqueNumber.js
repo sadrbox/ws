@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from "../prisma/prisma-client.js";
 import { normalizeDocNumber } from "../services/documentNumbering.js";
+import { localYear, yearBounds, orgTimeZone } from "../services/periodBounds.js";
 
 export class DuplicateNumberError extends Error {
 	constructor(message) {
@@ -30,9 +31,13 @@ export async function assertUniqueNumber(modelName, { number, date, organization
 	if (!num) return;
 	const d = date ? new Date(date) : new Date();
 	if (isNaN(d.getTime())) return;
-	const year = d.getFullYear();
-	const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
-	const yearEnd = new Date(year + 1, 0, 1, 0, 0, 0, 0); // верхняя граница исключительно
+	// Год — местный, в поясе учёта (ACCOUNTING_TIME_ZONE), как у выделения номера
+	// (documentNumbering.allocateNumber) — P3 аудита 27.09. Раньше год и его границы брались по
+	// поясу сервера: при сервере не в поясе учёта документ первых часов 1 января проверялся
+	// против прошлого года — ложный 409 «номер занят» (или пропуск настоящего дубля).
+	const tz = orgTimeZone(organizationUuid);
+	const year = localYear(d, tz) ?? d.getFullYear();
+	const { start: yearStart, end: yearEnd } = yearBounds(year, tz); // [начало года, начало следующего)
 	const where = {
 		number: num,
 		deletedAt: null,
